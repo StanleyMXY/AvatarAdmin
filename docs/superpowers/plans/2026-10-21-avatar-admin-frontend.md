@@ -15,7 +15,7 @@
 | 设计点 | 我的理解 |
 |---|---|
 | 交付物 | 在已克隆的空仓库 AvatarAdmin（远程 `git@github.com:StanleyMXY/AvatarAdmin.git`，分支 main，不重新 init）里写管理后台前端；规格 5.0 路由总表里 72 个有页面的行（共 73 行，导出行没有页面）一次全部做完，没有阶段，也没有标成可有可无的项 |
-| 依据 | 页面、字段、权限码按规格；接口按契约 §17 和它指向的 §8、§10、§11、§14.2、§15、§16、§22–§26、§28；响应字段取契约 §18 的实体字段；契约没定、后端已定的接口按后端的说明 `AvatarBackend/docs/superpowers/plans/2026-10-21-avatar-backend-note-for-avataradmin.md`（文件上传先上传后创建、目录和渲染模型、默认数字人、`/config`、归因、审核内容的转写文字）；后端的说明里没有、我们又需要的接口，列成问题交给后端，不自己猜 |
+| 依据 | 页面、字段、权限码按规格；接口按契约 §17 和它指向的 §8、§10、§11、§14.2、§15、§16、§22–§26、§28；契约没定的接口和全部响应字段名，以后端 2026-10-21 的两份文件为准且自包含：说明 `AvatarBackend/docs/superpowers/plans/2026-10-21-avatar-backend-note-for-avataradmin.md`（提交 1bc0b66）和对我们 11 条问题的逐条回复 `AvatarBackend/docs/superpowers/plans/2026-10-21-avatar-backend-reply-to-avataradmin.md`（提交 4e1f538）；两处都没有的接口，列成新问题交给后端，不自己猜 |
 | Git | 计划提交在 main（第一个提交）；实现在分支 `admin-frontend`；全部完成后合回 main；提交不问你，推送先问你 |
 | 命名 | 包名 `avatar-admin`；仓库的文件、文件夹、标识符、注释、文档里不出现参照项目或任何第三方产品名；参照项目只用于看结构，不复制代码 |
 | 技术栈 | Umi Max 4.7.25、React 19.3.x、antd 6.6.x、`@ant-design/pro-components` 3.1.14-7（预发布线，精确锁定）、`@ant-design/plots`、dayjs、TypeScript 5.9.x、Node ≥ 20（本机 25.6.1）；规划时这一组在 Node 25.6.1 上构建和组件测试都通过，以任务 1 的实测为准 |
@@ -41,20 +41,20 @@
 | 标签页 | 自己写 TabManager，不做 keep-alive（切换标签会重新挂载页面）；标签列表存 `localStorage`，按当前权限过滤；总览固定不可关；"刷新"只重新加载该标签 |
 | 语言 | 只有 zh-CN 和 en-US；初始语言取已保存的选择，否则取浏览器语言：任何 `zh` 开头归 zh-CN，其余归 en-US；键是扁平点分字符串，语言文件按模块拆开；有测试扫描源码里不经语言文件的文字 |
 | 时间 | 时刻用 `Intl` 按浏览器时区显示；统计日是 UTC 的 `YYYY-MM-DD`，选哪天就发哪天、不做时区换算，页面标注 UTC；"默认昨天"按 UTC 算；签到、任务统计标注"用户本地日" |
-| 文本规则 | 所有"去首尾空白"按契约 §1.9 的 29 个码点自己实现，不用 `String.trim`；"N 个字符"的长度按码点数（契约对管理端字段只写"字符"，按码点数是我的假设，写进给后端的问题） |
+| 文本规则 | 所有"去首尾空白"按契约 §1.9 的 29 个码点自己实现，不用 `String.trim`；管理端所有文本字段的长度先去空白、再按 Unicode 码点计（不是 UTF-16 长度，也不是字素），去空白后为空的必填字段后端返回 400，存的是去掉空白后的值——后端的回复已确认，前端预检用同一个口径 |
 | 链接校验 | 一个 `validateServerLink`，规则是契约 §1.7，所有链接字段共用 |
 | 主题 | dim、deep、light 三种模式，取值照规格 §7；模式存 `localStorage`；切换不刷新页面，图表跟着重绘；实心主色按钮的文字颜色按对比度自动选深色或白色；有对比度测试 |
 | 构建变量 | `ADMIN_PRODUCT_NAME`、`ADMIN_LOGO_URL`、`ADMIN_PRIMARY_COLOR`、`ADMIN_PRIMARY_HOVER`、`ADMIN_PRIMARY_ACTIVE`、通话质量红框阈值 `ADMIN_QUALITY_MIN_SUCCESS_RATE`（0.95）和 `ADMIN_QUALITY_MAX_SLOW_SHARE`（0.05），开发期另有 `ADMIN_API_PROXY_TARGET`；默认值取规格 §7 和 §11，默认标志是仓库内的中性 SVG，不引外部地址；仓库不放密钥 |
-| 前端读不到的配置值 | 页面需要、但编辑权限不属于该页权限的配置值（例如模板页要的 `app.supported_locales`），不写死数字：优先从 `GET /api/admin/meta`（契约缺口里新增的只读接口）取，取不到就不做前端预检、不显示数字，交给后端校验并原样展示后端错误 |
+| 前端读不到的配置值 | 页面需要、但编辑权限不属于该页权限的配置值（例如模板页要的 `app.supported_locales`），不写死数字：从 `GET /api/admin/meta` 取（后端已定：任何已登录、不在改密码状态的管理员可调，平铺对象 12 个字段，没有默认值又未配置的键为 `null`）；值为 `null` 或接口取不到（404，后端还没上线时）就不做前端预检、不显示数字，交给后端校验并原样展示后端错误 |
 | 导出 | `fetch` 带 `Authorization`，先看状态码和内容类型再保存；失败的 JSON 展示给用户、绝不存成文件；显示已接收的字节数 |
-| 上传 | 先上传、后创建：`XMLHttpRequest` 的 multipart（要进度条），文件字段名 `file`，响应 `data.uploadId`；创建或修改时只提交 `uploadId`（目录用 `previewUploadId`、`iconUploadId`，渲染模型用 `uploadId`，默认数字人用 `sourceUploadId`），后端不认手填的地址、大小、校验和；上传中禁止提交；`uploadId` 的错误：种类不符 400 `INVALID_REQUEST`、已被别的对象用了 409 `INVALID_STATE`、不存在 404 `RESOURCE_NOT_FOUND`；`upload.public_base_url` 没配置时广告素材和 APK 上传返回 503 `DEPENDENCY_UNAVAILABLE`，页面提示先去系统配置里设置它 |
-| 校验失败的文字 | `INVALID_REQUEST` 的 `data.details` 是 `[{ref, reason}]`，`reason` 是代码（`ACCOUNT_NOT_FOUND`、`ACCOUNT_NOT_ACTIVE`、`NOT_HTTPS`、`INVALID_HOST`、`INVALID_PORT`、`INVALID_PATH`、`TOO_LONG`、`INVALID_EMAIL`、`NOT_AN_INTEGER`、`OUT_OF_RANGE`、`NOT_BOOLEAN`、`INVALID_LANGUAGE_TAG`、`EMPTY_NOT_ALLOWED`）：界面文字按 `reason` 查语言文件（键 `reason.<代码>`），后端 `message` 里的英文说明只作兜底；前端自己的链接校验用同一组代码，所以同一条文字两边共用 |
+| 上传 | 先上传、后创建：`XMLHttpRequest` 的 multipart（要进度条），文件字段名一律 `file`（后台所有上传接口都是；缺少 `file` 时后端返回 400 `INVALID_REQUEST`，`details` 为 `[{ref:"file", reason:"EMPTY_NOT_ALLOWED"}]`），响应 `data.uploadId`；创建或修改时只提交 `uploadId`（目录用 `previewUploadId`、`iconUploadId`，渲染模型用 `uploadId`，默认数字人用 `sourceUploadId`），后端不认手填的地址、大小、校验和；上传中禁止提交；`uploadId` 的错误：种类不符 400 `INVALID_REQUEST`、已被别的对象用了 409 `INVALID_STATE`、不存在 404 `RESOURCE_NOT_FOUND`；`upload.public_base_url` 没配置时广告素材和 APK 上传返回 503 `DEPENDENCY_UNAVAILABLE`，页面提示先去系统配置里设置它 |
+| 校验失败的文字 | `INVALID_REQUEST` 的 `data.details` 是 `[{ref, reason}]`，`reason` 是代码（14 个：`ACCOUNT_NOT_FOUND`、`ACCOUNT_NOT_ACTIVE`、`NOT_HTTPS`、`INVALID_HOST`、`INVALID_PORT`、`INVALID_PATH`、`TOO_LONG`、`INVALID_EMAIL`、`NOT_AN_INTEGER`、`OUT_OF_RANGE`、`NOT_BOOLEAN`、`INVALID_LANGUAGE_TAG`、`EMPTY_NOT_ALLOWED`，以及规则词表专用的 `INVALID_PATTERN`）：界面文字按 `reason` 查语言文件（键 `reason.<代码>`），后端 `message` 里的英文说明只作兜底；`ref` 的含义由接口决定（配置是键、词表是数组下标、分页是参数名、上传是 `file`、账号列表是账号 ID）；前端自己的链接校验用同一组代码，所以同一条文字两边共用 |
 | 统计页 | 读汇总表；标注 UTC；"重新落地该日"需要 `STATS:LAND`；趋势图缺失日补 0；未到期的留存格显示"—"；去重人数不跨日相加；比率在浏览器里算，分母为 0 显示"—"（规格 4.4、5.2、5.13） |
 | 配置键 | `src/pages/config/configSchema.ts` 每个键一项，键清单由 grep 契约 §17.5 的表得到（规划时 224 行），标签和说明进两个语言文件；`GET /config` 只返回当前管理员有权编辑的键，所以页面没有只读行；返回里不在 schema 里的键警告并只读，schema 里有而返回里没有的键（没有编辑权限）不显示、不警告；每行有"恢复默认"（`DELETE /config/{key}`，后端清掉这个键、回到代码里的默认值），行里显示 `updatedAt`、`updatedBy`（库里没有这个键的行时为 `null`，表示还是默认值）；`value` 为 `null` 表示没有默认值又未配置 |
 | 配置键的归属页面 | 224 个键里 160 个是 `CONFIG:MANAGE`，由 `/config` 渲染；其余 64 个键分属 10 个模块权限码（推送 12、审核 10、邀请 9、归因 9、广告位 9、订阅 8、养成 3、投诉 2、记忆 1、成本 1），每个码的键由拥有它的模块页面用 `ConfigForm` 按权限码整组渲染——规格只给了养成管理、召回参数、奖励设置、归因参数、广告全局设置五处，审核（规则页）、订阅（功能开关页）、投诉、记忆（模型页）、成本（价格页）五个模块各加一段"参数"区，否则这些键只有 `CONFIG:MANAGE` 够得着 |
-| 下拉选项来源的权限 | 选项来源接口要求另一个权限码时（管理员表单的角色列表要 `ROLE:MANAGE`、赠送服装的条目列表要 `COSMETIC:MANAGE`、投放账户筛选要 `ATTRIBUTION:MANAGE`、广告单元表单的计划和广告位要 `ADS:CAMPAIGN` 和 `ADS:PLACEMENT`），选择器收到 403 就禁用并写明缺哪个权限，不崩溃；给后端的问题里提议放宽这些读接口 |
-| 契约和后端的说明都没写的点 | 后端的说明已经定了的不再算缺口（`/config` 三个接口、目录 / 动作 / 渲染模型 / 声明的请求写法、默认数字人、三个新上传接口、投诉证据、归因记录和汇总、审核内容的转写文字）；仍然缺的是：读不到的配置值（新增只读接口 `GET /api/admin/meta`）、`GET /me` 的 `id` 和各列表的管理员用户名字段、`POST /uploads/image` 与 `POST /ads/media` 请求里的文件字段名、封禁 / 解封接口由哪个权限码控制、规则词表 `PUT` 的请求体、下拉选项来源接口的权限、响应字段只用一句话描述的接口、越界时的状态码、管理端字段长度的单位；这些写成问题交给后端，在回复之前按下面"仍未解决的缺口"表里写明的暂定做法做，回复后改我们这边 |
-| 给后端的问题 | `docs/contract-requests/2026-10-21-admin-frontend.md`：已写好（11 条新增或补充的接口，另有一张 20 行的表，列出响应字段只有一句话描述的接口），每条写了名称、行为、我们为什么需要和回复之前的暂定做法，由你交给后端；任务 32 再加"规格需要在 main 上修改的地方"一节和后端的回复；我不改 AvatarApp 的文档 |
+| 下拉选项来源的权限 | 后端已把七个选项来源接口对使用它的页面权限开放读取（`GET /roles` 对 `ADMIN:MANAGE`、`GET /cosmetics` 对 `COSMETIC:GRANT`、`GET /attribution/campaigns` 对 `ATTRIBUTION:VIEW`、`GET /ads/campaigns` 对 `ADS:UNIT` 和 `ADS:CREATIVE`、`GET /ads/placements` 对 `ADS:UNIT`、`GET /ads/units` 对 `ADS:CREATIVE`、`GET /entitlement-defs` 对 `SUBSCRIPTION:GRANT`）；选择器收到 403 仍然禁用并写明缺哪个权限，当作兜底 |
+| 契约和后端都没写的点 | 目前没有：我们的 11 条问题和响应字段表后端已逐条回复（只有"无广告原因行加 `platform`"不采用，页面不显示这一列）；做的时候再发现两处文件都没有的接口，写成新的一份文件交给后端，不改后端的回复，也不自己猜 |
+| 给后端的问题 | 第一份 `docs/contract-requests/2026-10-21-admin-frontend.md`（AvatarAdmin 提交 21b6773）已被后端回复，保持原样不再改；新问题写新的文件；任务 32 再加"规格需要在 main 上修改的地方"；我不改 AvatarApp 的文档，也不改后端的回复 |
 | 评审深度 | 请求层、令牌与会话、权限判断与路由守卫、导出下载、凭据类字段（不回显）做深度评审；其余任务一次独立评审，不做复审轮次 |
 | 任务顺序 | 任务 1–10 是地基，按顺序做；模块任务（11–31）彼此独立，依赖关系见"执行顺序"；任务 32 最后 |
 | 时间预算 | 你确认本计划之后、动手之前，我按任务 1 实测的安装、构建、测试耗时给出预算，你确认后才开始写代码 |
@@ -100,30 +100,29 @@
 - [ ] 步骤 5：提交（一个任务一个或几个提交，提交说明写这个任务做了什么）
 
 测试只在本任务的文件范围内跑；全量测试和构建在任务 32 跑一次，之后某个修复只重跑它影响的测试。模块任务另有两条共同要求：
-- 本模块的每个接口先读契约对应的节和后端的说明；两处都没写清的点（字段名、请求体、权限码）不自己猜：先看"契约缺口"表有没有暂定做法，没有就在 `docs/contract-requests/2026-10-21-admin-frontend.md` 里追加一条问题（接口、字段、我们为什么需要），在任务报告里列出，本任务按最小的暂定做法继续、不阻塞，后端回复后再改；
+- 本模块的每个接口先读契约对应的节和后端的说明；两处都没写清的点（字段名、请求体、权限码）不自己猜：先查后端的两份文件（说明和回复），都没有就写一份新的问题文件（`docs/contract-requests/` 下，接口、字段、我们为什么需要），在任务报告里列出，本任务按最小的做法继续、不阻塞，后端回复后再改；
 - 本模块的页面文字全部进 `src/locales/zh-CN/<模块>.ts` 和 `src/locales/en-US/<模块>.ts`，两边键相同。
 
-## 契约缺口（后端的说明之后仍未解决的）
+## 后端的回复（4e1f538）和我们原来暂定做法的出入
 
-后端 2026-10-21 的说明（`GET /config` 三个接口、目录 / 动作 / 渲染模型 / 声明的请求写法、默认数字人、三个新上传接口、投诉证据、归因记录和汇总、审核内容的转写文字、`INVALID_REQUEST` 的原因代码、新错误码和新配置键）已经定下来，不再算缺口。下面是说明里没有、我们又需要的点；它们写成问题，交给后端（`docs/contract-requests/2026-10-21-admin-frontend.md`）。后端回复之前按右列的暂定做法做，不当作定论；回复后改我们这边。
+后端对我们 11 条问题全部采用，字段名以它的回复为准，各任务的 Interfaces 已按它写。和我们原来的暂定做法有出入或补充的只有这些：
 
-| 缺口 | 暂定做法 |
-|---|---|
-| 页面需要、但对应配置键的编辑权限不属于该页权限的值（契约 §17.5 逐键核对过：这 12 个键里 `invite.chain_max_depth` 的编辑权限是 `INVITE:CONFIG`、`attribution.click_retention_days` 是 `ATTRIBUTION:MANAGE`，页面分别是 `INVITE:VIEW`、`ATTRIBUTION:VIEW`，其余 10 个是 `CONFIG:MANAGE`；`GET /config` 只返回管理员能编辑的键，所以这些页面的管理员读不到）：`app.supported_locales`（推送模板矩阵、客户端配置语言页签、通知 / 版本说明 / 广告素材 / 目录名称的语言页签）、`stats.land_interval_minutes`（总览）、`usage_price.allowed_currencies`（价格页币种下拉）、`deletion.alert_after_failures`（删除任务高亮）、`invite.chain_max_depth`（邀请链深度上限）、`notification.max_recipients`（通知收件人上限）、`upload.push_image_max_bytes`（推送图片大小）、`stats.max_range_days` 与 `analytics.live_max_range_days`（日期范围上限）、`abuse.cluster_min_free_accounts`（多开检测阈值的默认值）、`attribution.click_retention_days`（点击明细页的保留天数说明）、`avatar.declaration_required`（上传声明页顶部的提示） | 新增只读接口 `GET /api/admin/meta`（任何登录的管理员可调），返回 `{supportedLocales, landIntervalMinutes, allowedCurrencies, deletionAlertAfterFailures, inviteChainMaxDepth, maxRecipients, pushImageMaxBytes, statsMaxRangeDays, analyticsLiveMaxRangeDays, abuseClusterMinFreeAccounts, attributionClickRetentionDays, declarationRequired}`；前端 `useAdminMeta()` 取不到某项时按"前端读不到的配置值"一行处理；删除任务高亮也可由行字段 `overAlertThreshold` 代替 |
-| `GET /me` 没有管理员 ID，而额度调账页要判断"申请人是不是我"；改密码页要知道 `admin.password_min_length`，而强制改密码的管理员只能调 `me` 和改密码；所有展示管理员的列（审计日志、调账申请人 / 审核人、投诉处理人、审核记录审核人、推送任务创建人、版本创建人）契约只给管理员 ID，页面需要用户名 | `GET /me` 加 `id` 和 `passwordMinLength`（放在 `me` 里，不放 `meta`，因为强制改密码的管理员调不了别的接口）；这些列表的行加同名的 `…Username` 字段（`adminUsername`、`applicantUsername`、`reviewerUsername`、`handledByUsername`、`createdByUsername`）；审计日志的"按管理员筛选"仍传 `adminId`，筛选框的选项取自行里出现过的管理员 |
-| `POST /uploads/image`（推送图片）和 `POST /ads/media`（广告素材）请求里文件字段叫什么：说明里三个新上传接口是 `file`、"已有的上传不变"，契约没写这两个的字段名（`POST /uploads/apk` 契约写了 `file`） | 暂定 `file`，与另外四个上传一致 |
-| 管理端要显示图片（服装 / 背景预览图、动作图标、默认数字人的源图和外观预览、用户的外观预览）：响应按 17.4 通则只有 `previewRef`、`iconRef`、`sourceImageRef` 这类存储引用，不是能显示的地址 | 暂定响应加 `previewUrl`、`iconUrl`、`sourceImageUrl`（短时效签名地址或公开地址，规则同审核内容的地址）；没有这些字段时列表显示占位图，不拼地址 |
-| 默认数字人生成失败时是什么状态、怎么重试：说明里的状态链是 `DRAFT` → `GENERATING` → `READY`，没写失败 | 暂定失败时回到 `DRAFT` 并在行里带 `failureReason`，再点"生成"重试；前端按"状态加可选的失败原因"画，不假设有 `FAILED` |
-| 管理端字段的长度单位：契约对管理端字段（封禁理由 1–500、删除理由 1–200、通知标题 100 / 正文 500、任务说明 500、邮件标题 1–200、规则文本 1–200 等）只写"字符"，只有人格设定、伴侣名字、举报详情、反馈正文、`generationSpec` 明写码点 | 前端按码点数检查（与契约 §1.9 的 29 码点去空白配套）；给后端的问题里要求写明单位 |
-| 规则词表的保存方式：`PUT /moderation/text-rules` 是整表替换还是逐条（契约 §11.2 说值是数组，每条 `{id, pattern, matchMode, level, note}`，`id` 保存时生成） | 整表替换：请求体是整个数组，新增的条目不带 `id`；后端校验失败的 `data.details` 用规则 `id`（新增的用下标）指到行 |
-| 越界时的状态码：列表的 `pageSize` 超过 200、统计报表的 `from`/`to` 超过 `stats.max_range_days` 时返回什么（契约只写"上限 200""不超过"） | 假设返回 400 `INVALID_REQUEST`；假后端这样做；前端不依赖具体状态码，只展示后端文字 |
-| 契约只用一句话描述响应、没有给字段名的接口（规划时核对出的，契约 §17.4 开头"响应字段即第十八节对应实体的字段"管不到这些复合响应）：`GET /client-config`；订阅的 `GET /entitlement-defs`、`/feature-gates`、`/subscriptions/{id}`、`/accounts/{id}/entitlements`；`GET /accounts/{id}/credits`；用户的 `GET /users/{id}`、`/accounts/{id}/avatars`、`/users/{id}/devices`、`/users/{id}/auth-events`、`/abuse/clusters/accounts`；邀请的 `GET /invites/codes`、`/invites/records`；归因的 `GET /attribution/clicks`、`/campaigns`（`/records`、`/summary` 后端已定，`/performance` 的指标字段契约 §10.5 已写，只缺投放账户编码、名称、日期这几个维度字段）；成本的 `GET /usage/prices`、`/usage/price-batches/pending`、`/usage/models`；埋点的 `GET /analytics/funnel`、`/event-names`、`/event-summary`；`GET /email/templates`；系统管理的 `GET /admins`、`/roles`；`GET /notifications`；签到和任务的 `GET /checkin/activities/{id}`、`/checkin/records`、`/tasks/records`；广告报表的 `GET /ads/report/by-*` 只缺行的维度名称字段（指标字段契约 §22.9 已写）和无广告原因行；`GET /likeness-complaints/{id}` | 每个模块任务按规格的页面列和契约 §18 的实体字段定义响应类型，列出的接口在任务里单独记下"响应形状"，写进给后端的问题；管理员、账号这类被引用的对象带名称字段（见上一行 `…Username`）；广告的无广告原因行补上 `platform`（汇总表 `StatAdNofillDaily` 的主键里有，契约 §22.9 的返回字段里漏了，规格 5.17 的表要显示它） |
-| 下拉选项的来源接口要求另一个权限码：管理员表单的角色列表（`GET /roles` 要 `ROLE:MANAGE`，页面是 `ADMIN:MANAGE`）、赠送服装的条目列表（`GET /cosmetics` 要 `COSMETIC:MANAGE`，页面是 `COSMETIC:GRANT`）、投放账户筛选（`GET /attribution/campaigns` 要 `ATTRIBUTION:MANAGE`，页面是 `ATTRIBUTION:VIEW`）、广告单元表单的计划和广告位（`GET /ads/campaigns`、`GET /ads/placements` 要 `ADS:CAMPAIGN`、`ADS:PLACEMENT`，页面是 `ADS:UNIT`） | 给后端的问题里提议这些读接口另允许对应页面的码（`GET /roles` ← `ADMIN:MANAGE`，`GET /cosmetics` ← `COSMETIC:GRANT`，`GET /attribution/campaigns` ← `ATTRIBUTION:VIEW`，`GET /ads/campaigns` 与 `GET /ads/placements` ← `ADS:UNIT`）；前端在这之前遇到 403 的行为见关键设计点表"下拉选项来源的权限" |
-| 封禁、解封接口由哪个码控制，契约没标（`USER:BAN` 只出现在用户模块的码列表里；用户导出同时要 `USER:EXPORT` 和 `USER:VIEW` 契约已写） | 假设 `POST /users/{id}/ban`、`/unban` 需要 `USER:BAN` |
+| 条目 | 后端定的 | 对前端的影响 |
+|---|---|---|
+| 管理员用户名 | 命名按我们的；`GET /config` 的 `updatedBy` 是管理员 ID，另有 `updatedByUsername`；用户名读取时按 ID 查，管理员已删除时用户名为 `null`、ID 照旧；审计日志的 `adminUsername` 是写入当时的用户名，不随改名变 | 显示用户名，为 `null` 时显示 ID 前 8 位；审计日志直接显示 `adminUsername` |
+| 图片地址 | 响应不再返回存储引用；地址是短时效签名地址（有效期同审核内容地址），每次取列表都拿到新地址，文件缺失为 `null` | 不缓存地址，每次打开页面重新取列表；`null` 显示占位图 |
+| 规则词表 | 请求体和响应都是 `{items:[…]}`，不是裸数组；整表替换、原子；带 `id` 且在当前词表里的沿用 `id`，其余是新增；`details.ref` 一律是数组下标（从 0 起的字符串）；正则不合法的原因代码是 `INVALID_PATTERN`；超过条数上限时 `details` 只有一项，`ref` 为 `items`、`reason` 为 `OUT_OF_RANGE` | 按下标把错误对到行；上限提示显示在整张表上 |
+| 选项来源接口 | 七个（比我们提的多三个：`GET /ads/campaigns` 和 `GET /ads/units` 对 `ADS:CREATIVE`、`GET /entitlement-defs` 对 `SUBSCRIPTION:GRANT`） | 素材表单按计划、按单元选择，发放限时权益选权益，都不再需要额外权限 |
+| 越界 | 分页参数和日期范围越界都是 400 `INVALID_REQUEST`，`details` 的 `ref` 是出错的参数名，原因 `OUT_OF_RANGE` 或 `NOT_AN_INTEGER`；不静默截断；`page` 缺省 1，`pageSize` 缺省 20 | 假后端同样这样做 |
+| `GET /me`、`GET /api/admin/meta` | `me` 加 `id`、`passwordMinLength`，强制改密码状态下照常可调；`meta` 12 个字段，改密码状态下返回 403 | 登录后只在不需要改密码时才取 `meta` |
+| 无广告原因行 | 仍是 `{statDate, slotKey, reason, cnt}`，不加 `platform`、`channelCode`；广告报表不传筛选时是全部平台、全部渠道的合计 | 规格 5.17 表里的"平台"列不显示（后端说明契约会话已同意把设计里的这一列删掉） |
+| 默认数字人生成失败 | 回到 `DRAFT`，行里带 `failureReason`（六个值之一或 `null`），没有 `FAILED` 状态 | 和我们的暂定做法一致 |
+
+后端已另交给改契约的会话去改契约和管理端前端设计；我们不用等，也不改它们。
 
 ## 规格与契约的冲突（规划时已逐行核对，以契约为准）
 
-2026-10-21 后端的说明之前核对出 13 行冲突，其中 6 行（订阅四页的读权限、审核内容区、动作目录、`GET /config` 的写法、14 种告警、五个邮件模板）连同完整的 `MEMORY:` 权限码，AvatarApp main 上的规格已按契约改好，计划按改后的规格。规格里仍然留着的是下面 7 行；实现按契约做，每条在任务 32 的"规格需要在 main 上修改的地方"里列给你：
+2026-10-21 后端的说明之前核对出 13 行冲突，其中 6 行（订阅四页的读权限、审核内容区、动作目录、`GET /config` 的写法、14 种告警、五个邮件模板）连同完整的 `MEMORY:` 权限码，AvatarApp main 上的规格已按契约改好，计划按改后的规格。规格里仍然留着的是下面 8 行；实现按契约做，每条在任务 32 的"规格需要在 main 上修改的地方"里列给你：
 
 | 规格的位置 | 规格写的 | 契约写的 | 实现怎么做 |
 |---|---|---|---|
@@ -134,6 +133,7 @@
 | 5.0 通话 / 订阅 / 客服 | 写"会话列表、详情""订阅列表、详情""反馈列表、详情"，没给详情路由 | — | 详情用抽屉 |
 | 5.12 裂变层级页签 | 统计项"链路节点数" | `GET /invites/depth-stats` 的 `totalChains` 是范围内不同根账号（没有邀请人的账号）的数量，不是节点数（§17.4 邀请管理行） | 页面显示"链数（根账号数）"，文字取契约的含义 |
 | 3.3 改密码页 | "只允许进入改密码页"，没给路由 | — | 路由 `/user/change-password` 是本计划自己定的 |
+| 5.17 广告报表的无广告原因分布表 | 列含"平台" | `GET /ads/report/nofill` 的行是 `{statDate, slotKey, reason, cnt}`，没有 `platform`、`channelCode`（后端回复第 18 条；后端说明契约会话已同意把设计里的这一列删掉） | 页面不显示平台列；广告报表没有渠道筛选 |
 
 ---
 
@@ -220,7 +220,7 @@ AvatarAdmin/
 ## 任务 3：请求层
 
 **Files:**
-- Create: `src/request/envelope.ts`、`errors.ts`、`session.ts`、`apiClient.ts`、`download.ts`、`upload.ts`、`src/locales/zh-CN/error.ts`、`src/locales/en-US/error.ts`（契约 §1.4 通用错误码表里每个码一条用户看得懂的文字，键是 `error.<码>`，另有 `error.NETWORK_ERROR`、`error.INVALID_RESPONSE`、`error.UNKNOWN`；表里包括后端新增的 405、415、503 两个）、`src/locales/zh-CN/reason.ts`、`src/locales/en-US/reason.ts`（`INVALID_REQUEST` 的 13 个原因代码各一条文字，键是 `reason.<代码>`：`ACCOUNT_NOT_FOUND`、`ACCOUNT_NOT_ACTIVE`、`NOT_HTTPS`、`INVALID_HOST`、`INVALID_PORT`、`INVALID_PATH`、`TOO_LONG`、`INVALID_EMAIL`、`NOT_AN_INTEGER`、`OUT_OF_RANGE`、`NOT_BOOLEAN`、`INVALID_LANGUAGE_TAG`、`EMPTY_NOT_ALLOWED`）、`src/locales/errorCodes.generated.json`（由 `sed` 取 §1.4 表、`grep` 出第一列得到，保存原始输出和行数）
+- Create: `src/request/envelope.ts`、`errors.ts`、`session.ts`、`apiClient.ts`、`download.ts`、`upload.ts`、`src/locales/zh-CN/error.ts`、`src/locales/en-US/error.ts`（契约 §1.4 通用错误码表里每个码一条用户看得懂的文字，键是 `error.<码>`，另有 `error.NETWORK_ERROR`、`error.INVALID_RESPONSE`、`error.UNKNOWN`；表里包括后端新增的 405、415、503 两个）、`src/locales/zh-CN/reason.ts`、`src/locales/en-US/reason.ts`（`INVALID_REQUEST` 的 14 个原因代码各一条文字，键是 `reason.<代码>`：`ACCOUNT_NOT_FOUND`、`ACCOUNT_NOT_ACTIVE`、`NOT_HTTPS`、`INVALID_HOST`、`INVALID_PORT`、`INVALID_PATH`、`TOO_LONG`、`INVALID_EMAIL`、`NOT_AN_INTEGER`、`OUT_OF_RANGE`、`NOT_BOOLEAN`、`INVALID_LANGUAGE_TAG`、`EMPTY_NOT_ALLOWED`、`INVALID_PATTERN`）、`src/locales/errorCodes.generated.json`（由 `sed` 取 §1.4 表、`grep` 出第一列得到，保存原始输出和行数）
 - Test: 同名 `*.test.ts`、`src/locales/error.test.ts`（`errorCodes.generated.json` 里每个码在两个语言文件里都有非空文字）
 
 **Interfaces:**
@@ -242,7 +242,7 @@ AvatarAdmin/
 - `downloadFile`：200 且内容类型是 xlsx → 触发保存，文件名取 `Content-Disposition`（含 `filename*=UTF-8''` 的非 ASCII 名）；429、400、403 的 JSON 体 → 抛 `ApiError`（带后端 `code`、`message`）且**没有触发保存**；401 → 走 `onExpired`；200 但内容类型是 `application/json` → 当错误处理；`onProgress` 收到累计字节数。
 - `uploadFile`：进度回调；信封解析与 `apiRequest` 一致；带授权头；401 走 `onExpired`；`abort` 能取消。
 - `setToken` 在 `sessionStorage` 抛异常时不崩溃，且令牌**没有**写进 `localStorage`。
-- `describeError`：`INVALID_REQUEST` 带 `details: [{ref:'privacyPolicyUrl', reason:'NOT_HTTPS'}]` 时，`fields` 里该项的文字取 `reason.NOT_HTTPS` 的本地化文字而不是后端英文；`reason` 不认识时退回后端 `message`；两种语言下 13 个原因代码都有非空文字；`error.<码>` 缺失时用 `error.UNKNOWN` 加后端 `message`。
+- `describeError`：`INVALID_REQUEST` 带 `details: [{ref:'privacyPolicyUrl', reason:'NOT_HTTPS'}]` 时，`fields` 里该项的文字取 `reason.NOT_HTTPS` 的本地化文字而不是后端英文；`reason` 不认识时退回后端 `message`；两种语言下 14 个原因代码都有非空文字；`error.<码>` 缺失时用 `error.UNKNOWN` 加后端 `message`。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
 
@@ -284,10 +284,10 @@ AvatarAdmin/
 - Produces:
   - `ok<T>(data: T)` / `fail(httpStatus, code, message, data?)` 生成契约 §1.3 的信封
   - `guard(perm: PermissionCode | PermissionCode[] | null, handler)`：校验令牌（无效或过期 → 401 `ADMIN_INVALID_TOKEN`）、`mustChangePassword` 时除 `me` 和改密码外一律 403 `ADMIN_FORBIDDEN`、缺权限 → 403 `ADMIN_FORBIDDEN`、成功后交给 handler；handler 里可取 `req.admin`
-  - `paginate<T>(rows: T[], page: number, pageSize: number): Page<T>`（`page` 从 1，`pageSize` 超过 200 时 400 `INVALID_REQUEST`，这个状态码是契约缺口表里的假设）
+  - `paginate<T>(rows: T[], page: number, pageSize: number): Page<T>`（`page` 从 1，`pageSize` 超过 200 时 400 `INVALID_REQUEST`，后端已确认：分页参数越界返回 400 `INVALID_REQUEST`，`details` 为 `[{ref: 参数名, reason: OUT_OF_RANGE 或 NOT_AN_INTEGER}]`，缺省 `page` 1、`pageSize` 20）
   - `fixtures`：`multilingualSamples`（泰语、阿拉伯语、印尼语、越南语、西班牙语、英语、中文各若干条，含长串无空格和 emoji），`makeUuid()`，`daysAgoIso(n)`
   - 预置管理员（用户名、权限集合）：`root`（超级）、`support`、`finance`、`reviewer`、`newhire`（`mustChangePassword`）、`fresh`（未绑定认证器）；假验证码 `000000`；假密码写进 README 并注明只对假后端有效
-  - 接口：`POST /api/admin/auth/login`、`POST /api/admin/auth/totp/enroll`、`POST /api/admin/auth/change-password`、`GET /api/admin/me`（契约的四个字段加契约缺口表里的 `id`）、`GET /api/admin/meta`（契约缺口表里的只读接口，任何登录的管理员可调，值取契约 §17.5 对应键的默认值）、`GET /api/admin/permissions`（权限树，由 `PERMISSION_CODES` 和路由元数据生成：每个页面一个 `MENU` 节点，该页面的其余权限码是它的 `FUNCTION` 子节点，名称取自任务 4 建的 `src/locales/{zh-CN,en-US}/permission.ts`，假后端用相对路径导入它们）
+  - 接口：`POST /api/admin/auth/login`、`POST /api/admin/auth/totp/enroll`、`POST /api/admin/auth/change-password`、`GET /api/admin/me`（响应 `{id, username, superAdmin, mustChangePassword, permissions, passwordMinLength}`，强制改密码状态下照常可调）、`GET /api/admin/meta`（平铺对象，12 个字段，任何已登录且不在改密码状态的管理员可调，在改密码状态返回 403 `ADMIN_FORBIDDEN`；值取契约 §17.5 对应键的默认值，没有默认值的键为 `null`）、`GET /api/admin/permissions`（权限树，由 `PERMISSION_CODES` 和路由元数据生成：每个页面一个 `MENU` 节点，该页面的其余权限码是它的 `FUNCTION` 子节点，名称取自任务 4 建的 `src/locales/{zh-CN,en-US}/permission.ts`，假后端用相对路径导入它们）
 
 **Implement:**
 - 假后端文件只用相对路径导入（Umi 的 mock 加载器不一定解析 `@/` 别名）；`config/config.ts` 的 `mock: { exclude: ['mock/_core/**', 'mock/**/*.test.ts'] }`，避免工具文件和测试文件被当成接口文件加载。
@@ -343,8 +343,9 @@ AvatarAdmin/
 **Interfaces:**
 - Consumes: 任务 3 的 `apiRequest`、`setToken`、`setSessionHandlers`；任务 4 的 `canAccess`；任务 6 的外壳
 - Produces:
-  - `login(body: { username: string; password: string; totp?: string }): Promise<LoginResult>`，`LoginResult = { token: string; expiresAt: string } | { status: 'ENROLL_REQUIRED'; enrollToken: string; otpauthUri: string }`（线上格式，契约 §17.2：成功时 `data` 就是 `{token, expiresAt}`，没有 `status`；只有绑定分支带 `status`，用 `'token' in r` 区分；任务 5 的假后端同样不给成功响应加 `status`）；`enrollTotp(body: { enrollToken: string; totp: string })`；`changePassword(body: { oldPassword: string; newPassword: string })`；`getMe(): Promise<{ id?: string; username: string; superAdmin: boolean; mustChangePassword: boolean; permissions: string[]; passwordMinLength?: number }>`（`id`、`passwordMinLength` 是给后端的问题里要加的字段，真后端没有时按缺失处理）
-  - `getAdminMeta(): Promise<AdminMeta>` 与 `useAdminMeta(): Partial<AdminMeta>`：登录后与 `getMe` 并行取一次；请求失败（含真后端还没有这个接口时的 404）得到空对象，页面按"前端读不到的配置值"处理，不报错；字段见契约缺口表
+  - `login(body: { username: string; password: string; totp?: string }): Promise<LoginResult>`，`LoginResult = { token: string; expiresAt: string } | { status: 'ENROLL_REQUIRED'; enrollToken: string; otpauthUri: string }`（线上格式，契约 §17.2：成功时 `data` 就是 `{token, expiresAt}`，没有 `status`；只有绑定分支带 `status`，用 `'token' in r` 区分；任务 5 的假后端同样不给成功响应加 `status`）；`enrollTotp(body: { enrollToken: string; totp: string })`；`changePassword(body: { oldPassword: string; newPassword: string })`；`getMe(): Promise<{ id: string; username: string; superAdmin: boolean; mustChangePassword: boolean; permissions: string[]; passwordMinLength: number }>`（后端已定，字段名以它的回复为准；真后端还没上线、字段缺失时按缺失处理，不报错）
+  - `type AdminMeta = { supportedLocales: string[] | null; landIntervalMinutes: number | null; allowedCurrencies: string[] | null; deletionAlertAfterFailures: number | null; inviteChainMaxDepth: number | null; maxRecipients: number | null; pushImageMaxBytes: number | null; statsMaxRangeDays: number | null; analyticsLiveMaxRangeDays: number | null; abuseClusterMinFreeAccounts: number | null; attributionClickRetentionDays: number | null; declarationRequired: boolean | null }`（后端回复第 1 条，十二个字段一字不差；`supportedLocales`、`allowedCurrencies` 是字符串数组，`declarationRequired` 是布尔，其余是整数；没有默认值又未配置的键为 `null`）
+  - `getAdminMeta(): Promise<AdminMeta>` 与 `useAdminMeta(): Partial<AdminMeta>`：登录后、且 `me.mustChangePassword` 为假时取一次（在改密码状态后端返回 403）；请求失败（含真后端还没有这个接口时的 404）得到空对象；某项为 `null` 或缺失，页面都按"前端读不到的配置值"处理（不预检、不显示数字），不报错
   - `safeReturnUrl(raw: string | null | undefined): string`：只接受以单个 `/` 开头的站内路径（拒绝 `//host`、`http://…`、`javascript:`、含反斜杠），否则返回 `/dashboard`
   - `useSession()`：`{ me, refreshPermissions(), signOut() }`
 
@@ -354,7 +355,7 @@ AvatarAdmin/
 - `safeReturnUrl`：`/users/42?tab=x` 原样；`//evil.example`、`https://evil.example`、`javascript:alert(1)`、`/\evil` 都得 `/dashboard`。
 - 绑定页：二维码是本地生成的（渲染结果里没有任何 `http` 开头的 `img` 地址，也没有对外部域名发请求）；验证码错提示并保留 `enrollToken`；`enrollToken` 过期（401 `ADMIN_INVALID_TOKEN`）回登录页。
 - 强制改密码：`mustChangePassword` 为真时，访问任何其他路由都被重定向到改密码页；前端校验两次一致、不等于用户名、非空，`me.passwordMinLength` 有值时再校验长度（按码点数），没有值时长度错误由后端 `INVALID_REQUEST` 的 `message` 展示；成功后清令牌回登录页。
-- `getAdminMeta` 返回 404 或网络失败时，`useAdminMeta()` 得到空对象，页面不崩溃、不弹错误。
+- `getAdminMeta` 返回 404 或网络失败时，`useAdminMeta()` 得到空对象，页面不崩溃、不弹错误；`me.mustChangePassword` 为真时**不发** `meta` 请求；`meta` 里某项是 `null` 时，使用它的页面按"读不到"处理（用一个 `maxRecipients: null` 的例子断言不预检）。
 - 会话：收到 401 `ADMIN_INVALID_TOKEN` 清令牌并跳 `/user/login?redirect=<当前路径>`；登录后回到该路径；收到 403 `ADMIN_FORBIDDEN` 提示无权限、不跳转、`refreshPermissions` 被调用一次，之后按钮按新权限显示；不用定时器轮询。
 - 写操作途中令牌过期（Review Focus 5）：提交请求得到 401，页面跳登录，登录后回到原页面；原请求**没有被自动重发**。
 
@@ -423,7 +424,7 @@ AvatarAdmin/
 - `LandBar`：没有 `STATS:LAND` 不渲染；默认日期是 UTC 昨天（用 `withTimeZone('Asia/Singapore', …)` 与固定时钟断言）；点击发 `POST /stats/land/{name}?date=`，成功后调用 `onLanded`；失败显示后端文字。
 - `ReportHelper`：关闭后刷新仍关闭；`localStorage` 抛异常时照常显示且不崩溃。
 - `TrendChart`：随主题模式切换用新主题重绘（断言传给图表的配置变化）。
-- `mock/stats.mock.ts`：`/stats/daily` 在 `platform≠ALL` 时业务列为 `null`；`activeSubscriptions` 当天为 `null`；`/stats/retention` 未到期的 `dN` 为 `null`；`from/to` 跨度超过 `stats.max_range_days` 返回 400 `INVALID_REQUEST`（契约没写状态码，见契约缺口表）；缺 `STATS:VIEW` 返回 403；`POST /stats/land/*` 缺 `STATS:LAND` 返回 403。
+- `mock/stats.mock.ts`：`/stats/daily` 在 `platform≠ALL` 时业务列为 `null`；`activeSubscriptions` 当天为 `null`；`/stats/retention` 未到期的 `dN` 为 `null`；`from/to` 跨度超过 `stats.max_range_days` 返回 400 `INVALID_REQUEST`（后端已确认：分页参数和日期范围越界都是 400 `INVALID_REQUEST`）；缺 `STATS:VIEW` 返回 403；`POST /stats/land/*` 缺 `STATS:LAND` 返回 403。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
 
@@ -437,7 +438,7 @@ AvatarAdmin/
 - Consumes: 任务 3、8
 - Produces:
   - `type ConfigKind = 'int' | 'string' | 'bool' | 'json' | 'url'`；`type ConfigKeySpec = { key: string; kind: ConfigKind; editPermission: PermissionCode; group: string; min?: number; max?: number; risk?: boolean; editedElsewhere?: string; validate?: (v: unknown) => string | null }`；`CONFIG_SCHEMA: ConfigKeySpec[]`；`editedElsewhere` 是该键有专门编辑器的页面路径（目前只有 `moderation.text_rules` → `/moderation/rules`，契约 §17.5 写明它也可通过 `/moderation/text-rules` 编辑）：`ConfigForm` 把这样的键显示为只读并附链接，不提供第二个编辑器
-  - 线上格式（后端的说明）：`GET /config` → `{ items: ConfigItem[] }`，`ConfigItem = { key: string; value: unknown | null; defaultValue: unknown | null; editPermission: PermissionCode; updatedAt: string | null; updatedBy: string | null }`，不分页、按键名升序，只含当前管理员有权编辑的键；`PUT /config/{key}` 请求体 `{ value }`；`DELETE /config/{key}` 清掉这个键、回到默认值；
+  - 线上格式（后端的说明）：`GET /config` → `{ items: ConfigItem[] }`，`ConfigItem = { key: string; value: unknown | null; defaultValue: unknown | null; editPermission: PermissionCode; updatedAt: string | null; updatedBy: string | null; updatedByUsername: string | null }`（`updatedBy` 是管理员 ID，页面显示 `updatedByUsername`，为 `null` 而 `updatedBy` 非空时显示 ID 前 8 位），不分页、按键名升序，只含当前管理员有权编辑的键；`PUT /config/{key}` 请求体 `{ value }`；`DELETE /config/{key}` 清掉这个键、回到默认值；
   - `listConfig(): Promise<{ items: ConfigItem[] }>`、`saveConfig(key: string, value: unknown): Promise<ConfigSaveResult>`、`resetConfig(key: string): Promise<ConfigSaveResult>`，`ConfigSaveResult = { key: string; value: unknown; warnings: { code: string; message: string; count?: number }[] }`（`count` 只有 `PHONE_LOGIN_DISABLED_ACCOUNTS` 带；`resetConfig` 的 `warnings` 为空数组）；三个接口里键不存在 404 `RESOURCE_NOT_FOUND`，没有该键的编辑权限 403 `ADMIN_FORBIDDEN`，值不合法 400 `INVALID_REQUEST`（`details` 的 `ref` 是键、`reason` 是原因代码）
   - `ConfigForm`：属性 `{ keys?: string[]; prefixes?: string[]; editPermission?: PermissionCode }`（三个筛选取并集；都不传渲染 `GET /config` 返回的全部键），按前缀分组渲染；保存一次一个键；这是系统配置页和所有模块"参数"区共用的渲染方式
 
@@ -455,7 +456,7 @@ AvatarAdmin/
 - 键集合：`CONFIG_SCHEMA` 的键集合等于 `configKeys.generated.json`；每个键在两个语言文件里都有 label 和 desc。
 - `editedElsewhere`：`moderation.text_rules` 在系统配置页和审核规则页的"参数"区里都是只读行，带指向规则编辑器的链接；规则页的"参数"区因此是该码的另外 9 个键。
 - 键归属：schema 里每个非 `CONFIG:MANAGE` 的 `editPermission` 在 `CONFIG_HOSTS` 里都有页面（断言覆盖，漏一个就失败）；`<ConfigForm editPermission="MODERATION:CONFIG" />` 只渲染该码的键（假后端按权限过滤，所以没有这个权限的管理员看不到这一区）；schema 里有而 `GET /config` 没返回的键（没有编辑权限）不显示也不警告。
-- `ConfigForm`：`GET /config` 返回的行都可编辑（后端只返回有权编辑的键，没有只读行）；返回而 schema 里没有的键 → 页面顶部警告"存在未识别的配置项"并只读显示；JSON 键解析失败时该行保存按钮禁用；保存只发这一个键的 `PUT /config/{key}`，请求体是 `{ "value": … }`；`value` 为 `null` 的行显示"未配置"（没有默认值又没设置过），不当成空字符串或 0；`updatedAt` 非空的行显示更新时间和 `updatedBy`，并有"恢复默认"（行内确认，调 `DELETE /config/{key}`，成功后该行回到 `defaultValue`，`updatedAt` 变空）；`updatedAt` 为空的行"恢复默认"禁用；后端 `INVALID_REQUEST` 的 `data.details` 按 `ref` 对到该行、文字取 `reason.<代码>`（`describeError`）；响应带 `warnings` 时用警告样式显示且不阻止，`PHONE_LOGIN_DISABLED_ACCOUNTS` 带 `count`；六个风险键各有行内风险文字；`upload.public_base_url` 没有默认值，未配置时该行旁写明"广告素材和 APK 上传需要它"。
+- `ConfigForm`：`GET /config` 返回的行都可编辑（后端只返回有权编辑的键，没有只读行）；返回而 schema 里没有的键 → 页面顶部警告"存在未识别的配置项"并只读显示；JSON 键解析失败时该行保存按钮禁用；保存只发这一个键的 `PUT /config/{key}`，请求体是 `{ "value": … }`；`value` 为 `null` 的行显示"未配置"（没有默认值又没设置过），不当成空字符串或 0；`updatedAt` 非空的行显示更新时间和 `updatedByUsername`，并有"恢复默认"（行内确认，调 `DELETE /config/{key}`，成功后该行回到 `defaultValue`，`updatedAt` 变空）；`updatedAt` 为空的行"恢复默认"禁用；后端 `INVALID_REQUEST` 的 `data.details` 按 `ref` 对到该行、文字取 `reason.<代码>`（`describeError`）；响应带 `warnings` 时用警告样式显示且不阻止，`PHONE_LOGIN_DISABLED_ACCOUNTS` 带 `count`；六个风险键各有行内风险文字；`upload.public_base_url` 没有默认值，未配置时该行旁写明"广告素材和 APK 上传需要它"。
 - 养成管理：阈值非整数、`BONDING ≥ CLOSE`、里程碑天数重复或含 0 时不提交；只有 `COMPANIONSHIP:CONFIG` 的管理员 `GET /config` 只得到这三个键（假后端按权限过滤）。
 - 假后端：缺编辑权限的 `PUT`、`DELETE` 返回 403；键不存在返回 404；整数键小于 1 返回 400 且 `data.details` 是 `[{ref: 键, reason: 'OUT_OF_RANGE'}]`；关系约束（`retry.initial_seconds ≤ retry.max_seconds` 等）返回 400；`GET /config` 按键名升序且只含该管理员有权编辑的键；`DELETE` 后 `value` 回到默认值、`warnings` 为空。
 
@@ -465,7 +466,7 @@ AvatarAdmin/
 
 ## 模块任务（11–31）
 
-模块任务彼此独立，只依赖地基任务 1–10，下面单独写明的跨模块依赖除外。每个模块任务的 Files 都是：`src/services/<模块>/`、`src/pages/<模块>/`、`mock/<模块>.mock.ts`、`config/routes/<模块>.ts`、`src/locales/{zh-CN,en-US}/<模块>.ts` 及对应测试，下面不再重复。假后端的每个接口都按契约对缺权限、对象不存在（404 `RESOURCE_NOT_FOUND`）、状态不允许（409 `INVALID_STATE`，`data.status` 是当前状态）、重复（409 `DUPLICATE_RESOURCE`，`data.field`）返回相应错误，列表接口用 `paginate`；假数据用 `multilingualSamples`。
+模块任务彼此独立，只依赖地基任务 1–10，下面单独写明的跨模块依赖除外。每个模块任务的 Files 都是：`src/services/<模块>/`、`src/pages/<模块>/`、`mock/<模块>.mock.ts`、`config/routes/<模块>.ts`、`src/locales/{zh-CN,en-US}/<模块>.ts` 及对应测试，下面不再重复。假后端的每个接口都按契约对缺权限、对象不存在（404 `RESOURCE_NOT_FOUND`）、状态不允许（409 `INVALID_STATE`，`data.status` 是当前状态）、重复（409 `DUPLICATE_RESOURCE`，`data.field`）返回相应错误，列表接口用 `paginate`；假数据用 `multilingualSamples`；响应字段名一律按后端的回复：管理员 ID 字段旁带 `…Username`（管理员已删除时为 `null`）、图片带 `…Url`（每次取列表给新的地址，缺失为 `null`）、分页或日期范围越界返回 400 `INVALID_REQUEST`（`details` 的 `ref` 是参数名）。
 
 ### 任务 11：订阅与权益
 
@@ -474,7 +475,12 @@ AvatarAdmin/
 **Interfaces:**
 - Produces: `type FeatureValue = { mode: 'VALUE'; value: unknown } | { mode: 'UNLIMITED' } | { mode: 'UNSET' }`；`FeatureValueEditor`（属性 `{ type: 'BOOLEAN'|'LIMIT'|'STRING'; value: FeatureValue; allowUnset: boolean; allowUnlimited: boolean; onChange }`）；`saveEntitlementFeatures(key, features)`、`saveGateDefault(key, FeatureValue)`、`saveGateCreditCost(key, number | null)`；账号维度给用户详情（任务 16）用的 `getAccountEntitlements(id)`、`grantPromoEntitlement(id, { entitlementKey, durationDays, reason })`、`revokePromoEntitlement(promoId)`。
 
+- 响应类型（后端回复第 2–4 条）：`EntitlementDef = { key; name; priority; features: { featureKey; mode: 'VALUE'|'UNLIMITED'|'UNSET'; value: unknown | null }[] }`（按 `priority` 升序，`features` 列出全部已声明的开关、按 `featureKey` 升序，没有配置行就是 `UNSET`）；`FeatureGate = { key; kind: 'BOOLEAN'|'LIMIT'|'STRING'; limitScope: string | null; defaultMode: 'VALUE'|'UNLIMITED'|'UNSET'; defaultValue: unknown | null; creditCost: number | null; description: string }`（`limitScope` 仅 `LIMIT` 类有值，`UNSET` 只会出现在五个额度键上）；`SubscriptionDetail = Subscription 的全部列 & { events: { id; type; subtype; eventSignedAt; receivedAt; processedAt; error; needsAttention }[] }`（事件按 `eventSignedAt` 倒序，不含 `payload`；列表项没有 `events`）；`AccountEntitlements = { effective: { featureKey; kind; mode; value; source: 'ENTITLEMENT'|'DEFAULT'|'NONE'; entitlementKey: string | null }[]; entitlements: (AccountEntitlement 的列 & { entitlementName; status: 'ACTIVE'|'EXPIRED'|'REVOKED' })[] }`（`entitlements` 按 `startsAt` 倒序）。
+- 发放限时权益时，权益的选项来自 `GET /entitlement-defs`（后端已对 `SUBSCRIPTION:GRANT` 开放读取）。
+
 **Tests:**
+- 账号的权益页签：`effective` 每个开关一行，显示生效值和来源（权益 / 默认值 / 无）；`entitlements` 里"撤销"按钮只对 `source=PROMO` 且 `status=ACTIVE` 的行显示（再加 `SUBSCRIPTION:GRANT`）。
+- 订阅详情抽屉的事件时间线用 `eventSignedAt`（商店给出的事件时间）倒序，`error` 非空的事件标红，`needsAttention` 的事件有标记。
 - `FeatureValueEditor`：三种状态界面上可区分，序列化分别是 `{mode:'UNSET'}`、`{mode:'UNLIMITED'}`、`{mode:'VALUE',value}`；`UNSET` 只在功能开关默认值的五个额度键上能选；`credits.period_grant` 不能选"不限"；`call.lifetime_minutes` 不出现在权益的功能值里。
 - 额度单价单元格：只有永久的 `LIMIT` 开关可编辑；`avatar.looks_max`、`credits.period_grant` 禁用。
 - 三个通话额度键默认值**都**未配置 → 顶部红条；只配一个 → 无红条；两个文字额度键同理有各自的红条。
@@ -492,12 +498,12 @@ AvatarAdmin/
 **Refs:** 规格 5.10 后半（额度包、调账申请与审核、额度账户、额度流水、额度统计、账号额度）；契约 §15.9、§17.4 额度行。路由取规格 5.0"订阅与额度"中额度相关五行。
 
 **Interfaces:**
-- Produces: `createAdjustRequest(body)`、`approveAdjustRequest(id, note?)`、`rejectAdjustRequest(id, note)`；给用户详情用的 `getAccountCredits(id)`；`NegativeBalance` 展示组件（余额为负时醒目颜色并带"为负时不能消费，新购买的额度会先抵扣"）。
+- Produces: `createAdjustRequest(body)`、`approveAdjustRequest(id, note?)`、`rejectAdjustRequest(id, note)`；给用户详情用的 `getAccountCredits(id, { page, pageSize })`，响应 `{ balance; totalEarned; totalSpent; items: LedgerRow[]; total }`（后端回复第 5 条），`LedgerRow = { id; delta; reason; purchaseId; eventKey; spendKind; featureKey; itemKey; quantity; note; createdAt }`，流水按 `id` 倒序分页，没有额度账户的账号三个合计是 0、`items` 为空（不是 404）；调账申请行带 `applicantUsername`、`reviewerUsername`；`NegativeBalance` 展示组件（余额为负时醒目颜色并带"为负时不能消费，新购买的额度会先抵扣"）。
 
 **Tests:**
-- `me.id` 有值且申请人是当前管理员时，审核按钮禁用并提示（`id` 是给后端的问题里要加到 `GET /me` 的字段，没有时不禁用，由后端的 `SELF_REVIEW_FORBIDDEN` 兜底）；后端返回 `SELF_REVIEW_FORBIDDEN` 时展示。
+- `me.id` 有值且申请人是当前管理员时，审核按钮禁用并提示（`id` 是 `GET /me` 里后端已加的字段，真后端还没上线、字段缺失时不禁用，由后端的 `SELF_REVIEW_FORBIDDEN` 兜底）；后端返回 `SELF_REVIEW_FORBIDDEN` 时展示。
 - 驳回备注必填（`trimSpec` 后至少 1 个码点），通过时备注选填；`kind=GRANT` 时额度必须为正，`ADJUST` 可正可负。
-- 余额为负的行用警示色；流水筛选"获得"只请求正的变动、"消耗"只请求负的变动（断言发出的参数）。
+- 余额为负的行用警示色；流水筛选"获得"发 `type=earn`、"消耗"发 `type=spend`（契约 §15.9 的参数，断言发出的参数）；账号额度页签对没有额度账户的账号显示三个 0 和空流水，不报错。
 - 账号 ID 筛选是精确匹配（不做模糊），提交的是用户输入的完整值。
 - 额度统计的消费额度按 `spendKind` 分，服装再按 `itemKey` 分；沙盒不计入的说明文字存在。
 - 没有 `SUBSCRIPTION:VIEW` 看不到账户、流水页；没有 `SUBSCRIPTION:GRANT` 看不到"新建申请"；没有 `CREDIT:REVIEW` 看不到通过 / 驳回。
@@ -509,6 +515,7 @@ AvatarAdmin/
 **Refs:** 规格 5.14；契约 §16.2–§16.3、§14、§17.4（系统监控行、后台告警一段）、§12。路由取规格 5.0 的"记忆服务""系统监控""客服"各行；反馈详情用抽屉。接口路径用契约的：`/memory/tiers[/{name}]`、`/memory/embedding-models[/{name}]`、`GET /accounts/{id}/memory`、`PUT /accounts/{id}/memory/embedding-model`、`GET /monitor/pipeline`、`GET /alerts`、`POST /alerts/{id}/resolve`。记忆模型页另有一段 `<ConfigForm editPermission="MEMORY:MODEL_REGISTER" />`；写权限用完整的码 `MEMORY:TIER_CONFIG`、`MEMORY:MODEL_REGISTER`、`MEMORY:MODEL_ASSIGN`。
 
 **Interfaces:**
+- 响应类型（契约 §16.2–§16.3 加后端回复第 3 条）：档位 `{ items: { tierName; topK; recencyChannelEnabled; recencyChannelCount; consolidationEnabled; consolidationThreshold }[] }`；模型 `{ items: { modelName; teiBaseUrl; dimensions }[] }`；`GET /accounts/{id}/memory` → `{ tier: { tierName; syncStatus; assignedAt; lastError }; embeddingAssignments: { modelName; assignedBy; assignedByUsername; assignedAt }[] }`。
 - Produces: `listAlerts(p: { status?: 'OPEN'|'RESOLVED'; type?: string; page; pageSize })`、`resolveAlert(id)`（给总览任务 21 用）；`getAccountMemory(id)`、`assignEmbeddingModel(accountId, name)`（给用户详情用）；`ALERT_TYPES`：契约后台告警一段列的全部 14 种类型的常量表（规格 5.14 只列了 13 种，少了 `LOOK_PACKAGE_PREPARE_FAILED`）。
 
 **Tests:**
@@ -530,11 +537,13 @@ AvatarAdmin/
 - 动作补生成：`POST /actions/{id}/backfill`，响应 `{scheduled: N}`；动作不存在 404，已停用 409 `INVALID_STATE`；只对风格适用且缺片段或片段 `FAILED` 的外观补，重复调用只补还缺的。
 - 默认数字人（`DEFAULT_AVATAR:MANAGE`）：`GET /default-avatars`（每行带 `status`）、`POST /default-avatars {name, style, sourceUploadId}`、`PUT /default-avatars/{id} {name}`（只改名）、`POST /default-avatars/{id}/generate`、`POST /default-avatars/{id}/activate`、`DELETE /default-avatars/{id}`；状态 `DRAFT` → `GENERATING` → `READY` → 生效（`isActive`）；`generate` 只对 `DRAFT`，`activate` 要求 `READY`，同一时刻只有一个生效（激活新的，旧的变成非生效但保留），只有非生效且不在生成中的能删，违反一律 409 `INVALID_STATE`；生成的前置配置没配好 503 `GENERATION_NOT_CONFIGURED`。`POST /default-avatars` 不收 `portraitAuthorized`。
 - 投诉证据：`GET /likeness-complaints/{id}/evidence/{index}`（`index` 从 0 起，`COMPLAINT:VIEW`），返回 `{url, mediaType}`，每次读取写审计日志，越界 404 `RESOURCE_NOT_FOUND`。
-- 后端的说明里没写、我们又需要的：列表里的图片怎么显示（响应只有存储引用）、默认数字人生成失败是什么状态——见"契约缺口"，暂定做法已写明。
+- 响应字段（后端回复第 5、6、19 条）：服装 / 背景目录每项带 `previewUrl`、动作目录每项带 `iconUrl`、默认数字人每项带 `sourceImageUrl` 和 `previewUrl`（外观还没生成时 `null`）、`GET /accounts/{id}/avatars` 每个外观带 `previewUrl`；这些响应不再返回 `previewRef`、`iconRef`、`sourceImageRef`；地址是短时效签名地址，每次取列表都是新的，文件缺失为 `null`，所以页面不缓存地址、每次打开页面重新取列表、`null` 显示占位图。
+- `GET /default-avatars` → `{items:[{id, name, style, status, isActive, failureReason, lookId, sourceImageUrl, previewUrl}]}`，按创建时间倒序，不分页；`status` 取 `DRAFT`、`GENERATING`、`READY`，**没有 `FAILED`**：生成失败回到 `DRAFT`，行里带 `failureReason`（`CONTENT_REJECTED`、`GENERATION_FAILED`、`EXTERNAL_TIMEOUT`、`EXTERNAL_TASK_LOST`、`SUBJECT_UNDERAGE`、`NO_FACE_DETECTED` 之一或 `null`），再点"生成"重试，点"生成"后 `failureReason` 清空；`POST`、`PUT`、`generate`、`activate` 的响应是同一项的形状。
+- `GET /likeness-complaints`（列表）和 `/{id}`（详情）每项是 `LikenessComplaint` 的列（`id`、`contactEmail`、`description`、`status`、`receivedAt`、`dueAt`、`resolvedAt`、`handledBy`、`relatedAvatarAssetIds`）加 `handledByUsername`、`overdue`（布尔）、`evidenceCount`（整数）；不返回 `evidenceRefs`；详情另有 `events: [{id, fromStatus, toStatus, note, adminId, adminUsername, createdAt}]`，按 `createdAt` 升序。
 
 **Interfaces:**
 - Consumes: 任务 9 的 `getChannels`（渠道包下拉）；任务 8 的 `UploadField`
-- Produces: `SurfacesPicker`（平台加渠道码的组合，能选"该平台全部渠道"，不选任何一项表示所有端，值格式按契约 §3.7）；`getAccountAvatars(id)`（返回形象、外观和拥有的服装，含 `source`，`USER:VIEW`，用户详情用）、`grantCosmetic(id, { itemId, reason })`（`COSMETIC:GRANT`，用户详情用）；`DefaultAvatarStatus = 'DRAFT' | 'GENERATING' | 'READY'`。
+- Produces: `SurfacesPicker`（平台加渠道码的组合，能选"该平台全部渠道"，不选任何一项表示所有端，值格式按契约 §3.7）；`getAccountAvatars(id)`（返回形象、外观和拥有的服装，含 `source`，`USER:VIEW`，用户详情用）、`grantCosmetic(id, { itemId, reason })`（`COSMETIC:GRANT`，用户详情用）；`DefaultAvatarStatus = 'DRAFT' | 'GENERATING' | 'READY'`；`DefaultAvatarFailureReason` 是上面六个值的联合类型。
 
 **Tests:**
 - `SurfacesPicker`：不选任何项时显示"所有端"，序列化为契约 §3.7 规定的"无限制"取值；选"该平台全部渠道"与选具体渠道的序列化各自正确。
@@ -542,9 +551,9 @@ AvatarAdmin/
 - 动作目录：**没有类型列，也没有表情曲线上传**；每一行都有"给已有外观补生成"，确认框写明会产生生成费用；已停用的动作该按钮禁用；点击后提示"已安排 N 个生成任务"（取响应的 `scheduled`），`scheduled` 为 0 时提示"没有需要补生成的外观"；`triggerableBy` 三个取值（`USER`、`AGENT`、`BOTH`）都能选。
 - 上传声明：新建版本（多语言文案）和"设为生效"（确认文字存在）调 `POST /declarations`、`PUT /declarations/{version}/activate`；`useAdminMeta().declarationRequired` 为 `false` 时顶部有"当前部署不要求勾选声明"的提示，缺失或为 `true` 时不显示。
 - 渲染模型：先上传 zip（`POST /uploads/renderer-model`，上传中不能提交），再以 JSON 提交 `uploadId` 和表单里的 `rendererKind`、`version`、`platform`、`abi`、`rendererFormatVersion`、`minVersionCode`，请求体里没有 `sha256`、`sizeBytes`；列表列出契约 §18 的字段，`sha256`、`sizeBytes` 只读；启用、停用是行内开关。
-- 系统默认数字人：新建流程是"上传源图（`POST /uploads/default-avatar-source`）→ 填名字、选风格、勾选'这张图有肖像授权或是合成的、不对应真人'（只是界面确认，未勾选不能提交，请求体里没有 `portraitAuthorized`）→ `POST /default-avatars` 得到 `DRAFT`"；按状态显示按钮：`DRAFT` 有"生成"，`GENERATING` 显示进行中且没有操作，`READY` 有"设为生效"，非生效且不在生成中的有"删除"（行内确认）；已生效的行没有"删除"；设为生效的确认文字写明"游客和没有形象的账号会立刻看到它"，并说明原来生效的会变成非生效但保留；每个按钮在后端 409 `INVALID_STATE` 时展示当前状态；503 `GENERATION_NOT_CONFIGURED` 时提示生成的前置配置没配好；名字必填，后端 400 原样展示；改名只发 `{name}`；需要 `DEFAULT_AVATAR:MANAGE`。
+- 系统默认数字人：新建流程是"上传源图（`POST /uploads/default-avatar-source`）→ 填名字、选风格、勾选'这张图有肖像授权或是合成的、不对应真人'（只是界面确认，未勾选不能提交，请求体里没有 `portraitAuthorized`）→ `POST /default-avatars` 得到 `DRAFT`"；按状态显示按钮：`DRAFT` 有"生成"，`GENERATING` 显示进行中且没有操作，`READY` 有"设为生效"，非生效且不在生成中的有"删除"（行内确认）；已生效的行没有"删除"；设为生效的确认文字写明"游客和没有形象的账号会立刻看到它"，并说明原来生效的会变成非生效但保留；`DRAFT` 行带 `failureReason` 时显示本地化的失败原因（六个值各有文字），"生成"成功发出后该原因消失；每个按钮在后端 409 `INVALID_STATE` 时展示当前状态；503 `GENERATION_NOT_CONFIGURED` 时提示生成的前置配置没配好；名字必填，后端 400 原样展示；改名只发 `{name}`；需要 `DEFAULT_AVATAR:MANAGE`。
 - 生成任务：只按类型筛选（接口参数只有 `status`、`type`，不做时间筛选），类型含全部五种；系统任务（账号为空）显示"系统"。
-- 赠送服装（用户详情用的 `grantCosmetic` 所在的选择框）：条目列表的来源接口返回 403 时，选择器禁用并写明"需要 `COSMETIC:MANAGE` 才能列出条目"，不崩溃。
+- 赠送服装（用户详情用的 `grantCosmetic` 所在的选择框）：条目列表来自 `GET /cosmetics`（后端已对 `COSMETIC:GRANT` 开放读取）；仍收到 403 时选择器禁用并写明"需要 `COSMETIC:MANAGE` 或 `COSMETIC:GRANT` 才能列出条目"，当作兜底，不崩溃。
 - 投诉：已结案状态不显示流转和删除形象按钮；状态下拉只有 `INVESTIGATING`、`RESOLVED_NOT_FOUND`、`REJECTED`；删除形象的确认文字写明"不能撤销"；到期未结案的行高亮；没有 `COMPLAINT:MANAGE` 看不到流转和删除；证据文件按 `index`（从 0 起）逐个取，每次点击重新取 `{url, mediaType}`，按 `mediaType` 用图片或相应播放器显示，地址不写日志、不放进可分享的 URL，页面有"查看会被记录"的提示；越界的 404 显示"证据不存在"；页面写明"怎么找到对应的形象还没有定：在法律意见出来之前，只能按投诉人提供的上传者信息人工查找"（规格 5.25）。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
@@ -554,7 +563,7 @@ AvatarAdmin/
 **Refs:** 规格 5.8；契约 §11.2、§11.4、§17.4 内容审核行。路由取规格 5.0"内容审核"三行（四条路由：队列和详情同一行，`/moderation/:id` 是独立路由）。文本规则页另有一段 `<ConfigForm editPermission="MODERATION:CONFIG" />`：该码的 10 个键里 `moderation.text_rules` 就是规则词表，由词表编辑器编辑（`GET/PUT /moderation/text-rules`），参数区只渲染另外 9 个键（任务 10 的 `editedElsewhere`）。
 
 **Interfaces:**
-- Produces: `getModerationContent(id): Promise<{ kind: 'TEXT'; text: string } | { kind: 'FILE'; mediaType: string; url: string }>`（每次进入详情和签名地址过期后重新取，不缓存、不写日志）；`decideModeration(id, { decision: 'APPROVE' | 'REJECT'; note?: string })`；`getModerationStats({ from, to })`（给总览用）。
+- Produces: `getModerationContent(id): Promise<{ kind: 'TEXT'; text: string } | { kind: 'FILE'; mediaType: string; url: string; text?: string }>`（`FILE` 带配套文本时多一个 `text` 字段，目前只有声音样本带转写；每次进入详情和签名地址过期后重新取，不缓存、不写日志）；`decideModeration(id, { decision: 'APPROVE' | 'REJECT'; note?: string })`；`getModerationStats({ from, to })`（给总览用）。
 
 **Tests:**
 - 内容区只对持有 `MODERATION:REVIEW` 的管理员取内容（契约：`GET …/content` 要 `REVIEW`，规格 5.8 同）；没有 `REVIEW` 的管理员看到记录字段和"无权查看内容"的提示，并且**没有发出取内容的请求**。
@@ -564,7 +573,7 @@ AvatarAdmin/
 - 举报来源的记录显示举报理由和补充说明（`reporterReason`、`reporterDetail`，长文字用 `EllipsisPopoverText`）。
 - 判定：拒绝时备注必填（`trimSpec` 后至少 1 个码点），通过时选填；确认弹窗先显示这次判定对该类内容的后果（文字取契约 §11.4 的效果表，每种内容类型一条）；连点只发一次请求；"通过""拒绝"按钮只对持有 `MODERATION:REVIEW` 的管理员渲染。
 - 队列默认按等待时长排序，顶部显示最老一条的等待时长；来源筛选含"投诉"，内容类型含 `AVATAR_IMAGE`、`ACTION_CLIP`。
-- 文本规则：每条规则的字段是匹配文本（`pattern`，1..200 个码点）、匹配方式三种（`SUBSTRING`、`WORD`、`REGEX`）、级别（`REVIEW`、`BLOCK`）、备注；页面说明存在：匹配前会做规范化（不分大小写、去掉零宽字符）、正则有执行时间预算、命中 `BLOCK` 的内容不会再发给审核服务；`REGEX` 在前端用 `new RegExp` 只给**不阻止保存**的提示（后端用 Java `Pattern`，语法有差异，以后端为准），后端 400 的 `data.details` 按规则 `id`（新增的用下标）显示在对应行；超过 `moderation.text_rules_max` 条提示；泰语、阿拉伯语的 `SUBSTRING` 规则能录入并回显；保存是整表替换（请求体是整个数组，新增的条目不带 `id`，这是契约缺口表里的假设）。
+- 文本规则：每条规则的字段是匹配文本（`pattern`，1..200 个码点）、匹配方式三种（`SUBSTRING`、`WORD`、`REGEX`）、级别（`REVIEW`、`BLOCK`）、备注；页面说明存在：匹配前会做规范化（不分大小写、去掉零宽字符）、正则有执行时间预算、命中 `BLOCK` 的内容不会再发给审核服务；`note` 最多 200 个码点；`REGEX` 在前端用 `new RegExp` 只给**不阻止保存**的提示（后端用 Java `Pattern`，语法有差异，以后端为准）；泰语、阿拉伯语的 `SUBSTRING` 规则能录入并回显。接口（后端回复第 8 条）：`GET/PUT /moderation/text-rules` 的请求体和响应都是 `{items:[{id, pattern, matchMode, level, note}]}`（按保存的顺序，两个方法都要 `MODERATION:CONFIG`）；`PUT` 是原子的整表替换：带 `id` 且在当前词表里的元素沿用该 `id`，不带 `id` 或 `id` 不在当前词表里的是新增，当前有而请求里没有的被删除；响应含新生成的 `id`；校验失败时 `data.details` 的 `ref` 一律是该元素在请求数组里的下标（从 0 起的字符串），原因 `EMPTY_NOT_ALLOWED`（`pattern` 去空白后为空）、`TOO_LONG`（`pattern` 或 `note` 超长）、`OUT_OF_RANGE`（`matchMode`、`level` 不在取值内）、`INVALID_PATTERN`（`REGEX` 不能编译），按下标把错误对到行；条数超过 `moderation.text_rules_max` 时 `details` 只有一项，`ref` 为 `items`、原因 `OUT_OF_RANGE`，提示显示在整张表上；任何一项不合格什么都不保存，页面保持编辑内容不丢。
 - 审核统计：日期范围用 UTC 日；`avgHandleSeconds`、`oldestPendingSeconds` 为 `null` 时显示"—"。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
@@ -574,12 +583,17 @@ AvatarAdmin/
 **Refs:** 规格 5.7、5.7a；契约 §2.8、§13.1、§17.4 用户管理行、认证事件行、多开检测行、账号状态与后台操作矩阵。路由取规格 5.0"用户"中除"站内通知"外的四行。**依赖：任务 11、12、13、14**（详情的订阅与权益、额度、记忆、形象与服装页签用它们的接口）。
 
 **Interfaces:**
+- 响应类型（后端回复第 6–9 条）：
+  - `UserDetail`：`User` 的列 `id`、`email`、`emailVerifiedAt`、`phone`、`phoneVerifiedAt`（邮箱、手机号的掩码与列表一致）、`status`、`banReason`、`bannedAt`、`currentAvatarAssetId`、`currentVoiceAssetId`、`personaModerationStatus`、`companionName`、`timezone`、`conversationLanguage`、`lifetimeGrantSeconds`、`lifetimeUsedSeconds`、`channelCode`、`registerPlatform`、`priorInviteeRewarded`、`inviteRewardedCount`、`createdAt`，加派生字段 `loginMethods`（`EMAIL`、`PHONE`、`GOOGLE`、`APPLE` 中现有的）、`trafficType`（`PAID` 或 `ORGANIC`）、`companionship`（`{interactionCount, currentStreak, lastInteractionDate, lastInteractionAt}`，没有养成数据时 `0`、`0`、`null`、`null`）、`counts`（`{avatars, voices, looks, cosmetics}`）、`attribution`（`{source, matchType, mediaSource, campaign, installTime, registeredAt}`，没有归因记录时整个字段为 `null`）；后端不返回人设、密码哈希、第三方登录标识。
+  - `AccountAvatars = { avatars: { assetId; name; style; createdAt; currentLookId; isCurrent; looks: { lookId; status; outfitItemId; backgroundItemId; previewUrl; createdAt }[] }[]; cosmetics: { itemId; itemKey; source: 'CREDITS'|'ADMIN_GRANT'; creditLedgerId; grantedAt }[] }`（形象按 `createdAt` 倒序；`style` 在形象上，不在外观上）。
+  - 设备 `GET /users/{id}/devices` → `{items:[{id, platform, appVersion, locale, lastSeenAt, tokenSuffix}]}`（令牌末 6 位，不分页）；认证事件 `GET /users/{id}/auth-events` → `{items:[{type, reason, deviceIdHashPrefix, ipHashPrefix, at}], total}`（两个哈希只给前 8 位，设备哈希为空时 `null`）；多开聚类的账号 `GET /abuse/clusters/accounts` → `{items:[{accountId, createdAt, status, paid, registerMethod}], total}`（`paid` 布尔，`registerMethod` 取 `EMAIL`、`GOOGLE`、`APPLE`、`PHONE`）；删除任务行是 `AccountDeletion` 的列加 `requestedByUsername`。
 - Produces: `BanUserModal`（属性 `{ accountId; status; onDone }`，多开检测页复用）、`StartDeletionModal`；详情页签：概览、形象与服装、归因、会话、设备、认证事件、订阅与权益、额度、记忆（各页签需要对应的查看权限才出现）。
 
 **Tests:**
 - 用户列表的筛选项齐全：账号 ID、邮箱（完整精确）、手机号（完整 E.164 精确）、状态、注册渠道、流量类型（付费、自然）、媒体来源。
 - 邮箱、手机号：没有 `USER:EMAIL_VIEW` / `USER:PHONE_VIEW` 时原样显示后端给的掩码值；筛选框提交的是用户输入的完整值（不做模糊、不截取）。
-- 封禁 / 解封按钮只对 `USER:BAN` 渲染（契约缺口表里的假设）；封禁：理由必填，1..500 个码点，旁边有"这是写给用户看的文字，只有一种语言"；弹窗确认文字写明"封禁会立即结束进行中的通话，不作废登录令牌，解封后原令牌继续可用"；状态为 `PENDING_DELETION` / `DELETING` 的账号封禁按钮禁用；连点只发一次。
+- 详情：概览页签显示 `loginMethods`、`trafficType`、`companionship`、`counts`；`attribution` 为 `null` 时显示"没有归因记录"；设备页签显示令牌末 6 位（`tokenSuffix`），认证事件页签的设备、IP 列显示前 8 位哈希（`deviceIdHashPrefix`、`ipHashPrefix`，为空显示"—"）；多开聚类的账号行用 `paid` 决定有没有"封禁"按钮；形象与服装页签里外观的预览图用 `previewUrl`（`null` 显示占位图，不缓存地址）。
+- 封禁 / 解封按钮只对 `USER:BAN` 渲染（后端已确认 ban、unban 都要 `USER:BAN`）；封禁：理由必填，1..500 个码点，旁边有"这是写给用户看的文字，只有一种语言"；弹窗确认文字写明"封禁会立即结束进行中的通话，不作废登录令牌，解封后原令牌继续可用"；状态为 `PENDING_DELETION` / `DELETING` 的账号封禁按钮禁用；连点只发一次。
 - 发起 / 取消删除按钮只对 `USER:DELETION` 渲染；发起删除：理由 1..200 个码点，说明有宽限期；状态已是待删除 / 删除中时按钮禁用；取消删除只在 `PENDING_DELETION` 且在宽限期内可用；账号处于这两种状态时，发放权益、新建额度申请、指派模型的按钮禁用。
 - 发放限时权益：理由必填，页面写明"不影响商店里的订阅"；撤销有行内确认。
 - 删除任务页：`FAILED` 行有"重试"；`attempts` 达到 `useAdminMeta().deletionAlertAfterFailures` 的行高亮，取不到阈值时不高亮（不写死数字）；原因枚举六种都有本地化文字，为空时显示"—"。
@@ -645,10 +659,12 @@ AvatarAdmin/
 
 **Refs:** 规格 5.6；契约 §7、§17.4 埋点管理行。路由（页面）`/analytics/summary`、`/analytics/detail`、`/analytics/funnel`（`ANALYTICS:VIEW`）；服务函数用契约的接口路径（页面路由不是接口路径，契约 §17.4 开头明说）：`GET /analytics/events`、`/analytics/event-summary`、`/analytics/event-names`、`/analytics/funnel`、`GET/POST/PUT/DELETE /analytics/funnels`。事件汇总接口不分页，一次返回全部事件名（前端分页 50）。
 
+- 响应类型（后端回复第 13 条）：`GET /analytics/event-summary` → `{items:[{eventName, pv, uv}]}`（不分页，按 `pv` 倒序、相同按 `eventName` 升序）；`GET /analytics/event-names` → `{items: string[]}`（升序）；`GET /analytics/funnel` → `{steps:[{eventName, count, conversionFromPrevious}]}`，与请求的 `steps` 同序同数，`count` 是该步去重主体数，`conversionFromPrevious` 是 0 到 1 的小数，第一步以及上一步 `count` 为 0 时为 `null`。
+
 **Tests:**
 - 事件汇总：默认按 `pv` 降序，前端分页 50；日期范围默认 7 天（`DateRangeUtc` 的 `maxDays` 取 `useAdminMeta().analyticsLiveMaxRangeDays`），超过后端上限而前端没有这个值时展示后端的 `INVALID_REQUEST` 文字。
 - 事件明细：时间范围必填；IP 列原样显示后端给的值（掩码或完整）；展开行显示格式化的 `params`、`context` JSON；`clientTime` 列带"客户端自报，不可信"提示；事件名联想来自 `event-names`。
-- 漏斗：步骤 2..10 个，不足或超过时不能查询；`windowHours` 1..720，默认 24；事件名里不含逗号（含逗号时拒绝，因为参数用逗号连接）；预设漏斗带"系统预设"标签、没有编辑、删除，自定义的有且需要 `ANALYTICS:FUNNEL_MANAGE`；结果的相邻步骤转化率 = 本步 ÷ 上一步，上一步为 0 显示"—"；保存的漏斗另存为、编辑、删除各调对应接口；提示面板写明"同一账号按顺序在窗口内依次完成各步骤才算"，去重人数不跨日聚合。
+- 漏斗：步骤 2..10 个，不足或超过时不能查询；`windowHours` 1..720，默认 24；事件名里不含逗号（含逗号时拒绝，因为参数用逗号连接）；预设漏斗带"系统预设"标签、没有编辑、删除，自定义的有且需要 `ANALYTICS:FUNNEL_MANAGE`；相邻步骤转化率取响应的 `conversionFromPrevious`（0–1 小数，显示成百分比；`null` 显示"—"，前端不自己重算）；保存的漏斗另存为、编辑、删除各调对应接口；提示面板写明"同一账号按顺序在窗口内依次完成各步骤才算"，去重人数不跨日聚合。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
 
@@ -690,6 +706,8 @@ AvatarAdmin/
 
 **Refs:** 规格 5.12；契约 §9.1–§9.2、§17.4 邀请管理行。路由 `/invite/codes`、`/invite/records`、`/invite/stats`、`/invite/share-stats`（`INVITE:VIEW`）、`/invite/rewards`（`INVITE:CONFIG`，菜单挂在"活动管理"下，照规格 5.0）。
 
+- 响应类型（后端回复第 10 条）：`GET /invites/codes` → `{items:[{id, code, ownerAccountId, createdAt}], total}`（`createdAt` 是所有者账号的创建时间）；`GET /invites/records` → `{items:[{id, inviterAccountId, inviteeAccountId, inviterLabel, inviteeLabel, redeemedAt, rewardStatus, rewardReason, inviterCreditsGranted, inviteeCreditsGranted, rewardedAt}], total}`，按 `redeemedAt` 倒序；列表页显示掩码标识 `inviterLabel`、`inviteeLabel`，不显示完整账号 ID。
+
 **Tests:**
 - 裂变层级页签的统计项：平均链路深度（一位小数）、最大链路深度、链数（`totalChains`，根账号数；不叫"节点数"，见冲突表）。
 - 邀请统计 KPI：参与率 = `activeInviters / registeredAccounts`；人均邀请数为 `null` 时显示"—"；排行表"查看裂变"切到裂变页签并带上账号；裂变深度输入 `1..inviteChainMaxDepth`（`useAdminMeta` 给，缺失时不限上界、默认 3，由后端校验）；邀请链树节点显示掩码标识。
@@ -704,6 +722,8 @@ AvatarAdmin/
 
 **Interfaces:**
 - Produces: `probeActivityOverlap(action, id, body)`：先 `confirm=false`，响应有 `disabledActivities` 时返回它们，由页面弹确认框，确认后以 `confirm=true` 再发
+
+- 响应类型（后端回复第 17 条）：`GET /checkin/activities` 每项是 `CheckinActivity` 的列（`id`、`name`、`startDate`、`endDate`、`status`、`createdBy`、`createdAt`、`updatedAt`）加 `createdByUsername`、`lifecycleStatus`；`GET /checkin/activities/{id}` 另加 `rewards: [{dayNum, rewardCredits, bonusCredits}]`（按 `dayNum` 升序）；`GET /checkin/records` 每项是 `CheckinRecord` 的列加 `activityName`；`GET /tasks/records` 每项是 `TaskRecord` 的列加 `taskName`；名称是读取时的当前名称，对象不存在时为 `null`、ID 照旧（显示"—"和 ID）。
 
 **Tests:**
 - 发布 / 启用签到活动、编辑生效中活动的日期范围：先探测；有重叠时确认框列出将被停用的活动名，取消则不发第二次；无重叠直接成功。
@@ -721,6 +741,8 @@ AvatarAdmin/
 **Interfaces:**
 - Consumes: 任务 9 的 `getChannels`
 - Produces: `parseCostBatch(input: { kind: 'json'; text: string } | { kind: 'csv'; text: string }): { rows: CostRow[]; errors: { line: number; reason: string }[] }`（纯函数；日期接受 `YYYY-MM-DD`、`YYYY/MM/DD`、`YYYY.MM.DD` 并统一成 `YYYY-MM-DD`；任一行出错则 `rows` 为空）
+
+- 响应类型（后端回复第 11 条）：`GET /attribution/clicks` → `{items:[{id, clickedAt, campaignId, campaignName, status, channel, utmSource, utmMedium, utmCampaign, ip, claimedAt}], total}`（按 `clickedAt` 倒序；`status` 取 `PENDING`、`MATCHED`、`EXPIRED`；`channel` 取 `STORE_REDIRECT`、`APK_DOWNLOAD`；`ip` 默认掩码，持有 `ANALYTICS:IP_VIEW` 才完整）；`GET /attribution/campaigns` → `{items, total}`，每项是 `AttributionCampaign` 的列（`id`、`code`、`name`、`mediaSource`、`utmMedium`、`campaign`、`adset`、`ad`、`facebookPixelId`、`googlePixelId`、`tiktokPixelId`、`remark`、`enabled`、`createdBy`、`createdAt`、`updatedAt`）加 `createdByUsername`、`channelCodes`（渠道码数组）、`facebookAccessTokenSet`（布尔，"已设置"就看它，令牌本身永不返回）。
 
 **Tests:**
 - `parseCostBatch`：JSON 数组、每行一个对象两种写法；CSV 表头 `campaign_code,stat_date,cost,currency,remark`；三种日期写法归一；负数花费、非数字、缺字段、不存在的日期（`2026-02-30`）各按行报原因；一行错整批 `rows` 为空；超过 `attribution.cost_batch_max` 行时报错（该值从 `GET /config` 读，ATTRIBUTION:MANAGE 可读）；`currency` 与 `attribution.cost_currency` 不同的行不合法（契约 §10.5）；同一批内重复的（投放账户编码，日期）整批拒绝并按行说明。
@@ -744,7 +766,10 @@ AvatarAdmin/
 **Interfaces:**
 - Produces: `validateBands(bands: Band[]): { ok: true } | { ok: false; reasonKey: string }`（第一档下限 0；下一档下限 = 上一档上限 + 1；最后一档上限为空）；`useAdminMeta().allowedCurrencies`
 
+- 响应类型（后端回复第 12 条）：`GET /usage/prices` → `{items: PriceBatch[], total}`（一项一个批次，按 `resourceType`、`provider`、`model`、`unit` 升序、同模型内 `effectiveFrom` 倒序）；`PriceBatch = { batchId; resourceType; provider; model; unit; effectiveFrom; currency; status; source; confirmedBy; confirmedByUsername; confirmedAt; reviewedBy; reviewedByUsername; reviewedAt; reviewNote; createdAt; bands: Band[] | null; unitPrice: string | null }`，`LLM` 批次的 `bands` 是 `[{inputMinTokens, inputMaxTokens, inputPrice, cachedInputPrice, outputPrice}]`（按下限升序）、`unitPrice` 为 `null`，其他资源类型 `unitPrice` 有值、`bands` 为 `null`；**所有价格都是字符串形式的十进制数，不经过浮点**，不返回 `rawSnapshot`；`GET /usage/price-batches/pending` → `{items}`，每项是批次形状（`status=PENDING_REVIEW`）加 `active`（同一模型今天生效的 `ACTIVE` 批次，同一形状，没有则 `null`，页面据此逐档对比）；`GET /usage/models` → `{items, total}`，每项是 `UsageModel` 的列加 `hasActivePrice`（布尔）。
+
 **Tests:**
+- 价格是十进制字符串：`"0.0000000001"`、`"12345678.1234567890"` 在读取、显示、手填提交（请求里仍是字符串）全程不变，不出现科学计数法，不被 `Number` 转换吞掉精度；档位边界（token 数）是整数。
 - `validateBands`：缺口、重叠、第一档不从 0 起、最后一档有上限、单档各一个反例和正例。
 - 报表：不同币种分开显示、不相加；费用为空的请求归"无费用"组；"没有价格的请求"卡片点击跳到价格页"模型"页签并带"没有生效价格"筛选；非 LLM 行显示数量与单位而不是 token；导出需 `STATS:EXPORT`，落地需 `STATS:LAND`。
 - 报表顶部写明"费用按各组件上报的用量和价格表计算；LLM 费用是下限：用户打断通话时被取消的 LLM 请求可能没有用量，厂商仍会计费，LLM 对账以云厂商账单为准；自己部署的资源类型的费用取决于运营填的分摊价格"（规格 5.23）。
@@ -761,6 +786,8 @@ AvatarAdmin/
 **Interfaces:**
 - Consumes: 任务 8 的 `UploadField`、`LinkInput`、`SCREEN_TARGETS`（`IN_APP_ROUTE` 的目标下拉）；任务 10 的 `ConfigForm`（广告全局设置）
 - Produces: `TargetingEditor`（平台、国家、系统最低版本、App 最低版本、语言、时段列表，时段按用户本地时间）
+
+- 响应类型（后端回复第 18 条）：`GET /ads/report/by-placement` 每行 `placementId`、`slotKey`、`placementName` 加指标；`by-campaign` 每行 `campaignId`、`campaignName`；`by-creative` 每行 `creativeId`、`creativeTitle`（没有为 `null`）；`by-country` 每行 `country`（空串表示未知）；指标字段是契约 §22.9 列的那些；`GET /ads/report/nofill` 的行是 `{statDate, slotKey, reason, cnt}`，**没有 `platform`、`channelCode`**，所以无广告原因表只有日期、广告位、原因、次数四列（规格 5.17 的"平台"列不显示）；不传筛选时是全部平台、全部渠道的合计。
 
 **Tests:**
 - 每个广告页顶部可折叠的投放检查清单存在，五层条件按顺序列出，游客只有 `app_open`、`call_end` 两个广告位的说明存在。
@@ -781,7 +808,7 @@ AvatarAdmin/
 - 渠道：凭据输入框永远是空的，编辑时留空表示不修改（请求体不含该字段）；供应商下拉来自 `GET /sms/meta`；测试发送弹窗显示当天剩余次数，需要 `SMS:CHANNEL:CONFIG`；启用开关走 `PUT …/enabled`，立即生效；删除、停用、或改 `smsType` / `countries` 使它不再是最后一个覆盖的启用 `OTP` 通道时，如果 `auth.phone_login_enabled` 为真**或存在手机号账号**，后端返回 `INVALID_REQUEST`，页面在操作前提示这两个条件并原样展示后端文字（契约 §23.4）。
 - 模板：`OTP` 类型缺 `{code}` 时实时报错且不能保存；可用占位符 `{minutes}`、`{appName}`；选模板规则的说明存在；编码创建后只读；不能停用或删除最后一个启用的 `OTP` 模板（操作前提示，后端 `INVALID_REQUEST` 原样展示）。
 - 发送记录：号码默认显示后端的掩码，持有 `SMS:RECORD:PHONE_VIEW` 才是完整值；没有任何"查看验证码"入口；导出按钮只对 `SMS:RECORD:EXPORT` 渲染；验证码走推送的行不显示供应商消息 ID 和送达状态。
-- 邮件模板：契约有五个模板（规格 5.18a 写四个，少了 `LIKENESS_COMPLAINT_RECEIVED`），必含占位符的规则在前端按模板编码维护：`REGISTER_CODE`→`{code}`，`PASSWORD_RESET`→`{resetLink}`，`DELETION_CONFIRM`→`{confirmLink}` 与 `{subscriptionNotice}`，`PASSWORD_CHANGED`→`{time}`，`LIKENESS_COMPLAINT_RECEIVED` 无必含；后端返回了前端不认识的编码时照样显示、可编辑，只是不做必含占位符的前端检查；标题 1..200 个码点；"恢复默认"先显示默认文案再行内确认；模板清单取后端返回。
+- 邮件模板：`GET /email/templates` → `{items:[{templateCode, subject, body, defaultSubject, defaultBody, modified, updatedBy, updatedByUsername, updatedAt, placeholders, requiredPlaceholders}]}`（五个模板码各一项、按 `templateCode` 升序、不分页；`modified` 表示库里有这一行，没改过时三个修改人时间字段为 `null`；`reset` 之后与从未改过一样）；**可用的占位符和必含的占位符由后端的 `placeholders`、`requiredPlaceholders` 给，前端不写死模板码对应的规则**：编辑页提示可用占位符，保存前检查必含的占位符都在，后端返回了前端不认识的模板码照样显示、可编辑；标题 1..200 个码点；"恢复默认"先显示 `defaultSubject`、`defaultBody` 再行内确认；模板清单取后端返回。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
 
@@ -807,10 +834,12 @@ AvatarAdmin/
 
 **Refs:** 规格 5.20、5.21；契约 §25.4、§26.2–§26.3、§1.7。路由 `/users/notifications`（`NOTIFICATION:VIEW`）、`/config/client`（`CLIENTCONFIG:VIEW`）。
 
+- 响应类型（后端回复第 1、16 条）：`GET /client-config` → `{items:[{key, type, localized, readOnly, configured, defaultValue, values, updatedBy, updatedByUsername, updatedAt}]}`（登记的全部键各一项、按 `key` 升序、不分页；`type` 取 `URL`、`EMAIL`、`STRING`、`BOOLEAN`、`INT`、`STRING_LIST`；`readOnly` 为真是取自系统配置、不能编辑的那六个键；`configured` 表示库里有这个键的值（`readOnly` 的键恒为真）；`defaultValue` 是登记的默认值，没有为 `null`；`values` 是 `{"<语言标签>": 值}`，空字符串键是默认值，`localized` 为假的键只有空字符串键，没配置的键是 `{}`，`readOnly` 的键是 `{"": 当前系统配置值}`，值的 JSON 类型与 `PUT` 在同一位置接受的一致）；**登记表里每个键的"说明"和"客户端使用点"文字不在接口里**，放在语言文件里以 `key` 为索引（`clientConfig.<key>.desc`、`clientConfig.<key>.usage`），查不到时显示 `key`。`GET /notifications` → `{items:[{id, accountId, category, title, isRead, linkType, linkTarget, sentBy, sentByUsername, createdAt}], total}`（`title` 是英文标题）；`GET /notifications/{id}` → `Notification` 的全部列（`id`、`accountId`、`category`、`titleI18n`、`bodyI18n`、`templateKey`、`templateParams`、`linkType`、`linkTarget`、`isRead`、`sentBy`、`createdAt`）加 `sentByUsername`；`SYSTEM_EVENT` 的 `titleI18n`、`bodyI18n` 为 `null`，`ADMIN` 的 `templateKey`、`templateParams` 为 `null`。
+
 **Tests:**
 - 发送：收件账号每行一个 ID、去重；超过 `useAdminMeta().maxRecipients` 时提示（缺失时交给后端）；后端 400 的 `data.details` 逐个账号列出且整批不发；标题 ≤100、正文 ≤500（码点，实时计数）；`en` 必填；链接用 `LinkTargetField`（无、页面、网址；"页面"的下拉就是 `SCREEN_TARGETS`，"网址"走 `LinkInput`）；"同时推送"勾选旁写明"推送遵守用户的公告类通知偏好，偏好关闭的用户只收到收件箱消息"；页面注明"全体用户请用手动推送任务"；发送按钮和弹窗只对 `NOTIFICATION:SEND` 渲染。
 - 列表点开抽屉看到全部语言的标题与正文、模板键和参数。
-- 客户端配置：列表列出键、说明、类型、是否按语言区分、是否已配置、客户端使用点；`URL` 类型填 `http://` 或空值不能保存；`STRING_LIST` 只读；一个语言校验失败整个键不保存；"重置"删除该键全部语言值（行内确认）；预览按所选语言显示实际取值并标出来源（该语言 / 默认值 / 未配置）；六个只读键各自显示"由 X 配置决定，在系统配置里改"，没有 `inviteShareSubtitle`；没有 `CLIENTCONFIG:MANAGE` 看不到保存和重置。
+- 客户端配置：列表列出键、说明、类型、是否按语言区分、是否已配置、客户端使用点；`URL` 类型填 `http://` 或空值不能保存；`STRING_LIST` 只读；一个语言校验失败整个键不保存；"重置"删除该键全部语言值（行内确认）；预览按所选语言显示实际取值并标出来源（该语言 / 默认值 / 未配置）；`readOnly` 为真的键（规划时就是那六个，由接口的 `readOnly` 决定，前端不写死）各自显示"由 X 配置决定，在系统配置里改"，没有 `inviteShareSubtitle`；没有 `CLIENTCONFIG:MANAGE` 看不到保存和重置。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
 
@@ -821,12 +850,14 @@ AvatarAdmin/
 **Interfaces:**
 - Produces: `PermissionTreeSelect`（属性 `{ nodes: PermissionNode[]; value: string[]; onChange }`：勾选父节点同时勾选全部后代，部分后代选中时父节点为半选，值是完整的码列表）
 
+- 响应类型（后端回复第 3、15 条）：`GET /admins` → `{items, total}`，每项是 `AdminUser` 的列 `id`、`username`、`superAdmin`、`status`、`mustChangePassword`、`totpEnrolledAt`、`lastLoginAt`、`createdAt` 加 `roles: [{id, name}]`（按名字升序）；`GET /roles` → `{items, total}`，每项是 `AdminRole` 的列 `id`、`name`、`remark`、`createdAt` 加 `permissionCodes`（升序）；两个接口都分页，管理员表单里选角色用 `pageSize=200` 一次取完；审计日志的 `adminUsername` 是写入当时的用户名，管理员以后被删除或改名，已写的行不变，直接显示它；别处的 `…Username` 为 `null`（管理员已删除）而 ID 非空时，显示 ID 前 8 位。
+
 **Tests:**
 - `PermissionTreeSelect`：勾选父节点得到父节点和全部后代；取消一个后代，父节点变半选并从值里去掉；保存的值是完整列表；节点名按界面语言取 `nameZh` / `nameEn`，缺一种时用另一种，都缺时显示码。
 - 管理员：持有 `ADMIN:MANAGE` 的管理员不能修改自己的角色和 `superAdmin`（对自己的行这两项禁用）；`superAdmin` 开关只对超级管理员可用；不能停用或删除自己、最后一个启用的超级管理员（按钮禁用且后端 403 / 409 原样展示）；角色是多选，选项来自 `GET /roles`（要 `ROLE:MANAGE`），只有 `ADMIN:MANAGE` 的管理员收到 403 时，角色选择器禁用并写明缺哪个权限；用户名创建后只读；重置密码、重置二次验证有确认；`DUPLICATE_RESOURCE` 的 `data.field` 指到对应表单项。
 - 角色：删除仍分配给管理员的角色时展示 `ROLE_IN_USE`；权限树读取需要 `ROLE:MANAGE` 或 `PERMISSION:MANAGE`。
 - 权限树页：内置节点只能改名称和排序（码、父节点不可改，无删除）；自定义节点可改父节点、可删除；有子节点时删除展示 `PERMISSION_HAS_CHILDREN`；页面顶部写明自定义节点对现有接口没有效力。
-- 审计日志：筛选管理员、动作、对象类型、对象 ID、时间范围；管理员列显示用户名（契约缺口表）。
+- 审计日志：筛选管理员、动作、对象类型、对象 ID、时间范围；管理员列显示 `adminUsername`（写入当时的用户名，不随改名变）。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
 
@@ -847,7 +878,7 @@ AvatarAdmin/
   - `npm run build` 的产物里没有 `mock/` 的任何内容（按假账号用户名和假验证码 grep `dist/`）。
 - [ ] **步骤 2：规格 §12 验收清单逐条对到测试或手工检查**，写成一张"条目 → 对应测试名或检查方法 → 结果"的表放进任务报告；没有对应测试的条目补测试。
 - [ ] **步骤 3：浏览器走查**：`npm run dev:mock`，用 `root` 登录，用 `support`、`finance`、`reviewer` 各登录一次，每个模块打开至少一个页面；如果当前会话没有可用的浏览器工具，报告里写"浏览器走查未运行"并给出未走查的页面数，不用其他方式替代。
-- [ ] **步骤 4：定稿给后端的问题和规格修改清单**：`docs/contract-requests/2026-10-21-admin-frontend.md` 第一部分（计划阶段已写好交给后端）按后端的回复更新，执行中新发现的、说明里没有的接口追加成新的问题；再加"规格需要在 main 上修改的地方"一节，内容是本计划"规格与契约的冲突"表的全部行（规划时 7 行，执行中发现的再加），每行写规格的位置、现在的文字、应改成什么；两部分的条数写进报告，没有得到回复的问题单独列出。
+- [ ] **步骤 4：定稿给后端的问题和规格修改清单**：`docs/contract-requests/2026-10-21-admin-frontend.md` 第一部分（计划阶段已写好交给后端）按后端的回复更新，执行中新发现的、说明里没有的接口追加成新的问题；再加"规格需要在 main 上修改的地方"一节，内容是本计划"规格与契约的冲突"表的全部行（规划时 8 行，执行中发现的再加），每行写规格的位置、现在的文字、应改成什么；两部分的条数写进报告，没有得到回复的问题单独列出。
 - [ ] **步骤 5：部署文档** `docs/deploy.md`：同域反向代理（`/api/` 转发、其余走单页应用回退到 `index.html`）的完整 nginx 示例、哈希文件名资源的缓存头、构建变量清单与构建命令；README 写运行方式（`dev:mock`、`dev:api`）、假账号、构建变量、测试命令。
 - [ ] **步骤 6：报告**：开头先写"修复未完成的数量 / 记录项数量 / 未运行项数量 / 阻塞项数量"，再写其余；然后把 `admin-frontend` 合回 main（提交不问你）；**推送前问你**。
 
