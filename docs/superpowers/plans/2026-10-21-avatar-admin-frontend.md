@@ -808,7 +808,8 @@ AvatarAdmin/
 - 渠道：凭据输入框永远是空的，编辑时留空表示不修改（请求体不含该字段）；供应商下拉来自 `GET /sms/meta`；测试发送弹窗显示当天剩余次数，需要 `SMS:CHANNEL:CONFIG`；启用开关走 `PUT …/enabled`，立即生效；删除、停用、或改 `smsType` / `countries` 使它不再是最后一个覆盖的启用 `OTP` 通道时，如果 `auth.phone_login_enabled` 为真**或存在手机号账号**，后端返回 `INVALID_REQUEST`，页面在操作前提示这两个条件并原样展示后端文字（契约 §23.4）。
 - 模板：`OTP` 类型缺 `{code}` 时实时报错且不能保存；可用占位符 `{minutes}`、`{appName}`；选模板规则的说明存在；编码创建后只读；不能停用或删除最后一个启用的 `OTP` 模板（操作前提示，后端 `INVALID_REQUEST` 原样展示）。
 - 发送记录：号码默认显示后端的掩码，持有 `SMS:RECORD:PHONE_VIEW` 才是完整值；没有任何"查看验证码"入口；导出按钮只对 `SMS:RECORD:EXPORT` 渲染；验证码走推送的行不显示供应商消息 ID 和送达状态。
-- 邮件模板：`GET /email/templates` → `{items:[{templateCode, subject, body, defaultSubject, defaultBody, modified, updatedBy, updatedByUsername, updatedAt, placeholders, requiredPlaceholders}]}`（五个模板码各一项、按 `templateCode` 升序、不分页；`modified` 表示库里有这一行，没改过时三个修改人时间字段为 `null`；`reset` 之后与从未改过一样）；**可用的占位符和必含的占位符由后端的 `placeholders`、`requiredPlaceholders` 给，前端不写死模板码对应的规则**：编辑页提示可用占位符，保存前检查必含的占位符都在，后端返回了前端不认识的模板码照样显示、可编辑；标题 1..200 个码点；"恢复默认"先显示 `defaultSubject`、`defaultBody` 再行内确认；模板清单取后端返回。
+- 邮件模板：`GET /email/templates` → `{items:[{templateCode, subject, body, defaultSubject, defaultBody, modified, updatedBy, updatedByUsername, updatedAt, placeholders, requiredPlaceholders}]}`（五个模板码各一项、按 `templateCode` 升序、不分页；`modified` 表示库里有这一行，没改过时三个修改人时间字段为 `null`；`reset` 之后与从未改过一样）；**可用的占位符和必含的占位符由后端的 `placeholders`、`requiredPlaceholders` 给，前端不写死模板码对应的规则**：编辑页提示可用占位符（原样显示带花括号的字符串），保存前检查必含的占位符都在（`placeholders`、`requiredPlaceholders` 每项都带花括号，和正文里写的完全一样，后端回复第二份已确认：用数组里的原样字符串在正文里找，区分大小写，不去花括号，也不做大小写折叠；缺任何一个必含项，后端返回 400 `INVALID_REQUEST`，`message` 写明缺哪个），后端返回了前端不认识的模板码照样显示、可编辑；标题 1..200 个码点；"恢复默认"先显示 `defaultSubject`、`defaultBody` 再行内确认；模板清单取后端返回。
+- 必含占位符检查：`requiredPlaceholders` 为 `["{code}"]` 时，正文含 `{code}` 通过；只含 `code`、含 `{CODE}`、含 `{ code }` 都不通过并指出缺 `{code}`。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
 
