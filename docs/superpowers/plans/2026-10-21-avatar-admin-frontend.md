@@ -18,7 +18,7 @@
 | 依据 | 页面、字段、权限码按规格；接口按契约 §17 和它指向的 §8、§10、§11、§14.2、§15、§16、§22–§26、§28；契约没定的接口和全部响应字段名，以后端 2026-10-21 的两份文件为准且自包含：说明 `AvatarBackend/docs/superpowers/plans/2026-10-21-avatar-backend-note-for-avataradmin.md`（提交 1bc0b66）和对我们 11 条问题的逐条回复 `AvatarBackend/docs/superpowers/plans/2026-10-21-avatar-backend-reply-to-avataradmin.md`（提交 4e1f538）；两处都没有的接口，列成新问题交给后端，不自己猜 |
 | Git | 计划提交在 main（第一个提交）；实现在分支 `admin-frontend`；全部完成后合回 main；提交不问你，推送先问你 |
 | 命名 | 包名 `avatar-admin`；仓库的文件、文件夹、标识符、注释、文档里不出现参照项目或任何第三方产品名；参照项目只用于看结构，不复制代码 |
-| 技术栈 | Umi Max 4.7.25、React 19.3.x、antd 6.6.x、`@ant-design/pro-components` 3.1.14-7（预发布线，精确锁定）、`@ant-design/plots`、dayjs、TypeScript 5.9.x、Node ≥ 20（本机 25.6.1）；规划时这一组在 Node 25.6.1 上构建和组件测试都通过，以任务 1 的实测为准 |
+| 技术栈 | Umi Max 4.7.25、React 19.3.x、antd 6.6.x、`@ant-design/pro-components` 3.1.14-7（预发布线，精确锁定）、`@ant-design/plots`、dayjs、TypeScript 5.9.x、Node ^22.22.1 或 ≥24（任务 1 按已装包的 engines 核实：lint-staged 17.6.0 要求 ≥22.22.1，vitest 4.1.10 排除 Node 23；本机 25.6.1）；规划时这一组在 Node 25.6.1 上构建和组件测试都通过，以任务 1 的实测为准 |
 | 为什么是 antd 6 加预发布的 pro-components | pro-components 稳定版 2.8.10 的 peer 只声明 antd 4/5；Ant Design Pro 官方模板今天用的就是 antd 6 加 pro-components 3.1.14 线；参照项目是 antd 6 加 2.8.10 再手工打补丁，不照做 |
 | 图表库 | `@ant-design/plots`（规格写的 `@ant-design/charts` 里的统计图部分，官方模板也用它；charts 多带的图谱和流程图库我们用不到）；这一条偏离规格文字，你可以改回 |
 | 测试 | Vitest 4.1.x 加 happy-dom 加 Testing Library；`@umijs/max` 和 `@ant-design/plots` 在测试里别名到 `tests/stubs/` 里的桩（应用代码照常从 `@umijs/max` 导入）；不用 Jest（规划时实测：Jest 加 Umi 测试预设在 Node 25 下加载 `jest.config.ts` 即报错，改成 CommonJS 配置后单个测试要 295 秒）；时区相关的测试在测试里用 `withTimeZone(tz, fn)` 设 `process.env.TZ`（本机实测有效），Vitest 用 `forks` 进程池 |
