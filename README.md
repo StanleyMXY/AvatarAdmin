@@ -6,8 +6,13 @@ backend contract live in the AvatarApp repository and are not copied here.
 
 ## Requirements
 
-- Node 20 or newer (developed on 25.6.1). Node 25 prints a `--localstorage-file` warning when
-  `max` runs; it is harmless.
+- Node `^22.22.1 || >=24.0.0` (`engines` in `package.json`; developed on 25.6.1). Floor derived from
+  the `engines` fields of the installed packages: `lint-staged@17.6.0` needs `>=22.22.1` (the
+  highest; it only runs in the commit hook), `@ant-design/pro-components@3.1.14-7` needs
+  `>=22.12.0` (the highest among packages needed to build), `@testing-library/jest-dom@7.0.1`
+  needs `>=22`, `vite@7.3.6` needs `^20.19.0 || >=22.12.0`, and `vitest@4.1.10` needs
+  `^20.0.0 || ^22.0.0 || >=24.0.0`, which excludes Node 23. Node 25 prints a
+  `--localstorage-file` warning when `max` runs; it is harmless.
 - npm. The lockfile is committed; install with `npm install` from the repository root.
 - Keep the npm cache and temp directory off the system drive if it is short on space:
 
@@ -70,11 +75,15 @@ There are no secrets in this repository.
   names. The Umi stub is steered with `setTestAccess`, `setTestInitialState`, `setTestLocation`
   and reset with `resetUmiStub()` in `beforeEach`.
 - Node 22+ has its own `localStorage` that shadows happy-dom's and is unusable without a file, so
-  `vitest.config.ts` starts the test workers with `--no-experimental-webstorage`. `tests/setup.ts`
-  also gives every test fresh, empty `localStorage` / `sessionStorage`, and makes
-  `vi.spyOn(Storage.prototype, 'setItem')` take effect even on a storage that was already used
-  (happy-dom otherwise binds the method on first use). Code that guards storage access with
-  `try/catch` is tested by making `setItem` throw this way.
+  `vitest.config.ts` starts the test workers with `--no-experimental-webstorage`.
+- happy-dom binds a `Storage` method onto the instance the first time it is read, which would make
+  a later `vi.spyOn(Storage.prototype, 'setItem')` silently do nothing. `tests/setup.ts` therefore
+  gives every test fresh, empty `localStorage` / `sessionStorage` (no data carries over between
+  tests) and makes both forms work, also on a storage that was already used:
+  `vi.spyOn(Storage.prototype, 'setItem')` (affects both storages) and
+  `vi.spyOn(localStorage, 'setItem')`, `Object.defineProperty(localStorage, 'setItem', ...)` or
+  `localStorage.setItem = fn` (affect that storage only). `tests/storage.test.ts` shows each form
+  being caught by a `try/catch`. Code that guards storage access with `try/catch` is tested this way.
 - Time zone dependent code is tested with `withTimeZone(tz, fn)` from `tests/withTimeZone.ts`,
   which sets `process.env.TZ` for the callback and restores it afterwards. A `TZ=... node`
   prefix does not work under Git Bash on Windows.
@@ -82,9 +91,19 @@ There are no secrets in this repository.
 ## Commit hook
 
 `.husky/pre-commit` runs, in order:
+
 1. `lint-staged`: `biome check` on the staged files only;
-2. `scripts/typecheck-staged.mjs`: type-checks the whole project, but fails only on errors located
-   in staged files. Errors in other files are printed as a warning, so a half-written file
-   elsewhere in the working tree does not block an unrelated commit.
+2. `scripts/typecheck-staged.mjs`: type-checks the whole project, but fails only on type errors
+   located in staged files; errors in other files are printed as a warning, so a half-written file
+   elsewhere in the working tree does not block an unrelated commit. It always fails when `tsc`
+   itself cannot do its job: it could not be started or was killed, it exited non-zero without a
+   readable diagnostic (crash, out of memory), or it reported a configuration problem (a diagnostic
+   with no file location such as TS6053, or any diagnostic located in a `.json` file such as an
+   unknown `tsconfig.json` option). It also runs when only `tsconfig*.json` or `package.json` is
+   staged. `tsc` reads the working tree, not the index, so a partly staged file is checked as it is
+   on disk. Tests: `scripts/typecheck-staged.test.ts`.
+
+`.husky/commit-msg` hands over to a global `core.hooksPath` `commit-msg` hook when the developer has
+one (husky's own hooks path would otherwise bypass it), and does nothing otherwise.
 
 Do not bypass the hook with `--no-verify`.
