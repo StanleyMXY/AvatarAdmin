@@ -1,0 +1,17 @@
+{
+  "extends": "./src/.umi/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "types": ["node", "vitest/globals"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@@/*": ["./src/.umi/*"],
+      "@root/*": ["./*"],
+      "@umijs/max": ["./node_modules/umi"],
+      "@umijs/max/typings": ["./src/.umi/typings"]
+    }
+  },
+  "include": ["src/**/*", "config/**/*", "mock/**/*", "scripts/**/*", "tests/**/*", "*.ts"],
+  "exclude": ["node_modules", "dist", ".superpowers", "src/.umi-production"]
+}

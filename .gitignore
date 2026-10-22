@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.umi/
+.umi-production/
+.umi-test/
+src/.umi/
+coverage/
+*.log
+.DS_Store
+
+# environment files: only the example is tracked
+.env*
+!.env.example
+
+# controller and agent working files
+.superpowers/

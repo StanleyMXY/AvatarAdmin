@@ -1,0 +1,52 @@
+{
+  "name": "avatar-admin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Admin console frontend",
+  "scripts": {
+    "dev:mock": "max dev",
+    "dev:api": "cross-env MOCK=none max dev",
+    "build": "max build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check",
+    "tsc": "tsc --noEmit",
+    "check:routes": "tsx scripts/check-route-inventory.ts",
+    "check:codes": "tsx scripts/check-permission-codes.ts",
+    "check:config-keys": "tsx scripts/check-config-keys.ts",
+    "postinstall": "max setup",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@ant-design/icons": "6.3.4",
+    "@ant-design/plots": "2.6.8",
+    "@ant-design/pro-components": "3.1.14-7",
+    "antd": "6.6.7",
+    "dayjs": "1.11.23",
+    "qrcode.react": "4.2.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.2",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
+    "@types/node": "^24.0.10",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@umijs/max": "4.7.25",
+    "cross-env": "10.1.0",
+    "happy-dom": "20.14.6",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0",
+    "react-intl": "12.1.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
