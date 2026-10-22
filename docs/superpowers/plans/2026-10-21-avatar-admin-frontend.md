@@ -45,8 +45,9 @@
 | 链接校验 | 一个 `validateServerLink`，规则是契约 §1.7，所有链接字段共用 |
 | 主题 | dim、deep、light 三种模式，取值照规格 §7；模式存 `localStorage`；切换不刷新页面，图表跟着重绘；实心主色按钮的文字颜色按对比度自动选深色或白色；有对比度测试 |
 | 构建变量 | `ADMIN_PRODUCT_NAME`、`ADMIN_LOGO_URL`、`ADMIN_PRIMARY_COLOR`、`ADMIN_PRIMARY_HOVER`、`ADMIN_PRIMARY_ACTIVE`、通话质量红框阈值 `ADMIN_QUALITY_MIN_SUCCESS_RATE`（0.95）和 `ADMIN_QUALITY_MAX_SLOW_SHARE`（0.05），开发期另有 `ADMIN_API_PROXY_TARGET`；默认值取规格 §7 和 §11，默认标志是仓库内的中性 SVG，不引外部地址；仓库不放密钥 |
-| 前端读不到的配置值 | 页面需要、但编辑权限不属于该页权限的配置值（例如模板页要的 `app.supported_locales`），不写死数字：从 `GET /api/admin/meta` 取（后端已定：任何已登录、不在改密码状态的管理员可调，平铺对象 12 个字段，没有默认值又未配置的键为 `null`）；值为 `null` 或接口取不到（404，后端还没上线时）就不做前端预检、不显示数字，交给后端校验并原样展示后端错误 |
+| 前端读不到的配置值 | 页面需要、但编辑权限不属于该页权限的配置值（例如模板页要的 `app.supported_locales`），不写死数字：从 `GET /api/admin/meta` 取（后端已定：任何已登录、不在改密码状态的管理员可调，平铺对象 20 个字段：12 个配置值，没有默认值又未配置的键为 `null`；另 8 个上传限制，都是整数、不会是 `null`）；值为 `null` 或接口取不到（404，后端还没上线时）就不做前端预检、不显示数字，交给后端校验并原样展示后端错误 |
 | 导出 | `fetch` 带 `Authorization`，先看状态码和内容类型再保存；失败的 JSON 展示给用户、绝不存成文件；显示已接收的字节数 |
+| 上传限制的提前检查 | 六个上传入口（推送图片、服装 / 背景预览图和动作图标、广告素材、APK、渲染模型 zip、默认数字人源图）都在控件旁写出可接受的类型和限制（文件大小换算成 MB，像素换算成百万像素），选好文件后、上传之前检查类型、空文件、文件大小、图片宽×高，超限就在页面上说出是哪一项、限制多少、实际多少，不发请求；限制来自 `meta`（推送图片 `pushImageMaxBytes`，其余七个入口的八个字段见任务 7），`meta` 取不到某项时不检查那一项、把服务器返回的错误文字显示出来（服务器仍是最终把关，超限是 400 `INVALID_FILE`）；宽高只读图片文件头里的数字（PNG 的 IHDR 块、JPEG 的 SOF 段），绝不把整张图交给浏览器解码（一张声明几万乘几万像素的小图会让浏览器卡死） |
 | 上传 | 先上传、后创建：`XMLHttpRequest` 的 multipart（要进度条），文件字段名一律 `file`（后台所有上传接口都是；缺少 `file` 时后端返回 400 `INVALID_REQUEST`，`details` 为 `[{ref:"file", reason:"EMPTY_NOT_ALLOWED"}]`），响应 `data.uploadId`；创建或修改时只提交 `uploadId`（目录用 `previewUploadId`、`iconUploadId`，渲染模型用 `uploadId`，默认数字人用 `sourceUploadId`），后端不认手填的地址、大小、校验和；上传中禁止提交；`uploadId` 的错误：种类不符 400 `INVALID_REQUEST`、已被别的对象用了 409 `INVALID_STATE`、不存在 404 `RESOURCE_NOT_FOUND`；`upload.public_base_url` 没配置时广告素材和 APK 上传返回 503 `DEPENDENCY_UNAVAILABLE`，页面提示先去系统配置里设置它 |
 | 校验失败的文字 | `INVALID_REQUEST` 的 `data.details` 是 `[{ref, reason}]`，`reason` 是代码（14 个：`ACCOUNT_NOT_FOUND`、`ACCOUNT_NOT_ACTIVE`、`NOT_HTTPS`、`INVALID_HOST`、`INVALID_PORT`、`INVALID_PATH`、`TOO_LONG`、`INVALID_EMAIL`、`NOT_AN_INTEGER`、`OUT_OF_RANGE`、`NOT_BOOLEAN`、`INVALID_LANGUAGE_TAG`、`EMPTY_NOT_ALLOWED`，以及规则词表专用的 `INVALID_PATTERN`）：界面文字按 `reason` 查语言文件（键 `reason.<代码>`），后端 `message` 里的英文说明只作兜底；`ref` 的含义由接口决定（配置是键、词表是数组下标、分页是参数名、上传是 `file`、账号列表是账号 ID）；前端自己的链接校验用同一组代码，所以同一条文字两边共用 |
 | 统计页 | 读汇总表；标注 UTC；"重新落地该日"需要 `STATS:LAND`；趋势图缺失日补 0；未到期的留存格显示"—"；去重人数不跨日相加；比率在浏览器里算，分母为 0 显示"—"（规格 4.4、5.2、5.13） |
@@ -114,7 +115,7 @@
 | 规则词表 | 请求体和响应都是 `{items:[…]}`，不是裸数组；整表替换、原子；带 `id` 且在当前词表里的沿用 `id`，其余是新增；`details.ref` 一律是数组下标（从 0 起的字符串）；正则不合法的原因代码是 `INVALID_PATTERN`；超过条数上限时 `details` 只有一项，`ref` 为 `items`、`reason` 为 `OUT_OF_RANGE` | 按下标把错误对到行；上限提示显示在整张表上 |
 | 选项来源接口 | 七个（比我们提的多三个：`GET /ads/campaigns` 和 `GET /ads/units` 对 `ADS:CREATIVE`、`GET /entitlement-defs` 对 `SUBSCRIPTION:GRANT`） | 素材表单按计划、按单元选择，发放限时权益选权益，都不再需要额外权限 |
 | 越界 | 分页参数和日期范围越界都是 400 `INVALID_REQUEST`，`details` 的 `ref` 是出错的参数名，原因 `OUT_OF_RANGE` 或 `NOT_AN_INTEGER`；不静默截断；`page` 缺省 1，`pageSize` 缺省 20 | 假后端同样这样做 |
-| `GET /me`、`GET /api/admin/meta` | `me` 加 `id`、`passwordMinLength`，强制改密码状态下照常可调；`meta` 12 个字段，改密码状态下返回 403 | 登录后只在不需要改密码时才取 `meta` |
+| `GET /me`、`GET /api/admin/meta` | `me` 加 `id`、`passwordMinLength`，强制改密码状态下照常可调；`meta` 20 个字段，改密码状态下返回 403 | 登录后只在不需要改密码时才取 `meta` |
 | 无广告原因行 | 仍是 `{statDate, slotKey, reason, cnt}`，不加 `platform`、`channelCode`；广告报表不传筛选时是全部平台、全部渠道的合计 | 规格 5.17 表里的"平台"列不显示（后端说明契约会话已同意把设计里的这一列删掉） |
 | 默认数字人生成失败 | 回到 `DRAFT`，行里带 `failureReason`（六个值之一或 `null`），没有 `FAILED` 状态 | 和我们的暂定做法一致 |
 
@@ -191,7 +192,7 @@ AvatarAdmin/
 ## 任务 2：纯函数工具（不依赖任何框架）
 
 **Files:**
-- Create: `src/utils/trimSpec.ts`、`codePoints.ts`、`linkRule.ts`、`utcDay.ts`、`ratio.ts`、`format.ts`、`resolveLocale.ts`，`src/theme/contrast.ts`
+- Create: `src/utils/trimSpec.ts`、`codePoints.ts`、`linkRule.ts`、`utcDay.ts`、`ratio.ts`、`format.ts`、`resolveLocale.ts`，`src/utils/imageHeader.ts`、`uploadLimits.ts`，`src/theme/contrast.ts`
 - Test: 同名 `*.test.ts`，放在各文件旁边
 
 **Interfaces:**
@@ -201,6 +202,10 @@ AvatarAdmin/
   - `validateServerLink(value: string, opts?: { maxLength?: number }): { ok: true } | { ok: false; reasonKey: LinkReasonKey }`，`LinkReasonKey` 就是后端 `INVALID_REQUEST` 原因代码里与链接有关的那几个（`NOT_HTTPS`、`INVALID_HOST`、`INVALID_PORT`、`INVALID_PATH`、`TOO_LONG`），界面文字取 `reason.<代码>`（语言文件里每个代码有文字），前端校验和后端校验共用同一条文字
   - `todayUtc(now?: Date): string`、`yesterdayUtc(now?: Date): string`、`lastNDaysUtc(n: number, now?: Date): { from: string; to: string }`、`pickedDay(d: Dayjs): string`（用选中的日历日的年月日，不经过时区）、`daysBetween(from: string, to: string): string[]`、`utcDayRangeToInstants(from: string, to: string): { from: string; to: string }`（把统计日范围 `[from, to]` 变成后端按时刻筛选的 `[from 当日 00:00:00Z, to 次日 00:00:00Z)`，`to` 不含，给 `GET /attribution/records` 这类按 `eventTime` 筛的接口用）
   - `safeRatio(n: number | null | undefined, d: number | null | undefined): number | null`（`d` 为 0 / 空 / 非有限数，或 `n` 为空 → `null`）、`formatPercent(r: number | null, locale: string, digits?: number): string`、`formatCount(n: number | null | undefined, locale: string): string`，空值一律返回导出的常量 `DASH`（`'—'`）
+  - `readImageSize(file: Blob): Promise<{ format: 'PNG' | 'JPEG'; width: number; height: number } | null>`：只用 `Blob.slice` 读文件头——PNG 读开头的 IHDR 块，JPEG 按段长逐段往后找 SOF 段（`C0`–`CF`，除 `C4`、`C8`、`CC`，跳过 APPn 等段，分块读，最多读到文件的前 4 MiB），不是 PNG / JPEG 的签名或找不到时返回 `null`；**不调用任何会解码图片的浏览器接口**（`Image`、`createImageBitmap`、`canvas`）
+  - `sniffFileKind(file: Blob): Promise<'PNG' | 'JPEG' | 'MP4' | 'ZIP' | null>`：读文件头前 12 字节按签名判类型（MP4 看偏移 4 处的 `ftyp`）
+  - `type UploadKind = 'pushImage' | 'catalogImage' | 'adMedia' | 'apk' | 'rendererModel' | 'defaultAvatarSource'`；`UPLOAD_ENTRIES: Record<UploadKind, { endpoint: string; accept: readonly ('PNG' | 'JPEG' | 'MP4' | 'ZIP')[]; extensions?: readonly string[]; maxBytesField: keyof UploadLimitMeta; maxPixelsField?: keyof UploadLimitMeta }>`；`type UploadLimitMeta = { pushImageMaxBytes: number | null; uploadMaxBytes: number; adMediaMaxBytes: number; apkMaxBytes: number; renderAssetMaxBytes: number; catalogImageMaxBytes: number; catalogImageMaxPixels: number; adImageMaxPixels: number; defaultAvatarSourceMaxPixels: number }`（`AdminMeta` 在任务 7 里包含它，任务 2 不依赖任务 7）：推送图片 `/uploads/image`、JPEG / PNG、`pushImageMaxBytes`；目录图片 `/uploads/catalog-image`、JPEG / PNG、`catalogImageMaxBytes`、`catalogImageMaxPixels`；广告素材 `/ads/media`、JPEG / PNG / MP4、`adMediaMaxBytes`、`adImageMaxPixels`（只对图片）；APK `/uploads/apk`、ZIP 加扩展名 `.apk`、`apkMaxBytes`；渲染模型 `/uploads/renderer-model`、ZIP 加扩展名 `.zip`、`renderAssetMaxBytes`；默认数字人源图 `/uploads/default-avatar-source`、JPEG / PNG、`uploadMaxBytes`、`defaultAvatarSourceMaxPixels`
+  - `checkUploadFile(kind: UploadKind, file: File, meta: Partial<UploadLimitMeta>): Promise<{ ok: true } | { ok: false; problem: 'EMPTY' | 'WRONG_TYPE' | 'TOO_LARGE' | 'TOO_MANY_PIXELS'; limit?: number; actual?: number }>`：依次查空文件、类型（按文件头签名和扩展名）、大小、像素（只对图片）；`meta` 里缺少或为 `null` 的限制字段，跳过对应那一项；`describeUploadLimits(kind: UploadKind, meta: Partial<UploadLimitMeta>, locale: string): { types: string; maxBytes?: string; maxPixels?: string }`（"2 MB"、"36 百万像素"这类显示用文字；缺失的项不出现）
   - `formatInstant(iso: string, locale: string): string`（`Intl.DateTimeFormat`，浏览器时区；解析不了就原样返回）、`formatBytes(n: number, locale: string): string`
   - `resolveInitialLocale(stored: string | null, browserLanguages: readonly string[]): 'zh-CN' | 'en-US'`
   - `contrastRatio(fg: string, bg: string): number`、`pickOnPrimary(primaryHex: string): string`（主色上深色文字 `#06201F` 与白色里对比度更高的一个）
@@ -209,6 +214,10 @@ AvatarAdmin/
 - `trimSpec`：29 个码点各自在首尾都被去掉；U+200B、U+FEFF 不被去掉；U+0085、U+001C–U+001F 被去掉（语言自带的 `trim` 做不到，用例里并排断言 `' x'.trim()` 与 `trimSpec` 的差别）；中间的空白不动。
 - `lengthWithin`：emoji（BMP 以外）算 1 个码点；泰语组合符、阿拉伯语连字各自按码点数；`' a '` 在 `1..1` 内；全空白字符串长度为 0。
 - `validateServerLink`：契约 §1.7 的每一条各一个正例和反例——大写 `HTTPS://`、前导空格、用户信息、空端口、6 位端口、IPv6 方括号（接受）、`xn--` 域名（接受）、Unicode 域名（拒绝）、路径含非 ASCII（拒绝并给"请百分号编码"类的原因 `INVALID_PATH`）、反斜杠、制表符、U+202E、总长 2048 与 2049（`TOO_LONG`）；每个拒绝用例断言得到的是上面五个原因代码之一。
+- `readImageSize`：用手工拼出的字节构造 PNG（3000×2000）、基线 JPEG（SOF0）、渐进式 JPEG（SOF2）、SOF 前面有 70 KB 的 APP1（EXIF）段并要跨块读取的 JPEG、SOF 前面有 DHT（`C4`）的 JPEG 各一个，得到正确的宽高；被截断的文件、签名不对的文件得 `null`；一个只有约 100 字节却声明 60000×60000 的 PNG 立刻读出宽高，**且 `Image`、`createImageBitmap`、`canvas` 都没有被调用**（测试里把它们换成一调用就抛错的桩）；PNG 只读开头约 64 字节，对 `Blob.slice` 的调用记录显示请求的总字节数不超过 4 MiB。
+- `sniffFileKind`：PNG、JPEG、MP4（偏移 4 处是 `ftyp`）、ZIP（`PK`）各一例，其他得 `null`。
+- `checkUploadFile`：对六个入口各测一次边界——文件大小恰好等于上限通过、多 1 字节 `TOO_LARGE`（带 `limit` 和 `actual`）；图片宽×高恰好等于上限通过、多 1 个像素 `TOO_MANY_PIXELS`；PNG 声明 4294967295×4294967295 得 `TOO_MANY_PIXELS`（乘积超过 2^53 也不丢精度，用 BigInt 或先除再比较）；广告素材的 MP4 不做像素检查；APK 入口选 `.zip` 文件、渲染模型入口选 `.apk` 文件得 `WRONG_TYPE`；0 字节得 `EMPTY`；`meta` 里缺少 `catalogImageMaxPixels` 时只跳过像素检查、大小检查照常；`pushImageMaxBytes` 为 `null` 时跳过大小检查。
+- `describeUploadLimits`：目录图片得类型 "JPEG / PNG"、"2 MB"、"36 百万像素"，两种语言的文字都存在；广告素材的像素提示注明"只对图片"。
 - `utcDayRangeToInstants('2026-10-21','2026-10-21')` 得 `2026-10-21T00:00:00Z` 到 `2026-10-22T00:00:00Z`（`to` 不含），在两个时区下一样。
 - `utcDay`：每个用例用 `withTimeZone('Asia/Singapore', …)` 与 `withTimeZone('America/Los_Angeles', …)` 各跑一遍（`tests/withTimeZone.ts` 在运行时设 `process.env.TZ` 并在结束后还原，本机实测有效；Shell 里的 `TZ=… node` 在 Git Bash 下不生效，不用）；`now = 2026-10-21T17:30:00Z`（新加坡已是 10-22 01:30）时 `todayUtc` 是 `2026-10-21`、`yesterdayUtc` 是 `2026-10-20`；`pickedDay(dayjs('2026-10-21'))` 在两个时区都是 `2026-10-21`；`lastNDaysUtc(7)` 含今天共 7 个日历日。
 - `ratio`：分母 0、`null`、`NaN` 都得 `null`；`formatPercent(null)` 是 `'—'`；`0` 与 `null` 的显示不同（`0%` 对 `—`）；不会出现 `NaN`、`Infinity`、`null%`。
@@ -287,7 +296,7 @@ AvatarAdmin/
   - `paginate<T>(rows: T[], page: number, pageSize: number): Page<T>`（`page` 从 1，`pageSize` 超过 200 时 400 `INVALID_REQUEST`，后端已确认：分页参数越界返回 400 `INVALID_REQUEST`，`details` 为 `[{ref: 参数名, reason: OUT_OF_RANGE 或 NOT_AN_INTEGER}]`，缺省 `page` 1、`pageSize` 20）
   - `fixtures`：`multilingualSamples`（泰语、阿拉伯语、印尼语、越南语、西班牙语、英语、中文各若干条，含长串无空格和 emoji），`makeUuid()`，`daysAgoIso(n)`
   - 预置管理员（用户名、权限集合）：`root`（超级）、`support`、`finance`、`reviewer`、`newhire`（`mustChangePassword`）、`fresh`（未绑定认证器）；假验证码 `000000`；假密码写进 README 并注明只对假后端有效
-  - 接口：`POST /api/admin/auth/login`、`POST /api/admin/auth/totp/enroll`、`POST /api/admin/auth/change-password`、`GET /api/admin/me`（响应 `{id, username, superAdmin, mustChangePassword, permissions, passwordMinLength}`，强制改密码状态下照常可调）、`GET /api/admin/meta`（平铺对象，12 个字段，任何已登录且不在改密码状态的管理员可调，在改密码状态返回 403 `ADMIN_FORBIDDEN`；值取契约 §17.5 对应键的默认值，没有默认值的键为 `null`）、`GET /api/admin/permissions`（权限树，由 `PERMISSION_CODES` 和路由元数据生成：每个页面一个 `MENU` 节点，该页面的其余权限码是它的 `FUNCTION` 子节点，名称取自任务 4 建的 `src/locales/{zh-CN,en-US}/permission.ts`，假后端用相对路径导入它们）
+  - 接口：`POST /api/admin/auth/login`、`POST /api/admin/auth/totp/enroll`、`POST /api/admin/auth/change-password`、`GET /api/admin/me`（响应 `{id, username, superAdmin, mustChangePassword, permissions, passwordMinLength}`，强制改密码状态下照常可调）、`GET /api/admin/meta`（平铺对象，20 个字段（12 个配置值加 8 个上传限制），任何已登录且不在改密码状态的管理员可调，在改密码状态返回 403 `ADMIN_FORBIDDEN`；值取契约 §17.5 对应键的默认值，没有默认值的键为 `null`）、`GET /api/admin/permissions`（权限树，由 `PERMISSION_CODES` 和路由元数据生成：每个页面一个 `MENU` 节点，该页面的其余权限码是它的 `FUNCTION` 子节点，名称取自任务 4 建的 `src/locales/{zh-CN,en-US}/permission.ts`，假后端用相对路径导入它们）
 
 **Implement:**
 - 假后端文件只用相对路径导入（Umi 的 mock 加载器不一定解析 `@/` 别名）；`config/config.ts` 的 `mock: { exclude: ['mock/_core/**', 'mock/**/*.test.ts'] }`，避免工具文件和测试文件被当成接口文件加载。
@@ -344,7 +353,7 @@ AvatarAdmin/
 - Consumes: 任务 3 的 `apiRequest`、`setToken`、`setSessionHandlers`；任务 4 的 `canAccess`；任务 6 的外壳
 - Produces:
   - `login(body: { username: string; password: string; totp?: string }): Promise<LoginResult>`，`LoginResult = { token: string; expiresAt: string } | { status: 'ENROLL_REQUIRED'; enrollToken: string; otpauthUri: string }`（线上格式，契约 §17.2：成功时 `data` 就是 `{token, expiresAt}`，没有 `status`；只有绑定分支带 `status`，用 `'token' in r` 区分；任务 5 的假后端同样不给成功响应加 `status`）；`enrollTotp(body: { enrollToken: string; totp: string })`；`changePassword(body: { oldPassword: string; newPassword: string })`；`getMe(): Promise<{ id: string; username: string; superAdmin: boolean; mustChangePassword: boolean; permissions: string[]; passwordMinLength: number }>`（后端已定，字段名以它的回复为准；真后端还没上线、字段缺失时按缺失处理，不报错）
-  - `type AdminMeta = { supportedLocales: string[] | null; landIntervalMinutes: number | null; allowedCurrencies: string[] | null; deletionAlertAfterFailures: number | null; inviteChainMaxDepth: number | null; maxRecipients: number | null; pushImageMaxBytes: number | null; statsMaxRangeDays: number | null; analyticsLiveMaxRangeDays: number | null; abuseClusterMinFreeAccounts: number | null; attributionClickRetentionDays: number | null; declarationRequired: boolean | null }`（后端回复第 1 条，十二个字段一字不差；`supportedLocales`、`allowedCurrencies` 是字符串数组，`declarationRequired` 是布尔，其余是整数；没有默认值又未配置的键为 `null`）
+  - `type AdminMeta = { supportedLocales: string[] | null; landIntervalMinutes: number | null; allowedCurrencies: string[] | null; deletionAlertAfterFailures: number | null; inviteChainMaxDepth: number | null; maxRecipients: number | null; pushImageMaxBytes: number | null; statsMaxRangeDays: number | null; analyticsLiveMaxRangeDays: number | null; abuseClusterMinFreeAccounts: number | null; attributionClickRetentionDays: number | null; declarationRequired: boolean | null; uploadMaxBytes: number; adMediaMaxBytes: number; apkMaxBytes: number; renderAssetMaxBytes: number; catalogImageMaxBytes: number; catalogImageMaxPixels: number; adImageMaxPixels: number; defaultAvatarSourceMaxPixels: number }`（后端回复第 1 条的十二个字段加第三份回复新增的八个上传限制字段，一字不差；八个上传限制是整数、不会是 `null`，其中 `catalogImageMaxBytes`（2097152）、`catalogImageMaxPixels`（36000000）、`adImageMaxPixels`（36000000）、`defaultAvatarSourceMaxPixels`（250000000）是固定值，`uploadMaxBytes`、`adMediaMaxBytes`、`apkMaxBytes`、`renderAssetMaxBytes` 取自 `upload.max_bytes`、`upload.ad_media_max_bytes`、`upload.apk_max_bytes`、`upload.render_asset_max_bytes` 的当前值；`supportedLocales`、`allowedCurrencies` 是字符串数组，`declarationRequired` 是布尔，其余是整数；没有默认值又未配置的键为 `null`）
   - `getAdminMeta(): Promise<AdminMeta>` 与 `useAdminMeta(): Partial<AdminMeta>`：登录后、且 `me.mustChangePassword` 为假时取一次（在改密码状态后端返回 403）；请求失败（含真后端还没有这个接口时的 404）得到空对象；某项为 `null` 或缺失，页面都按"前端读不到的配置值"处理（不预检、不显示数字），不报错
   - `safeReturnUrl(raw: string | null | undefined): string`：只接受以单个 `/` 开头的站内路径（拒绝 `//host`、`http://…`、`javascript:`、含反斜杠），否则返回 `/dashboard`
   - `useSession()`：`{ me, refreshPermissions(), signOut() }`
@@ -376,7 +385,7 @@ AvatarAdmin/
   - `ReasonModalForm`：属性 `{ open; title; reasonLabel; min?: number; max?: number; hint?: ReactNode; onSubmit: (reason: string) => Promise<void>; onClose }`；理由先 `trimSpec`，再按码点数检查 `min..max`（默认 1..500）；提交失败保持打开并展示 `ApiError.message`
   - `LinkInput`：antd Form 控件，规则用 `validateServerLink`，出错文字取 `link.error.*`
   - `SCREEN_TARGETS: readonly string[]`（`src/utils/screenTargets.ts`）：契约 §8.3 的页面标识清单，推送、站内通知、广告素材的"页面"目标共用这一份（规划时 9 个：`conversation`、`companion`、`store`、`credits`、`settings`、`notifications`、`subscription`、`checkin`、`daily_tasks`；执行时按契约当时的清单为准）；`LinkTargetField`：属性 `{ value: { linkType: 'NONE' | 'SCREEN' | 'URL'; linkTarget: string }; onChange }`，`SCREEN` 时目标是 `SCREEN_TARGETS` 的下拉，`URL` 时目标走 `LinkInput`，`NONE` 时目标为空串
-  - `UploadField<T extends { uploadId: string }>`：属性 `{ url; accept; maxBytes?: number; onUploaded: (r: T) => void; onBusyChange: (busy: boolean) => void }`；上传端点一览（都是 `multipart/form-data`、字段 `file`、响应 `data.uploadId`）：`/uploads/catalog-image`（服装 / 背景预览图和动作图标，JPEG 或 PNG，2 MiB，权限 `COSMETIC:MANAGE` 或 `ACTION:MANAGE`）、`/uploads/renderer-model`（zip，`RENDERER:MANAGE`）、`/uploads/default-avatar-source`（JPEG 或 PNG，`DEFAULT_AVATAR:MANAGE`）、`/uploads/image`（推送图片）、`/ads/media`（广告素材）、`/uploads/apk`（APK）；400 `INVALID_FILE`（空文件、超限、按内容判出的类型不符）、503 `DEPENDENCY_UNAVAILABLE`（`upload.public_base_url` 没配置）都按 `describeError` 显示
+  - `UploadField<T extends { uploadId: string }>`：属性 `{ kind: UploadKind; onUploaded: (r: T) => void; onBusyChange: (busy: boolean) => void }`；端点、可接受的类型和限制都从任务 2 的 `UPLOAD_ENTRIES[kind]` 和 `useAdminMeta()` 取；控件旁常显示限制行（`describeUploadLimits`：类型、最大多少 MB、最大多少百万像素）；选好文件后先 `checkUploadFile`，不通过就在控件下说出是哪一项（类型不对、空文件、文件太大、图片像素太多）、限制多少、实际多少，**不发请求**；通过才上传。上传端点（都是 `multipart/form-data`、字段 `file`、响应 `data.uploadId`）的权限：`/uploads/catalog-image` 要 `COSMETIC:MANAGE` 或 `ACTION:MANAGE`，`/uploads/renderer-model` 要 `RENDERER:MANAGE`，`/uploads/default-avatar-source` 要 `DEFAULT_AVATAR:MANAGE`；服务器仍是最终把关：400 `INVALID_FILE`（空文件、超限、按内容判出的类型不符；默认数字人源图经服务器处理后仍大于 19,000,000 字节也是它，前端预检不了）、503 `DEPENDENCY_UNAVAILABLE`（`upload.public_base_url` 没配置）都按 `describeError` 显示
   - `MaskedText`：原样显示后端给的掩码值，不尝试还原，旁边可放"需要 X 权限才能看完整值"的提示
   - `Can`：`<Can code="USER:BAN">…</Can>`，用 `useAccess`
   - `ExportButton`：属性 `{ name: string; params: Record<string, unknown>; viewCode: PermissionCode }`；只有同时持有 `STATS:EXPORT` 和 `viewCode` 才渲染（其他导出按各页自己的码，用 `requiredCodes` 属性覆盖）；请求 `GET /api/admin/stats/export/{name}`（或传入的 `url`），显示已接收字节数
@@ -388,6 +397,7 @@ AvatarAdmin/
 - `ReasonModalForm`：全空白理由（含 U+3000、U+00A0）被拒；501 个码点被拒、500 个通过；500 个 emoji 通过（按码点数）；提交失败保持打开并显示后端文字；提交中按钮禁用。
 - `LinkInput`：每种 `reasonKey` 都显示本地化文字，不显示键本身。
 - `LinkTargetField`：三种类型各自序列化正确；`SCREEN` 的下拉恰好是 `SCREEN_TARGETS`；切换类型时清空目标。
+- `UploadField`：对六个 `kind` 各测一次——超限的文件（大小、像素各一例）不触发任何 `XMLHttpRequest`，页面文字写明哪一项超限、限制和实际各是多少；限制行里的数字来自 `meta`，换一组 `meta` 值文字随之变化；`meta` 为空对象时不显示数字、不做检查、上传照常发出，服务器返回 400 `INVALID_FILE` 时显示它的文字；预览图只在检查通过之后才生成。
 - `UploadField`：上传中 `onBusyChange(true)`，完成或失败后 `false`；失败按 `describeError` 显示（400 `INVALID_FILE`、503 `DEPENDENCY_UNAVAILABLE` 各一例）；成功回调带 `uploadId`；表单提交时后端判 `uploadId` 已被别的对象用了（409 `INVALID_STATE`）、种类不符（400 `INVALID_REQUEST`）或不存在（404 `RESOURCE_NOT_FOUND`），表单提示"请重新上传文件"并清掉这个 `uploadId`，不重发。
 - `RowActions`：3 个操作全显示；4 个显示前 2 个加"更多"。
 - `ExportButton`：没有 `STATS:EXPORT` 不渲染；成功触发保存；429 / 400 / 403 显示后端提示且**不保存文件**（Review Focus 1）；显示进度字节数。
@@ -547,11 +557,11 @@ AvatarAdmin/
 
 **Tests:**
 - `SurfacesPicker`：不选任何项时显示"所有端"，序列化为契约 §3.7 规定的"无限制"取值；选"该平台全部渠道"与选具体渠道的序列化各自正确。
-- 服装 / 动作：`key` 创建后只读；预览图 / 图标先走 `POST /uploads/catalog-image` 再把 `previewUploadId` / `iconUploadId` 放进创建或修改请求，请求体里没有图片地址；超过 2 MiB 或不是 JPEG / PNG 的文件，后端 400 `INVALID_FILE` 原样按 `describeError` 显示；`generationSpec` 的长度按码点数检查 1..2000（先 `trimSpec`），阿拉伯语和 emoji 各一例；上下架是行内开关，调 `…/enabled`。
+- 服装 / 动作：`key` 创建后只读；预览图 / 图标先走 `POST /uploads/catalog-image` 再把 `previewUploadId` / `iconUploadId` 放进创建或修改请求，请求体里没有图片地址；超过 `catalogImageMaxBytes`（2 MiB）、宽×高超过 `catalogImageMaxPixels`（36 百万像素）或不是 JPEG / PNG 的文件，上传前就被拦下（`UploadField kind="catalogImage"`），后端 400 `INVALID_FILE` 仍按 `describeError` 显示作兜底；`generationSpec` 的长度按码点数检查 1..2000（先 `trimSpec`），阿拉伯语和 emoji 各一例；上下架是行内开关，调 `…/enabled`。
 - 动作目录：**没有类型列，也没有表情曲线上传**；每一行都有"给已有外观补生成"，确认框写明会产生生成费用；已停用的动作该按钮禁用；点击后提示"已安排 N 个生成任务"（取响应的 `scheduled`），`scheduled` 为 0 时提示"没有需要补生成的外观"；`triggerableBy` 三个取值（`USER`、`AGENT`、`BOTH`）都能选。
 - 上传声明：新建版本（多语言文案）和"设为生效"（确认文字存在）调 `POST /declarations`、`PUT /declarations/{version}/activate`；`useAdminMeta().declarationRequired` 为 `false` 时顶部有"当前部署不要求勾选声明"的提示，缺失或为 `true` 时不显示。
-- 渲染模型：先上传 zip（`POST /uploads/renderer-model`，上传中不能提交），再以 JSON 提交 `uploadId` 和表单里的 `rendererKind`、`version`、`platform`、`abi`、`rendererFormatVersion`、`minVersionCode`，请求体里没有 `sha256`、`sizeBytes`；列表列出契约 §18 的字段，`sha256`、`sizeBytes` 只读；启用、停用是行内开关。
-- 系统默认数字人：新建流程是"上传源图（`POST /uploads/default-avatar-source`）→ 填名字、选风格、勾选'这张图有肖像授权或是合成的、不对应真人'（只是界面确认，未勾选不能提交，请求体里没有 `portraitAuthorized`）→ `POST /default-avatars` 得到 `DRAFT`"；按状态显示按钮：`DRAFT` 有"生成"，`GENERATING` 显示进行中且没有操作，`READY` 有"设为生效"，非生效且不在生成中的有"删除"（行内确认）；已生效的行没有"删除"；设为生效的确认文字写明"游客和没有形象的账号会立刻看到它"，并说明原来生效的会变成非生效但保留；`DRAFT` 行带 `failureReason` 时显示本地化的失败原因（六个值各有文字），"生成"成功发出后该原因消失；每个按钮在后端 409 `INVALID_STATE` 时展示当前状态；503 `GENERATION_NOT_CONFIGURED` 时提示生成的前置配置没配好；名字必填，后端 400 原样展示；改名只发 `{name}`；需要 `DEFAULT_AVATAR:MANAGE`。
+- 渲染模型：先上传 zip（`POST /uploads/renderer-model`，`UploadField kind="rendererModel"`，上传前检查 `renderAssetMaxBytes` 和 zip 类型，上传中不能提交），再以 JSON 提交 `uploadId` 和表单里的 `rendererKind`、`version`、`platform`、`abi`、`rendererFormatVersion`、`minVersionCode`，请求体里没有 `sha256`、`sizeBytes`；列表列出契约 §18 的字段，`sha256`、`sizeBytes` 只读；启用、停用是行内开关。
+- 系统默认数字人：新建流程是"上传源图（`POST /uploads/default-avatar-source`，`UploadField kind="defaultAvatarSource"`，上传前检查 `uploadMaxBytes`、`defaultAvatarSourceMaxPixels` 和 JPEG / PNG 类型）→ 填名字、选风格、勾选'这张图有肖像授权或是合成的、不对应真人'（只是界面确认，未勾选不能提交，请求体里没有 `portraitAuthorized`）→ `POST /default-avatars` 得到 `DRAFT`"；按状态显示按钮：`DRAFT` 有"生成"，`GENERATING` 显示进行中且没有操作，`READY` 有"设为生效"，非生效且不在生成中的有"删除"（行内确认）；已生效的行没有"删除"；设为生效的确认文字写明"游客和没有形象的账号会立刻看到它"，并说明原来生效的会变成非生效但保留；`DRAFT` 行带 `failureReason` 时显示本地化的失败原因（六个值各有文字），"生成"成功发出后该原因消失；每个按钮在后端 409 `INVALID_STATE` 时展示当前状态；503 `GENERATION_NOT_CONFIGURED` 时提示生成的前置配置没配好；名字必填，后端 400 原样展示；改名只发 `{name}`；需要 `DEFAULT_AVATAR:MANAGE`。
 - 生成任务：只按类型筛选（接口参数只有 `status`、`type`，不做时间筛选），类型含全部五种；系统任务（账号为空）显示"系统"。
 - 赠送服装（用户详情用的 `grantCosmetic` 所在的选择框）：条目列表来自 `GET /cosmetics`（后端已对 `COSMETIC:GRANT` 开放读取）；仍收到 403 时选择器禁用并写明"需要 `COSMETIC:MANAGE` 或 `COSMETIC:GRANT` 才能列出条目"，当作兜底，不崩溃。
 - 投诉：已结案状态不显示流转和删除形象按钮；状态下拉只有 `INVESTIGATING`、`RESOLVED_NOT_FOUND`、`REJECTED`；删除形象的确认文字写明"不能撤销"；到期未结案的行高亮；没有 `COMPLAINT:MANAGE` 看不到流转和删除；证据文件按 `index`（从 0 起）逐个取，每次点击重新取 `{url, mediaType}`，按 `mediaType` 用图片或相应播放器显示，地址不写日志、不放进可分享的 URL，页面有"查看会被记录"的提示；越界的 404 显示"证据不存在"；页面写明"怎么找到对应的形象还没有定：在法律意见出来之前，只能按投诉人提供的上传者信息人工查找"（规格 5.25）。
@@ -694,7 +704,7 @@ AvatarAdmin/
 
 **Tests:**
 - 模板完整性矩阵：行是触发原因，列是 `supportedLocales`，缺的格子标红；启用召回模板时某语言缺模板，前端提示并以后端校验为准；`supportedLocales` 缺失时不显示矩阵，只显示模板列表。
-- 图片：只接受 jpg / png，其他类型当场拒绝；大小不预检（读不到上限时），后端的错误原样展示；上传中提交按钮禁用；提交只带 `uploadId`，请求体里没有 `imageUrl`。
+- 图片：`UploadField kind="pushImage"`，只接受 JPEG / PNG，上传前按 `pushImageMaxBytes` 检查大小（取不到该值时不检查，后端的错误原样展示）；上传中提交按钮禁用；提交只带 `uploadId`，请求体里没有 `imageUrl`。
 - 链接用 `LinkTargetField`：类型 `NONE`（点击只打开 App）、`SCREEN`（目标是 `SCREEN_TARGETS` 的下拉）、`URL`（走 `LinkInput`，总长 ≤ 2048）；模板、手动任务、周期推送三处都一样。
 - 手动任务：受众选"账号 ID 列表"时平台、语言筛选禁用；`PENDING` 行才有"取消"；周期推送：每月 31 日在短月取月末的提示存在，时区下拉默认 UTC 并说明"固定时区，不是每个用户的当地时间"；删除的文字是"停用，已生成的任务保留"。
 - 推送效果：点开率 = `pushesOpened / pushesSent`，分母 0 显示"—"，列提示写明"点开数记在点开当天"；落地条 `push`；导出 `push`。
@@ -793,6 +803,7 @@ AvatarAdmin/
 - 每个广告页顶部可折叠的投放检查清单存在，五层条件按顺序列出，游客只有 `app_open`、`call_end` 两个广告位的说明存在。
 - 广告位页文字：总开关默认关闭（关闭时 App 隐藏所有广告位）、联调时可把频控和冷却临时改成 0（不限）测完改回、频控按展示计数（预取了但没展示的不占额度）。
 - 广告位：激励广告位的频控输入不能为 0，旁边显示"每账号每天最多通过广告得到 = 频控 × 奖励额度"；不能新增或删除广告位；`ads.skip_after_seconds` 大于 5 或 `ads.force_close_seconds` 为 0 且存在不可跳过素材时显示警告但不阻止保存（读取 `warnings`）。
+- 素材文件上传前检查（`UploadField kind="adMedia"`）：类型 JPEG / PNG / MP4，大小 `adMediaMaxBytes`，图片另查宽×高 `adImageMaxPixels`，视频（MP4）没有像素检查。
 - 素材上传 `POST /ads/media` 返回 503 `DEPENDENCY_UNAVAILABLE`（`upload.public_base_url` 没配置）时，上传控件旁提示"先在系统配置里设置 `upload.public_base_url`"，持有 `CONFIG:MANAGE` 的管理员带链接到 `/config`，其余人只看到提示文字。
 - 素材：先上传再创建，提交只带 `uploadId`，表单里尺寸、大小、时长只读；规格不符时给出原因；已通过的素材没有编辑、删除，只有暂停，提示"要换内容请新建一条，再暂停旧的"；审核状态与投放状态分开显示；拒绝必须填备注；开屏或插屏选"不可跳过"显示政策警告；激励阈值 5..30 且视频不超过时长；`IN_APP_ROUTE` 目标是下拉。
 - 计划：删除只对草稿或已结束且没有单元的；已结束不可编辑。单元：权重 ≥ 0，0 表示不会被选中；`geoConfigured=false` 时国家定向旁有提示。
@@ -823,7 +834,7 @@ AvatarAdmin/
 **Tests:**
 - `validateStoreUrl`：正例；包名不符、多余参数、`http`、非 Play 域名各一反例。
 - 页面顶部写明判定规则：客户端版本号等于或高于生效版本 → 不提示；介于最低版本号和生效版本之间 → 可选更新；低于最低版本号 → 强制更新；等于最低版本号时是可选更新。
-- 表单：渠道包创建后只读；新的版本号必须严格大于该渠道当前生效版本的版本号（创建、编辑草稿、激活三处，契约 §24.2），前端用列表里的生效版本先做提示，后端为准；最低版本号 ≥ 1 且不超过版本号；更新说明缺 `en` 不能保存；STORE 渠道没有 APK 控件，DIRECT 渠道有，上传中禁止提交，地址、大小、SHA-256 只读。
+- 表单：渠道包创建后只读；新的版本号必须严格大于该渠道当前生效版本的版本号（创建、编辑草稿、激活三处，契约 §24.2），前端用列表里的生效版本先做提示，后端为准；最低版本号 ≥ 1 且不超过版本号；更新说明缺 `en` 不能保存；STORE 渠道没有 APK 控件，DIRECT 渠道有（`UploadField kind="apk"`，上传前检查 `apkMaxBytes` 和 `.apk` 压缩包类型），上传中禁止提交，地址、大小、SHA-256 只读。
 - 权限：新建、编辑草稿、删除草稿、上传 APK 的按钮只对 `APPVERSION:MANAGE` 渲染（规格 5.0）。
 - APK 上传返回 503 `DEPENDENCY_UNAVAILABLE`（`upload.public_base_url` 没配置）时，上传控件旁提示"先在系统配置里设置 `upload.public_base_url`"，持有 `CONFIG:MANAGE` 的管理员带链接到 `/config`，其余人只看到提示文字。
 - 激活：STORE 渠道必须勾选"新版本已经在商店对用户可见"才能提交，提交带 `confirmStoreLive=true`；新最低版本号大于当前生效版本号时用强提示文字；DIRECT 渠道不弹商店确认；已归档的版本没有操作；只有 `APPVERSION:ACTIVATE` 才有激活和下线按钮；下线有行内确认。
