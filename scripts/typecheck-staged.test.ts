@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { evaluate, parseDiagnostics, shouldCheck } from './typecheck-staged.mjs';
+import { evaluate, parseDiagnostics, shouldCheck } from './typecheck-staged-core.mjs';
 
 const SCRIPT = join(__dirname, 'typecheck-staged.mjs');
 const REAL_TSC = join(__dirname, '..', 'node_modules', 'typescript', 'bin', 'tsc');
@@ -166,8 +166,8 @@ function stage(dir: string, ...names: string[]) {
   expect(result.status).toBe(0);
 }
 
-function runHook(dir: string) {
-  const result = spawnSync(process.execPath, [SCRIPT], { cwd: dir, encoding: 'utf8' });
+function runHook(dir: string, script: string = SCRIPT) {
+  const result = spawnSync(process.execPath, [script], { cwd: dir, encoding: 'utf8' });
   return {
     status: result.status,
     out: `${result.stdout}${result.stderr}`,
@@ -175,7 +175,9 @@ function runHook(dir: string) {
   };
 }
 
-describe('typecheck-staged.mjs end to end', () => {
+// Each case starts a real tsc (about 1 to 3 s measured, more on a cold disk), so the 5 s default
+// would make these flaky.
+describe('typecheck-staged.mjs end to end', { timeout: 60_000 }, () => {
   const GOOD = 'export const good: number = 1;\n';
   const BAD = "export const bad: number = 'x';\n";
 
@@ -266,5 +268,38 @@ describe('typecheck-staged.mjs end to end', () => {
     rmSync(join(dir, 'node_modules'), { recursive: true, force: true });
     stage(dir, 'a.ts');
     expect(runHook(dir).status).toBe(1);
+  });
+
+  describe('the check still runs when the repository is reached by another spelling of its path', () => {
+    function badRepo(): string {
+      const dir = makeRepo({ 'bad.ts': BAD, 'tsconfig.json': GOOD_TSCONFIG });
+      stage(dir, 'bad.ts');
+      return dir;
+    }
+
+    it('through a junction to both the repository and the script directory', () => {
+      const dir = badRepo();
+      const holder = mkdtempSync(join(tmpdir(), 'typecheck-staged-link-'));
+      temps.push(holder);
+      const repoLink = join(holder, 'repo-link');
+      const scriptsLink = join(holder, 'scripts-link');
+      symlinkSync(dir, repoLink, 'junction');
+      symlinkSync(__dirname, scriptsLink, 'junction');
+      const outcome = runHook(repoLink, join(scriptsLink, 'typecheck-staged.mjs'));
+      expect(outcome.status).toBe(1);
+      expect(outcome.out).toContain('bad.ts(1,14)');
+    });
+
+    it.skipIf(process.platform !== 'win32')('with a different drive-letter casing', () => {
+      const flip = (path: string) =>
+        /^[A-Za-z]:/.test(path)
+          ? (path[0] === path[0].toUpperCase() ? path[0].toLowerCase() : path[0].toUpperCase()) +
+            path.slice(1)
+          : path;
+      const dir = badRepo();
+      const outcome = runHook(flip(dir), flip(SCRIPT));
+      expect(outcome.status).toBe(1);
+      expect(outcome.out).toContain('bad.ts(1,14)');
+    });
   });
 });

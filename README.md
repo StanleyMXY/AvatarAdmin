@@ -101,7 +101,9 @@ There are no secrets in this repository.
    with no file location such as TS6053, or any diagnostic located in a `.json` file such as an
    unknown `tsconfig.json` option). It also runs when only `tsconfig*.json` or `package.json` is
    staged. `tsc` reads the working tree, not the index, so a partly staged file is checked as it is
-   on disk. Tests: `scripts/typecheck-staged.test.ts`.
+   on disk. `typecheck-staged.mjs` is a thin entry point; the logic is in `typecheck-staged-core.mjs`
+   (no "am I the main module" path comparison, which fails open behind a junction or a different
+   drive-letter spelling). Tests: `scripts/typecheck-staged.test.ts`.
 
 `.husky/commit-msg` hands over to a global `core.hooksPath` `commit-msg` hook when the developer has
 one (husky's own hooks path would otherwise bypass it), and does nothing otherwise.
