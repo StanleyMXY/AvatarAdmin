@@ -1,0 +1,2 @@
+npx --no-install lint-staged
+node scripts/typecheck-staged.mjs

@@ -1,0 +1,7 @@
+# husky points core.hooksPath at this repository, which bypasses a developer's global hooks.
+# If a global core.hooksPath is configured and has a commit-msg hook, hand over to it so that
+# hook still runs. Without a global hook this does nothing.
+global_hooks=$(git config --global core.hooksPath 2>/dev/null)
+if [ -n "$global_hooks" ] && [ -x "$global_hooks/commit-msg" ]; then
+  "$global_hooks/commit-msg" "$1" || exit $?
+fi
