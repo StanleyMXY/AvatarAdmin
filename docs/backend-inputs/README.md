@@ -9,4 +9,4 @@
 | `2026-10-21-avatar-backend-reply-2-to-avataradmin.md` | 409126c | 邮件模板占位符每项带花括号 |
 | `2026-10-22-avatar-backend-reply-3-to-avataradmin-upload-limits.md` | afe2764 | `GET /api/admin/meta` 新增八个上传限制字段，六个上传入口的提前检查 |
 
-**规则：** 这些文件是快照，不在这里改。后端以后若有新的回复，是新的文件；管理端前端有新问题，写新的文件放到 `docs/contract-requests/`，不改这里的任何一份。契约和管理端前端设计（在 AvatarApp 仓库）仍然只读，且**不复制进本仓库**。
+**规则：** 这些文件是快照，不在这里改。后端以后若有新的回复，是新的文件；管理端前端有新问题，写新的文件放到 `docs/contract-requests/`，不改这里的任何一份。契约和管理端前端设计的快照在 `docs/shared-snapshots/`，同样只读。

@@ -13,7 +13,7 @@ AvatarApp 的管理后台前端（Umi Max + Ant Design，TypeScript）。计划�
 
 ## 需求来源与共享文档
 
-- 规格（`docs/admin-frontend-design.md`）和契约（`docs/backend-task-java-backend.md`）在 **AvatarApp 仓库**，是共享文档：**只读**，不改，也**不复制进本仓库**。要改它们的地方，写成完整的变更请求（名称、行为、检查顺序、错误、测试）交给负责人，由他决定谁在 AvatarApp 的 main 上改。
+- 规格（`docs/admin-frontend-design.md`）和契约（`docs/backend-task-java-backend.md`）是共享文档（正本在 AvatarApp 仓库的 main）：**只读**。本仓库 `docs/shared-snapshots/` 里有逐字节相同的快照（见那里的 README），读它们；不改快照。要改它们的地方，写成完整的变更请求（名称、行为、检查顺序、错误、测试）交给负责人，由他决定谁在 AvatarApp 的 main 上改。
 - 契约没定的接口和全部响应字段名，以 `docs/backend-inputs/` 里后端的四份文件为准。那里和计划里都没有的接口，不要猜：写成新的问题文件放到 `docs/contract-requests/`（接口、字段、我们为什么需要），在报告里列出，当前任务按最小的做法继续。契约的缺口不是"阻塞"。
 - 不修改 AvatarApp、AvatarBackend 仓库里的任何文件。
 

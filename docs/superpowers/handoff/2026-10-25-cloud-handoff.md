@@ -15,16 +15,14 @@
 2. 计划 `docs/superpowers/plans/2026-10-21-avatar-admin-frontend.md`：开头的"关键设计点"表是已经和负责人确认过的理解；然后是 Global Constraints、Review Focus、任务统一写法、与后端回复的出入、规格与契约的冲突表、32 个任务、执行顺序。
 3. `docs/superpowers/handoff/execution-conventions.md`：执行约定和已定的 10 条裁决。
 4. `docs/superpowers/handoff/ledger.md`：账本，之后每个任务的开始、完成、评审都往末尾加行。
-5. `docs/backend-inputs/`：后端的四份文件，字段名的依据。
+5. `docs/backend-inputs/`：后端的四份文件，字段名的依据。`docs/shared-snapshots/`：规格和契约的快照。
 6. 取出某个任务的任务书：`bash docs/superpowers/handoff/brief.sh N`（在仓库根运行，输出到标准输出）。
 
-## 云端环境要先确认的事（我没有验证过，必须在第一步做）
+## 云端环境要先确认的事（没有在云端验证过，必须在第一步做）
 
-1. **能不能读 AvatarApp 仓库**（`StanleyMXY/AvatarApp`，main 分支）里的 `docs/admin-frontend-design.md`（规格）和 `docs/backend-task-java-backend.md`（契约，第 17 节是管理端接口）。几乎每个任务都要对照它们。
-   - 读得到：用 `git clone` 或会话里挂上的第二个仓库读，只读，**不复制进本仓库**，不改。
-   - 读不到：**停下**，状态 BLOCKED，在报告开头写"缺：规格和契约两份文件，需要负责人把 AvatarApp 仓库加进云端会话的可读仓库，或把这两份文件放到本会话能读到的位置（不要放进本仓库）"。不要凭计划里的转述去写任务 2 以后的内容：计划只转述了冲突点，没有逐字复制。
-2. **Node 版本**：`node -v`。要求 `^22.22.1 || >=24.0.0`。不满足就先装满足的，再 `npm install`（`postinstall` 会跑 `max setup`，`prepare` 会装 husky 钩子）。
-3. **能不能用子代理**：能用就按下面"执行方式"；不能用，就一个任务一个任务地在本会话里做，并且评审在新开的会话里做（只给它 diff 和任务书）。
+1. **规格和契约在本仓库的 `docs/shared-snapshots/`**（`admin-frontend-design.md` 是规格，`backend-task-java-backend.md` 是契约，第 17 节是管理端接口）：AvatarApp main 的逐字节快照，只读，规则和来源提交见那里的 README。云端读不到 AvatarApp 仓库，所以放了这份副本。计划、任务书里写的 `D:\Projects\PycharmProjects\AvatarApp\docs\…` 路径，对应这两个文件。几乎每个任务都要对照它们。契约文件有 1 MB，不要整份读进来：按任务书指的节读（`grep -n` 找节号）。
+2. **Node 版本**：云端自带 Node 20、21、22（官方文档：`/opt/node20`、`/opt/node21`、`/opt/node22`，默认在 PATH 上的是 22，没有列 24，22 的小版本号文档没写；`check-tools` 可以列出已装工具）。项目要求 `^22.22.1 || >=24.0.0`，这个下限来自 lint-staged 17.6.0 的 engines。步骤：`node -v`；满足就继续；不满足先试 `npm install` 和 `npx vitest run`，Node 22 的低小版本只会在安装时对 engines 给警告，不一定不能用，以测试能否全绿为准，并把实际版本和警告写进第一份报告；确实不能用，就装一个满足的：`npm install --prefix "$HOME/.local/node24" node@24`，再 `export PATH="$HOME/.local/node24/node_modules/.bin:$PATH"`（只靠 npm 官方源，不需要别的域名；**这条没有验证过**）。装好后 `npm install`（`postinstall` 会跑 `max setup`，`prepare` 会装 husky 钩子）。负责人可以把固定 Node 版本写进云端环境的 setup script，那样每次会话开始时就是对的。
+3. **子代理**：官方文档说云端的子代理和本地一样可用（Agent 工具）；没有写并发数的限制。能用就按下面"执行方式"；不能用，就一个任务一个任务地在本会话里做，并且评审在新开的会话里做（只给它 diff 和任务书）。
 4. **提交钩子能跑**：任务 1 做了 pre-commit（lint-staged + 暂存文件的类型检查）。第一次提交前跑一遍 `npx vitest run scripts/typecheck-staged.test.ts`，确认钩子的测试在云端是绿的。钩子失败要修，不绕过。
 
 ## 执行方式
@@ -40,7 +38,7 @@
 ## 遇到问题怎么办
 
 - **契约没写、后端的四份文件也没写的接口或字段**：不是阻塞。写一份新的问题文件到 `docs/contract-requests/`（接口、字段、我们为什么需要），本任务按最小的做法继续，在报告里列出。
-- **规格里要改的地方**：规格是共享文档，只在 AvatarApp 的 main 上改。不要改，也不要在本仓库放副本；把完整的变更请求（名称、行为、检查顺序、错误、测试）写进任务报告，计划任务 32 里有汇总清单。
+- **规格或契约里要改的地方**：正本在 AvatarApp 的 main，只在那里改。不要改本仓库的快照；把完整的变更请求（名称、行为、检查顺序、错误、测试）写进任务报告，计划任务 32 里有汇总清单。
 - **需要改共享文件**（见 `execution-conventions.md` 的归属）：只有地基任务能改；模块任务需要时状态 NEEDS_CONTEXT，写明要改什么。
 - **同一个位置第二次出现新缺陷**：停下来重新规划，不要打第三个补丁。
 

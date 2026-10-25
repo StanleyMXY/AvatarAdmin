@@ -5,11 +5,11 @@
 ## 约定（每条都来自本项目已发生的问题或负责人的明确要求）
 
 - 分支：在你自己的工作分支上做，从 `main` 分出；不开 worktree；不用 `git add -f`、`--no-verify`、`git add -A`、`git commit -a`、强推。
-- 需求来源（只读，不改，不复制进本仓库）：
+- 需求来源（只读，不改）：
   - 计划：本仓库 `docs/superpowers/plans/2026-10-21-avatar-admin-frontend.md`。
-  - 规格 `docs/admin-frontend-design.md` 和契约 `docs/backend-task-java-backend.md`：在 GitHub 仓库 `StanleyMXY/AvatarApp` 的 `main` 分支，读不到就是**阻塞**（见交接文档），不要凭记忆写。
+  - 规格和契约：本仓库 `docs/shared-snapshots/` 里的 `admin-frontend-design.md`、`backend-task-java-backend.md`（AvatarApp main 的快照，只读，规则见那里的 README）。计划里写的 `D:\Projects\PycharmProjects\AvatarApp\docs\…` 路径，对应这两个文件。
   - 后端的四份文件：本仓库 `docs/backend-inputs/`。字段名以它们为准；它们和契约里都没有的接口不要猜，状态 NEEDS_CONTEXT，写成新的问题文件放到 `docs/contract-requests/`，本任务按最小的做法继续。
-- 不修改 AvatarApp、AvatarBackend 里的任何文件。
+- 不修改 AvatarApp、AvatarBackend 里的任何文件，也不修改 `docs/shared-snapshots/` 里的快照。
 - 提交：每次只提交本任务的路径：`git add <路径…>` 然后 `git commit -m "<说明>" -- <路径…>`。提交说明写这个任务做了什么，不带编号式缩写。提交前的钩子（lint-staged 和暂存文件的类型检查）必须通过。
 - 测试：只跑本任务相关的测试：`npx vitest run <路径或文件名>`；不跑全量测试，不跑 `npm run build`（任务 1 和任务 32 除外）。类型检查和 lint 用 pre-commit 钩子，或 `npx biome check <路径>`、`npx tsc --noEmit` 并只看自己路径下的报错。
 - Node：版本要求 `^22.22.1 || >=24.0.0`（来自 lint-staged 17.6.0、pro-components、vitest 4.1.10 的 engines）。开始前 `node -v`；不满足就先装满足的版本，再 `npm install`。`.npmrc` 里 `legacy-peer-deps=true` 不要去掉。
