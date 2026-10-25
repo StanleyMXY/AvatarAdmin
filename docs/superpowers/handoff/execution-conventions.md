@@ -4,7 +4,7 @@
 
 ## 约定（每条都来自本项目已发生的问题或负责人的明确要求）
 
-- 分支：在你自己的工作分支上做，从 `admin-frontend` 分出；不开 worktree；不用 `git add -f`、`--no-verify`、`git add -A`、`git commit -a`、强推。
+- 分支：在你自己的工作分支上做，从 `main` 分出；不开 worktree；不用 `git add -f`、`--no-verify`、`git add -A`、`git commit -a`、强推。
 - 需求来源（只读，不改，不复制进本仓库）：
   - 计划：本仓库 `docs/superpowers/plans/2026-10-21-avatar-admin-frontend.md`。
   - 规格 `docs/admin-frontend-design.md` 和契约 `docs/backend-task-java-backend.md`：在 GitHub 仓库 `StanleyMXY/AvatarApp` 的 `main` 分支，读不到就是**阻塞**（见交接文档），不要凭记忆写。

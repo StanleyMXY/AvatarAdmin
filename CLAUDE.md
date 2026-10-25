@@ -43,5 +43,5 @@ AvatarApp 的管理后台前端（Umi Max + Ant Design，TypeScript）。计划�
 ## Git
 
 - 提交不用问，每次只提交自己任务的路径（`git add <路径>` 加 `git commit -m … -- <路径>`），不用 `git add -A`、`git commit -a`、`git add -f`、`--no-verify`。
-- 只推送你自己的工作分支；不推 `main`，不强推。合并按层级：工作分支 → `admin-frontend` → `main`，由负责人决定何时合并。
+- 只推送你自己的工作分支（`claude/…`，从 `main` 分出）；不直接推 `main`，不强推。工作分支由负责人看过后合并到 `main`。
 - 提交前的钩子（lint-staged 和暂存文件的类型检查）必须通过；钩子失败就修，不绕过。
