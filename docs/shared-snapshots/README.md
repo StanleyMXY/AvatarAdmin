@@ -7,7 +7,7 @@
 | `admin-frontend-design.md` | `docs/admin-frontend-design.md` | 59706fdc |
 | `backend-task-java-backend.md` | `docs/backend-task-java-backend.md` | 89c71002 |
 
-**为什么有这份副本：** 云端会话一次只挂一个仓库，读不到 AvatarApp。2026-10-26 负责人决定把它们拷进本仓库，让没有本机文件的会话也能对照。
+**为什么有这份副本：** 负责人不让云端会话访问 AvatarApp 仓库，所以 2026-10-26 决定把这两份拷进本仓库，让云端会话只读本仓库就能对照。
 
 **规则：**
 - 这是**只读快照**，不在这里改。计划、任务书、`CLAUDE.md` 里写的"规格""契约"，在本仓库里就读这里的文件；计划里写的 `D:\…\AvatarApp\docs\…` 路径对应这里的同名文件。
