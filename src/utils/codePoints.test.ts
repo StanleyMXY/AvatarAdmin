@@ -14,7 +14,7 @@ describe('countCodePoints', () => {
     // A regional-indicator pair (a flag): two code points.
     expect(countCodePoints('🇹🇭')).toBe(2);
     // Man, ZWJ, woman, ZWJ, girl: five code points.
-    expect(countCodePoints('👨‍👩‍👧')).toBe(5);
+    expect(countCodePoints('👨\u200D👩\u200D👧')).toBe(5);
   });
 
   it('counts Arabic letters and the lam-alef ligature character by code point', () => {
@@ -46,7 +46,7 @@ describe('lengthWithin', () => {
     expect(lengthWithin(' a ', 1, 1)).toBe(true);
     expect(lengthWithin('　a\u0085', 1, 1)).toBe(true);
     // The zero-width space is not whitespace, so it counts.
-    expect(lengthWithin('​a', 1, 1)).toBe(false);
+    expect(lengthWithin('\u200Ba', 1, 1)).toBe(false);
   });
 
   it('gives length 0 to an all-whitespace string', () => {

@@ -10,7 +10,7 @@ import { ApiError } from './errors';
 
 export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-const BIDI_CONTROLS = /[‎‏‪-‮⁦-⁩]/g;
+const BIDI_CONTROLS = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: file names must not carry control characters
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/g;
 

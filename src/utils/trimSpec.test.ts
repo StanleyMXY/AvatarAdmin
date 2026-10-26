@@ -49,7 +49,7 @@ describe('trimSpec', () => {
   });
 
   it('keeps zero-width space, BOM and direction marks (format characters are not whitespace here)', () => {
-    for (const ch of ['​', '﻿', '‎', '‏', '‮', '⁠', '᠎']) {
+    for (const ch of ['\u200B', '\uFEFF', '\u200E', '\u200F', '\u202E', '\u2060', '\u180E']) {
       expect(trimSpec(`${ch}x${ch}`)).toBe(`${ch}x${ch}`);
     }
   });
@@ -64,8 +64,8 @@ describe('trimSpec', () => {
     expect(trimSpec('\u001Cx')).toBe('x');
     expect(trimSpec('\u001Fx')).toBe('x');
     // trim() removes the BOM, trimSpec keeps it
-    expect('﻿x'.trim()).toBe('x');
-    expect(trimSpec('﻿x')).toBe('﻿x');
+    expect('\uFEFFx'.trim()).toBe('x');
+    expect(trimSpec('\uFEFFx')).toBe('\uFEFFx');
   });
 
   it('only touches the ends, never the middle', () => {

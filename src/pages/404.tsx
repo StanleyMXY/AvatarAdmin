@@ -1,4 +1,18 @@
-// Placeholder so the catch-all route builds; the shell task replaces it with the real page.
-export default function NotFound() {
-  return <div data-testid="not-found-placeholder" />;
+import { history, useIntl } from '@umijs/max';
+import { Button, Result } from 'antd';
+
+export default function NotFoundPage() {
+  const intl = useIntl();
+  return (
+    <Result
+      status="404"
+      title={intl.formatMessage({ id: 'pages.404.title' })}
+      subTitle={intl.formatMessage({ id: 'pages.404.subtitle' })}
+      extra={
+        <Button type="primary" onClick={() => history.push('/dashboard')}>
+          {intl.formatMessage({ id: 'pages.404.back' })}
+        </Button>
+      }
+    />
+  );
 }

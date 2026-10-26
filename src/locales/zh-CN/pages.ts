@@ -1,0 +1,26 @@
+const messages: Record<string, string> = {
+  'pages.theme.label': '主题',
+  'pages.theme.dim': '暗蓝',
+  'pages.theme.deep': '深青',
+  'pages.theme.light': '浅色',
+  'pages.lang.label': '语言',
+  'pages.lang.zhCN': '简体中文',
+  'pages.lang.enUS': 'English',
+  'pages.header.changePassword': '修改密码',
+  'pages.header.logout': '退出登录',
+  'pages.tabs.refresh': '刷新',
+  'pages.tabs.close': '关闭',
+  'pages.tabs.closeOthers': '关闭其他',
+  'pages.tabs.closeAll': '关闭全部',
+  'pages.tabs.closeLeft': '关闭左侧',
+  'pages.tabs.closeRight': '关闭右侧',
+  'pages.403.title': '没有访问权限',
+  'pages.403.subtitle': '你的账号没有打开这个页面所需的权限，请联系管理员。',
+  'pages.403.needs': '需要的权限：{name}',
+  'pages.403.back': '返回总览',
+  'pages.404.title': '页面不存在',
+  'pages.404.subtitle': '这个地址不是后台里的页面。',
+  'pages.404.back': '返回总览',
+};
+
+export default messages;

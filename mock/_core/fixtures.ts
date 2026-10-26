@@ -48,7 +48,7 @@ export const multilingualSamples = {
   ],
   // One string without any space or break opportunity, and one with a combining mark and a ZWJ sequence.
   longUnbroken: `${'A'.repeat(300)}`,
-  edgeCases: ['ก็ก็ก็ก็', '\u{1F468}‍\u{1F469}‍\u{1F467} family', 'lam-alef ﻻ'],
+  edgeCases: ['ก็ก็ก็ก็', '\u{1F468}\u200D\u{1F469}\u200D\u{1F467} family', 'lam-alef ﻻ'],
 } as const;
 
 export type SampleLanguage = 'th' | 'ar' | 'id' | 'vi' | 'es' | 'en' | 'zh';

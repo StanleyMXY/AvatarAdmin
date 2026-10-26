@@ -33,7 +33,7 @@ describe('validateServerLink: scheme (contract 1.7)', () => {
   it('rejects anything before the scheme, a leading space first', () => {
     expect(reject(' https://example.com')).toBe('NOT_HTTPS');
     expect(reject('\thttps://example.com')).toBe('NOT_HTTPS');
-    expect(reject('​https://example.com')).toBe('NOT_HTTPS');
+    expect(reject('\u200Bhttps://example.com')).toBe('NOT_HTTPS');
   });
 });
 
@@ -82,7 +82,7 @@ describe('validateServerLink: host', () => {
     expect(reject('https://-example.com')).toBe('INVALID_HOST');
     expect(reject('https://exa mple.com')).toBe('INVALID_HOST');
     expect(reject('https://exa\tmple.com')).toBe('INVALID_HOST');
-    expect(reject('https://example.com‮')).toBe('INVALID_HOST');
+    expect(reject('https://example.com\u202E')).toBe('INVALID_HOST');
     expect(reject('https://exa*mple.com')).toBe('INVALID_HOST');
   });
 });
@@ -136,8 +136,8 @@ describe('validateServerLink: path, query, fragment', () => {
     expect(reject('https://example.com/a\nb')).toBe('INVALID_PATH');
     expect(reject('https://example.com/a\u0000b')).toBe('INVALID_PATH');
     expect(reject('https://example.com/a\u007Fb')).toBe('INVALID_PATH');
-    expect(reject('https://example.com/‮evil')).toBe('INVALID_PATH');
-    expect(reject('https://example.com/a​b')).toBe('INVALID_PATH');
+    expect(reject('https://example.com/\u202Eevil')).toBe('INVALID_PATH');
+    expect(reject('https://example.com/a\u200Bb')).toBe('INVALID_PATH');
     expect(reject('https://example.com/ ')).toBe('INVALID_PATH');
   });
 });

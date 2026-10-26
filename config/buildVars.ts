@@ -54,9 +54,10 @@ export const buildVars = {
   ADMIN_QUALITY_MAX_SLOW_SHARE: readFraction('ADMIN_QUALITY_MAX_SLOW_SHARE', 0.05),
 } as const;
 
-/** Shape expected by Umi's `define`: every value JSON-encoded so strings stay strings. */
+/**
+ * The values for Umi's `define`. Umi encodes each value as JSON itself, so they are passed as they
+ * are: encoding them here too would put quote marks inside every string in the browser.
+ */
 export function toDefine(vars: Record<string, string | number>): Record<string, string | number> {
-  return Object.fromEntries(
-    Object.entries(vars).map(([key, value]) => [key, JSON.stringify(value)]),
-  );
+  return { ...vars };
 }

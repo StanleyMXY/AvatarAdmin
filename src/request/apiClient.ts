@@ -6,7 +6,8 @@ import { getToken, handleForbidden, handleTokenExpired } from './session';
 /** Every admin endpoint is under this prefix; service functions give the path after it. */
 export const ADMIN_API_BASE = '/api/admin';
 
-export const LOCALE_STORAGE_KEY = 'avatar-admin.locale';
+/** Where Umi's locale plugin keeps the language the user chose. */
+export const LOCALE_STORAGE_KEY = 'umi_locale';
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
