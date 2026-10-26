@@ -1,17 +1,20 @@
-import { getLocale, history } from '@umijs/max';
+import { getLocale } from '@umijs/max';
 import type { ReactElement } from 'react';
 import appRoutes from '../config/routes';
-import { type AccessMe, canAccess } from './access/canAccess';
+import { canAccess } from './access/canAccess';
 import { buildVars } from './buildVars';
-import { HeaderDropdown } from './components/layout/HeaderDropdown';
+import { AccountMenu } from './components/layout/AccountMenu';
 import { LangSwitch } from './components/layout/LangSwitch';
-import { signOut } from './components/layout/signOut';
 import { TabManager } from './components/layout/TabManager';
 import { ThemeSwitch } from './components/layout/ThemeSwitch';
 import { applyInitialLocale } from './locales/initLocale';
 import { Forbidden } from './pages/403';
 import NotFoundPage from './pages/404';
 import { setLocaleProvider } from './request/apiClient';
+import { loadSession } from './session/loadSession';
+import { SessionBridge } from './session/SessionBridge';
+import { SessionGate } from './session/SessionGate';
+import type { SessionState } from './session/state';
 import { ThemeRoot } from './theme/ThemeRoot';
 import { LAYOUT } from './theme/tokens';
 
@@ -26,11 +29,19 @@ export function render(oldRender: () => void): void {
   oldRender();
 }
 
-/** What the app knows about the signed-in administrator; the session task fills it from `GET /me`. */
-export type InitialState = { me?: AccessMe & { username?: string } };
+/** What the app knows about the signed-in administrator (`GET /me`) and the shared values (`GET /meta`). */
+export type InitialState = SessionState;
 
 export async function getInitialState(): Promise<InitialState> {
-  return {};
+  return loadSession();
+}
+
+/**
+ * Inside Umi's data providers and outside its router: connects the request layer's session signals
+ * (token lost, permission refused) to the page.
+ */
+export function innerProvider(container: ReactElement): ReactElement {
+  return <SessionBridge>{container}</SessionBridge>;
 }
 
 /** Wraps the whole app: the theme (Ant Design token set) of the chosen mode. */
@@ -52,22 +63,19 @@ export const layout = ({ initialState }: { initialState?: InitialState }) => {
     contentStyle: { padding: LAYOUT.contentPadding },
     menu: { locale: true },
     actionsRender: () => [<LangSwitch key="lang" />, <ThemeSwitch key="theme" />],
-    avatarProps: {
-      render: () =>
-        me?.username ? (
-          <HeaderDropdown
-            username={me.username}
-            onChangePassword={() => history.push('/user/change-password')}
-            onLogout={signOut}
-          />
-        ) : null,
-    },
-    unAccessible: <Forbidden />,
+    avatarProps: { render: () => <AccountMenu /> },
+    unAccessible: (
+      <SessionGate>
+        <Forbidden />
+      </SessionGate>
+    ),
     noFound: <NotFoundPage />,
     childrenRender: (children: ReactElement) => (
-      <TabManager routes={appRoutes} can={can} locale={getLocale()}>
-        {children}
-      </TabManager>
+      <SessionGate>
+        <TabManager routes={appRoutes} can={can} locale={getLocale()}>
+          {children}
+        </TabManager>
+      </SessionGate>
     ),
   };
 };

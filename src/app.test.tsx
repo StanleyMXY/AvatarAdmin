@@ -1,8 +1,15 @@
 import { render, screen } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getLocale, resetUmiStub, setLocale } from '../tests/stubs/umi-max';
-import { layout, render as renderHook, rootContainer } from './app';
+import {
+  getLocale,
+  history,
+  resetUmiStub,
+  setLocale,
+  setTestInitialState,
+  setTestLocation,
+} from '../tests/stubs/umi-max';
+import { getInitialState, innerProvider, layout, render as renderHook, rootContainer } from './app';
 import { buildVars } from './buildVars';
 import { applyInitialLocale } from './locales/initLocale';
 import { apiRequest } from './request/apiClient';
@@ -13,7 +20,16 @@ beforeEach(() => {
   resetThemeModeForTests();
 });
 
-const config = (me?: { superAdmin: boolean; permissions: string[]; username?: string }) =>
+const signedIn = (superAdmin: boolean, permissions: string[]) => ({
+  id: '1',
+  username: 'ploy',
+  superAdmin,
+  mustChangePassword: false,
+  permissions,
+  passwordMinLength: 12,
+});
+
+const config = (me?: ReturnType<typeof signedIn>) =>
   layout({ initialState: me ? { me } : undefined });
 
 describe('layout', () => {
@@ -39,7 +55,9 @@ describe('layout', () => {
   });
 
   it('shows the 403 page and the 404 page from the language files', () => {
-    const c = config({ superAdmin: false, permissions: [] });
+    setTestInitialState({ me: signedIn(false, []) });
+    setTestLocation({ pathname: '/users/list', search: '' });
+    const c = config(signedIn(false, []));
     render(
       <IntlProvider
         locale="en-US"
@@ -55,8 +73,60 @@ describe('layout', () => {
   });
 
   it('puts the language and theme switches in the header', () => {
-    const actions = config({ superAdmin: true, permissions: [] }).actionsRender();
+    const actions = config(signedIn(true, [])).actionsRender();
     expect(actions).toHaveLength(2);
+  });
+});
+
+describe('the session in the shell', () => {
+  it('shows the 403 page only to someone who is signed in; anyone else is sent to sign-in', () => {
+    setTestInitialState({});
+    setTestLocation({ pathname: '/users/list', search: '?x=1' });
+    const c = config();
+    render(
+      <IntlProvider
+        locale="en-US"
+        messages={{ 'pages.403.title': 'No permission' }}
+        onError={() => {}}
+      >
+        {c.unAccessible}
+      </IntlProvider>,
+    );
+    expect(screen.queryByText('No permission')).toBeNull();
+    expect(history.replace).toHaveBeenCalledWith(
+      `/user/login?redirect=${encodeURIComponent('/users/list?x=1')}`,
+    );
+  });
+
+  it('keeps an account that must change its password out of every page of the shell', () => {
+    setTestInitialState({ me: { ...signedIn(true, []), mustChangePassword: true } });
+    setTestLocation({ pathname: '/users/list', search: '' });
+    const c = config({ ...signedIn(true, []), mustChangePassword: true });
+    render(
+      <IntlProvider locale="en-US" onError={() => {}}>
+        {c.childrenRender(<div data-testid="page" />)}
+      </IntlProvider>,
+    );
+    expect(screen.queryByTestId('page')).toBeNull();
+    expect(history.replace).toHaveBeenCalledWith('/user/change-password');
+  });
+
+  it('shows the page to a signed-in account', () => {
+    setTestInitialState({ me: signedIn(true, []) });
+    setTestLocation({ pathname: '/dashboard', search: '' });
+    const c = config(signedIn(true, []));
+    render(
+      <IntlProvider locale="en-US" onError={() => {}}>
+        {c.childrenRender(<div data-testid="page" />)}
+      </IntlProvider>,
+    );
+    expect(screen.getByTestId('page')).toBeInTheDocument();
+    expect(history.replace).not.toHaveBeenCalled();
+  });
+
+  it("reads the account through the session loader, and puts the bridge inside Umi's providers", () => {
+    expect(typeof getInitialState).toBe('function');
+    expect(innerProvider(<div />)).toBeDefined();
   });
 });
 
