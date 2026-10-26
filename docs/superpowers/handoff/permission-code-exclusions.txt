@@ -1,0 +1,7 @@
+# Tokens in the contract that have the shape of a permission code but are not codes of this project.
+# They appear only inside "evidence" notes that quote the reference project's permissions, or the
+# reference project's old name of a code that this project names differently.
+# One token per line; lines starting with # are comments. Read by scripts/check-permission-codes.ts.
+DRAMA:USER:EXPORT
+DRAMA:USER:PHONE_VIEW
+SMS:SEND_RECORD:EXPORT
