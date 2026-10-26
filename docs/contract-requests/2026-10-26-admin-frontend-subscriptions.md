@@ -68,3 +68,11 @@
 **问：** 要不要把它加进 `GET /meta`？
 
 **暂定做法：** 前端只检查"0 以上的整数"，上限交给后端，把后端的拒绝文字显示在那一行旁。
+
+## 九、后台读订阅的接口不应把完整 Google 令牌发给只有查看权限的管理员
+
+契约 15.3 写 Google 的 `storeRef` 就是 `purchaseToken`，15.2 的绑定规则让持有购买凭证的人可以在 `google/verify` 认领订阅。`GET /subscriptions` 和 `GET /subscriptions/{id}` 现在把完整令牌发给持有 `SUBSCRIPTION:VIEW` 的管理员（`linkedPurchaseToken` 同理）。
+
+**问：** 能否对 Google 只返回末 6 位（字段名带 `Suffix`，做法同 17.4 附表的设备推送令牌 `tokenSuffix`）？完整变更请求（行为、检查顺序、错误、测试）在 `docs/superpowers/handoff/reports/task-11-review.md` 的 C1。
+
+**暂定做法：** 前端的订阅详情抽屉对 Google 只显示 `…` 加末 6 位，不带复制按钮；Apple 的 `originalTransactionId` 照常显示。响应 JSON 里的完整令牌前端挡不住。

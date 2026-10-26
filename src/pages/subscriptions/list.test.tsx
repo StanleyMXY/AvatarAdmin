@@ -98,6 +98,31 @@ describe('the subscription detail drawer', { timeout: 30000 }, () => {
     return await screen.findByRole('dialog');
   };
 
+  it('does not show a Google purchase token: it can claim the subscription, so only its last six characters appear, with nothing to copy', async () => {
+    for (const s of subscriptionsState().subscriptions) {
+      s.store = 'GOOGLE';
+      s.storeRef = 'gp-token-SECRETVALUE-abc123';
+    }
+    useMockBackend(subscriptionsMock);
+    const dialog = await openFirst();
+    await within(dialog).findAllByTestId('timeline-event');
+    expect(dialog.textContent).not.toContain('SECRETVALUE');
+    expect(dialog.textContent).toContain('abc123');
+    expect(within(dialog).queryByRole('button', { name: /copy/i })).toBeNull();
+    expect(dialog.querySelector('.anticon-copy')).toBeNull();
+  });
+
+  it('shows the whole Apple original transaction ID, which cannot claim a subscription by itself', async () => {
+    for (const s of subscriptionsState().subscriptions) {
+      s.store = 'APPLE';
+      s.storeRef = '2000000123456789';
+    }
+    useMockBackend(subscriptionsMock);
+    const dialog = await openFirst();
+    await within(dialog).findAllByTestId('timeline-event');
+    expect(dialog.textContent).toContain('2000000123456789');
+  });
+
   it('lists the events newest first by the time the store signed them', async () => {
     useMockBackend(subscriptionsMock);
     const dialog = await openFirst();
