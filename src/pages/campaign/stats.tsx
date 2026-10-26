@@ -1,4 +1,3 @@
-import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Button, Flex, Spin, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -19,6 +18,7 @@ import { lastNDaysUtc } from '../../utils/utcDay';
 import { CampaignSelect } from './CampaignSelect';
 import { FailureBar } from './FailureBar';
 import { moneyText, numberOf, rateText, shareText, unitCostText } from './figures';
+import { HeaderTip } from './HeaderTip';
 import { countText, orDash } from './texts';
 import { useCampaigns } from './useCampaigns';
 import { useRead } from './useRead';
@@ -30,23 +30,6 @@ const DAILY_PAGE_SIZE = 20;
 const initialFilter = (): Filter => ({ range: lastNDaysUtc(7), campaignId: undefined });
 /** The campaign id 0 is not a campaign: it is the row of the installs that matched none. */
 const isUnattributedRow = (row: PerformanceRow) => String(row.campaignId ?? '') === '0';
-
-/** A column title with a hint icon; the tip text is the language key `<id>.tip`. */
-function HeaderTip({ id, label }: { id: string; label?: string }) {
-  const intl = useIntl();
-  return (
-    <span>
-      {label ?? intl.formatMessage({ id })}
-      <Tooltip title={intl.formatMessage({ id: `${id}.tip` })}>
-        <QuestionCircleOutlined
-          data-testid={`tip-${id.split('.').pop()}`}
-          aria-hidden={false}
-          style={{ marginInlineStart: 4 }}
-        />
-      </Tooltip>
-    </span>
-  );
-}
 
 /**
  * 投放效果 (`ATTRIBUTION:VIEW`): the funnel of the own attribution for each campaign and for each

@@ -116,6 +116,8 @@ describe('the cost list', { timeout: 30000 }, () => {
   it('reads the last 30 UTC days, for all campaigns, 20 rows to a page, also where the local date is the next day', async () => {
     await withTimeZone('Pacific/Auckland', async () => {
       vi.setSystemTime(new Date('2026-10-26T20:00:00Z'));
+      // the token of the administrator is good for eight hours from when it was made
+      signIn('root');
       const { calls } = await openCosts();
       const read = costReads(calls)[0];
       expect(read.get('from')).toBe('2026-09-27');
@@ -228,6 +230,8 @@ describe('entering a cost', { timeout: 30000 }, () => {
   it('takes the UTC day for today where the local date is already the next day', async () => {
     await withTimeZone('Pacific/Auckland', async () => {
       vi.setSystemTime(new Date('2026-10-26T20:00:00Z'));
+      // the token of the administrator is good for eight hours from when it was made
+      signIn('root');
       await open();
       expect(within(await dialog()).getByLabelText('Date (UTC)')).toHaveValue('2026-10-26');
     });
