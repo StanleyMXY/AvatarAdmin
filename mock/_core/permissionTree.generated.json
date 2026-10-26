@@ -1,0 +1,476 @@
+[
+  {
+    "code": "USER:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 1
+  },
+  {
+    "code": "USER:BAN",
+    "parent": "USER:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 2
+  },
+  {
+    "code": "USER:EMAIL_VIEW",
+    "parent": "USER:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 3
+  },
+  {
+    "code": "USER:EXPORT",
+    "parent": "USER:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 4
+  },
+  {
+    "code": "USER:PHONE_VIEW",
+    "parent": "USER:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 5
+  },
+  {
+    "code": "ABUSE:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 6
+  },
+  {
+    "code": "USER:DELETION",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 7
+  },
+  {
+    "code": "NOTIFICATION:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 8
+  },
+  {
+    "code": "NOTIFICATION:SEND",
+    "parent": "NOTIFICATION:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 9
+  },
+  {
+    "code": "MODERATION:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 10
+  },
+  {
+    "code": "MODERATION:REVIEW",
+    "parent": "MODERATION:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 11
+  },
+  {
+    "code": "MODERATION:CONFIG",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 12
+  },
+  {
+    "code": "COSMETIC:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 13
+  },
+  {
+    "code": "COSMETIC:GRANT",
+    "parent": "COSMETIC:MANAGE",
+    "type": "FUNCTION",
+    "sortOrder": 14
+  },
+  {
+    "code": "ACTION:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 15
+  },
+  {
+    "code": "DECLARATION:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 16
+  },
+  {
+    "code": "RENDERER:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 17
+  },
+  {
+    "code": "GENERATION:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 18
+  },
+  {
+    "code": "DEFAULT_AVATAR:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 19
+  },
+  {
+    "code": "COMPLAINT:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 20
+  },
+  {
+    "code": "COMPLAINT:MANAGE",
+    "parent": "COMPLAINT:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 21
+  },
+  {
+    "code": "SESSION:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 22
+  },
+  {
+    "code": "STATS:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 23
+  },
+  {
+    "code": "STATS:EXPORT",
+    "parent": "STATS:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 24
+  },
+  {
+    "code": "STATS:LAND",
+    "parent": "STATS:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 25
+  },
+  {
+    "code": "COMPANIONSHIP:CONFIG",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 26
+  },
+  {
+    "code": "SUBSCRIPTION:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 27
+  },
+  {
+    "code": "CREDIT:REVIEW",
+    "parent": "SUBSCRIPTION:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 28
+  },
+  {
+    "code": "SUBSCRIPTION:GRANT",
+    "parent": "SUBSCRIPTION:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 29
+  },
+  {
+    "code": "FINANCE:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 30
+  },
+  {
+    "code": "SUBSCRIPTION:CONFIG",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 31
+  },
+  {
+    "code": "ADS:CAMPAIGN",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 32
+  },
+  {
+    "code": "ADS:PLACEMENT",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 33
+  },
+  {
+    "code": "ADS:UNIT",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 34
+  },
+  {
+    "code": "ADS:CREATIVE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 35
+  },
+  {
+    "code": "ADS:REPORT",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 36
+  },
+  {
+    "code": "PUSH:TEMPLATE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 37
+  },
+  {
+    "code": "PUSH:SEND",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 38
+  },
+  {
+    "code": "PUSH:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 39
+  },
+  {
+    "code": "PUSH:CONFIG",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 40
+  },
+  {
+    "code": "INVITE:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 41
+  },
+  {
+    "code": "CHECKIN:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 42
+  },
+  {
+    "code": "CHECKIN:MANAGE",
+    "parent": "CHECKIN:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 43
+  },
+  {
+    "code": "TASK:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 44
+  },
+  {
+    "code": "TASK:MANAGE",
+    "parent": "TASK:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 45
+  },
+  {
+    "code": "INVITE:CONFIG",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 46
+  },
+  {
+    "code": "ATTRIBUTION:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 47
+  },
+  {
+    "code": "ATTRIBUTION:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 48
+  },
+  {
+    "code": "ANALYTICS:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 49
+  },
+  {
+    "code": "ANALYTICS:FUNNEL_MANAGE",
+    "parent": "ANALYTICS:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 50
+  },
+  {
+    "code": "ANALYTICS:IP_VIEW",
+    "parent": "ANALYTICS:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 51
+  },
+  {
+    "code": "SUPPORT:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 52
+  },
+  {
+    "code": "SUPPORT:MANAGE",
+    "parent": "SUPPORT:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 53
+  },
+  {
+    "code": "MEMORY:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 54
+  },
+  {
+    "code": "MEMORY:MODEL_ASSIGN",
+    "parent": "MEMORY:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 55
+  },
+  {
+    "code": "MEMORY:MODEL_REGISTER",
+    "parent": "MEMORY:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 56
+  },
+  {
+    "code": "MEMORY:TIER_CONFIG",
+    "parent": "MEMORY:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 57
+  },
+  {
+    "code": "MONITOR:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 58
+  },
+  {
+    "code": "MONITOR:MANAGE",
+    "parent": "MONITOR:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 59
+  },
+  {
+    "code": "COST:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 60
+  },
+  {
+    "code": "COST:PRICE",
+    "parent": "COST:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 61
+  },
+  {
+    "code": "CONFIG:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 62
+  },
+  {
+    "code": "CLIENTCONFIG:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 63
+  },
+  {
+    "code": "CLIENTCONFIG:MANAGE",
+    "parent": "CLIENTCONFIG:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 64
+  },
+  {
+    "code": "EMAIL:TEMPLATE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 65
+  },
+  {
+    "code": "SMS:CHANNEL",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 66
+  },
+  {
+    "code": "SMS:CHANNEL:CONFIG",
+    "parent": "SMS:CHANNEL",
+    "type": "FUNCTION",
+    "sortOrder": 67
+  },
+  {
+    "code": "SMS:TEMPLATE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 68
+  },
+  {
+    "code": "SMS:RECORD",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 69
+  },
+  {
+    "code": "SMS:RECORD:EXPORT",
+    "parent": "SMS:RECORD",
+    "type": "FUNCTION",
+    "sortOrder": 70
+  },
+  {
+    "code": "SMS:RECORD:PHONE_VIEW",
+    "parent": "SMS:RECORD",
+    "type": "FUNCTION",
+    "sortOrder": 71
+  },
+  {
+    "code": "ADMIN:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 72
+  },
+  {
+    "code": "ROLE:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 73
+  },
+  {
+    "code": "PERMISSION:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 74
+  },
+  {
+    "code": "APPVERSION:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 75
+  },
+  {
+    "code": "APPVERSION:ACTIVATE",
+    "parent": "APPVERSION:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 76
+  },
+  {
+    "code": "APPVERSION:MANAGE",
+    "parent": "APPVERSION:VIEW",
+    "type": "FUNCTION",
+    "sortOrder": 77
+  },
+  {
+    "code": "CHANNEL:MANAGE",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 78
+  },
+  {
+    "code": "AUDIT:VIEW",
+    "parent": null,
+    "type": "MENU",
+    "sortOrder": 79
+  }
+]

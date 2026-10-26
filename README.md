@@ -35,6 +35,25 @@ backend contract live in the AvatarApp repository and are not copied here.
 `postinstall` runs `max setup` (generates `src/.umi`, which is git-ignored); `prepare` installs the
 husky hooks.
 
+## Mock backend
+
+`npm run dev:mock` serves `/api/admin/**` from `mock/` (Umi's mock loader, development server only, never part of the build). The state is in memory and starts again on every restart. `npm run dev:api` turns it off (`MOCK=none`) and proxies `/api` to `ADMIN_API_PROXY_TARGET`; the front end code is the same in both modes. The loader skips `mock/_core/**` (helpers) and `mock/**/*.test.ts`.
+
+**The accounts, passwords and the verification code below exist only in the mock backend. They are fakes, not secrets, and the real backend does not know them.**
+
+| User name | Password | State | Permissions |
+|---|---|---|---|
+| `root` | `mock-password-root` | super administrator | all 79 codes |
+| `support` | `mock-password-support` | normal | sessions, users (view, ban), support, complaints (view), notifications (view), statistics (view) |
+| `finance` | `mock-password-finance` | normal | subscriptions, credits, finance statistics, costs and prices, statistics (view, export, re-land) |
+| `reviewer` | `mock-password-reviewer` | normal | moderation (view, review, rules), complaints (view, manage) |
+| `newhire` | `mock-password-newhire` | must change the password first | users (view), statistics (view) |
+| `fresh` | `mock-password-fresh` | has no authenticator yet (login answers `ENROLL_REQUIRED`) | statistics (view), monitor (view) |
+
+The verification code is `000000` for every account, also for the first enrollment. Five wrong codes in a row lock the user name for 15 minutes (429 `RATE_LIMITED`). `GET /api/admin/meta` returns the defaults of contract 17.5 (so `supportedLocales` is `["en"]`) and the upload limits of the backend's third reply. `GET /api/admin/permissions` is the built-in permission tree, derived from spec table 5.0 (`scripts/permissionTree.ts`; the data is `mock/_core/permissionTree.generated.json`, and a test keeps the two equal).
+
+Each module's mock file exports `{ 'METHOD /api/admin/path': handler }`; wrap handlers with `guard(permission, handler)` from `mock/_core/auth.ts`, which gives the contract's 401 and 403 answers and `req.admin`. Sample data comes from `mock/_core/fixtures.ts` (Thai, Arabic, Indonesian, Vietnamese, Spanish, English and Chinese, with long strings without spaces and emoji). Tests call a handler directly with `call` from `mock/_core/testing.ts`; no server is started.
+
 ## Build variables
 
 Set in the environment or in `.env.local` (git-ignored; copy `.env.example`). They are injected at

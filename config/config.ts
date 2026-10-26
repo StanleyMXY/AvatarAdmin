@@ -23,5 +23,7 @@ export default defineConfig({
   antd: {},
   define: toDefine(buildVars),
   proxy,
+  // Tools and tests in mock/ are not endpoint files.
+  mock: { exclude: ['mock/_core/**', 'mock/**/*.test.ts'] },
   routes,
 });

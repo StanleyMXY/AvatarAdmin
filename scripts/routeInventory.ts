@@ -13,7 +13,8 @@ export type RouteTable = {
 const ROUTE_IN_BACKTICKS = /`(\/[^`\s]*)`/g;
 const CODE_IN_BACKTICKS = /`([A-Z_]+(?::[A-Z_]+)+)`/;
 
-export function parseRouteTable(spec: string): RouteTable {
+/** The cells of every data row of table 5.0 (four cells each), without the header. */
+export function readTableCells(spec: string): string[][] {
   const lines = spec.split('\n');
   const start = lines.findIndex((line) => line.startsWith('### 5.0 '));
   if (start === -1) throw new Error('table 5.0 (路由总表) not found in the spec');
@@ -22,10 +23,7 @@ export function parseRouteTable(spec: string): RouteTable {
   while (i < lines.length && !lines[i].startsWith('|')) i++;
   i += 2; // header row and the separator row
 
-  const routes: SpecRoute[] = [];
-  const rowsWithoutRoute: string[] = [];
-  let rows = 0;
-  let menu = '';
+  const rows: string[][] = [];
   for (; i < lines.length && lines[i].startsWith('|'); i++) {
     const cells = lines[i]
       .split('|')
@@ -33,7 +31,17 @@ export function parseRouteTable(spec: string): RouteTable {
       .map((cell) => cell.trim());
     if (cells.length !== 4)
       throw new Error(`row has ${cells.length} cells, expected 4: ${lines[i]}`);
-    rows++;
+    rows.push(cells);
+  }
+  return rows;
+}
+
+export function parseRouteTable(spec: string): RouteTable {
+  const routes: SpecRoute[] = [];
+  const rowsWithoutRoute: string[] = [];
+  const cellRows = readTableCells(spec);
+  let menu = '';
+  for (const cells of cellRows) {
     if (cells[0] !== '') menu = cells[0];
     const paths = [...cells[1].matchAll(ROUTE_IN_BACKTICKS)].map((m) => m[1]);
     if (paths.length === 0) {
@@ -43,7 +51,7 @@ export function parseRouteTable(spec: string): RouteTable {
     const access = CODE_IN_BACKTICKS.exec(cells[2])?.[1] ?? null;
     for (const path of paths) routes.push({ path, access, menu });
   }
-  return { rows, rowsWithoutRoute, routes };
+  return { rows: cellRows.length, rowsWithoutRoute, routes };
 }
 
 export type AccessMismatch = { path: string; spec: string | null; routes: string | null };
