@@ -23,8 +23,8 @@ const messages: Record<string, string> = {
 
   'stat.guest.cohort.date': '设备首次出现日',
   'stat.guest.cohort.size': '基数设备数',
-  'stat.guest.cohort.cell': '{count}（{percent}）',
-  'stat.guest.cohort.cellDelta': '{count}（{percent}）（+{delta}）',
+  'stat.guest.cohort.cell': '{count} · {percent}',
+  'stat.guest.cohort.cellDelta': '{count} · {percent}（{delta}）',
   'stat.guest.cohort.note':
     '每格是该队列累计转注册的设备数和占基数的百分比，括号里的加号是比前一列新增的设备数；“—”表示这一天还没到。',
   'stat.guest.cohort.distribution': '转化耗时分布',
@@ -48,8 +48,6 @@ const messages: Record<string, string> = {
   'stat.guest.retention.cohortDate': '设备首次出现日',
   'stat.guest.retention.cohortSize': '设备数',
   'stat.guest.retention.days': '留存天数',
-  'stat.guest.dayN': 'D{n}',
-  'stat.guest.retention.chart': 'D{n} 留存率',
   'stat.guest.retention.note':
     'cohort 是设备第一次出现的那一天，已转注册的设备照常计入，没有通过设备校验的设备不在内。Dn 表示第 N 天当天设备仍有任意客户端事件，百分比的分母是基数设备数。',
 

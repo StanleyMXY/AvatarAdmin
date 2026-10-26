@@ -18,6 +18,12 @@ const routes: AdminRoute[] = [
       component: './stat/retention',
       access: 'STATS:VIEW',
     },
+    {
+      path: '/stat/guest',
+      name: 'guest',
+      component: './stat/guest',
+      access: 'STATS:VIEW',
+    },
   ]),
 ];
 
