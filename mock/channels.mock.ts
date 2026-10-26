@@ -5,8 +5,7 @@ import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
 
 // The channel packages (contract 24.7): any signed-in administrator reads the list, CHANNEL:MANAGE
 // creates and changes. The code, the platform and the distribution cannot be changed after the
-// channel is made, and there is no delete. Each row has the code twice, as `code` (the column of the
-// contract) and as `channelCode` (what the first reader of this list, the statistics filters, read).
+// channel is made, and there is no delete. A row has the code as `code`, the column of the contract.
 
 const CODE = /^[a-z0-9_-]{2,32}$/;
 const PLATFORMS = ['ANDROID', 'IOS'];
@@ -17,7 +16,7 @@ const refuse = (details: Detail[]): never => {
   throw invalidRequest(`invalid: ${details.map((d) => d.ref).join(', ')}`, details);
 };
 
-const view = (channel: MockChannel) => ({ ...structuredClone(channel), channelCode: channel.code });
+const view = (channel: MockChannel) => structuredClone(channel);
 
 const nameProblem = (value: unknown): Detail | null => {
   // The contract gives no length for the name.

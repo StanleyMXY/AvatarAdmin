@@ -44,13 +44,14 @@ describe('GET /channels', () => {
     expect(items.map((c: { code: string }) => c.code)).toEqual(['play', 'direct', 'appstore']);
     expect(items[0]).toMatchObject({
       code: 'play',
-      channelCode: 'play',
       name: 'Android store',
       platform: 'ANDROID',
       distribution: 'STORE',
       packageName: 'app.example.play',
       enabled: true,
     });
+    // the contract's column is `code`; there is no `channelCode`
+    expect(items[0]).not.toHaveProperty('channelCode');
     expect(items[1]).toMatchObject({ code: 'direct', distribution: 'DIRECT' });
     expect(items[2]).toMatchObject({ code: 'appstore', platform: 'IOS', packageName: null });
   });

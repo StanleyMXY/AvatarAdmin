@@ -13,17 +13,19 @@ export type ChannelRow = {
 /**
  * `GET /channels` (any signed-in administrator). The answer is read as `{ items: [...] }`, or as a
  * bare list; the contract does not say which (see docs/contract-requests). Rows without a channel
- * code are dropped.
+ * code are dropped; the code is read from `code` (the column of the contract) or `channelCode`.
  */
 export async function getChannels(): Promise<ChannelRow[]> {
   const data = await apiRequest<unknown>({ method: 'GET', url: '/channels' });
   const list = Array.isArray(data) ? data : (data as { items?: unknown } | null)?.items;
   if (!Array.isArray(list)) return [];
-  return list.filter(
-    (row): row is ChannelRow =>
-      typeof row === 'object' &&
-      row !== null &&
-      typeof (row as { channelCode?: unknown }).channelCode === 'string' &&
-      (row as { channelCode: string }).channelCode !== '',
-  );
+  // The contract names the column `code` (24.7); `channelCode` is also accepted.
+  return list.flatMap((row): ChannelRow[] => {
+    if (typeof row !== 'object' || row === null) return [];
+    const { code, channelCode } = row as { code?: unknown; channelCode?: unknown };
+    const value = typeof channelCode === 'string' && channelCode !== '' ? channelCode : code;
+    return typeof value === 'string' && value !== ''
+      ? [{ ...(row as ChannelRow), channelCode: value }]
+      : [];
+  });
 }
