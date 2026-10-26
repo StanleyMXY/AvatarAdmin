@@ -1,0 +1,114 @@
+import { describe, expect, it } from 'vitest';
+import { type Coverage, isLastOtpChannel, isLastOtpTemplate, keepsCoverage } from './lastOtp';
+
+const ch = (id: string, countries: string[] | null, over: Partial<Coverage> = {}): Coverage => ({
+  id,
+  enabled: true,
+  smsType: 'OTP',
+  countries,
+  ...over,
+});
+
+describe('the last enabled OTP channel that covers a country', () => {
+  it('is the only enabled OTP channel', () => {
+    expect(isLastOtpChannel(ch('1', ['TH']), [ch('1', ['TH'])])).toBe(true);
+    expect(isLastOtpChannel(ch('1', []), [ch('1', [])])).toBe(true);
+    expect(isLastOtpChannel(ch('1', null), [ch('1', null)])).toBe(true);
+  });
+
+  it('is not the last when another enabled OTP channel covers all its countries', () => {
+    expect(isLastOtpChannel(ch('1', ['TH']), [ch('1', ['TH']), ch('2', ['TH', 'VN'])])).toBe(false);
+    expect(
+      isLastOtpChannel(ch('1', ['TH', 'VN']), [
+        ch('1', ['TH', 'VN']),
+        ch('2', ['TH']),
+        ch('3', ['VN']),
+      ]),
+    ).toBe(false);
+    expect(isLastOtpChannel(ch('1', ['TH']), [ch('1', ['TH']), ch('2', [])])).toBe(false);
+    expect(isLastOtpChannel(ch('1', []), [ch('1', []), ch('2', [])])).toBe(false);
+  });
+
+  it('is the last for a country that no other covers, even when the others cover more', () => {
+    expect(isLastOtpChannel(ch('1', ['TH', 'ID']), [ch('1', ['TH', 'ID']), ch('2', ['TH'])])).toBe(
+      true,
+    );
+    // A channel for all countries is the last for the countries the others do not name.
+    expect(isLastOtpChannel(ch('1', []), [ch('1', []), ch('2', ['TH'])])).toBe(true);
+  });
+
+  it('does not count channels that are off or are not OTP', () => {
+    expect(
+      isLastOtpChannel(ch('1', ['TH']), [ch('1', ['TH']), ch('2', ['TH'], { enabled: false })]),
+    ).toBe(true);
+    expect(
+      isLastOtpChannel(ch('1', ['TH']), [
+        ch('1', ['TH']),
+        ch('2', ['TH'], { smsType: 'MARKETING' }),
+      ]),
+    ).toBe(true);
+  });
+
+  it('is never the last when it is off or is not OTP itself: it holds no coverage to lose', () => {
+    expect(
+      isLastOtpChannel(ch('1', ['TH'], { enabled: false }), [ch('1', ['TH'], { enabled: false })]),
+    ).toBe(false);
+    expect(
+      isLastOtpChannel(ch('1', ['TH'], { smsType: 'MARKETING' }), [
+        ch('1', ['TH'], { smsType: 'MARKETING' }),
+      ]),
+    ).toBe(false);
+  });
+
+  it('reads country codes without regard to case and ignores entries that are not text', () => {
+    expect(isLastOtpChannel(ch('1', ['th']), [ch('1', ['th']), ch('2', ['TH'])])).toBe(false);
+    expect(
+      isLastOtpChannel(ch('1', ['TH']), [ch('1', ['TH']), ch('2', [5 as unknown as string])]),
+    ).toBe(true);
+  });
+});
+
+describe('a change that keeps the coverage', () => {
+  const all = [ch('1', ['TH', 'ID']), ch('2', ['TH'])];
+  it('keeps it when the type stays OTP and the countries still hold those only this channel serves', () => {
+    expect(keepsCoverage(all[0], { smsType: 'OTP', countries: ['ID', 'VN'] }, all)).toBe(true);
+    expect(keepsCoverage(all[0], { smsType: 'OTP', countries: [] }, all)).toBe(true);
+    expect(keepsCoverage(all[0], { smsType: 'OTP', countries: ['TH', 'ID'] }, all)).toBe(true);
+  });
+  it('loses it when the type leaves OTP, or when a country only this channel serves is dropped', () => {
+    expect(keepsCoverage(all[0], { smsType: 'MARKETING', countries: ['TH', 'ID'] }, all)).toBe(
+      false,
+    );
+    expect(keepsCoverage(all[0], { smsType: 'OTP', countries: ['TH'] }, all)).toBe(false);
+  });
+  it('a channel for all countries loses it when it is narrowed to a list, if no other one serves all', () => {
+    const only = ch('1', []);
+    expect(keepsCoverage(only, { smsType: 'OTP', countries: ['TH'] }, [only])).toBe(false);
+    expect(keepsCoverage(only, { smsType: 'OTP', countries: [] }, [only])).toBe(true);
+  });
+  it('is always kept for a channel that was not the last one', () => {
+    const both = [ch('1', ['TH']), ch('2', ['TH'])];
+    expect(keepsCoverage(both[0], { smsType: 'MARKETING', countries: [] }, both)).toBe(true);
+  });
+});
+
+describe('the last enabled OTP template', () => {
+  const t = (id: string, over = {}) => ({ id, enabled: true, smsType: 'OTP', ...over });
+  it('is the only enabled OTP template', () => {
+    expect(isLastOtpTemplate(t('1'), [t('1')])).toBe(true);
+    expect(isLastOtpTemplate(t('1'), [t('1'), t('2')])).toBe(false);
+    expect(
+      isLastOtpTemplate(t('1'), [
+        t('1'),
+        t('2', { enabled: false }),
+        t('3', { smsType: 'MARKETING' }),
+      ]),
+    ).toBe(true);
+  });
+  it('is never the last when it is off or is not OTP itself', () => {
+    expect(isLastOtpTemplate(t('1', { enabled: false }), [t('1', { enabled: false })])).toBe(false);
+    expect(
+      isLastOtpTemplate(t('1', { smsType: 'MARKETING' }), [t('1', { smsType: 'MARKETING' })]),
+    ).toBe(false);
+  });
+});
