@@ -1,6 +1,7 @@
-// Menu titles and texts of the daily report and the retention report (statistics menu). The
-// statistics menu has no language file of its own that this module may write: stats.ts belongs to the
-// shared statistics pieces, so these texts sit in the empty file that no module has taken yet.
+// Texts of the overview (/dashboard, keys menu.dashboard.* and dashboard.*) and, because the
+// statistics menu has no language file that the daily and retention report may write, the menu
+// titles and texts of those two reports (keys menu.stats.*, stat.daily.*, stat.retention.*,
+// stat.reactivation.*). Every key is defined once.
 const messages: Record<string, string> = {
   'menu.stats.daily': '日报',
   'menu.stats.retention': '留存报表',
@@ -70,6 +71,48 @@ const messages: Record<string, string> = {
   'stat.reactivation.helper.title': '如何阅读此报表',
   'stat.reactivation.helper.content':
     '沉默用户：注册日早于“统计日减沉默天数”、并且在统计日前这段沉默天数内没有任何客户端事件的账号。回流用户：其中统计日当天又出现了任意客户端事件的账号。回流率是回流用户数除以沉默用户数；没有沉默用户时显示“—”。后台产生的推送等事件不算活跃，回流不分平台。',
+
+  // 总览 /dashboard (spec 5.1).
+  'menu.dashboard.overview': '总览',
+  'dashboard.temp': '临时值',
+  'dashboard.explain.landInterval': '今日数据是临时值，每隔 {minutes} 分钟刷新一次。',
+  'dashboard.explain.provisional': '今日数据是临时值。',
+  'dashboard.empty': '你的账号没有可显示的总览卡片。',
+  'dashboard.metric.dau': '日活',
+  'dashboard.metric.newAccounts': '新增账号',
+  'dashboard.metric.callMinutes': '通话总分钟',
+  'dashboard.metric.d1': 'D1 留存',
+  'dashboard.card.newSubscriptions': '新订阅',
+  'dashboard.card.guestConverted': '游客设备转注册',
+  'dashboard.card.d1.cohort': '队列日 {date}',
+  'dashboard.card.moderation': '审核积压',
+  'dashboard.card.moderation.caption': '最老待处理内容的等待时长',
+  'dashboard.card.moderation.none': '没有待处理的内容。',
+  'dashboard.card.moderation.open': '查看审核队列',
+  'dashboard.card.alerts': '未处理告警',
+  'dashboard.card.alerts.open': '查看告警',
+  'dashboard.card.loadFailed': '加载失败：{message}',
+  'dashboard.change.vsYesterday': '较昨日',
+  'dashboard.change.vs7Days': '较 7 天前',
+  'dashboard.trend.title': '趋势',
+  'dashboard.trend.metrics': '指标',
+  'dashboard.trend.lastWeek': '{metric}（上周同期）',
+  'dashboard.range.today': '今天',
+  'dashboard.range.last7': '近 7 天',
+  'dashboard.range.last14': '近 14 天',
+  'dashboard.range.last30': '近 30 天',
+  'dashboard.range.custom': '自定义',
+  'dashboard.axis.accounts': '账号数',
+  'dashboard.axis.minutes': '分钟',
+  'dashboard.axis.percent': '%',
+  'dashboard.platform.title': '平台分布（今日日活）',
+  'dashboard.platform.empty': '今日还没有按平台拆分的日活。',
+  'dashboard.quick.title': '快捷入口',
+  'dashboard.quick.daily': '日报',
+  'dashboard.quick.retention': '留存',
+  'dashboard.quick.guest': '游客统计',
+  'dashboard.quick.quality': '通话质量',
+  'dashboard.quick.subscriptions': '订阅统计',
 };
 
 export default messages;

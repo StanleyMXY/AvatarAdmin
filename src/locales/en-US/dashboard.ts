@@ -1,6 +1,7 @@
-// Menu titles and texts of the daily report and the retention report (statistics menu). The
-// statistics menu has no language file of its own that this module may write: stats.ts belongs to the
-// shared statistics pieces, so these texts sit in the empty file that no module has taken yet.
+// Texts of the overview (/dashboard, keys menu.dashboard.* and dashboard.*) and, because the
+// statistics menu has no language file that the daily and retention report may write, the menu
+// titles and texts of those two reports (keys menu.stats.*, stat.daily.*, stat.retention.*,
+// stat.reactivation.*). Every key is defined once.
 const messages: Record<string, string> = {
   'menu.stats.daily': 'Daily report',
   'menu.stats.retention': 'Retention report',
@@ -74,6 +75,49 @@ const messages: Record<string, string> = {
   'stat.reactivation.helper.title': 'How to read this report',
   'stat.reactivation.helper.content':
     'Silent users are accounts registered before the day minus the silent days that had no client event at all in the silent days before the day. Reactivated users are those among them with any client event on the day itself. The rate is reactivated users divided by silent users; with no silent users it is a dash. Events the backend produces itself (such as pushes) do not count as activity. Reactivation is not split by platform.',
+
+  // Overview /dashboard (spec 5.1).
+  'menu.dashboard.overview': 'Overview',
+  'dashboard.temp': 'Provisional',
+  'dashboard.explain.landInterval':
+    "Today's figures are provisional and are refreshed every {minutes} minutes.",
+  'dashboard.explain.provisional': "Today's figures are provisional.",
+  'dashboard.empty': 'No overview card is available for your account.',
+  'dashboard.metric.dau': 'Daily active users',
+  'dashboard.metric.newAccounts': 'New accounts',
+  'dashboard.metric.callMinutes': 'Call minutes',
+  'dashboard.metric.d1': 'D1 retention',
+  'dashboard.card.newSubscriptions': 'New subscriptions',
+  'dashboard.card.guestConverted': 'Guest devices converted',
+  'dashboard.card.d1.cohort': 'Cohort {date}',
+  'dashboard.card.moderation': 'Moderation backlog',
+  'dashboard.card.moderation.caption': 'Longest wait of a pending record',
+  'dashboard.card.moderation.none': 'Nothing is waiting.',
+  'dashboard.card.moderation.open': 'Open the queue',
+  'dashboard.card.alerts': 'Open alerts',
+  'dashboard.card.alerts.open': 'View alerts',
+  'dashboard.card.loadFailed': 'Failed to load: {message}',
+  'dashboard.change.vsYesterday': 'vs yesterday',
+  'dashboard.change.vs7Days': 'vs 7 days ago',
+  'dashboard.trend.title': 'Trend',
+  'dashboard.trend.metrics': 'Metrics',
+  'dashboard.trend.lastWeek': '{metric} (same period last week)',
+  'dashboard.range.today': 'Today',
+  'dashboard.range.last7': 'Last 7 days',
+  'dashboard.range.last14': 'Last 14 days',
+  'dashboard.range.last30': 'Last 30 days',
+  'dashboard.range.custom': 'Custom',
+  'dashboard.axis.accounts': 'Accounts',
+  'dashboard.axis.minutes': 'Minutes',
+  'dashboard.axis.percent': '%',
+  'dashboard.platform.title': "Platform split (today's DAU)",
+  'dashboard.platform.empty': 'No per-platform active users for today yet.',
+  'dashboard.quick.title': 'Quick links',
+  'dashboard.quick.daily': 'Daily report',
+  'dashboard.quick.retention': 'Retention',
+  'dashboard.quick.guest': 'Guest statistics',
+  'dashboard.quick.quality': 'Call quality',
+  'dashboard.quick.subscriptions': 'Subscription statistics',
 };
 
 export default messages;
