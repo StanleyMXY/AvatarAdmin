@@ -34,13 +34,15 @@ const VALIDATORS: Record<string, (value: unknown) => string | null> = {
   'companionship.stage_thresholds': (v) => {
     const o = v as { BONDING?: unknown; CLOSE?: unknown } | null;
     if (typeof o !== 'object' || o === null || Array.isArray(o)) return 'OUT_OF_RANGE';
-    if (!isPositiveInt(o.BONDING) || !isPositiveInt(o.CLOSE)) return 'NOT_AN_INTEGER';
+    if (!Number.isInteger(o.BONDING) || !Number.isInteger(o.CLOSE)) return 'NOT_AN_INTEGER';
+    if (!isPositiveInt(o.BONDING) || !isPositiveInt(o.CLOSE)) return 'OUT_OF_RANGE';
     return o.BONDING < o.CLOSE ? null : 'OUT_OF_RANGE';
   },
   // 1 to 20 different positive whole numbers of days.
   'milestone.days': (v) => {
     if (!Array.isArray(v) || v.length < 1 || v.length > 20) return 'OUT_OF_RANGE';
-    if (!v.every(isPositiveInt)) return 'NOT_AN_INTEGER';
+    if (!v.every((x) => typeof x === 'number' && Number.isInteger(x))) return 'NOT_AN_INTEGER';
+    if (!v.every(isPositiveInt)) return 'OUT_OF_RANGE';
     return new Set(v).size === v.length ? null : 'OUT_OF_RANGE';
   },
   // Language tags, at most 35 characters each, all different, and `en` among them.
@@ -414,6 +416,8 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     kind: 'int',
     editPermission: 'CONFIG:MANAGE',
     group: 'generation',
+    min: 1,
+    max: 10,
   },
   {
     key: 'generation.reprepare_max_attempts',
@@ -867,6 +871,8 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     kind: 'int',
     editPermission: 'MODERATION:CONFIG',
     group: 'moderation',
+    min: 0,
+    max: 100,
     risk: true,
   },
   {

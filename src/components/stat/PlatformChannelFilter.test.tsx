@@ -10,7 +10,7 @@ import { PlatformChannelFilter } from './PlatformChannelFilter';
 const channels = [
   {
     channelCode: 'play',
-    name: 'Google Play',
+    name: 'Android store',
     platform: 'ANDROID',
     distribution: 'STORE',
     packageName: 'a.b',
@@ -64,7 +64,7 @@ describe('PlatformChannelFilter', () => {
     await waitFor(async () => {
       expect(await options(user, 'Channel package')).toEqual([
         'All',
-        'play · Google Play',
+        'play · Android store',
         'direct · Direct',
       ]);
     });

@@ -59,10 +59,10 @@ describe('defaultValueOf', () => {
     expect(value('[7,30,100]')).toEqual([7, 30, 100]);
     expect(value('{"BONDING":50,"CLOSE":150}')).toEqual({ BONDING: 50, CLOSE: 150 });
     expect(value('AvatarApp', 'app.display_name')).toBe('AvatarApp');
+    expect(value('空列表')).toEqual([]);
   });
   it('is null when the table says there is no default', () => {
-    for (const text of ['无默认值', '空', '空列表', '空（未配置按 0）'])
-      expect(value(text)).toBeNull();
+    for (const text of ['无默认值', '空', '空（未配置按 0）']) expect(value(text)).toBeNull();
   });
 });
 

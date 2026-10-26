@@ -80,4 +80,40 @@ describe('the companionship page', () => {
     );
     expect(puts(calls)).toHaveLength(0);
   });
+
+  it('keeps what was typed when a save fails, and shows the refusal', async () => {
+    useMockBackend(configMock);
+    renderPage(<CompanionshipPage />);
+    fireEvent.change(await bonding(), { target: { value: '80' } });
+    fireEvent.change(burst(), { target: { value: '45' } });
+    const original = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string, init: RequestInit) => {
+      if ((init.method ?? 'GET') === 'PUT' && String(input).endsWith('text_burst_minutes')) {
+        return new Response(JSON.stringify({ code: 'INTERNAL_ERROR', message: 'x', data: null }), {
+          status: 500,
+        });
+      }
+      return original(input, init);
+    });
+    fireEvent.click(save());
+    await waitFor(() =>
+      expect(document.querySelector('.ant-form-item-explain-error')).not.toBeNull(),
+    );
+    expect(burst()).toHaveValue('45'); // not put back to 30
+  });
+
+  it('keeps a token that is not a whole number as typed and refuses it, without sending', async () => {
+    const calls = useMockBackend(configMock);
+    renderPage(<CompanionshipPage />);
+    await bonding();
+    const box = screen.getByRole('combobox', { name: 'Milestone days' });
+    fireEvent.change(box, { target: { value: 'abc' } });
+    fireEvent.keyDown(box, { key: 'Enter', keyCode: 13 });
+    fireEvent.click(save());
+    await waitFor(() =>
+      expect(document.querySelector('.ant-form-item-explain-error')).not.toBeNull(),
+    );
+    expect(puts(calls)).toHaveLength(0);
+    expect(document.body.textContent).not.toContain('NaN');
+  });
 });

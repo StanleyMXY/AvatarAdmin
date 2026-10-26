@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { Alert, Button, Card, Flex, Spin } from 'antd';
+import { Alert, Button, Card, Flex, Spin, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import type { PermissionCode } from '../../access/permissionCodes';
 import { type ConfigItem, listConfig } from '../../services/config';
@@ -83,6 +83,28 @@ export function ConfigForm(props: Props) {
           showIcon
           title={intl.formatMessage({ id: 'config.unknownKeys' }, { keys: unknown.join(', ') })}
         />
+      ) : null}
+      {unknown.length > 0 ? (
+        <Card size="small" title={intl.formatMessage({ id: 'config.unknownGroup' })}>
+          {shown
+            .filter((item) => !specOf(item.key))
+            .map((item) => (
+              <Flex
+                key={item.key}
+                vertical
+                gap={2}
+                style={{ padding: '8px 0' }}
+                data-testid={`config-unknown-${item.key}`}
+              >
+                <Typography.Text code>{item.key}</Typography.Text>
+                <Typography.Text style={{ overflowWrap: 'anywhere' }}>
+                  {item.value === null
+                    ? intl.formatMessage({ id: 'config.unset' })
+                    : JSON.stringify(item.value)}
+                </Typography.Text>
+              </Flex>
+            ))}
+        </Card>
       ) : null}
       {[...groups.entries()].map(([group, rows]) => (
         <Card

@@ -210,7 +210,7 @@ describe('fillMissingDays', () => {
 describe('getChannels', () => {
   const row = {
     channelCode: 'play',
-    name: 'Google Play',
+    name: 'Android store',
     platform: 'ANDROID',
     distribution: 'STORE',
     packageName: 'x.y',

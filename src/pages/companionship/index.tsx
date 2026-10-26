@@ -12,7 +12,14 @@ const KEYS = [
   'companionship.text_burst_minutes',
 ] as const;
 
-type Draft = { bonding: number | null; close: number | null; days: number[]; burst: number | null };
+/** `daysText` is what is typed in the days box; it is read as numbers when the form is saved. */
+type Draft = {
+  bonding: number | null;
+  close: number | null;
+  days: number[];
+  daysText: string[];
+  burst: number | null;
+};
 
 const draftOf = (items: ConfigItem[]): Draft => {
   const value = (key: string) => items.find((i) => i.key === key)?.value;
@@ -26,6 +33,7 @@ const draftOf = (items: ConfigItem[]): Draft => {
     bonding: typeof stages?.BONDING === 'number' ? stages.BONDING : null,
     close: typeof stages?.CLOSE === 'number' ? stages.CLOSE : null,
     days: Array.isArray(days) ? days.filter((d): d is number => typeof d === 'number') : [],
+    daysText: Array.isArray(days) ? days.filter((d) => typeof d === 'number').map(String) : [],
     burst: typeof burst === 'number' ? burst : null,
   };
 };
@@ -62,15 +70,17 @@ export default function CompanionshipPage() {
   const { run, pending } = useSingleFlight(async () => {
     if (!items || !draft) return;
     const before = draftOf(items);
+    // A token that is not a whole number stays NaN, so that the check below refuses it.
+    const typedDays = draft.daysText.map((v) => (/^\d+$/.test(v) ? Number(v) : Number.NaN));
     const next: Record<(typeof KEYS)[number], unknown> = {
       'companionship.stage_thresholds': { BONDING: draft.bonding, CLOSE: draft.close },
-      'milestone.days': draft.days,
+      'milestone.days': typedDays,
       'companionship.text_burst_minutes': draft.burst,
     };
     const changed = {
       'companionship.stage_thresholds':
         before.bonding !== draft.bonding || before.close !== draft.close,
-      'milestone.days': JSON.stringify(before.days) !== JSON.stringify(draft.days),
+      'milestone.days': JSON.stringify(before.days) !== JSON.stringify(typedDays),
       'companionship.text_burst_minutes': before.burst !== draft.burst,
     };
     const found: typeof errors = {};
@@ -97,8 +107,8 @@ export default function CompanionshipPage() {
         await saveConfig(key, next[key]);
       } catch (error) {
         const { text, fields } = describeFailure(intl, error);
+        // What was typed stays in the form; the values already saved are read again only on success.
         setErrors({ [field[key]]: fields.find((f) => f.ref === key)?.text ?? text });
-        await load();
         return;
       }
     }
@@ -124,14 +134,14 @@ export default function CompanionshipPage() {
           <Flex gap={12} wrap>
             <InputNumber
               aria-label={t('companionship.bonding')}
-              addonBefore="BONDING"
+              prefix="BONDING"
               precision={0}
               value={draft.bonding}
               onChange={(v) => setDraft({ ...draft, bonding: v })}
             />
             <InputNumber
               aria-label={t('companionship.close')}
-              addonBefore="CLOSE"
+              prefix="CLOSE"
               precision={0}
               value={draft.close}
               onChange={(v) => setDraft({ ...draft, close: v })}
@@ -147,15 +157,9 @@ export default function CompanionshipPage() {
             mode="tags"
             aria-label={t('companionship.days')}
             tokenSeparators={[',', ' ']}
-            value={draft.days.map(String)}
+            value={draft.daysText}
             open={false}
-            onChange={(values: string[]) =>
-              setDraft({
-                ...draft,
-                // a token that is not a whole number stays as NaN so that the check below refuses it
-                days: values.map((v) => (/^\d+$/.test(v) ? Number(v) : Number.NaN)),
-              })
-            }
+            onChange={(values: string[]) => setDraft({ ...draft, daysText: values })}
           />
         </Form.Item>
         <Form.Item

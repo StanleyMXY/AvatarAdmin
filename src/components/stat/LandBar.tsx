@@ -27,12 +27,18 @@ export function LandBar({ name, onLanded }: Props) {
   const [day, setDay] = useState<string>(() => yesterdayUtc());
 
   const { run, pending } = useSingleFlight(async () => {
+    let landed = 0;
     try {
-      for (const one of Array.isArray(name) ? name : [name]) await landStat(one, day);
+      for (const one of Array.isArray(name) ? name : [name]) {
+        await landStat(one, day);
+        landed += 1;
+      }
       message.success(intl.formatMessage({ id: 'stat.common.land.done' }, { date: day }));
-      onLanded();
     } catch (error) {
       message.error(describeFailure(intl, error).text);
+    } finally {
+      // Whatever was re-landed before a failure is already in the table: the page reads it again.
+      if (landed > 0) onLanded();
     }
   });
 

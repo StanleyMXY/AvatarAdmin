@@ -69,7 +69,20 @@ describe('LandBar', () => {
     await waitFor(() => expect(calls).toHaveLength(1));
     await new Promise((r) => setTimeout(r, 30));
     expect(calls).toHaveLength(1);
-    expect(onLanded).not.toHaveBeenCalled();
+    expect(onLanded).not.toHaveBeenCalled(); // nothing was re-landed
+  });
+
+  it('tells the page when the first name was re-landed and the second failed', async () => {
+    const calls = stubFetch((call) =>
+      call.url.includes('daily-business')
+        ? jsonResponse(500, envelope('INTERNAL_ERROR'))
+        : jsonResponse(200, envelope('200', null)),
+    );
+    const onLanded = vi.fn();
+    renderPage(<LandBar name={['daily-event', 'daily-business']} onLanded={onLanded} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
+    await waitFor(() => expect(calls).toHaveLength(2));
+    await waitFor(() => expect(onLanded).toHaveBeenCalledTimes(1));
   });
 
   it('runs both names in order when all succeed', async () => {

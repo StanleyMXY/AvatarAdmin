@@ -1,4 +1,4 @@
-import { Link, useIntl } from '@umijs/max';
+import { FormattedMessage, Link, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Input, InputNumber, Switch, Tag, Typography } from 'antd';
 import { useMemo, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
@@ -136,6 +136,8 @@ export function ConfigRow({ spec, item, onChanged }: Props) {
             value={typeof draft === 'string' ? draft : ''}
             onChange={setDraft}
             onValidityChange={setJsonValid}
+            // a key with no value yet may stay empty; one that has a value may not be emptied
+            allowEmpty={item.value === null}
             rows={4}
           />
         );
@@ -171,8 +173,10 @@ export function ConfigRow({ spec, item, onChanged }: Props) {
       {editor()}
       {spec.editedElsewhere ? (
         <Typography.Text type="secondary">
-          {t('config.editedElsewhere', { page: '' })}
-          <Link to={spec.editedElsewhere}>{spec.editedElsewhere}</Link>
+          <FormattedMessage
+            id="config.editedElsewhere"
+            values={{ page: <Link to={spec.editedElsewhere}>{spec.editedElsewhere}</Link> }}
+          />
         </Typography.Text>
       ) : null}
       {dirty && problem && !readOnly ? (

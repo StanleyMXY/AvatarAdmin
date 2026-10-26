@@ -135,6 +135,32 @@ describe('PUT /config/:key', () => {
     expect((await put('root', 'moderation.review_score', 0.5)).status).toBe(200);
   });
 
+  it('needs the review score strictly below the block score, and the job timeout strictly above the lease', async () => {
+    await put('root', 'moderation.block_score', 5);
+    expect((await put('root', 'moderation.review_score', 5)).status).toBe(400);
+    expect((await put('root', 'moderation.review_score', 4)).status).toBe(200);
+    expect((await put('root', 'export.job_timeout_minutes', 10)).status).toBe(400); // equal to the lease of 10
+    expect((await put('root', 'export.job_timeout_minutes', 11)).status).toBe(200);
+  });
+
+  it('keeps events.ttl_days at least 30 days above stats.land_window_days', async () => {
+    expect((await put('root', 'events.ttl_days', 10)).status).toBe(400);
+    expect((await put('root', 'events.ttl_days', 33)).status).toBe(200); // the default window is 3
+    expect((await put('root', 'stats.land_window_days', 4)).status).toBe(400);
+  });
+
+  it('keeps generation.max_attempts between 1 and 10', async () => {
+    expect((await put('root', 'generation.max_attempts', 99)).status).toBe(400);
+    expect((await put('root', 'generation.max_attempts', 10)).status).toBe(200);
+  });
+
+  it('gives an empty list as the default of moderation.text_rules', async () => {
+    const row = (await list('root')).body.data.items.find(
+      (r: { key: string }) => r.key === 'moderation.text_rules',
+    );
+    expect(row.defaultValue).toEqual([]);
+  });
+
   it('keeps the access token life within the refresh token life', async () => {
     expect((await put('root', 'auth.access_ttl_minutes', 30 * 1440 + 1)).status).toBe(400);
     expect((await put('root', 'auth.refresh_ttl_days', 0)).status).toBe(400);

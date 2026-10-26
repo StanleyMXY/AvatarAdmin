@@ -55,6 +55,21 @@ describe('daily', () => {
     ).toBe(true);
   });
 
+  it('has no active-subscription count when a channel is chosen, and no back-fill flag without a snapshot', async () => {
+    const rows = (
+      await get('daily', 'support', { from: addDays(today, -30), to: today, channel: 'play' })
+    ).body.data.items;
+    expect(
+      rows.every((r: { activeSubscriptions: number | null }) => r.activeSubscriptions === null),
+    ).toBe(true);
+    const all = (await get('daily', 'support', { from: addDays(today, -30), to: today })).body.data
+      .items;
+    for (const r of all) {
+      if (r.activeSubscriptions === null) expect(r.activeSubscriptionsBackfilled).toBeNull();
+      else expect(typeof r.activeSubscriptionsBackfilled).toBe('boolean');
+    }
+  });
+
   it('is the same on every call', async () => {
     const a = (await get('daily', 'support', range)).body.data;
     const b = (await get('daily', 'support', range)).body.data;

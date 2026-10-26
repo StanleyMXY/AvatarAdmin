@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { App, DatePicker, Flex } from 'antd';
 import dayjs from 'dayjs';
+import { useState } from 'react';
 import { daysBetween, lastNDaysUtc, pickedDay, todayUtc, yesterdayUtc } from '../../utils/utcDay';
 
 export type DayRange = { from: string; to: string };
@@ -25,11 +26,17 @@ export function DateRangeUtc({ value, onChange, maxDays }: Props) {
   const { message } = App.useApp();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
+  // A refused range is taken off the picker by drawing it again from `value`.
+  const [version, setVersion] = useState(0);
 
   const accept = (range: DayRange) => {
     if (range.from > range.to) return;
     if (maxDays !== undefined && daysBetween(range.from, range.to).length > maxDays) {
-      message.warning(t('stat.common.rangeTooLong', { days: maxDays }));
+      message.warning({
+        key: 'range-too-long',
+        content: t('stat.common.rangeTooLong', { days: maxDays }),
+      });
+      setVersion((v) => v + 1);
       return;
     }
     onChange(range);
@@ -43,6 +50,7 @@ export function DateRangeUtc({ value, onChange, maxDays }: Props) {
   return (
     <Flex gap={8} wrap align="center">
       <DatePicker.RangePicker
+        key={version}
         allowClear={false}
         value={[asPickerDate(value.from), asPickerDate(value.to)]}
         presets={[

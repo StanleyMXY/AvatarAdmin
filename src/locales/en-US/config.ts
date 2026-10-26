@@ -48,6 +48,7 @@ const messages: Record<string, string> = {
   'config.group.sms': 'SMS',
   'config.group.appversion': 'App versions',
   'config.group.notification': 'Notifications',
+  'config.unknownGroup': 'Unrecognised settings (read only)',
   'config.unset': 'Not set',
   'config.default': 'Default',
   'config.modified': 'Modified',
@@ -58,7 +59,13 @@ const messages: Record<string, string> = {
   'config.save': 'Save',
   'config.saved': 'Saved',
   'config.unknownKeys': 'Unrecognised settings: {keys}',
-  'config.editedElsewhere': 'Edit it in {page}',
+  'config.editedElsewhere': 'Edit it on this page: {page}',
+  'config.warning.AD_SKIP_AFTER_TOO_LONG':
+    'The skip delay is over 5 seconds, which may break store rules that full-screen ads must be closable',
+  'config.warning.AD_FORCE_CLOSE_DISABLED':
+    'Forced close is set to 0 (off), so ads that are not rewarded have no fallback close button',
+  'config.warning.SMS_COUNTRY_UNCOVERED':
+    'A country in the allow list has no enabled SMS channel covering it',
   'config.requiresUploadBase': 'Ad media and APK uploads need it',
   'config.jsonInvalid': 'Not valid JSON',
   'config.warning.PHONE_LOGIN_DISABLED_ACCOUNTS':

@@ -5,7 +5,7 @@ import { ok } from './_core/http';
 const CHANNELS = [
   {
     channelCode: 'play',
-    name: 'Google Play',
+    name: 'Android store',
     platform: 'ANDROID',
     distribution: 'STORE',
     packageName: 'app.example.play',
@@ -23,7 +23,7 @@ const CHANNELS = [
   },
   {
     channelCode: 'appstore',
-    name: 'App Store',
+    name: 'iOS store',
     platform: 'IOS',
     distribution: 'STORE',
     packageName: null,

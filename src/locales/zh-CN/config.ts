@@ -48,6 +48,7 @@ const messages: Record<string, string> = {
   'config.group.sms': '短信',
   'config.group.appversion': '应用版本',
   'config.group.notification': '站内通知',
+  'config.unknownGroup': '未识别的配置项（只读）',
   'config.unset': '未配置',
   'config.default': '默认值',
   'config.modified': '已修改',
@@ -58,7 +59,12 @@ const messages: Record<string, string> = {
   'config.save': '保存',
   'config.saved': '已保存',
   'config.unknownKeys': '存在未识别的配置项：{keys}',
-  'config.editedElsewhere': '请在{page}里编辑',
+  'config.editedElsewhere': '请在这个页面里编辑：{page}',
+  'config.warning.AD_SKIP_AFTER_TOO_LONG':
+    '跳过倒计时超过 5 秒，可能不符合商店对全屏广告可以关闭的要求',
+  'config.warning.AD_FORCE_CLOSE_DISABLED':
+    '强制关闭已设为 0（不启用），非激励广告没有兜底的关闭按钮',
+  'config.warning.SMS_COUNTRY_UNCOVERED': '白名单里有国家没有启用的短信通道覆盖',
   'config.requiresUploadBase': '广告素材和 APK 上传需要它',
   'config.jsonInvalid': 'JSON 格式不对',
   'config.warning.PHONE_LOGIN_DISABLED_ACCOUNTS': '关闭手机号登录后，仍有 {count} 个手机号账号',

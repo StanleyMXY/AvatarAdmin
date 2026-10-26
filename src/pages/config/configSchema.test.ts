@@ -100,7 +100,7 @@ describe('validateValue', () => {
     expect(validateValue(s, { BONDING: 50, CLOSE: 150 })).toBeNull();
     expect(validateValue(s, { BONDING: 150, CLOSE: 150 })).toBe('OUT_OF_RANGE');
     expect(validateValue(s, { BONDING: 200, CLOSE: 150 })).toBe('OUT_OF_RANGE');
-    expect(validateValue(s, { BONDING: 0, CLOSE: 150 })).toBe('NOT_AN_INTEGER');
+    expect(validateValue(s, { BONDING: 0, CLOSE: 150 })).toBe('OUT_OF_RANGE');
     expect(validateValue(s, { BONDING: 5.5, CLOSE: 150 })).toBe('NOT_AN_INTEGER');
     expect(validateValue(s, [50, 150])).toBe('OUT_OF_RANGE');
     expect(validateValue(s, null)).toBe('OUT_OF_RANGE');
@@ -123,7 +123,9 @@ describe('validateValue', () => {
       ),
     ).toBeNull();
     expect(validateValue(s, [7, 7])).toBe('OUT_OF_RANGE');
-    expect(validateValue(s, [0, 7])).toBe('NOT_AN_INTEGER');
+    expect(validateValue(s, [0, 7])).toBe('OUT_OF_RANGE');
+    expect(validateValue(s, [-3])).toBe('OUT_OF_RANGE');
+    expect(validateValue(s, [Number.NaN])).toBe('NOT_AN_INTEGER');
     expect(validateValue(s, [1.5])).toBe('NOT_AN_INTEGER');
   });
 

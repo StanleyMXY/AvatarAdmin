@@ -62,12 +62,13 @@ export function dailyRow(day: string, platform: string, channel: string, today: 
   };
   const noBusiness = Object.fromEntries(Object.keys(business).map((key) => [key, null]));
   // The day-end snapshot: none for today, and some past days have none either.
-  const hasSnapshot = all && day < today && unit('snap', day) > 0.12;
+  // The snapshot exists only for platform ALL and channel ALL (contract 17.6).
+  const hasSnapshot = all && channel === 'ALL' && day < today && unit('snap', day) > 0.12;
   return {
     ...base,
     ...(all ? business : noBusiness),
     activeSubscriptions: hasSnapshot ? between(900, 1400, 'subs', day) : null,
-    activeSubscriptionsBackfilled: all ? hasSnapshot && unit('bf', day) > 0.7 : null,
+    activeSubscriptionsBackfilled: hasSnapshot ? unit('bf', day) > 0.7 : null,
   };
 }
 

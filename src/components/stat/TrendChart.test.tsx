@@ -38,7 +38,7 @@ describe('TrendChart', () => {
     expect(data).toHaveLength(6);
   });
 
-  it('draws a column that is null as 0, not as a gap or NaN', () => {
+  it('leaves a column that is null as a gap (not known), not as 0 and not as NaN', () => {
     renderPage(
       <TrendChart
         rows={[{ statDate: '2026-10-01', dau: null, wau: 3 }]}
@@ -48,7 +48,8 @@ describe('TrendChart', () => {
         to="2026-10-01"
       />,
     );
-    expect(dataOf().find((d) => d.series === 'DAU')?.value).toBe(0);
+    expect(dataOf().find((d) => d.series === 'DAU')?.value).toBeNull();
+    expect(dataOf().find((d) => d.series === 'WAU')?.value).toBe(3);
   });
 
   it('is drawn again with the new theme when the mode changes', () => {

@@ -13,10 +13,12 @@ const bad = (key: string, reason: string) =>
   invalidRequest(`${key} is not valid`, [{ ref: key, reason }]);
 
 // Relations between two keys (contract 17.5): `[smaller, larger]` must hold after the save.
-const RELATIONS: [string, string][] = [
-  ['retry.initial_seconds', 'retry.max_seconds'],
-  ['moderation.review_score', 'moderation.block_score'],
-  ['generation.voice_min_seconds', 'generation.voice_max_seconds'],
+// `strict`: the first must be below the second, not equal to it; `plus`: the second must be at least the first plus this.
+const RELATIONS: { small: string; large: string; strict?: boolean }[] = [
+  { small: 'retry.initial_seconds', large: 'retry.max_seconds' },
+  { small: 'moderation.review_score', large: 'moderation.block_score', strict: true },
+  { small: 'generation.voice_min_seconds', large: 'generation.voice_max_seconds' },
+  { small: 'export.lease_minutes', large: 'export.job_timeout_minutes', strict: true },
 ];
 
 /** What the server would refuse about `value` for `key`, as a reason code. The mock mirrors contract 17.5. */
@@ -47,11 +49,22 @@ function problemWith(key: string, value: unknown): string | null {
 }
 
 function relationProblem(key: string, value: unknown): string | null {
-  for (const [small, large] of RELATIONS) {
+  for (const { small, large, strict } of RELATIONS) {
     if (key !== small && key !== large) continue;
     const a = key === small ? value : currentValue(small);
     const b = key === large ? value : currentValue(large);
-    if (typeof a === 'number' && typeof b === 'number' && a > b) return 'OUT_OF_RANGE';
+    if (typeof a === 'number' && typeof b === 'number' && (strict ? a >= b : a > b)) {
+      return 'OUT_OF_RANGE';
+    }
+  }
+  // Statistics events must outlive the 30-day look-back of the weekly and monthly numbers.
+  if (key === 'events.ttl_days' && typeof value === 'number') {
+    const window = currentValue('stats.land_window_days');
+    if (typeof window === 'number' && value < 30 + window) return 'OUT_OF_RANGE';
+  }
+  if (key === 'stats.land_window_days' && typeof value === 'number') {
+    const ttl = currentValue('events.ttl_days');
+    if (typeof ttl === 'number' && ttl < 30 + value) return 'OUT_OF_RANGE';
   }
   if (key === 'auth.access_ttl_minutes' && typeof value === 'number') {
     const days = currentValue('auth.refresh_ttl_days');
@@ -74,7 +87,7 @@ function warningsFor(
     ];
   }
   if (key === 'ads.skip_after_seconds' && typeof value === 'number' && value > 5) {
-    return [{ code: 'SKIP_AFTER_TOO_LONG', message: 'A long skip delay can break store rules' }];
+    return [{ code: 'AD_SKIP_AFTER_TOO_LONG', message: 'A long skip delay can break store rules' }];
   }
   return [];
 }

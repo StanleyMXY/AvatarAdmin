@@ -58,10 +58,9 @@ const PLAIN_STRINGS = new Set([
  */
 export function defaultValueOf(row: RawConfigRow): unknown {
   const text = row.defaultText;
-  // This row's default is described in words; the address itself is quoted in the note.
-  if (row.key === 'usage_price.source_url')
-    return /默认 `(https:\/\/[^`]+)`/.exec(row.note)?.[1] ?? null;
+  // The default of this row is described in words (an address of a third-party service), so it stays unset here.
   if (PLAIN_STRINGS.has(row.key)) return text;
+  if (text === '空列表') return [];
   if (text === 'true') return true;
   if (text === 'false') return false;
   if (/^-?\d+(\.\d+)?$/.test(text)) return Number(text);

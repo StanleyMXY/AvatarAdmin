@@ -145,4 +145,37 @@ describe('DateRangeUtc', () => {
     const inputs = [...document.querySelectorAll('.ant-picker-input input')] as HTMLInputElement[];
     expect(inputs.map((i) => i.value)).toEqual(['2026-10-14', '2026-10-20']);
   });
+
+  it('puts the old range back in the box when a range is refused', async () => {
+    const onChange = vi.fn();
+    renderPage(
+      <DateRangeUtc
+        value={{ from: '2026-10-14', to: '2026-10-20' }}
+        onChange={onChange}
+        maxDays={7}
+      />,
+    );
+    open();
+    fireEvent.click(await screen.findByText('Last 30 days'));
+    await screen.findByText('At most 7 days at a time');
+    const inputs = [...document.querySelectorAll('.ant-picker-input input')] as HTMLInputElement[];
+    expect(inputs.map((i) => i.value)).toEqual(['2026-10-14', '2026-10-20']);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('accepts a range of exactly maxDays and refuses one day more', async () => {
+    const onChange = vi.fn();
+    renderPage(
+      <DateRangeUtc
+        value={{ from: '2026-10-14', to: '2026-10-20' }}
+        onChange={onChange}
+        maxDays={7}
+      />,
+    );
+    open();
+    fireEvent.click(await screen.findByText('Last 7 days'));
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith({ from: '2026-10-15', to: '2026-10-21' }),
+    );
+  });
 });

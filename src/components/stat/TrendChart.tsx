@@ -26,14 +26,14 @@ export function TrendChart<T extends { statDate: string }>({ rows, series, from,
     const zero = (statDate: string) =>
       ({ statDate, ...Object.fromEntries(series.map((s) => [s.field, 0])) }) as unknown as T;
     const full = fillMissingDays(rows, from, to, zero);
+    const sent = new Set(rows.map((row) => row.statDate));
     return full.flatMap((row) =>
       series.map((s) => {
         const raw = (row as unknown as Record<string, unknown>)[s.field];
-        return {
-          statDate: row.statDate,
-          series: s.label,
-          value: typeof raw === 'number' ? raw : 0,
-        };
+        // A day the backend sent no row for is 0; a row whose column is null is "not known" and is
+        // left as a gap, so that "no snapshot yet" is not read as "everything went to 0".
+        const known = typeof raw === 'number' ? raw : sent.has(row.statDate) ? null : 0;
+        return { statDate: row.statDate, series: s.label, value: known };
       }),
     );
   }, [rows, series, from, to]);

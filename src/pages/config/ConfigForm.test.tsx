@@ -134,6 +134,11 @@ describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
     renderPage(<ConfigForm />);
     expect(await screen.findByText('Unrecognised settings: brand.new_key')).toBeInTheDocument();
     expect(screen.queryByTestId('config-row-brand.new_key')).toBeNull();
+    // listed read-only with its value, no editor, no save
+    const unknown = screen.getByTestId('config-unknown-brand.new_key');
+    expect(unknown).toHaveTextContent('1');
+    expect(within(unknown).queryByRole('button')).toBeNull();
+    expect(within(unknown).queryByRole('textbox')).toBeNull();
     void calls;
   });
 
@@ -293,5 +298,27 @@ describe('ConfigForm: reset to default', () => {
     expect(calls.find((c) => c.method === 'DELETE')?.url).toBe(
       '/api/admin/config/auth.access_ttl_minutes',
     );
+  });
+});
+
+describe('ConfigForm: empty and Chinese', { timeout: 30000 }, () => {
+  it('does not mark a JSON key that has no value as invalid, until a value is removed from one that has', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['memory.tei_allowed_hosts', 'milestone.days']} />);
+    const none = await row('memory.tei_allowed_hosts');
+    expect(within(none).queryByText('Not valid JSON')).toBeNull();
+    const has = await row('milestone.days');
+    fireEvent.change(within(has).getByRole('textbox'), { target: { value: '' } });
+    expect(within(has).getByText('Not valid JSON')).toBeInTheDocument();
+  });
+
+  it('writes the link to the rule editor as one sentence in Chinese', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['moderation.text_rules']} />, 'zh-CN');
+    const r = await row('moderation.text_rules');
+    expect(r).toHaveTextContent('请在这个页面里编辑：/moderation/rules');
+    expect(within(r).getByRole('link', { name: '/moderation/rules' })).toBeInTheDocument();
   });
 });
