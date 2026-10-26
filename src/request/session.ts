@@ -1,0 +1,76 @@
+// The admin token lives in memory and in sessionStorage (so a reload of the tab keeps the
+// session). It is never written to localStorage, a cookie or a url. Storage can be missing or
+// refuse access (private windows, blocked site data), so every access is guarded and memory
+// alone is enough.
+
+const TOKEN_KEY = 'avatar-admin.token';
+
+let memoryToken: string | null = null;
+let hydrated = false;
+let expiredLatch = false;
+let handlers: SessionHandlers | null = null;
+
+export type SessionHandlers = { onExpired: () => void; onForbidden: () => void };
+
+export function getToken(): string | null {
+  if (!hydrated) {
+    hydrated = true;
+    try {
+      memoryToken = sessionStorage.getItem(TOKEN_KEY);
+    } catch {
+      memoryToken = null;
+    }
+  }
+  return memoryToken;
+}
+
+export function setToken(token: string): void {
+  hydrated = true;
+  memoryToken = token;
+  expiredLatch = false;
+  try {
+    sessionStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    // memory only
+  }
+}
+
+export function clearToken(): void {
+  hydrated = true;
+  memoryToken = null;
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // memory is already empty and is not refilled from storage after this point
+  }
+}
+
+export function setSessionHandlers(next: SessionHandlers): void {
+  handlers = next;
+}
+
+/**
+ * A request that was sent with `sentToken` was answered ADMIN_INVALID_TOKEN. Clears the token and
+ * calls `onExpired`, once however many requests report it. A report about a token that has been
+ * replaced since (a slow answer arriving after a new login) is ignored.
+ */
+export function handleTokenExpired(sentToken: string | null): void {
+  if (getToken() !== sentToken) return;
+  clearToken();
+  if (expiredLatch) return;
+  expiredLatch = true;
+  handlers?.onExpired();
+}
+
+/** A request was answered ADMIN_FORBIDDEN: the permissions the page shows may be out of date. */
+export function handleForbidden(): void {
+  handlers?.onForbidden();
+}
+
+/** Forgets the token, the handlers and what was read from storage (for sign-out flows and tests). */
+export function resetSessionState(): void {
+  memoryToken = null;
+  hydrated = false;
+  expiredLatch = false;
+  handlers = null;
+}
