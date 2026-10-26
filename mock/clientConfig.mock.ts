@@ -123,7 +123,7 @@ export default {
         continue;
       }
       const reason = refusal(def, value);
-      if (reason !== null) details.push({ ref: locale, reason });
+      if (reason !== null) details.push({ ref: locale === '' ? 'default' : locale, reason });
     }
     if (details.length > 0) throw invalidRequest('invalid request', details);
     const now = new Date().toISOString();

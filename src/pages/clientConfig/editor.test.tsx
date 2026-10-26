@@ -254,7 +254,7 @@ describe('the editor of a link key', () => {
                 {
                   details: [
                     { ref: 'th', reason: 'INVALID_PATH' },
-                    { ref: '', reason: 'TOO_LONG' },
+                    { ref: 'default', reason: 'TOO_LONG' },
                   ],
                 },
                 'SECRET backend sentence',

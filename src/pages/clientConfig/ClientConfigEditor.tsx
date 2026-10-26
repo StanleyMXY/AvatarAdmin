@@ -141,8 +141,10 @@ export function ClientConfigEditor({ item, editable, onClose, onChanged }: Props
       const { error: failed, text } = describeFailure(intl, error);
       const byLanguage: Record<string, string> = {};
       for (const detail of failed.details) {
-        if (draft.some((entry) => entry.locale === detail.ref)) {
-          byLanguage[detail.ref] = problemText(intl, detail.reason);
+        // The contract (1.4) writes the value without a language as `default`; its entry has the empty tag.
+        const tag = detail.ref === 'default' ? '' : detail.ref;
+        if (draft.some((entry) => entry.locale === tag)) {
+          byLanguage[tag] = problemText(intl, detail.reason);
         }
       }
       setServerErrors(byLanguage);

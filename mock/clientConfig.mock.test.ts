@@ -152,7 +152,10 @@ describe('saving a key', () => {
       'TOO_LONG',
     );
     expect((await save('inviteShareTitle', { '': '' })).status).toBe(200);
-    expect(detailsOf(await save('inviteShareText', { '': 'Join {link} {other}' }))[0].ref).toBe('');
+    // the value without a language is `default` in the details (contract 1.4)
+    expect(detailsOf(await save('inviteShareText', { '': 'Join {link} {other}' }))[0].ref).toBe(
+      'default',
+    );
     expect((await save('inviteShareText', { '': 'Join {link} with {code}' })).status).toBe(200);
     expect(detailsOf(await save('drivingLookaheadMs', { '': 1.5 }))[0].reason).toBe(
       'NOT_AN_INTEGER',
@@ -162,7 +165,7 @@ describe('saving a key', () => {
     );
     expect((await save('drivingLookaheadMs', { '': 250 })).status).toBe(200);
     expect(detailsOf(await save('inviteLinkBase', { '': 'https://a.example/?x=1' }))[0].ref).toBe(
-      '',
+      'default',
     );
     expect((await save('inviteLinkBase', { '': 'https://a.example/i' })).status).toBe(200);
   });
