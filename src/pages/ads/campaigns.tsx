@@ -249,12 +249,15 @@ export default function CampaignsPage() {
         rowKey={(row) => plainText(row.id)}
         emptyText={t('ads.campaigns.empty')}
       />
-      <CampaignModal
-        open={editing !== null}
-        campaign={editing === 'new' ? null : editing}
-        onClose={() => setEditing(null)}
-        onSaved={state.reload}
-      />
+      {/* Mounted only while it is open: a dialog that stayed mounted would keep what was typed in it for the next one. */}
+      {editing !== null ? (
+        <CampaignModal
+          open
+          campaign={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={state.reload}
+        />
+      ) : null}
     </Flex>
   );
 }

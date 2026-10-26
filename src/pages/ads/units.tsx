@@ -264,15 +264,18 @@ export default function UnitsPage() {
         rowKey={(row) => plainText(row.id)}
         emptyText={t('ads.units.empty')}
       />
-      <UnitModal
-        open={editing !== null}
-        unit={editing === 'new' ? null : editing}
-        campaigns={campaigns}
-        placements={placements}
-        geoConfigured={meta.data?.geoConfigured ?? null}
-        onClose={() => setEditing(null)}
-        onSaved={state.reload}
-      />
+      {/* Mounted only while it is open: a dialog that stayed mounted would keep what was typed in it for the next one. */}
+      {editing !== null ? (
+        <UnitModal
+          open
+          unit={editing === 'new' ? null : editing}
+          campaigns={campaigns}
+          placements={placements}
+          geoConfigured={meta.data?.geoConfigured ?? null}
+          onClose={() => setEditing(null)}
+          onSaved={state.reload}
+        />
+      ) : null}
     </Flex>
   );
 }

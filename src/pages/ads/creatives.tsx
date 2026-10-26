@@ -346,15 +346,18 @@ export default function CreativesPage() {
         rowKey={(row) => plainText(row.id)}
         emptyText={t('ads.creatives.empty')}
       />
-      <CreativeModal
-        open={editing !== null}
-        creative={editing === 'new' ? null : editing}
-        units={units}
-        placements={placements}
-        tolerance={tolerance.data ?? null}
-        onClose={() => setEditing(null)}
-        onSaved={state.reload}
-      />
+      {/* Mounted only while it is open: a dialog that stayed mounted would keep what was typed in it for the next one. */}
+      {editing !== null ? (
+        <CreativeModal
+          open
+          creative={editing === 'new' ? null : editing}
+          units={units}
+          placements={placements}
+          tolerance={tolerance.data ?? null}
+          onClose={() => setEditing(null)}
+          onSaved={state.reload}
+        />
+      ) : null}
       <ReasonModalForm
         open={rejecting !== null}
         title={t('ads.creatives.rejectTitle')}

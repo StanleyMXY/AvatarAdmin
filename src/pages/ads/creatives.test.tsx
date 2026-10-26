@@ -1326,3 +1326,24 @@ describe('a session that ends while a write is on its way', { timeout: 40000 }, 
     expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
 });
+
+describe('a dialog that is opened again', { timeout: 40000 }, () => {
+  it('shows the creative that is edited, not what was typed in the dialog that was closed before', async () => {
+    const { user } = await load();
+    await user.click(screen.getByRole('button', { name: 'New creative' }));
+    const first = within(await dialog());
+    await user.type(
+      first.getByRole('textbox', { name: 'Click target' }),
+      'https://abandoned.example/',
+    );
+    await user.type(first.getByRole('textbox', { name: 'Title' }), 'Typed and abandoned');
+    await user.click(first.getByRole('button', { name: 'Cancel' }));
+    await user.click(within(await rowOf('3')).getByRole('button', { name: 'Edit' }));
+    const form = within(await dialog());
+    expect(form.getByRole('textbox', { name: 'Click target' })).toHaveValue(
+      creative('3').clickTarget,
+    );
+    expect(form.getByRole('textbox', { name: 'Title' })).toHaveValue(creative('3').title as string);
+    expect(form.getByTestId('creative-media').textContent).toMatch(/Current file/);
+  });
+});

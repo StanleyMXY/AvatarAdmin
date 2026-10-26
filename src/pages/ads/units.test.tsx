@@ -640,3 +640,26 @@ describe('a session that ends while a write is on its way', { timeout: 30000 }, 
     expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
 });
+
+describe('a dialog that is opened again', { timeout: 40000 }, () => {
+  it('shows the unit that is edited, with its targeting, not what was typed in the dialog that was closed before', async () => {
+    const { user } = await load();
+    await user.click(screen.getByRole('button', { name: 'New unit' }));
+    const first = within(await dialog());
+    await user.type(first.getByRole('textbox', { name: 'Name' }), 'Typed and abandoned');
+    await user.click(first.getByRole('checkbox', { name: 'iOS' }));
+    await user.click(first.getByRole('button', { name: 'Cancel' }));
+    await user.click(within(await rowOf('2')).getByRole('button', { name: 'Edit' }));
+    const form = within(await dialog());
+    expect(form.getByRole('textbox', { name: 'Name' })).toHaveValue(unit('2').name);
+    expect(form.getByRole('checkbox', { name: 'iOS' })).not.toBeChecked();
+    expect(form.getByRole('textbox', { name: 'Lowest system version' })).toHaveValue('13');
+    expect(form.getAllByPlaceholderText('Start')).toHaveLength(2);
+    await user.click(form.getByRole('button', { name: 'Cancel' }));
+    await user.click(within(await rowOf('1')).getByRole('button', { name: 'Edit' }));
+    const next = within(await dialog());
+    expect(next.getByRole('checkbox', { name: 'Android' })).toBeChecked();
+    expect(next.getByRole('textbox', { name: 'Lowest system version' })).toHaveValue('');
+    expect(next.queryAllByPlaceholderText('Start')).toHaveLength(0);
+  });
+});

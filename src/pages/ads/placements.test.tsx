@@ -589,3 +589,19 @@ describe('a session that ends while a write is on its way', { timeout: 30000 }, 
     expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
 });
+
+describe('a dialog that is opened again', { timeout: 30000 }, () => {
+  it('shows the placement that is edited, not the one that was edited before', async () => {
+    const { user } = await load();
+    await user.click(within(await rowOf('app_open')).getByRole('button', { name: 'Edit' }));
+    const first = within(await dialog());
+    const cap = first.getByRole('spinbutton', { name: 'Frequency cap' });
+    await user.clear(cap);
+    await user.type(cap, '9');
+    await user.click(first.getByRole('button', { name: 'Cancel' }));
+    await user.click(within(await rowOf('call_end')).getByRole('button', { name: 'Edit' }));
+    const form = within(await dialog());
+    expect(form.getByRole('spinbutton', { name: 'Frequency cap' })).toHaveValue('3');
+    expect(form.getByRole('spinbutton', { name: 'Cooldown (minutes)' })).toHaveValue('10');
+  });
+});

@@ -204,12 +204,15 @@ export default function PlacementsPage() {
           ) : null}
         </Flex>
       </Card>
-      <PlacementModal
-        open={editing !== null}
-        placement={editing}
-        onClose={() => setEditing(null)}
-        onSaved={reload}
-      />
+      {/* Mounted only while it is open: a dialog that stayed mounted would keep what was typed in it for the next one. */}
+      {editing !== null ? (
+        <PlacementModal
+          open
+          placement={editing}
+          onClose={() => setEditing(null)}
+          onSaved={reload}
+        />
+      ) : null}
     </Flex>
   );
 }
