@@ -5,7 +5,7 @@
 // [A-Z_]+(:[A-Z_]+)+ in spec sections 3, 4 and 5 and in contract sections 17.3, 17.4, 22.9, 23.6,
 // 24.2, 25.7, 26.3 and 28 (`npm run check:codes -- <spec> <contract>` repeats this and compares):
 //
-//   grep -o -E '`[A-Z_]+(:[A-Z_]+)+`' <those sections> | tr -d '`' | sort -u     -> 82 words
+//   grep -o -E '`[A-Z_]+(:[A-Z_]+)+`' <those sections> | tr -d '`' | sort | uniq -c     -> 82 words
 //
 // minus the 3 words listed in docs/superpowers/handoff/permission-code-exclusions.txt (they are
 // quoted from another system's evidence notes, not codes of this project)               -> 79 codes.

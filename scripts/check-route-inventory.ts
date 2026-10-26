@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { flattenPages } from '../config/assembleRoutes';
 import routes from '../config/routes';
-import { compareRoutes, parseRouteTable } from './routeInventory';
+import { runRouteInventory } from './routeInventory';
 
 const args = process.argv.slice(2);
 const prefixes: string[] = [];
@@ -20,26 +20,10 @@ if (positional.length !== 1 || prefixes.includes('')) {
   process.exit(1);
 }
 
-const table = parseRouteTable(readFileSync(positional[0], 'utf8'));
-const pages = flattenPages(routes);
-const result = compareRoutes(table.routes, pages, {
-  prefixes: prefixes.length > 0 ? prefixes : undefined,
-});
-
-console.log(
-  `spec: ${table.rows} rows, ${table.rowsWithoutRoute.length} without a page route, ${table.routes.length} page routes; config/routes: ${pages.length} page routes${prefixes.length > 0 ? `; limited to ${prefixes.join(', ')}` : ''}`,
+const { output, ok } = runRouteInventory(
+  readFileSync(positional[0], 'utf8'),
+  flattenPages(routes),
+  prefixes,
 );
-console.log(`missing (${result.missing.length}):${result.missing.map((p) => `\n  ${p}`).join('')}`);
-console.log(`extra (${result.extra.length}):${result.extra.map((p) => `\n  ${p}`).join('')}`);
-console.log(
-  `access mismatch (${result.accessMismatch.length}):${result.accessMismatch
-    .map(
-      (m) =>
-        `\n  ${m.path}: spec ${m.spec ?? 'sign-in only'}, routes ${m.routes ?? 'sign-in only'}`,
-    )
-    .join('')}`,
-);
-
-const problems = result.missing.length + result.extra.length + result.accessMismatch.length;
-if (problems > 0) process.exit(1);
-console.log('ok');
+console.log(output);
+if (!ok) process.exit(1);

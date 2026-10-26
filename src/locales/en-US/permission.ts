@@ -22,7 +22,7 @@ const messages: Record<string, string> = {
   'permission.CLIENTCONFIG:MANAGE': 'Manage client configuration',
   'permission.CLIENTCONFIG:VIEW': 'View client configuration',
   'permission.COMPANIONSHIP:CONFIG': 'Set companionship parameters',
-  'permission.COMPLAINT:MANAGE': 'Handle complaints',
+  'permission.COMPLAINT:MANAGE': 'Handle complaints and remove the avatars found',
   'permission.COMPLAINT:VIEW': 'View complaints',
   'permission.CONFIG:MANAGE': 'Manage backend parameters',
   'permission.COSMETIC:GRANT': 'Grant cosmetics',
@@ -66,7 +66,8 @@ const messages: Record<string, string> = {
   'permission.STATS:LAND': 'Re-land a statistics day',
   'permission.STATS:VIEW': 'View statistics reports',
   'permission.SUBSCRIPTION:CONFIG': 'Configure subscriptions and credits',
-  'permission.SUBSCRIPTION:GRANT': 'Grant entitlements and credits',
+  'permission.SUBSCRIPTION:GRANT':
+    'Grant or revoke entitlements, request credit adjustments, handle subscription events',
   'permission.SUBSCRIPTION:VIEW': 'View subscriptions and credits',
   'permission.SUPPORT:MANAGE': 'Handle support feedback',
   'permission.SUPPORT:VIEW': 'View support feedback',

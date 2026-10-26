@@ -72,3 +72,30 @@ export function compareRoutes(
   }
   return { missing, extra, accessMismatch };
 }
+
+/** The text report of a comparison and whether it is clean (exit code 0). */
+export function runRouteInventory(
+  specText: string,
+  pages: readonly { path: string; access: string | null }[],
+  prefixes: string[] = [],
+): { output: string; ok: boolean } {
+  const table = parseRouteTable(specText);
+  const result = compareRoutes(table.routes, pages, {
+    prefixes: prefixes.length > 0 ? prefixes : undefined,
+  });
+  const list = (paths: string[]) => paths.map((path) => `\n  ${path}`).join('');
+  const limited = prefixes.length > 0 ? `; limited to ${prefixes.join(', ')}` : '';
+  const output = [
+    `spec: ${table.rows} rows, ${table.rowsWithoutRoute.length} without a page route, ${table.routes.length} page routes; config/routes: ${pages.length} page routes${limited}`,
+    `missing (${result.missing.length}):${list(result.missing)}`,
+    `extra (${result.extra.length}):${list(result.extra)}`,
+    `access mismatch (${result.accessMismatch.length}):${result.accessMismatch
+      .map(
+        (m) =>
+          `\n  ${m.path}: spec ${m.spec ?? 'sign-in only'}, routes ${m.routes ?? 'sign-in only'}`,
+      )
+      .join('')}`,
+  ].join('\n');
+  const ok = result.missing.length + result.extra.length + result.accessMismatch.length === 0;
+  return { output: ok ? `${output}\nok` : output, ok };
+}

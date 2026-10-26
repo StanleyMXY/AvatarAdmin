@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PERMISSION_CODES } from '../src/access/permissionCodes';
-import { compareRoutes, parseRouteTable } from './routeInventory';
+import { compareRoutes, parseRouteTable, runRouteInventory } from './routeInventory';
 
 const SPEC = 'docs/shared-snapshots/admin-frontend-design.md';
 
@@ -132,27 +132,84 @@ describe('compareRoutes', () => {
   });
 });
 
+describe('runRouteInventory', () => {
+  const fixture = [
+    '### 5.0 路由总表',
+    '',
+    '| 菜单 | 页面（路由） | access | 接口 |',
+    '|---|---|---|---|',
+    '| 用户 | 列表 `/users/list` | `USER:VIEW` | `GET /users` |',
+    '| | 详情 `/users/:id` | `USER:VIEW` | `GET /users/{id}` |',
+    '| 总览 | 看板 `/dashboard` | 登录即可 | `/stats/daily` |',
+    '| 统计 | 导出 | `STATS:EXPORT` | `/stats/export/{name}` |',
+    '',
+  ].join('\n');
+  const exact = [
+    { path: '/users/list', access: 'USER:VIEW' },
+    { path: '/users/:id', access: 'USER:VIEW' },
+    { path: '/dashboard', access: null },
+  ];
+
+  it('is clean and says ok for an exact match, ignoring the row without a route', () => {
+    const result = runRouteInventory(fixture, exact);
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain('4 rows, 1 without a page route, 3 page routes');
+    expect(result.output.endsWith('ok')).toBe(true);
+  });
+
+  it('is not clean when a route is missing, and lists it', () => {
+    const result = runRouteInventory(fixture, exact.slice(0, 2));
+    expect(result.ok).toBe(false);
+    expect(result.output).toMatch(/missing \(1\):\n {2}\/dashboard/);
+  });
+
+  it('is not clean when there is only an extra route', () => {
+    const result = runRouteInventory(fixture, [...exact, { path: '/other', access: null }]);
+    expect(result.ok).toBe(false);
+    expect(result.output).toMatch(/extra \(1\):\n {2}\/other/);
+    expect(result.output).toMatch(/missing \(0\)/);
+  });
+
+  it('is not clean when there is only a different access', () => {
+    const result = runRouteInventory(fixture, [
+      { path: '/users/list', access: 'USER:BAN' },
+      exact[1],
+      exact[2],
+    ]);
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain('/users/list: spec USER:VIEW, routes USER:BAN');
+  });
+
+  it('limits itself to the given prefixes', () => {
+    const result = runRouteInventory(fixture, [exact[0]], ['/users/list']);
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain('limited to /users/list');
+  });
+
+  it('really reads the pages it is given: an empty list is not clean', () => {
+    expect(runRouteInventory(fixture, []).ok).toBe(false);
+  });
+});
+
 describe('check-route-inventory.ts', { timeout: 60_000 }, () => {
   const run = (args: string[]) =>
     spawnSync('npx', ['tsx', 'scripts/check-route-inventory.ts', ...args], { encoding: 'utf8' });
 
-  it('exits 1 and lists the missing routes while the modules are still empty', () => {
-    const result = run([SPEC]);
-    expect(result.status).toBe(1);
-    expect(result.stdout).toMatch(/missing \(83\)/i);
-    expect(result.stdout).toContain('/users/list');
-  });
-
-  it('exits 1 and prints usage without the spec path', () => {
+  it('prints usage and exits 1 without the spec path', () => {
     const result = run([]);
     expect(result.status).toBe(1);
     expect(result.stdout + result.stderr).toMatch(/usage/i);
   });
 
-  it('limits the check to a prefix with --prefix', () => {
-    const result = run([SPEC, '--prefix', '/users']);
-    expect(result.stdout).toMatch(/missing \((\d+)\)/i);
-    expect(result.stdout).toContain('/users/list');
-    expect(result.stdout).not.toContain('/sms/records');
+  it('prints usage and exits 1 for --prefix without a value', () => {
+    const result = run([SPEC, '--prefix']);
+    expect(result.status).toBe(1);
+    expect(result.stdout + result.stderr).toMatch(/usage/i);
+  });
+
+  it('reads the real spec and the real routes and reports the spec totals, whatever the modules hold', () => {
+    const result = run([SPEC]);
+    expect(result.stdout).toContain('spec: 73 rows, 1 without a page route, 83 page routes');
+    expect([0, 1]).toContain(result.status);
   });
 });

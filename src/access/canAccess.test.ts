@@ -52,6 +52,17 @@ describe('canAccess', () => {
     expect(canAccess(me, 'ANYTHING:ELSE')).toBe(true);
   });
 
+  it('treats only the boolean true as super administrator', () => {
+    for (const odd of ['false', 'true', 1, {}, [], 'yes']) {
+      expect(canAccess({ superAdmin: odd as never, permissions: [] }, 'USER:BAN')).toBe(false);
+    }
+  });
+
+  it('does not strip white space from the codes it is given', () => {
+    expect(canAccess(admin([' USER:VIEW ']), 'USER:VIEW')).toBe(false);
+    expect(canAccess(admin(['USER:VIEW']), ' USER:VIEW')).toBe(false);
+  });
+
   it('needs only a signed-in administrator when there is no code', () => {
     expect(canAccess(admin([]), undefined)).toBe(true);
     expect(canAccess(admin([]), '')).toBe(true);
@@ -79,6 +90,11 @@ describe('access factory', () => {
     expect(rules.canAccess('USER:BAN')).toBe(true);
     expect(rules.canAccess('USER:VIEW')).toBe(false);
     expect(rules.canAccess(undefined)).toBe(true);
+  });
+
+  it('has no code check for undefined: canAccess(undefined) is false before the administrator is known', () => {
+    expect(access(undefined).canAccess(undefined)).toBe(false);
+    expect(access({ me: admin([]) }).canAccess(undefined)).toBe(true);
   });
 
   it('denies everything before the administrator is known', () => {

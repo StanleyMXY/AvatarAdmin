@@ -29,9 +29,9 @@ import support from './routes/support';
 import system from './routes/system';
 import users from './routes/users';
 
-// Assembly only. The modules are listed in the order of the menu in spec 5.0; the menu order is
-// the array order. A module that adds pages to another module's menu repeats that menu entry
-// (same path, name and icon) with its own children; see `mergeMenus`.
+// Assembly only. A module adds its pages with `menuGroup('<menu key>', [...])` (config/menus.ts);
+// the menus are put in the order of spec 5.0 and the pages of a menu in the order of the route
+// table, so the order of this list does not matter. Pages of one menu can come from several modules.
 export default assembleRoutes({
   auth,
   modules: [

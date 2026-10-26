@@ -6,10 +6,12 @@ export type AccessMe = { superAdmin: boolean; permissions: readonly string[] };
 /**
  * A route as `config/routes` writes it. `access` is a permission code and is what Umi's access
  * plugin looks up; a route without it needs only a sign-in. A route without `name`, with
- * `hideInMenu`, a `redirect` or `layout: false` is never a menu entry.
+ * `hideInMenu`, a `redirect` or `layout: false` is never a menu entry. A route without `path` is a
+ * menu group: it only holds `routes` (see `menuGroup` in config/menus.ts).
  */
 export type AdminRoute = {
-  path: string;
+  path?: string;
+  key?: string;
   name?: string;
   icon?: string;
   component?: string;
@@ -28,7 +30,7 @@ export type AdminRoute = {
 export function canAccess(me: AccessMe | undefined, code: string | undefined): boolean {
   if (!me) return false;
   if (!code) return true;
-  if (me.superAdmin) return true;
+  if (me.superAdmin === true) return true;
   return Array.isArray(me.permissions) && me.permissions.includes(code);
 }
 

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { AdminRoute } from '../src/access/canAccess';
 import { assembleRoutes, flattenPages, mergeMenus, problemsIn } from './assembleRoutes';
+import { menuGroup } from './menus';
 
-const leaf = (path: string, access?: AdminRoute['access']): AdminRoute => ({
+const page = (path: string, access?: AdminRoute['access']): AdminRoute => ({
   path,
   name: path.replace(/\W+/g, '_'),
   component: `.${path}`,
@@ -10,61 +11,98 @@ const leaf = (path: string, access?: AdminRoute['access']): AdminRoute => ({
 });
 
 describe('mergeMenus', () => {
-  it('keeps menus in the order of first appearance', () => {
+  it('puts the menus in the order of the spec whichever module comes first', () => {
     const merged = mergeMenus([
-      [{ path: '/a', name: 'a', routes: [leaf('/a/1')] }],
-      [{ path: '/b', name: 'b', routes: [leaf('/b/1')] }],
+      [menuGroup('system', [page('/system/audit')])],
+      [menuGroup('users', [page('/users/list')])],
+      [menuGroup('dashboard', [page('/dashboard')])],
     ]);
-    expect(merged.map((r) => r.path)).toEqual(['/a', '/b']);
+    expect(merged.map((g) => g.name)).toEqual(['dashboard', 'users', 'system']);
   });
 
-  it('joins the children of two modules that share one menu, in module order', () => {
+  it('joins the pages of two modules that share one menu into one group', () => {
     const merged = mergeMenus([
-      [{ path: '/users', name: 'users', routes: [leaf('/users/list'), leaf('/users/:id')] }],
-      [{ path: '/users', name: 'users', routes: [leaf('/users/notifications')] }],
+      [menuGroup('users', [page('/users/list')])],
+      [menuGroup('users', [page('/users/notifications')])],
     ]);
     expect(merged).toHaveLength(1);
-    expect(merged[0].routes?.map((r) => r.path)).toEqual([
-      '/users/list',
-      '/users/:id',
-      '/users/notifications',
-    ]);
+    expect(merged[0].routes?.map((r) => r.path)).toEqual(['/users/list', '/users/notifications']);
   });
 
-  it('keeps the position of the first module that mentions the menu', () => {
+  it('lets a menu hold pages with unrelated path prefixes (activity holds /act/... and /invite/rewards)', () => {
     const merged = mergeMenus([
       [
-        { path: '/invite', name: 'invite', routes: [leaf('/invite/codes')] },
-        { path: '/act', name: 'act', routes: [leaf('/invite/rewards')] },
+        menuGroup('invite', [page('/invite/codes')]),
+        menuGroup('activity', [page('/invite/rewards')]),
       ],
-      [{ path: '/campaign', name: 'campaign', routes: [leaf('/campaign/stats')] }],
-      [{ path: '/act', name: 'act', routes: [leaf('/act/signin')] }],
+      [menuGroup('activity', [page('/act/act-signin-config')])],
     ]);
-    expect(merged.map((r) => r.path)).toEqual(['/invite', '/act', '/campaign']);
+    const activity = merged.find((g) => g.name === 'activity');
+    expect(activity?.routes?.map((r) => r.path)).toEqual([
+      '/act/act-signin-config',
+      '/invite/rewards',
+    ]);
+    expect(merged.map((g) => g.name)).toEqual(['invite', 'activity']);
   });
 
-  it('passes single routes through and does not merge routes without children', () => {
-    const merged = mergeMenus([[leaf('/companionship')], [leaf('/dashboard')]]);
-    expect(merged.map((r) => r.path)).toEqual(['/companionship', '/dashboard']);
+  it('puts the pages of a menu in the order of the route table, also across modules', () => {
+    const merged = mergeMenus([
+      [menuGroup('system', [page('/system/audit'), page('/system/admins')])],
+      [menuGroup('system', [page('/system/channels'), page('/system/app-versions')])],
+    ]);
+    expect(merged[0].routes?.map((r) => r.path)).toEqual([
+      '/system/admins',
+      '/system/app-versions',
+      '/system/channels',
+      '/system/audit',
+    ]);
   });
 
-  it('refuses two modules that describe one menu differently', () => {
+  it('keeps pages that are not in the table after the known ones, in the given order', () => {
+    const merged = mergeMenus([
+      [menuGroup('users', [page('/users/zzz'), page('/users/list'), page('/users/aaa')])],
+    ]);
+    expect(merged[0].routes?.map((r) => r.path)).toEqual([
+      '/users/list',
+      '/users/zzz',
+      '/users/aaa',
+    ]);
+  });
+
+  it('puts groups with unknown names after the known menus, in the given order', () => {
+    const merged = mergeMenus([
+      [{ name: 'other', routes: [page('/o/1')] }],
+      [menuGroup('users', [page('/users/list')])],
+      [{ name: 'another', routes: [page('/a/1')] }],
+    ]);
+    expect(merged.map((g) => g.name)).toEqual(['users', 'other', 'another']);
+  });
+
+  it('does not change the arrays the modules export', () => {
+    const own = menuGroup('users', [page('/users/list')]);
+    const before = JSON.stringify(own);
+    mergeMenus([[own], [menuGroup('users', [page('/users/notifications')])]]);
+    expect(JSON.stringify(own)).toBe(before);
+    expect(own.routes).toHaveLength(1);
+  });
+
+  it('passes a page with a path through, after the menus', () => {
+    const merged = mergeMenus([[page('/standalone')], [menuGroup('users', [page('/users/list')])]]);
+    expect(merged.map((r) => r.path ?? r.name)).toEqual(['users', '/standalone']);
+  });
+
+  it('refuses a path that appears twice at the top', () => {
+    expect(() => mergeMenus([[page('/x')], [page('/x')]])).toThrow(/\/x/);
+  });
+
+  it('refuses a group without a name and a group with two icons', () => {
+    expect(() => mergeMenus([[{ routes: [page('/a')] }]])).toThrow(/name/);
     expect(() =>
       mergeMenus([
-        [{ path: '/users', name: 'users', icon: 'user', routes: [leaf('/users/a')] }],
-        [{ path: '/users', name: 'people', icon: 'user', routes: [leaf('/users/b')] }],
+        [{ name: 'g', icon: 'A', routes: [page('/a')] }],
+        [{ name: 'g', icon: 'B', routes: [page('/b')] }],
       ]),
-    ).toThrow(/\/users/);
-    expect(() =>
-      mergeMenus([
-        [{ path: '/users', name: 'users', icon: 'user', routes: [leaf('/users/a')] }],
-        [{ path: '/users', name: 'users', icon: 'team', routes: [leaf('/users/b')] }],
-      ]),
-    ).toThrow(/\/users/);
-  });
-
-  it('refuses a repeated route that is not a menu', () => {
-    expect(() => mergeMenus([[leaf('/x')], [leaf('/x')]])).toThrow(/\/x/);
+    ).toThrow(/g/);
   });
 
   it('accepts empty modules', () => {
@@ -76,11 +114,11 @@ describe('assembleRoutes', () => {
   it('puts the no-layout routes first, then the redirect, then the menus, then the catch-all', () => {
     const routes = assembleRoutes({
       auth: [{ path: '/user/login', layout: false, component: './user/login' }],
-      modules: [[{ path: '/dashboard', name: 'dashboard', component: './dashboard' }]],
+      modules: [[menuGroup('dashboard', [page('/dashboard')])]],
     });
-    expect(routes.map((r) => r.path)).toEqual(['/user/login', '/', '/dashboard', '*']);
+    expect(routes.map((r) => r.path ?? r.name)).toEqual(['/user/login', '/', 'dashboard', '*']);
     expect(routes[1]).toMatchObject({ path: '/', redirect: '/dashboard' });
-    expect(routes.at(-1)).toMatchObject({ path: '*' });
+    expect(routes.at(-1)).toMatchObject({ path: '*', component: './404' });
   });
 
   it('works with nothing but empty modules', () => {
@@ -89,15 +127,23 @@ describe('assembleRoutes', () => {
   });
 });
 
+describe('menuGroup', () => {
+  it('gives the group a key, the name of the menu and its icon', () => {
+    const group = menuGroup('users', [page('/users/list')]);
+    expect(group).toMatchObject({ key: 'users', name: 'users', icon: 'UserOutlined' });
+    expect(group.path).toBeUndefined();
+  });
+});
+
 describe('flattenPages', () => {
-  it('lists every route that opens a page, with its access, and skips menus, redirects and no-layout routes', () => {
+  it('lists every route that opens a page, with its access, and skips groups, redirects, no-layout routes and the catch-all', () => {
     const pages = flattenPages(
       assembleRoutes({
         auth: [{ path: '/user/login', layout: false, component: './user/login' }],
         modules: [
           [
-            { path: '/dashboard', name: 'dashboard', component: './dashboard' },
-            { path: '/users', name: 'users', routes: [leaf('/users/list', 'USER:VIEW')] },
+            menuGroup('dashboard', [page('/dashboard')]),
+            menuGroup('users', [page('/users/list', 'USER:VIEW')]),
           ],
         ],
       }),
@@ -107,26 +153,33 @@ describe('flattenPages', () => {
       { path: '/users/list', access: 'USER:VIEW' },
     ]);
   });
+
+  it('does not count a route that has children as a page, nor one without a component', () => {
+    expect(
+      flattenPages([
+        { path: '/a', name: 'a', component: './a', routes: [page('/a/b')] },
+        { path: '/c', name: 'c' },
+      ]),
+    ).toEqual([{ path: '/a/b', access: null }]);
+  });
 });
 
 describe('problemsIn', () => {
-  const ok = [
-    leaf('/a/x', 'USER:VIEW'),
-    { path: '/b', name: 'b', routes: [leaf('/b/1')] },
-  ] as AdminRoute[];
-
   it('finds nothing wrong in a good table', () => {
-    expect(problemsIn(ok)).toEqual([]);
+    expect(
+      problemsIn([menuGroup('users', [page('/users/list', 'USER:VIEW'), page('/users/:id')])]),
+    ).toEqual([]);
   });
 
-  it('finds an access value that is not a permission code', () => {
-    expect(problemsIn([{ ...leaf('/a'), access: 'NOT:A_CODE' as never }])).toEqual([
+  it('finds an access value that is not a permission code, also an empty one', () => {
+    expect(problemsIn([{ ...page('/a'), access: 'NOT:A_CODE' as never }])).toEqual([
       expect.stringContaining('NOT:A_CODE'),
     ]);
+    expect(problemsIn([{ ...page('/a'), access: '' as never }])).toHaveLength(1);
   });
 
-  it('finds two routes with one path', () => {
-    const problems = problemsIn([leaf('/a'), { path: '/m', name: 'm', routes: [leaf('/a')] }]);
+  it('finds two routes with one path, also when one is in a group', () => {
+    const problems = problemsIn([page('/a'), menuGroup('users', [page('/a')])]);
     expect(problems.join('\n')).toContain('/a');
   });
 
@@ -135,19 +188,15 @@ describe('problemsIn', () => {
     expect(problemsIn([{ path: '/a', name: 'a', redirect: '/b' }])).toEqual([]);
   });
 
-  it('finds a parameter route placed before a fixed route of the same level', () => {
-    const problems = problemsIn([
-      { path: '/users', name: 'users', routes: [leaf('/users/:id'), leaf('/users/abuse')] },
-    ]);
-    expect(problems.join('\n')).toContain('/users/abuse');
-    expect(
-      problemsIn([
-        { path: '/users', name: 'users', routes: [leaf('/users/abuse'), leaf('/users/:id')] },
-      ]),
-    ).toEqual([]);
+  it('finds a route without a path that is not a menu group', () => {
+    expect(problemsIn([{ component: './x' }]).join('\n')).toMatch(/menu/);
+    expect(problemsIn([{ name: 'g', routes: [] }]).join('\n')).toMatch(/menu g/);
+    expect(problemsIn([{ routes: [page('/a')] }]).join('\n')).toMatch(/menu/);
   });
 
-  it('does not mistake siblings with different parents for a clash', () => {
-    expect(problemsIn([leaf('/a/:id'), leaf('/b/fixed')])).toEqual([]);
+  it('accepts parameter routes in any place: the router ranks fixed segments first', () => {
+    expect(problemsIn([menuGroup('users', [page('/users/:id'), page('/users/abuse')])])).toEqual(
+      [],
+    );
   });
 });

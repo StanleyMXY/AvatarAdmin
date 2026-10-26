@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PERMISSION_CODES } from '../src/access/permissionCodes';
 import { flattenPages, problemsIn } from './assembleRoutes';
@@ -44,6 +44,11 @@ describe('config/routes.ts', () => {
     );
     expect(files.map((f) => f.replace(/\.ts$/, '')).sort()).toEqual([...MODULES].sort());
     for (const name of MODULES) expect(existsSync(`config/routes/${name}.ts`)).toBe(true);
+  });
+
+  it('imports every one of those module files, so a module cannot be left out of the table', () => {
+    const source = readFileSync('config/routes.ts', 'utf8');
+    for (const name of MODULES) expect(source).toContain(`from './routes/${name}'`);
   });
 
   it('redirects the root path to /dashboard', () => {
