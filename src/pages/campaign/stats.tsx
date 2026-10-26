@@ -170,7 +170,11 @@ export default function CampaignStatsPage() {
               <span data-testid="unattributed-count">
                 {countText(locale, row.unattributedInstalls)}
               </span>
-              <Typography.Text type="secondary" data-testid="unattributed-share">
+              <Typography.Text
+                type="secondary"
+                data-testid="unattributed-share"
+                style={{ maxWidth: 220, textAlign: 'end' }}
+              >
                 {t('campaign.stats.unattributed.share', { share })}
               </Typography.Text>
             </Flex>

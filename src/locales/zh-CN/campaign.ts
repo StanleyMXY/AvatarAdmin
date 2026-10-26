@@ -158,7 +158,7 @@ const messages: Record<string, string> = {
     '一个对象数组，或者每行一个对象。键为 campaignCode、statDate、amount、currency、remark。',
   'campaign.batch.json.label': 'JSON 内容',
   'campaign.batch.json.placeholder':
-    '[{"campaignCode": "spring_th", "statDate": "2026-10-20", "amount": 12.5, "currency": "USD", "remark": ""}]',
+    '[\'{\'"campaignCode": "spring_th", "statDate": "2026-10-20", "amount": 12.5, "currency": "USD", "remark": ""\'}\']',
   'campaign.batch.csv.help': '一个 .csv 文件，逗号分隔，表头为：',
   'campaign.batch.csv.choose': '选择 .csv 文件',
   'campaign.batch.csv.template': '下载模板',

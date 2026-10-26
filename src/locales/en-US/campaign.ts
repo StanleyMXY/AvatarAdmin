@@ -170,7 +170,7 @@ const messages: Record<string, string> = {
     'An array of objects, or one object on each line. The keys are campaignCode, statDate, amount, currency and remark.',
   'campaign.batch.json.label': 'Rows as JSON',
   'campaign.batch.json.placeholder':
-    '[{"campaignCode": "spring_th", "statDate": "2026-10-20", "amount": 12.5, "currency": "USD", "remark": ""}]',
+    '[\'{\'"campaignCode": "spring_th", "statDate": "2026-10-20", "amount": 12.5, "currency": "USD", "remark": ""\'}\']',
   'campaign.batch.csv.help': 'A .csv file with this header, comma separated:',
   'campaign.batch.csv.choose': 'Choose a .csv file',
   'campaign.batch.csv.template': 'Download the template',
