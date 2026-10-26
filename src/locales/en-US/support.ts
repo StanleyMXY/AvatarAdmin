@@ -1,3 +1,40 @@
-const messages: Record<string, string> = {};
+const messages: Record<string, string> = {
+  'menu.support.feedback': 'Feedback',
+
+  'support.col.id': 'ID',
+  'support.col.category': 'Category',
+  'support.col.account': 'Account ID',
+  'support.col.message': 'Message',
+  'support.col.status': 'Forwarding',
+  'support.col.forwardRef': 'Forward reference',
+  'support.col.attempts': 'Failures',
+  'support.col.createdAt': 'Created',
+  'support.col.actions': 'Actions',
+  'support.category.BUG': 'Bug',
+  'support.category.QUESTION': 'Question',
+  'support.category.SUGGESTION': 'Suggestion',
+  'support.category.OTHER': 'Other',
+  'support.status.PENDING': 'Pending',
+  'support.status.FORWARDED': 'Forwarded',
+  'support.status.FAILED': 'Failed',
+  'support.detail': 'Details',
+  'support.drawerTitle': 'Feedback {id}',
+  'support.retry': 'Retry',
+  'support.retryConfirm':
+    'Forward this feedback again? The failure count is reset and it goes back to pending.',
+  'support.retried': 'Queued to be forwarded again',
+  'support.field.message': 'Message',
+  'support.field.nextAttemptAt': 'Next attempt',
+  'support.field.lastError': 'Last error',
+  'support.context': 'Sent with the feedback',
+  'support.context.appVersion': 'App version',
+  'support.context.osVersion': 'System version',
+  'support.context.deviceModel': 'Device model',
+  'support.context.locale': 'Language',
+  'support.context.recentErrors': 'Recent errors',
+  'support.context.none': 'Not sent',
+  'support.note':
+    'This page only shows feedback and forwards it again; replies to users are made in the support tool.',
+};
 
 export default messages;
