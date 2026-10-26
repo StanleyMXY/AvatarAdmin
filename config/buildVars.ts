@@ -1,7 +1,7 @@
 /**
  * Build-time variables. Read from the process environment (Umi loads `.env` and `.env.local`
  * before this file is evaluated). They are injected into the bundle through `define` in
- * `config.ts`, so application code reads them as plain globals declared in `src/typings.d.ts`.
+ * `config.ts`, so application code reads them through `src/buildVars.ts`, the only file that names the globals.
  *
  * Defaults follow the design spec (section 7 and section 11). Nothing here is a secret.
  */

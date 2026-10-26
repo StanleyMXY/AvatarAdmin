@@ -1,11 +1,11 @@
 // The scanners behind tests/noHardcodedText.test.ts.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
 
 export type Finding = { file: string; line: number; text: string };
 
-/** Props whose value is shown to a person. */
+/** Names whose value is shown to a person, as a JSX prop or as the key of an object (table columns, options, menu items, dialogs). */
 const TEXT_PROPS = new Set([
   'title',
   'label',
@@ -24,20 +24,52 @@ const TEXT_PROPS = new Set([
   'help',
   'emptyText',
   'tip',
+  'subTitle',
+  'addonBefore',
+  'addonAfter',
+  'prefix',
+  'suffix',
+  'checkedChildren',
+  'unCheckedChildren',
+  'defaultMessage',
 ]);
+
+/** Calls whose string arguments are shown to a person: `message.error('...')`, `Modal.confirm(...)`. */
+const TEXT_CALL_OBJECTS = new Set(['message', 'notification']);
 
 /** A letter of any script (Latin, Thai, Arabic, CJK, ...): symbols, digits and punctuation alone are not text. */
 const hasLetter = (s: string) => /\p{L}/u.test(s);
 
-function stringLiterals(node: ts.Node): ts.StringLiteralLike[] {
-  if (ts.isStringLiteralLike(node)) return [node];
-  if (ts.isParenthesizedExpression(node)) return stringLiterals(node.expression);
+type Literal = { node: ts.Node; text: string };
+
+/** The string literals an expression can show: both sides of a condition, the text parts of a template, through `as`, parentheses and String(...). */
+function literalsOf(node: ts.Node): Literal[] {
+  if (ts.isStringLiteralLike(node)) return [{ node, text: node.text }];
+  if (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isTypeAssertionExpression(node) ||
+    ts.isSatisfiesExpression(node)
+  ) {
+    return literalsOf(node.expression);
+  }
   if (ts.isConditionalExpression(node))
-    return [...stringLiterals(node.whenTrue), ...stringLiterals(node.whenFalse)];
-  if (ts.isBinaryExpression(node))
-    return [...stringLiterals(node.left), ...stringLiterals(node.right)];
-  if (ts.isTemplateExpression(node))
-    return [ts.factory.createStringLiteral(node.head.text) as ts.StringLiteralLike];
+    return [...literalsOf(node.whenTrue), ...literalsOf(node.whenFalse)];
+  if (ts.isBinaryExpression(node)) return [...literalsOf(node.left), ...literalsOf(node.right)];
+  if (ts.isTemplateExpression(node)) {
+    return [
+      { node: node.head, text: node.head.text },
+      ...node.templateSpans.map((span) => ({ node: span.literal, text: span.literal.text })),
+    ];
+  }
+  if (
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === 'String'
+  ) {
+    return node.arguments.flatMap(literalsOf);
+  }
   return [];
 }
 
@@ -51,17 +83,19 @@ export function scanSource(fileName: string, text: string): Finding[] {
     ts.ScriptKind.TSX,
   );
   const findings: Finding[] = [];
-  const report = (node: ts.Node, value: string) => {
-    const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
-    findings.push({ file: fileName, line: line + 1, text: value.trim() });
+  const check = (literals: Literal[]) => {
+    for (const { node, text: value } of literals) {
+      if (!hasLetter(value)) continue;
+      const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+      findings.push({ file: fileName, line: line + 1, text: value.trim() });
+    }
   };
-  const check = (node: ts.Node, value: string) => {
-    if (hasLetter(value)) report(node, value);
-  };
+  const nameOf = (name: ts.PropertyName) =>
+    ts.isIdentifier(name) || ts.isStringLiteralLike(name) ? name.text : undefined;
 
   const visit = (node: ts.Node) => {
     if (ts.isJsxText(node)) {
-      check(node, node.text);
+      check([{ node, text: node.text }]);
     } else if (
       ts.isJsxAttribute(node) &&
       TEXT_PROPS.has(node.name.getText(source)) &&
@@ -69,17 +103,24 @@ export function scanSource(fileName: string, text: string): Finding[] {
     ) {
       const init = node.initializer;
       const expression = ts.isJsxExpression(init) ? init.expression : init;
-      if (expression)
-        for (const literal of stringLiterals(expression)) check(literal, literal.text);
+      if (expression) check(literalsOf(expression));
     } else if (
       ts.isJsxExpression(node) &&
       node.parent &&
       (ts.isJsxElement(node.parent) || ts.isJsxFragment(node.parent)) &&
       node.expression
     ) {
-      for (const literal of stringLiterals(node.expression)) check(literal, literal.text);
-    } else if (ts.isPropertyAssignment(node) && node.name.getText(source) === 'defaultMessage') {
-      for (const literal of stringLiterals(node.initializer)) check(literal, literal.text);
+      check(literalsOf(node.expression));
+    } else if (ts.isPropertyAssignment(node)) {
+      const key = nameOf(node.name);
+      if (key !== undefined && TEXT_PROPS.has(key)) check(literalsOf(node.initializer));
+    } else if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      TEXT_CALL_OBJECTS.has(node.expression.expression.text)
+    ) {
+      check(node.arguments.flatMap(literalsOf));
     }
     ts.forEachChild(node, visit);
   };
@@ -109,14 +150,28 @@ export function repoFiles(): string[] {
     maxBuffer: 64 * 1024 * 1024,
   })
     .split('\n')
-    .filter(Boolean);
+    .filter((file) => file !== '' && existsSync(file));
 }
 
 const TEXT_EXTENSIONS =
   /\.(ts|tsx|js|jsx|mjs|cjs|json|md|css|less|svg|html|yml|yaml|txt|example|hbs)$/;
 
-export const isTextFile = (file: string) =>
-  TEXT_EXTENSIONS.test(file) && !file.endsWith('package-lock.json');
+/** Source and text files, and the dot files (.npmrc, .lintstagedrc, .husky/*) that have no extension. */
+export const isTextFile = (file: string) => {
+  if (file.endsWith('package-lock.json')) return false;
+  const name = file.slice(file.lastIndexOf('/') + 1);
+  return TEXT_EXTENSIONS.test(file) || name.startsWith('.') || file.startsWith('.husky/');
+};
+
+const ALLOW_FILE = 'tests/noHardcodedText.allow.json';
+const MODULE_ALLOW_FILE = /(^|\/)hardcodedText\.allow\.json$/;
+
+/** The allow list: the shared file and, for module tasks, a `hardcodedText.allow.json` next to their own pages. */
+export function readAllowList(files: string[]): AllowEntry[] {
+  return files
+    .filter((file) => file === ALLOW_FILE || MODULE_ALLOW_FILE.test(file))
+    .flatMap((file) => JSON.parse(readFileSync(file, 'utf8')) as AllowEntry[]);
+}
 
 export const readText = (file: string): string | undefined => {
   try {

@@ -44,14 +44,14 @@ describe('countCodePoints', () => {
 describe('lengthWithin', () => {
   it('trims with the contract definition before counting', () => {
     expect(lengthWithin(' a ', 1, 1)).toBe(true);
-    expect(lengthWithin('　a\u0085', 1, 1)).toBe(true);
+    expect(lengthWithin('\u3000a\u0085', 1, 1)).toBe(true);
     // The zero-width space is not whitespace, so it counts.
     expect(lengthWithin('\u200Ba', 1, 1)).toBe(false);
   });
 
   it('gives length 0 to an all-whitespace string', () => {
-    expect(lengthWithin('   \t　', 1, 10)).toBe(false);
-    expect(lengthWithin('   \t　', 0, 10)).toBe(true);
+    expect(lengthWithin('   \t\u3000', 1, 10)).toBe(false);
+    expect(lengthWithin('   \t\u3000', 0, 10)).toBe(true);
   });
 
   it('accepts both bounds and rejects one past either', () => {

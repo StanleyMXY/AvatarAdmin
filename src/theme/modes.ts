@@ -1,4 +1,5 @@
 import { theme as antdTheme, type ThemeConfig } from 'antd';
+import type { MappingAlgorithm } from 'antd/es/theme/interface';
 import { useSyncExternalStore } from 'react';
 import { pickOnPrimary } from './contrast';
 import { FONT_FAMILY, LAYOUT, PRIMARY, RADIUS } from './tokens';
@@ -78,10 +79,16 @@ export function getModeTokens(mode: ThemeMode): ModeTokens {
   };
 }
 
+/** The dark algorithm moves the primary colour (#0ABAB5 becomes #0CA19D); this puts the seed back. */
+const keepPrimary: MappingAlgorithm = (seed, mapToken) => ({
+  ...(mapToken ?? antdTheme.defaultAlgorithm(seed)),
+  colorPrimary: seed.colorPrimary,
+});
+
 /** The Ant Design theme of a mode. Changing it re-themes the page in place; nothing reloads. */
 export function toAntdTheme(tokens: ModeTokens): ThemeConfig {
   return {
-    algorithm: tokens.isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+    algorithm: tokens.isDark ? [antdTheme.darkAlgorithm, keepPrimary] : antdTheme.defaultAlgorithm,
     token: {
       colorPrimary: tokens.colorPrimary,
       colorPrimaryHover: tokens.colorPrimaryHover,

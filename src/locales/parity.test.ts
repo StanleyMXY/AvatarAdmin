@@ -1,5 +1,6 @@
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { flattenPages } from '../../config/assembleRoutes';
 import { MENUS } from '../../config/menus';
 import routes from '../../config/routes';
 import type { AdminRoute } from '../access/canAccess';
@@ -52,6 +53,14 @@ describe('the two aggregate language objects', () => {
     expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort());
   });
 
+  it('keep Chinese characters out of the English texts, except the language names', () => {
+    const cjk = /[\u3400-\u9fff\uf900-\ufaff]/;
+    const allowed = new Set(['pages.lang.zhCN']);
+    for (const [key, text] of Object.entries(en)) {
+      if (!allowed.has(key)) expect(text, key).not.toMatch(cjk);
+    }
+  });
+
   it('have no empty text', () => {
     for (const dict of [zh, en]) {
       for (const [key, text] of Object.entries(dict)) expect(text.trim(), key).not.toBe('');
@@ -99,6 +108,16 @@ describe('the files behind them', () => {
     },
   );
 
+  it.each(LANGUAGES)(
+    '%s: the folder holds exactly the files in the list, so none is left out',
+    (language) => {
+      const files = readdirSync(join(process.cwd(), 'src/locales', language))
+        .filter((file) => /\.ts$/.test(file) && !/\.test\.ts$/.test(file))
+        .map((file) => file.replace(/\.ts$/, ''));
+      expect(files.sort()).toEqual([...MODULES, ...SHARED].sort());
+    },
+  );
+
   it('both languages have the same file keys, file by file', async () => {
     for (const name of [...MODULES, ...SHARED]) {
       expect(Object.keys(await load('zh-CN', name)).sort(), name).toEqual(
@@ -128,7 +147,6 @@ describe('what the shell needs to be there', () => {
       }
     };
     visit(routes, []);
-    expect(flattenPages(routes)).toBeDefined();
   });
 
   it('has permission.<code> for every permission code, in both languages', () => {

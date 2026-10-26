@@ -161,6 +161,23 @@ describe('TabManager: opening tabs', () => {
     expect(tabLabels()).toEqual(['Overview']);
   });
 
+  it('drops an open tab when the permission for its page is taken away', () => {
+    const ui = render(<Shell />);
+    visit('/users/list', ui);
+    visit('/system/audit', ui);
+    expect(tabLabels()).toEqual(['Overview', 'User list', 'Audit log']);
+    const withoutAudit = (code?: string) => code !== 'AUDIT:VIEW';
+    ui.rerender(<Shell can={withoutAudit} />);
+    expect(tabLabels()).toEqual(['Overview', 'User list']);
+  });
+
+  it('treats an address with a trailing slash as the same page', () => {
+    const ui = render(<Shell />);
+    visit('/users/list', ui);
+    visit('/users/list/', ui);
+    expect(tabLabels()).toEqual(['Overview', 'User list']);
+  });
+
   it('shows the page that is open (the children)', () => {
     render(<Shell />);
     expect(screen.getByTestId('probe')).toBeInTheDocument();

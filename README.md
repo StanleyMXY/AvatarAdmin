@@ -57,7 +57,7 @@ Each module's mock file exports `{ 'METHOD /api/admin/path': handler }`; wrap ha
 ## Build variables
 
 Set in the environment or in `.env.local` (git-ignored; copy `.env.example`). They are injected at
-build time by `config/buildVars.ts` and declared in `src/typings.d.ts`. Invalid values (a
+build time by `config/buildVars.ts` and read through `src/buildVars.ts`. Invalid values (a
 non-hex color, a logo that is not a same-origin path, a threshold outside 0..1) fail the build.
 There are no secrets in this repository.
 

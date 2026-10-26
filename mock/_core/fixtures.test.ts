@@ -17,7 +17,7 @@ describe('multilingualSamples', () => {
 
   it('really is in those scripts', () => {
     expect(multilingualSamples.th.join('')).toMatch(/[฀-๿]/);
-    expect(multilingualSamples.ar.join('')).toMatch(/[؀-ۿ]/);
+    expect(multilingualSamples.ar.join('')).toMatch(/[\u0600-\u06FF]/);
     expect(multilingualSamples.zh.join('')).toMatch(/[一-鿿]/);
     expect(multilingualSamples.vi.join('')).toMatch(/[ạảãàáâậầấẩẫăắằặẳẵ]/);
     expect(multilingualSamples.es.join('')).toMatch(/[¿¡ñáéíóú]/);

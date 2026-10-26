@@ -123,6 +123,19 @@ describe('HeaderDropdown', () => {
     expect(onLogout).toHaveBeenCalledTimes(1);
   });
 
+  it('opens from a focusable button named by the user name, so the keyboard reaches it', async () => {
+    render(
+      wrap(<HeaderDropdown username="ploy" onChangePassword={() => {}} onLogout={() => {}} />),
+    );
+    const trigger = screen.getByRole('button', { name: /ploy/ });
+    expect(trigger.tagName).toBe('BUTTON');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
+  });
+
   it('shows the user name next to the avatar', () => {
     render(
       wrap(<HeaderDropdown username="ploy" onChangePassword={() => {}} onLogout={() => {}} />),

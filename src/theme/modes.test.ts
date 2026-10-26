@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
+import { theme as antdTheme } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { contrastRatio, pickOnPrimary } from './contrast';
 import {
@@ -107,6 +108,17 @@ describe('toAntdTheme', () => {
       borderRadius: 12,
       fontSize: 14,
     });
+  });
+
+  it.each(THEME_MODES)('renders the spec primary colours in %s mode', (mode) => {
+    const cfg = toAntdTheme(getModeTokens(mode));
+    const resolved = antdTheme.getDesignToken(cfg);
+    expect(resolved.colorPrimary.toUpperCase()).toBe('#0ABAB5');
+    expect(resolved.colorPrimaryHover.toUpperCase()).toBe('#3DCBC7');
+    expect(resolved.colorPrimaryActive.toUpperCase()).toBe('#089A96');
+    expect(
+      contrastRatio(getModeTokens(mode).colorTextOnPrimary, resolved.colorPrimary),
+    ).toBeGreaterThanOrEqual(4.5);
   });
 
   it('puts the solid-primary text colour on the primary button', () => {

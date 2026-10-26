@@ -5,6 +5,7 @@ import {
   applyAllowList,
   type Finding,
   type PatternRule,
+  readAllowList,
   repoFiles,
   scanPatterns,
   scanSource,
@@ -58,6 +59,69 @@ describe('scanSource: text in .tsx that does not come from a language file', () 
     expect(scan(`const messages = { 'a.b': 'Hello' }; const x = 'Hello world';`)).toEqual([]);
   });
 
+  it('does not crash on a template with a part that is computed, and finds the text around it', () => {
+    // Written without a literal placeholder so that the linter does not take the fixtures for mistakes.
+    const n = '$' + '{n}';
+    const id = '$' + '{id}';
+    const tpl = (inner: string) => `\`${inner}\``;
+    expect(
+      scan(`export const A = () => <b>{${tpl(`Total ${n}`)}}</b>;`).map((f) => f.text),
+    ).toEqual(['Total']);
+    expect(
+      scan(`export const A = () => <Tag title={${tpl(`Selected ${n}`)}} />;`).map((f) => f.text),
+    ).toEqual(['Selected']);
+    expect(
+      scan(`export const A = () => <b>{${tpl(`${n} items`)}}</b>;`).map((f) => f.text),
+    ).toEqual(['items']);
+    expect(
+      scan(`export const A = () => <b title={${tpl(`user-${id}`)}} />;`).map((f) => f.text),
+    ).toEqual(['user-']);
+    expect(scan(`export const A = () => <b title={${tpl(`${n}%`)}} />;`)).toEqual([]);
+  });
+
+  it('finds text in the objects that build a table, a menu, a dialog or a form', () => {
+    const code = [
+      "export const columns = [{ title: 'Name', dataIndex: 'name' }];",
+      "export const options = [{ label: 'Yes', value: 1 }];",
+      "export const items = [{ key: 'a', label: '保存' }];",
+      "export const valueEnum = { a: { text: 'Active' } };",
+      "export const A = () => { Modal.confirm({ title: 'Delete?', content: 'Are you sure' }); return null; };",
+    ].join('\n');
+    expect(
+      scan(code)
+        .map((f) => f.text)
+        .sort(),
+    ).toEqual(['Active', 'Are you sure', 'Delete?', 'Name', 'Yes', '保存'].sort());
+  });
+
+  it('finds the text given to message and notification calls', () => {
+    const code =
+      "export const A = () => { message.error('Save failed'); notification.open({ message: 'Done', description: 'All saved' }); return null; };";
+    expect(
+      scan(code)
+        .map((f) => f.text)
+        .sort(),
+    ).toEqual(['All saved', 'Done', 'Save failed']);
+  });
+
+  it('finds text in the props of inputs and switches, and through String(), as and parentheses', () => {
+    const code =
+      "export const A = () => <><Input addonBefore=\"Price\" suffix={'kg'} /><Switch checkedChildren=\"On\" unCheckedChildren={('Off' as string)} /><Card subTitle={String('Hello')} /></>;";
+    expect(
+      scan(code)
+        .map((f) => f.text)
+        .sort(),
+    ).toEqual(['Hello', 'Off', 'On', 'Price', 'kg'].sort());
+  });
+
+  it('does not take other keys of an object for text', () => {
+    expect(
+      scan(
+        "export const x = { key: 'name', dataIndex: 'name', value: 'active', type: 'primary' };",
+      ),
+    ).toEqual([]);
+  });
+
   it('passes text that is only an expression', () => {
     expect(scan('export const A = () => <div>{name}</div>;')).toEqual([]);
   });
@@ -80,9 +144,7 @@ describe('applyAllowList', () => {
 
 describe('the repository today', () => {
   const files = repoFiles();
-  const allow = JSON.parse(
-    readFileSync('tests/noHardcodedText.allow.json', 'utf8'),
-  ) as AllowEntry[];
+  const allow: AllowEntry[] = readAllowList(files);
 
   it('has a reason for every allowed text', () => {
     for (const entry of allow) {
@@ -113,7 +175,7 @@ const RULES: PatternRule[] = [
   {
     name: 'external address',
     pattern:
-      /https?:\/\/(?!localhost\b|127\.0\.0\.1\b|www\.w3\.org\/|example\.(?:com|org|net)\b)[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/,
+      /(?:https?|wss?):\/\/(?!localhost\b|127\.0\.0\.1\b|www\.w3\.org\/|example\.(?:com|org|net)\b)(?:[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}|\d{1,3}(?:\.\d{1,3}){3})/,
     skip: isTestSupport,
     skipLine: /"\$schema"/,
   },
@@ -123,8 +185,10 @@ const RULES: PatternRule[] = [
     skip: isDocs,
   },
   {
-    name: 'hidden or direction-control character',
-    pattern: /[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\u00ad]/,
+    name: 'hidden, direction-control or non-ASCII space character',
+    // Format characters (zero-width, direction marks, BOM, soft hyphen, Arabic number signs), line and
+    // paragraph separators, the Hangul filler, and every space other than the plain one.
+    pattern: /[\p{Cf}\u0085\u2028\u2029\u3164\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]/u,
     skip: isDocs,
   },
   {
@@ -165,6 +229,7 @@ describe('scanPatterns finds what it should (on a temporary fixture)', () => {
       `const d = '${'dra' + 'mabox'}';`,
       `const e = 'https://fonts.cd${'n'}.example.org/f.css';`,
       `const f = '${String.fromCharCode(0x200b)}';`,
+      `const h = '${String.fromCharCode(0x3000)}';`,
       `const g = '${String.fromCharCode(0xc548, 0xb155)}';`,
     ].join('\n');
     writeFileSync(file, bad);
@@ -187,5 +252,14 @@ describe('scanPatterns finds what it should (on a temporary fixture)', () => {
       expect(external.pattern.test(ok), ok).toBe(false);
     }
     expect(external.pattern.test(`https://cd${'n'}.jsdelivr.net/npm/x`)).toBe(true);
+    for (const bad of [
+      'http://10.0.0.5/x',
+      'ws://evil.io/socket',
+      'wss://203.0.113.9:8443',
+      'http://127.0.0.10/',
+    ]) {
+      expect(external.pattern.test(bad), bad).toBe(true);
+    }
+    expect(external.pattern.test('ws://localhost:8000/ws')).toBe(false);
   });
 });

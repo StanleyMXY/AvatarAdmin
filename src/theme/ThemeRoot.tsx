@@ -1,4 +1,4 @@
-import { ConfigProvider } from 'antd';
+import { App, ConfigProvider } from 'antd';
 import { type ReactNode, useEffect } from 'react';
 import { applyModeToDocument, getModeTokens, toAntdTheme, useThemeMode } from './modes';
 
@@ -6,5 +6,9 @@ import { applyModeToDocument, getModeTokens, toAntdTheme, useThemeMode } from '.
 export function ThemeRoot({ children }: { children: ReactNode }) {
   const [mode] = useThemeMode();
   useEffect(() => applyModeToDocument(mode), [mode]);
-  return <ConfigProvider theme={toAntdTheme(getModeTokens(mode))}>{children}</ConfigProvider>;
+  return (
+    <ConfigProvider theme={toAntdTheme(getModeTokens(mode))}>
+      <App component={false}>{children}</App>
+    </ConfigProvider>
+  );
 }

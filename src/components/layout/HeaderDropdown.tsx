@@ -31,12 +31,25 @@ export function HeaderDropdown({ username, onChangePassword, onLogout }: Props) 
         ],
       }}
     >
-      <Space style={{ cursor: 'pointer' }}>
-        <Avatar size="small" data-testid="header-avatar">
-          {initialOf(username)}
-        </Avatar>
-        <span>{username}</span>
-      </Space>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        style={{
+          cursor: 'pointer',
+          background: 'none',
+          border: 0,
+          padding: 0,
+          color: 'inherit',
+          font: 'inherit',
+        }}
+      >
+        <Space>
+          <Avatar size="small" data-testid="header-avatar">
+            {initialOf(username)}
+          </Avatar>
+          <span>{username}</span>
+        </Space>
+      </button>
     </Dropdown>
   );
 }

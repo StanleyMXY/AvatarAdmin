@@ -69,24 +69,24 @@ describe('trimSpec', () => {
   });
 
   it('only touches the ends, never the middle', () => {
-    expect(trimSpec(' a 　 b c ')).toBe('a 　 b c');
+    expect(trimSpec(' a \u3000 b\u00A0c ')).toBe('a \u3000 b\u00A0c');
     expect(trimSpec('a\tb')).toBe('a\tb');
   });
 
   it('turns an all-whitespace or empty string into the empty string', () => {
     expect(trimSpec('')).toBe('');
-    expect(trimSpec(' \t\n　\u0085')).toBe('');
+    expect(trimSpec(' \t\n\u3000\u0085')).toBe('');
   });
 
   it('keeps text in other scripts intact around the removed ends', () => {
-    expect(trimSpec('　ภาษาไทย ')).toBe('ภาษาไทย');
-    expect(trimSpec(' مرحبا بالعالم ')).toBe('مرحبا بالعالم');
+    expect(trimSpec('\u3000ภาษาไทย\u00A0')).toBe('ภาษาไทย');
+    expect(trimSpec(' مرحبا بالعالم\u2003')).toBe('مرحبا بالعالم');
     expect(trimSpec('\t😀\n')).toBe('😀');
     expect(trimSpec(' Xin chào ')).toBe('Xin chào');
   });
 
   it('is idempotent', () => {
-    const once = trimSpec('   hola \u0085');
+    const once = trimSpec(' \u2003 hola \u0085');
     expect(trimSpec(once)).toBe(once);
   });
 });
