@@ -74,7 +74,6 @@ const messages: Record<string, string> = {
   'moderation.content.audited': '查看会被记录：每次查看都会写进审计日志。',
   'moderation.content.noPermission': '无权查看内容：查看被审核的内容需要“内容审核：复核”权限。',
   'moderation.content.blocked': '自动拦截，未保存原文。',
-  'moderation.content.notStored': '原文已不存在，这条记录没有可看的内容。',
   'moderation.content.loading': '正在取内容…',
   'moderation.content.failed': '内容取不到：{message}',
   'moderation.content.reload': '重新取内容',
@@ -97,7 +96,6 @@ const messages: Record<string, string> = {
   'moderation.decision.confirmReject': '确认拒绝',
   'moderation.decision.approved': '已通过',
   'moderation.decision.rejected': '已拒绝',
-  'moderation.decision.stale': '这条记录已经被处理，页面已刷新。',
 
   'moderation.effect.AVATAR.APPROVE': '上传任务继续生成形象。',
   'moderation.effect.AVATAR.REJECT': '上传任务失败（内容被拒绝），并删除用户的原照。',
@@ -161,7 +159,6 @@ const messages: Record<string, string> = {
   'moderation.rules.params': '参数',
   'moderation.rules.paramsNote': '审核的其他参数。规则词表本身在上面的表里编辑。',
 
-  'moderation.stats.range': '日期范围',
   'moderation.stats.created': '新增',
   'moderation.stats.approved': '通过',
   'moderation.stats.rejected': '拒绝',
