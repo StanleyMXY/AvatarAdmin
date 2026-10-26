@@ -65,6 +65,7 @@ export default function PlacementsPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [editing, setEditing] = useState<AdPlacement | null>(null);
+  const [settingsVersion, setSettingsVersion] = useState(0);
   const { data, failure, loading, reload } = useRead(listPlacements);
 
   const columns: ColumnsType<AdPlacement> = [
@@ -183,8 +184,11 @@ export default function PlacementsPage() {
       />
       <Card size="small" title={t('ads.placements.globalTitle')}>
         <Flex vertical gap={12}>
-          <AdsWarnings placements={data} />
-          <ConfigForm editPermission="ADS:PLACEMENT" />
+          <AdsWarnings placements={data} version={settingsVersion} />
+          <ConfigForm
+            editPermission="ADS:PLACEMENT"
+            onChanged={() => setSettingsVersion((v) => v + 1)}
+          />
         </Flex>
       </Card>
       <Card size="small" title={t('ads.placements.tableTitle')}>

@@ -174,6 +174,25 @@ describe('the warnings that stay on the page', { timeout: 30000 }, () => {
     expect(box.textContent).toMatch(/Google Play/);
   });
 
+  it('takes the warning away, and puts it there, as soon as the setting is saved (no page reload)', async () => {
+    setConfig('ads.skip_after_seconds', 8);
+    const { user } = await load();
+    await screen.findByTestId('ads-placements-warnings');
+    const row = await screen.findByTestId('config-row-ads.skip_after_seconds');
+    const input = within(row).getByRole('spinbutton');
+    await user.clear(input);
+    await user.type(input, '5');
+    await user.click(within(row).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(warnings()).toBeNull());
+    expect(saved.get('ads.skip_after_seconds')?.value).toBe(5);
+    const rowAgain = () => within(screen.getByTestId('config-row-ads.skip_after_seconds'));
+    await waitFor(() => expect(rowAgain().getByRole('spinbutton')).toHaveValue('5'));
+    await user.clear(rowAgain().getByRole('spinbutton'));
+    await user.type(rowAgain().getByRole('spinbutton'), '9');
+    await user.click(rowAgain().getByRole('button', { name: /Save/ }));
+    expect(await screen.findByTestId('ads-placements-warnings')).toBeInTheDocument();
+  });
+
   it('warns about the force-close of 0 and says how many creatives without a skip there are on the full-screen placements', async () => {
     setConfig('ads.force_close_seconds', 0);
     await load();

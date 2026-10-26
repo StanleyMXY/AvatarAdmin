@@ -36,13 +36,21 @@ type Found = { skipAfter: number | null; forceClose: number | null; notSkippable
  * `warnings` of a save, which the row of the setting shows. The count needs the creatives, so an
  * administrator without ADS:CREATIVE gets the warning without it.
  */
-export function AdsWarnings({ placements }: { placements: AdPlacement[] | null }) {
+export function AdsWarnings({
+  placements,
+  version = 0,
+}: {
+  placements: AdPlacement[] | null;
+  /** Changes when a setting was saved: the values are read again. */
+  version?: number;
+}) {
   const intl = useIntl();
   const access = useAccess() as unknown as { canAccess: (code?: string) => boolean };
   const canReadCreatives = access.canAccess('ADS:CREATIVE');
   const [found, setFound] = useState<Found | null>(null);
   const counter = useRef(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `version` only asks for a new read of the settings
   useEffect(() => {
     if (placements === null) return;
     const mine = ++counter.current;
@@ -67,7 +75,7 @@ export function AdsWarnings({ placements }: { placements: AdPlacement[] | null }
     return () => {
       counter.current += 1;
     };
-  }, [placements, canReadCreatives]);
+  }, [placements, canReadCreatives, version]);
 
   if (found === null) return null;
   const t = (id: string, values?: Record<string, string | number>) =>

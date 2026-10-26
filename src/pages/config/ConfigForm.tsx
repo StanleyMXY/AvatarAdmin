@@ -14,6 +14,8 @@ type Props = {
   prefixes?: string[];
   /** Every key edited with this permission. The three filters are joined (a key matching any is shown). */
   editPermission?: PermissionCode;
+  /** Called after a value was saved or reset, so a page can refresh what depends on it. */
+  onChanged?: () => void;
 };
 
 const matches = (item: ConfigItem, { keys, prefixes, editPermission }: Props): boolean => {
@@ -121,7 +123,10 @@ export function ConfigForm(props: Props) {
               key={item.key}
               spec={specOf(item.key) as NonNullable<ReturnType<typeof specOf>>}
               item={item}
-              onChanged={() => void load()}
+              onChanged={() => {
+                void load();
+                props.onChanged?.();
+              }}
             />
           ))}
         </Card>
