@@ -40,10 +40,11 @@ function rejectLocked(admin: MockAdmin, now = Date.now()): void {
 }
 
 /** Counts a wrong code; the fifth in a row locks the user name for a while (contract 17.2). */
-function wrongCode(admin: MockAdmin, now = Date.now()): never {
+function wrongCode(admin: MockAdmin, now = Date.now(), enrollToken?: string): never {
   admin.totpFailures += 1;
   if (admin.totpFailures >= TOTP_MAX_FAILURES) {
     admin.totpFailures = 0;
+    if (enrollToken) store.enrollTokens.delete(enrollToken); // too many wrong codes: the enrollment token is void
     admin.lockedUntil = now + TOTP_LOCKOUT_MINUTES * 60 * 1000;
     rejectLocked(admin, now);
   }
@@ -99,7 +100,8 @@ export default {
       return fail(401, 'ADMIN_INVALID_TOKEN', 'The enrollment token is invalid or expired');
     }
     rejectLocked(admin);
-    if (text(body.totp) !== FAKE_TOTP_CODE) return wrongCode(admin);
+    if (text(body.totp) !== FAKE_TOTP_CODE)
+      return wrongCode(admin, Date.now(), text(body.enrollToken));
     store.enrollTokens.delete(text(body.enrollToken));
     admin.totpEnrolled = true;
     admin.totpFailures = 0;

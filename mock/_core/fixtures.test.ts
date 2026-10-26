@@ -32,7 +32,7 @@ describe('multilingualSamples', () => {
 
   it('contains no Korean', () => {
     const text = JSON.stringify(multilingualSamples);
-    expect(text).not.toMatch(/[ᄀ-ᇿ㄰-㆏가-힯]/);
+    expect(text).not.toMatch(/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/);
   });
 });
 

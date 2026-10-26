@@ -14,6 +14,7 @@
     "check:routes": "tsx scripts/check-route-inventory.ts",
     "check:codes": "tsx scripts/check-permission-codes.ts",
     "check:config-keys": "tsx scripts/check-config-keys.ts",
+    "gen:permission-tree": "tsx scripts/gen-permission-tree.ts",
     "postinstall": "max setup",
     "prepare": "husky"
   },

@@ -7,6 +7,7 @@ import {
   PASSWORD_MIN_LENGTH,
   resetStore,
   store,
+  TOTP_LOCKOUT_MINUTES,
   TOTP_MAX_FAILURES,
 } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
@@ -369,6 +370,25 @@ describe('GET /meta', () => {
   it('carries the defaults of contract 17.5 and the fixed upload limits of backend reply 3', async () => {
     const { body } = await meta(await signIn('finance'));
     expect(body.data).toEqual(META_DEFAULTS);
+    // The twelve values typed in again from contract 17.5, so the table above cannot agree with itself by accident.
+    expect(body.data).toMatchObject({
+      supportedLocales: ['en'],
+      landIntervalMinutes: 15,
+      allowedCurrencies: ['USD'],
+      deletionAlertAfterFailures: 5,
+      inviteChainMaxDepth: 5,
+      maxRecipients: 1000,
+      pushImageMaxBytes: 1048576,
+      statsMaxRangeDays: 366,
+      analyticsLiveMaxRangeDays: 31,
+      abuseClusterMinFreeAccounts: 5,
+      attributionClickRetentionDays: 30,
+      declarationRequired: true,
+      uploadMaxBytes: 209715200,
+      adMediaMaxBytes: 52428800,
+      apkMaxBytes: 104857600,
+      renderAssetMaxBytes: 104857600,
+    });
     expect(body.data).toMatchObject({
       supportedLocales: ['en'],
       allowedCurrencies: ['USD'],
@@ -436,5 +456,149 @@ describe('GET /permissions', () => {
     expect((await tree(token)).status).toBe(200);
     admin.permissions = ['PERMISSION:MANAGE'];
     expect((await tree(token)).status).toBe(200);
+  });
+});
+
+describe('the order of the checks in login (contract 17.2: the password first, whether or not the user exists)', () => {
+  it('does not ask for a verification code when the password is wrong', async () => {
+    const { body } = await login({ username: 'root', password: 'wrong-wrong-wrong' });
+    expect(body.code).toBe('ADMIN_INVALID_CREDENTIALS');
+    expect(
+      (await login({ username: 'root', password: 'wrong-wrong-wrong', totp: '' })).body.code,
+    ).toBe('ADMIN_INVALID_CREDENTIALS');
+  });
+
+  it('does not say whether the code was right when the password is wrong', async () => {
+    const { body } = await login({
+      username: 'root',
+      password: 'wrong-wrong-wrong',
+      totp: FAKE_TOTP_CODE,
+    });
+    expect(body.code).toBe('ADMIN_INVALID_CREDENTIALS');
+  });
+});
+
+describe('the lock after wrong codes', () => {
+  const wrong = () => login({ username: 'root', password: mockPassword('root'), totp: '111111' });
+  const lock = async () => {
+    for (let i = 0; i < TOTP_MAX_FAILURES; i++) await wrong();
+  };
+
+  it('lasts 5 minutes: retryAfterSeconds is about 300', async () => {
+    expect(TOTP_LOCKOUT_MINUTES).toBe(5);
+    expect(TOTP_MAX_FAILURES).toBe(5);
+    await lock();
+    const { body } = await login({
+      username: 'root',
+      password: mockPassword('root'),
+      totp: FAKE_TOTP_CODE,
+    });
+    expect(body.data.retryAfterSeconds).toBeGreaterThan(290);
+    expect(body.data.retryAfterSeconds).toBeLessThanOrEqual(300);
+  });
+
+  it('ends: after the time has passed the right code signs in', async () => {
+    await lock();
+    adminOf('root').lockedUntil = Date.now() - 1;
+    expect(
+      (await login({ username: 'root', password: mockPassword('root'), totp: FAKE_TOTP_CODE }))
+        .status,
+    ).toBe(200);
+  });
+
+  it('locks by user name, not for everyone', async () => {
+    await lock();
+    expect(
+      (
+        await login({
+          username: 'support',
+          password: mockPassword('support'),
+          totp: FAKE_TOTP_CODE,
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it('also stops enrollment, and a lock reached while enrolling voids the enrollment token', async () => {
+    const enrollToken = (await login({ username: 'fresh', password: mockPassword('fresh') })).body
+      .data.enrollToken as string;
+    for (let i = 1; i < TOTP_MAX_FAILURES; i++) {
+      expect((await enroll({ enrollToken, totp: '111111' })).body.code).toBe('ADMIN_TOTP_INVALID');
+    }
+    const last = await enroll({ enrollToken, totp: '111111' });
+    expect([last.status, last.body.code]).toEqual([429, 'RATE_LIMITED']);
+    adminOf('fresh').lockedUntil = 0;
+    const afterwards = await enroll({ enrollToken, totp: FAKE_TOTP_CODE });
+    expect([afterwards.status, afterwards.body.code]).toEqual([401, 'ADMIN_INVALID_TOKEN']);
+  });
+
+  it('refuses enrollment with the right code while the user name is locked', async () => {
+    const enrollToken = (await login({ username: 'fresh', password: mockPassword('fresh') })).body
+      .data.enrollToken as string;
+    adminOf('fresh').lockedUntil = Date.now() + 60_000;
+    expect((await enroll({ enrollToken, totp: FAKE_TOTP_CODE })).status).toBe(429);
+  });
+
+  it('a right code on enrollment resets the count of wrong ones', async () => {
+    const start = async () =>
+      (await login({ username: 'fresh', password: mockPassword('fresh') })).body.data
+        .enrollToken as string;
+    const first = await start();
+    for (let i = 1; i < TOTP_MAX_FAILURES; i++)
+      await enroll({ enrollToken: first, totp: '111111' });
+    expect(adminOf('fresh').totpFailures).toBe(TOTP_MAX_FAILURES - 1);
+    await enroll({ enrollToken: first, totp: FAKE_TOTP_CODE });
+    expect(adminOf('fresh').totpFailures).toBe(0);
+  });
+});
+
+describe('enrollment tokens', () => {
+  it('are valid for 10 minutes', async () => {
+    const enrollToken = (await login({ username: 'fresh', password: mockPassword('fresh') })).body
+      .data.enrollToken as string;
+    const left =
+      (store.enrollTokens.get(enrollToken) as { expiresAt: number }).expiresAt - Date.now();
+    expect(left).toBeGreaterThan(9 * 60 * 1000);
+    expect(left).toBeLessThanOrEqual(10 * 60 * 1000);
+  });
+
+  it('do not work for an administrator who has been disabled since', async () => {
+    const enrollToken = (await login({ username: 'fresh', password: mockPassword('fresh') })).body
+      .data.enrollToken as string;
+    adminOf('fresh').status = 'DISABLED';
+    expect((await enroll({ enrollToken, totp: FAKE_TOTP_CODE })).body.code).toBe(
+      'ADMIN_INVALID_TOKEN',
+    );
+  });
+});
+
+describe('change-password rules that the preset names cannot reach', () => {
+  it('refuses a new password equal to the user name', async () => {
+    const admin = adminOf('support');
+    admin.username = 'a-really-long-user-name';
+    const token = (
+      await login({ username: admin.username, password: admin.password, totp: FAKE_TOTP_CODE })
+    ).body.data.token as string;
+    const { status, body } = await changePassword(token, {
+      oldPassword: admin.password,
+      newPassword: admin.username,
+    });
+    expect([status, body.code]).toEqual([400, 'INVALID_REQUEST']);
+    expect(body.data.details).toEqual([{ ref: 'newPassword', reason: 'OUT_OF_RANGE' }]);
+  });
+});
+
+describe('me for a super administrator', () => {
+  it('lists every built-in code even when the stored list is empty', async () => {
+    const token = await signIn('root');
+    adminOf('root').permissions = [];
+    const { body } = await me(token);
+    expect(body.data.permissions).toHaveLength(79);
+  });
+
+  it('lists only the stored codes for an ordinary administrator, however the flag looks', async () => {
+    const token = await signIn('support');
+    adminOf('support').permissions = ['USER:VIEW'];
+    expect((await me(token)).body.data.permissions).toEqual(['USER:VIEW']);
   });
 });

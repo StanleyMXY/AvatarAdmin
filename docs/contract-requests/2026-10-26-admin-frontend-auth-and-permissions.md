@@ -1,4 +1,4 @@
-# 给后端的问题：权限树的响应形状，和改密码的校验错误
+# 给后端的问题：权限树的响应形状、改密码的校验错误、验证码锁定的细节和权限树的父节点
 
 > **写给：** AvatarBackend 会话（后端）和改契约的会话。
 > **来源：** 管理端前端任务 5（假后端）。两个接口在契约 §17.2、§17.3、§17.4 和后端的回复里都没有写出响应或错误的具体形状，假后端按下面"暂定做法"先做，后端回复后再改。
@@ -25,3 +25,23 @@
 3. 密码长度按码点还是 UTF-16 单位计？（其他文本字段按契约 §1.9 去空白后按码点计。）
 
 **暂定做法：** 旧密码错 → 401 `ADMIN_INVALID_CREDENTIALS`；新密码太短或等于用户名 → 400 `INVALID_REQUEST`，`details` 为 `[{"ref":"newPassword","reason":"OUT_OF_RANGE"}]`；长度按码点计。前端本身也在提交前检查这两条（长度来自 `GET /me` 的 `passwordMinLength`），所以后端的这个错误只在前端检查漏掉时才会出现。
+
+## 三、验证码锁定（`admin.totp_max_failures`）的响应
+
+§17.2 写了"同一用户名连续 `admin.totp_max_failures` 次验证码错误，`admin.totp_lockout_minutes` 分钟内拒绝该用户名的登录（429 `RATE_LIMITED`）"，§1.4 写"其他限流的 429 没有 `data`，也不带 `Retry-After`"，只列了几处带 `retryAfterSeconds` 的 429，管理员锁定不在其中。
+
+**问：** (1) 第 5 次错误验证码本身返回 401 `ADMIN_TOTP_INVALID`、之后的登录返回 429，还是第 5 次就返回 429？(2) 这个 429 带不带 `data.retryAfterSeconds`？(3) 被锁定期间，密码错的登录请求返回 429 还是 401 `ADMIN_INVALID_CREDENTIALS`？(4) 绑定（`enroll`）一步里超过次数后，是返回 429，还是 401 `ADMIN_INVALID_TOKEN`（令牌作废）？
+
+**我们为什么需要：** 登录页要决定提示"请 N 分钟后再试"还是通用的"请求过于频繁"。
+
+**暂定做法（假后端和前端）：** 第 5 次错误就返回 429 且带 `data.retryAfterSeconds`；锁定期间不论密码对错都返回 429（按用户名锁）；`enroll` 超过次数时第 5 次返回 429、令牌作废，之后用同一令牌返回 401 `ADMIN_INVALID_TOKEN`。前端读 `retryAfterSeconds`，没有时显示通用文字。
+
+## 四、权限树里几个码的父节点
+
+契约 §17.3 说内置节点的父子关系"以 `docs/admin-frontend-design.md` 的表为准"。规格 5.0 表里，`COSMETIC:GRANT` 只出现在"用户详情"行（页面权限 `USER:VIEW`），`STATS:EXPORT`、`STATS:LAND` 只出现在成本报表、广告报表等行，表没有明确它们属于哪个页面。
+
+**问：** 后端实际写入的父节点是什么？尤其是 `COSMETIC:GRANT`（`COSMETIC:MANAGE` 的子节点，还是 `USER:VIEW` 的）、`STATS:EXPORT`、`STATS:LAND`（`STATS:VIEW` 的子节点，还是各自页面的）。另外 `SUBSCRIPTION:CONFIG` 既是"额度包"页的页面权限，又是权益定义、功能开关、商品映射三页的"保存"权限，它是 MENU 还是 FUNCTION？
+
+**我们为什么需要：** 角色编辑页"勾选父节点同时勾选全部子节点"的行为取决于它。
+
+**暂定做法：** 假后端把这几个码挂在同领域的页面下（`COSMETIC:GRANT` → `COSMETIC:MANAGE`，`STATS:EXPORT`/`STATS:LAND` → `STATS:VIEW`），`SUBSCRIPTION:CONFIG` 是 MENU。前端不写死任何父子关系，全部用 `GET /permissions` 返回的 `parent`。

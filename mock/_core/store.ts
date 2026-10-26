@@ -1,6 +1,8 @@
-// In-memory state of the mock backend. It lives as long as the dev server and is reset by
-// restarting it. Passwords and the verification code here are fakes that only the mock
-// backend accepts; they are listed in the README and are not secrets.
+// In-memory state of the mock backend. It lives as long as the dev server process: Umi loads the
+// mock files again whenever one of them is saved, so the state hangs on `globalThis` and survives
+// that (a developer who saves a file is not signed out). Restarting the server resets it.
+// Passwords and the verification code here are fakes that only the mock backend accepts; they are
+// listed in the README and are not secrets.
 import { randomUUID } from 'node:crypto';
 import type { PermissionCode } from '../../src/access/permissionCodes';
 import { ALL_CODES, PRESET_PERMISSIONS } from './permissions';
@@ -10,7 +12,7 @@ export const PASSWORD_MIN_LENGTH = 12;
 export const TOKEN_TTL_HOURS = 8;
 export const ENROLL_TTL_MINUTES = 10;
 export const TOTP_MAX_FAILURES = 5;
-export const TOTP_LOCKOUT_MINUTES = 15;
+export const TOTP_LOCKOUT_MINUTES = 5; // the defaults of admin.totp_max_failures and admin.totp_lockout_minutes (contract 17.5)
 
 export type MockAdmin = {
   id: string;
@@ -29,11 +31,18 @@ export type MockAdmin = {
 type TokenRecord = { adminId: string; tokenVersion: number; expiresAt: number };
 type EnrollRecord = { adminId: string; expiresAt: number };
 
-export const store = {
-  admins: new Map<string, MockAdmin>(),
-  tokens: new Map<string, TokenRecord>(),
-  enrollTokens: new Map<string, EnrollRecord>(),
+type Store = {
+  admins: Map<string, MockAdmin>;
+  tokens: Map<string, TokenRecord>;
+  enrollTokens: Map<string, EnrollRecord>;
 };
+
+const holder = globalThis as { __avatarAdminMockStore?: Store };
+const isFirstLoad = holder.__avatarAdminMockStore === undefined;
+
+holder.__avatarAdminMockStore ??= { admins: new Map(), tokens: new Map(), enrollTokens: new Map() };
+
+export const store: Store = holder.__avatarAdminMockStore;
 
 /** The fake password of a preset administrator: `mock-password-<username>`. */
 export const mockPassword = (username: string): string => `mock-password-${username}`;
@@ -74,7 +83,7 @@ export function resetStore(): void {
   for (const admin of seed) store.admins.set(admin.id, admin);
 }
 
-resetStore();
+if (isFirstLoad) resetStore();
 
 export const findAdminByUsername = (username: string): MockAdmin | undefined =>
   [...store.admins.values()].find((admin) => admin.username === username);

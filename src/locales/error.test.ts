@@ -96,7 +96,7 @@ describe('the two languages', () => {
   });
 
   it('contain no Korean and no raw error code as the whole text', () => {
-    const korean = /[ᄀ-ᇿ㄰-㆏가-힯]/;
+    const korean = /[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/;
     for (const dict of [zhError, enError, zhReason, enReason]) {
       for (const [key, text] of Object.entries(dict)) {
         expect(korean.test(text)).toBe(false);

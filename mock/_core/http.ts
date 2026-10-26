@@ -57,24 +57,47 @@ export const invalidRequest = (
   details: { ref: string; reason: string }[],
 ): MockHttpError => new MockHttpError(400, 'INVALID_REQUEST', message, { details });
 
+const INTERNAL_ERROR_REPLY = (): Reply => fail(500, 'INTERNAL_ERROR', 'Internal error');
+
 export const replyFromError = (error: unknown): Reply => {
   if (error instanceof MockHttpError)
     return fail(error.httpStatus, error.code, error.message, error.data);
-  return fail(500, 'INTERNAL_ERROR', 'Internal error');
+  // The only output of the mock backend: a handler that crashed would otherwise leave no trace.
+  console.error('[avatar-admin] mock handler failed:', error);
+  return INTERNAL_ERROR_REPLY();
 };
 
 export type Handler = (req: MockReq) => Reply | Promise<Reply>;
 
-/** The function Umi's mock loader calls: runs the handler and writes its reply. */
+const isReply = (value: unknown): value is Reply =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as Reply).status === 'number' &&
+  typeof (value as Reply).body === 'object' &&
+  (value as Reply).body !== null;
+
+/**
+ * The function Umi's mock loader calls: runs the handler and writes its reply. Nothing a handler
+ * does can take the dev server down: a thrown error, a missing `return`, or a body that cannot be
+ * written as JSON all become a 500 INTERNAL_ERROR envelope.
+ */
 export function toUmi(handler: Handler) {
   return async (req: MockReq, res: MockRes): Promise<void> => {
     let reply: Reply;
     try {
-      reply = await handler(req);
+      const result = await handler(req);
+      reply = isReply(result)
+        ? result
+        : replyFromError(new Error('the handler did not return a reply'));
     } catch (error) {
       reply = replyFromError(error);
     }
-    res.status(reply.status).json(reply.body);
+    try {
+      res.status(reply.status).json(reply.body);
+    } catch (error) {
+      const fallback = replyFromError(error);
+      res.status(fallback.status).json(fallback.body);
+    }
   };
 }
 
