@@ -4,6 +4,8 @@ import {
   type AllowEntry,
   applyAllowList,
   type Finding,
+  isPresent,
+  isTextFile,
   type PatternRule,
   readAllowList,
   repoFiles,
@@ -127,6 +129,41 @@ describe('scanSource: text in .tsx that does not come from a language file', () 
   });
 });
 
+describe('which files are read', () => {
+  it('leaves out a file that git lists but that no longer exists', () => {
+    expect(isPresent('package.json')).toBe(true);
+    expect(isPresent('src/pages/does-not-exist.tsx')).toBe(false);
+  });
+
+  it('reads dot files and the hook scripts, not the lock file', () => {
+    expect(isTextFile('.npmrc')).toBe(true);
+    expect(isTextFile('.lintstagedrc')).toBe(true);
+    expect(isTextFile('.husky/pre-commit')).toBe(true);
+    expect(isTextFile('src/app.tsx')).toBe(true);
+    expect(isTextFile('package-lock.json')).toBe(false);
+    expect(isTextFile('public/logo.png')).toBe(false);
+  });
+
+  it('reads the shared allow list and the one beside each module, and no other json', async () => {
+    const { mkdtempSync, writeFileSync, mkdirSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'allow-'));
+    mkdirSync(join(dir, 'pages'));
+    const entry = (text: string) => [{ file: 'x.tsx', text, reason: 'r' }];
+    const module = join(dir, 'pages', 'hardcodedText.allow.json');
+    const other = join(dir, 'pages', 'other.json');
+    writeFileSync(module, JSON.stringify(entry('module')));
+    writeFileSync(other, JSON.stringify(entry('other')));
+    const texts = readAllowList(['tests/noHardcodedText.allow.json', module, other]).map(
+      (e) => e.text,
+    );
+    expect(texts).toContain('module');
+    expect(texts).not.toContain('other');
+    expect(texts.filter((t) => t === 'module')).toHaveLength(1);
+  });
+});
+
 describe('applyAllowList', () => {
   const finding: Finding = { file: 'src/a.tsx', line: 3, text: 'Hello' };
   const allow: AllowEntry = { file: 'src/a.tsx', text: 'Hello', reason: 'brand name shown as is' };
@@ -238,6 +275,24 @@ describe('scanPatterns finds what it should (on a temporary fixture)', () => {
       RULES.map((r) => ({ ...r, skip: () => false })),
     ).map((f) => f.text.split(':')[0]);
     expect(new Set(names)).toEqual(new Set(RULES.map((r) => r.name)));
+  });
+
+  it('reports each hidden or non-ASCII space character on its own', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const rule = RULES.find((r) => r.name.startsWith('hidden')) as PatternRule;
+    const dir = mkdtempSync(join(tmpdir(), 'hidden-'));
+    const codes = [
+      0x200b, 0x200f, 0x202e, 0xfeff, 0x00ad, 0x0600, 0x061c, 0x00a0, 0x2003, 0x3000, 0x0085,
+      0x2028, 0x3164,
+    ];
+    const file = join(dir, 'chars.ts');
+    writeFileSync(file, codes.map((c) => `const x = '${String.fromCharCode(c)}';`).join('\n'));
+    const found = scanPatterns([file], [{ ...rule, skip: () => false }]);
+    expect(found.map((f) => f.line)).toEqual(codes.map((_, i) => i + 1));
+    writeFileSync(file, "const x = 'plain text, ก็ مرحبا 你好';\nconst y = '\\u200b';");
+    expect(scanPatterns([file], [{ ...rule, skip: () => false }])).toEqual([]);
   });
 
   it('lets a local address, an XML namespace and the example domains through', () => {

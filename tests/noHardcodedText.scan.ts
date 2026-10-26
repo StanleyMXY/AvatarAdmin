@@ -150,8 +150,12 @@ export function repoFiles(): string[] {
     maxBuffer: 64 * 1024 * 1024,
   })
     .split('\n')
-    .filter((file) => file !== '' && existsSync(file));
+    .filter((file) => file !== '')
+    .filter(isPresent);
 }
+
+/** git lists a file that was deleted but not yet staged; there is nothing to read there. */
+export const isPresent = (file: string) => existsSync(file);
 
 const TEXT_EXTENSIONS =
   /\.(ts|tsx|js|jsx|mjs|cjs|json|md|css|less|svg|html|yml|yaml|txt|example|hbs)$/;

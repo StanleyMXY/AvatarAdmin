@@ -5,6 +5,8 @@ import routes from './routes';
 
 export default defineConfig({
   hash: true,
+  // The browser tab title before and between pages; Umi's layout adds the page name to it.
+  title: buildVars.ADMIN_PRODUCT_NAME,
   // Without this, `max build` fails at esbuild's helper check (verified when the stack was chosen).
   esbuildMinifyIIFE: true,
   npmClient: 'npm',
