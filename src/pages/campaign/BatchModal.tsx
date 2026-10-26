@@ -41,7 +41,9 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
   const [jsonText, setJsonText] = useState('');
   const [csvText, setCsvText] = useState('');
   const [file, setFile] = useState<{ name: string; size: number } | null>(null);
-  const [fileProblem, setFileProblem] = useState<'tooLarge' | 'unreadable' | null>(null);
+  const [fileProblem, setFileProblem] = useState<'tooLarge' | 'unreadable' | 'notUtf8' | null>(
+    null,
+  );
   const [failure, setFailure] = useState<string | null>(null);
   const [refused, setRefused] = useState<{ ref: string; text: string }[]>([]);
   const input = useRef<HTMLInputElement>(null);
@@ -75,11 +77,19 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
       setFileProblem('tooLarge');
       return;
     }
+    let bytes: ArrayBuffer;
     try {
       // The file is read here and goes nowhere: only the rows go to the backend, on Import.
-      setCsvText(await chosen.text());
+      bytes = await chosen.arrayBuffer();
     } catch {
       setFileProblem('unreadable');
+      return;
+    }
+    try {
+      // A file saved in another encoding (Excel's ANSI, GBK) must not become replacement characters.
+      setCsvText(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    } catch {
+      setFileProblem('notUtf8');
     }
   };
 
@@ -145,6 +155,9 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
             size: formatBytes(MAX_FILE_BYTES, intl.locale),
           })}
         />
+      ) : null}
+      {fileProblem === 'notUtf8' ? (
+        <Alert type="error" showIcon title={t('campaign.batch.csv.notUtf8')} />
       ) : null}
       {fileProblem === 'unreadable' ? (
         <Alert type="error" showIcon title={t('campaign.batch.csv.unreadable')} />

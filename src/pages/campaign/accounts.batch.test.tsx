@@ -446,10 +446,44 @@ describe('the batch dialog: CSV', { timeout: 30000 }, () => {
     expect(await importButton()).toBeDisabled();
   });
 
+  it('refuses a file that is not UTF-8 (an Excel ANSI or GBK save) instead of importing replacement characters', async () => {
+    const { user } = await toCsv();
+    // "campaign_code,stat_date,cost,currency,remark\nspring_th,2026-09-01,10,USD,ni\xF1o" in Latin-1
+    const latin1 = new File(
+      [
+        new Uint8Array([
+          ...new TextEncoder().encode(
+            'campaign_code,stat_date,cost,currency,remark\nspring_th,2026-09-01,10,USD,ni',
+          ),
+          0xf1,
+          0x6f,
+        ]),
+      ],
+      'excel.csv',
+      { type: 'text/csv' },
+    );
+    await user.upload(await fileInput(), latin1);
+    expect(
+      await within(await dialog()).findByText(
+        'The file is not UTF-8 text. Save it as "CSV UTF-8" and choose it again.',
+      ),
+    ).toBeInTheDocument();
+    expect(await importButton()).toBeDisabled();
+  });
+
+  it('reads a UTF-8 file with a byte order mark and Thai, Arabic and Spanish remarks', async () => {
+    const { user } = await toCsv();
+    const text =
+      '\uFEFFcampaign_code,stat_date,cost,currency,remark\nspring_th,2026-09-01,10,USD,สวัสดี مرحبا niño';
+    await user.upload(await fileInput(), csvFile(text));
+    expect(await importButton()).toBeEnabled();
+    expect(document.body.textContent).not.toContain(String.fromCharCode(0xfffd));
+  });
+
   it('says when a file cannot be read', async () => {
     const { user } = await toCsv();
     const broken = csvFile('x');
-    vi.spyOn(broken, 'text').mockRejectedValue(new Error('disk'));
+    vi.spyOn(broken, 'arrayBuffer').mockRejectedValue(new Error('disk'));
     await user.upload(await fileInput(), broken);
     expect(
       await within(await dialog()).findByText('The file could not be read.'),

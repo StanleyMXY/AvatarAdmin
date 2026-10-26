@@ -164,6 +164,7 @@ const messages: Record<string, string> = {
   'campaign.batch.csv.template': '下载模板',
   'campaign.batch.csv.file': '文件：{name}（{size}）',
   'campaign.batch.csv.tooLarge': '文件超过 {size}，请拆成几个文件。',
+  'campaign.batch.csv.notUtf8': '文件不是 UTF-8 编码。请另存为“CSV UTF-8”后重新选择。',
   'campaign.batch.csv.unreadable': '读取文件失败。',
   'campaign.batch.csv.dates': '日期可以写成 YYYY-MM-DD、YYYY/MM/DD 或 YYYY.MM.DD。',
   'campaign.batch.local': '文件在本浏览器里读取，按“导入”之后才会把这些行发给后端。',

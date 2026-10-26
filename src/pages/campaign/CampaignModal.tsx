@@ -66,7 +66,7 @@ type ChannelState = { rows: ChannelRow[] } | 'failed' | null;
 
 /**
  * New or edit campaign (width 640, three sections). The `code` is the key of a campaign: typed once
- * and then read-only. The Facebook access token is write-only: the box is always empty, a token
+ * and then read-only. The access token is write-only: the box is always empty, a token
  * that is set is only said to be set, and an empty box sends no token at all (the old one stays).
  * A channel package that is disabled cannot be linked anew; one that is linked stays.
  */
@@ -78,7 +78,9 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
   const [form] = Form.useForm<Values>();
   const [failure, setFailure] = useState<string | null>(null);
   const editing = campaign !== null;
-  const initialCodes = campaign?.channelCodes.filter((c) => typeof c === 'string') ?? [];
+  const initialCodes = Array.isArray(campaign?.channelCodes)
+    ? campaign.channelCodes.filter((c) => typeof c === 'string')
+    : [];
   const [codes, setCodes] = useState<string[]>(initialCodes);
 
   const [channels, setChannels] = useState<ChannelState>(null);

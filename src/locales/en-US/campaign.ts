@@ -176,6 +176,8 @@ const messages: Record<string, string> = {
   'campaign.batch.csv.template': 'Download the template',
   'campaign.batch.csv.file': 'File: {name} ({size})',
   'campaign.batch.csv.tooLarge': 'The file is larger than {size}. Split it into several files.',
+  'campaign.batch.csv.notUtf8':
+    'The file is not UTF-8 text. Save it as "CSV UTF-8" and choose it again.',
   'campaign.batch.csv.unreadable': 'The file could not be read.',
   'campaign.batch.csv.dates': 'A day is written YYYY-MM-DD, YYYY/MM/DD or YYYY.MM.DD.',
   'campaign.batch.local':

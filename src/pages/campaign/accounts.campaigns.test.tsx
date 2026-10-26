@@ -481,6 +481,12 @@ describe('changing a campaign', { timeout: 30000 }, () => {
     return result;
   };
 
+  it('opens for a campaign whose channel packages are missing (null) instead of a blank page', async () => {
+    (campaignOf('spring_th') as unknown as { channelCodes: unknown }).channelCodes = null;
+    await open();
+    expect(within(await dialog()).getByLabelText('Display name')).toBeInTheDocument();
+  });
+
   it('is filled with the campaign, the code cannot be typed, and the token box is empty and says that a token is set', async () => {
     await open();
     const box = within(await dialog());
