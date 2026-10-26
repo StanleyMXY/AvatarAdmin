@@ -170,7 +170,17 @@ function GrantDialog({
  * from, and every entitlement row of the account. A limited-time grant that is still active can be
  * revoked, and a new one granted, by an administrator who holds `SUBSCRIPTION:GRANT`.
  */
-export function AccountEntitlementsPanel({ accountId }: { accountId: string }) {
+export function AccountEntitlementsPanel({
+  accountId,
+  grantDisabled = false,
+  revokeDisabled = false,
+}: {
+  accountId: string;
+  /** The account is waiting for deletion or being deleted: the backend refuses a new grant (contract 17.4 state table). */
+  grantDisabled?: boolean;
+  /** The account is being deleted: the backend refuses even a revoke. */
+  revokeDisabled?: boolean;
+}) {
   const intl = useIntl();
   const { message } = App.useApp();
   const access = useAccess() as unknown as { canAccess: (code?: string) => boolean };
@@ -279,7 +289,7 @@ export function AccountEntitlementsPanel({ accountId }: { accountId: string }) {
             {t('subscriptions.account.entitlements')}
           </Typography.Title>
           <Can code="SUBSCRIPTION:GRANT">
-            <Button type="primary" onClick={() => setGranting(true)}>
+            <Button type="primary" disabled={grantDisabled} onClick={() => setGranting(true)}>
               {t('subscriptions.account.grant')}
             </Button>
           </Can>
@@ -346,6 +356,7 @@ export function AccountEntitlementsPanel({ accountId }: { accountId: string }) {
                             {
                               key: 'revoke',
                               label: t('subscriptions.account.revoke'),
+                              disabled: revokeDisabled,
                               confirmText: t('subscriptions.account.revokeConfirm'),
                               onClick: revoke(row),
                             },
