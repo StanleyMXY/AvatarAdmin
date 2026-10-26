@@ -802,6 +802,59 @@ describe('the form: editing', { timeout: 30000 }, () => {
     expect(writesOf(calls)[0].body).not.toHaveProperty('confirm');
   });
 
+  it('decides to probe by the state read when the dialog opened, not by the row the list showed (another administrator published it meanwhile)', async () => {
+    const calls = useMockBackend(mock);
+    const user = userEvent.setup();
+    renderPage(<SigninConfigPage />);
+    await rowOf(THAI);
+    const other = activityState.activities.find((a) => a.id === '3');
+    if (other) other.status = 'ACTIVE';
+    const dialog = await edit(user, THAI);
+    const [, end] = within(dialog).getAllByPlaceholderText(/Select date/i);
+    await clearAndType(user, end, '2031-01-15');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(await screen.findByText('Check-in activity saved')).toBeInTheDocument();
+    expect(writesOf(calls)[0].body).toMatchObject({ confirm: false, endDate: '2031-01-15' });
+    expect(activityState.activities.find((a) => a.id === '3')?.endDate).toBe('2031-01-15');
+  });
+
+  it('a plain save that the backend did not apply (applied false) is not reported as saved: the probe goes on', async () => {
+    let first = true;
+    const key = 'PUT /api/admin/checkin/activities/:id';
+    type Res = { status: (code: number) => Res; json: (value: unknown) => void };
+    type Handler = (req: unknown, res: Res) => unknown;
+    const real = (activityMock as unknown as Record<string, Handler>)[key];
+    const calls = useMockBackend(
+      {
+        default: {
+          [key]: (req: unknown, res: Res) => {
+            if (first) {
+              first = false;
+              res.status(200).json({
+                code: '200',
+                message: 'ok',
+                data: { applied: false, disabledActivities: [] },
+              });
+              return undefined;
+            }
+            return real(req, res);
+          },
+        },
+      },
+      mock,
+    );
+    const user = userEvent.setup();
+    renderPage(<SigninConfigPage />);
+    const dialog = await edit(user, THAI);
+    const name = within(dialog).getByRole('textbox', { name: 'Activity name' });
+    await user.clear(name);
+    await user.type(name, 'Renamed once more');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls).length).toBeGreaterThanOrEqual(2));
+    expect(writesOf(calls)[1].body).toMatchObject({ confirm: false });
+    expect(await screen.findByText('Check-in activity saved')).toBeInTheDocument();
+  });
+
   const clearAndType = async (
     user: ReturnType<typeof userEvent.setup>,
     input: HTMLElement,

@@ -141,18 +141,26 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
     const show = (error: unknown) => setFailure(failureToForm(intl, form, error, FIELDS).text);
     if (detail && row) {
       const rangeChanged = body.startDate !== detail.startDate || body.endDate !== detail.endDate;
-      if (row.status === 'ACTIVE' && rangeChanged) {
+      // The state read when the dialog opened decides, not the row of the list (it can be older).
+      let probeFirst = detail.status === 'ACTIVE' && rangeChanged;
+      if (!probeFirst) {
+        try {
+          const reply = await updateCheckinActivity(row.id, body);
+          // The backend did not apply it (the activity went live meanwhile): ask the overlap question.
+          probeFirst =
+            typeof reply === 'object' &&
+            reply !== null &&
+            (reply as { applied?: unknown }).applied === false;
+        } catch (error) {
+          show(error);
+          return;
+        }
+      }
+      if (probeFirst) {
         const outcome = await probe('update', row.id, body);
         if (outcome.kind === 'cancelled') return;
         if (outcome.kind === 'failed') {
           show(outcome.error);
-          return;
-        }
-      } else {
-        try {
-          await updateCheckinActivity(row.id, body);
-        } catch (error) {
-          show(error);
           return;
         }
       }
