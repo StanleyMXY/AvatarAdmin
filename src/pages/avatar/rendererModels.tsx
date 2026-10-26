@@ -9,7 +9,7 @@ import {
   type RendererModel,
   setRendererModelEnabled,
 } from '../../services/avatar';
-import { formatBytes } from '../../utils/format';
+import { formatBytes, formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
 import { EnabledSwitch } from './EnabledSwitch';
 import { RendererModelModal } from './RendererModelModal';
@@ -71,6 +71,12 @@ export default function RendererModelsPage() {
       dataIndex: 'sha256',
       search: false,
       render: (_, row) => <EllipsisPopoverText text={row.sha256} lines={1} width={200} />,
+    },
+    {
+      title: t('avatar.models.createdAt'),
+      dataIndex: 'createdAt',
+      search: false,
+      render: (_, row) => (row.createdAt ? formatInstant(row.createdAt, intl.locale) : DASH),
     },
     {
       title: t('avatar.col.enabled'),

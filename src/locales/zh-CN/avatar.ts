@@ -128,6 +128,7 @@ const messages: Record<string, string> = {
   'avatar.models.minVersionCode': '最低 App 版本号',
   'avatar.models.sizeBytes': '大小',
   'avatar.models.sha256': 'SHA-256',
+  'avatar.models.createdAt': '登记时间',
   'avatar.models.enabledOf': '启用：{version} {platform} {abi}',
   'avatar.models.file': '模型文件',
   'avatar.models.fileHint': 'zip 文件。上传中不能提交表单。',

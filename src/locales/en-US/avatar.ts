@@ -131,6 +131,7 @@ const messages: Record<string, string> = {
   'avatar.models.minVersionCode': 'Lowest app version code',
   'avatar.models.sizeBytes': 'Size',
   'avatar.models.sha256': 'SHA-256',
+  'avatar.models.createdAt': 'Registered at',
   'avatar.models.enabledOf': 'Enabled: {version} {platform} {abi}',
   'avatar.models.file': 'Model file',
   'avatar.models.fileHint': 'A zip file. The form cannot be sent while the upload runs.',

@@ -65,6 +65,18 @@ describe('the renderer model page', { timeout: 60000 }, () => {
     expect(screen.getByText(/to every build; there is no scope/)).toBeInTheDocument();
   });
 
+  it('lists when each model was registered: the contract picks the newest enabled model of a platform, ABI and format by that time', async () => {
+    backend();
+    renderPage(<RendererModelsPage />);
+    const android = (await screen.findByText('arm64-v8a')).closest('tr') as HTMLElement;
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    const column = headers.indexOf('Registered at');
+    expect(column).toBeGreaterThanOrEqual(0);
+    const cell = within(android).getAllByRole('cell')[column];
+    expect(cell.textContent).toMatch(/\d/);
+    expect(cell.textContent).not.toBe('—');
+  });
+
   it('turns a model on or off with one PUT to /enabled', async () => {
     const calls = backend();
     renderPage(<RendererModelsPage />);

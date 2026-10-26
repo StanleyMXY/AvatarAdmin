@@ -192,9 +192,6 @@ describe('the complaint drawer: evidence', { timeout: 60000 }, () => {
     const reads = () => calls.filter((c) => c.url.includes('/evidence/'));
     await user.click(await within(drawer).findByRole('button', { name: 'File 1' }));
     const first = (await within(drawer).findByAltText('File 1')).getAttribute('src');
-    console.log(
-      [...drawer.querySelectorAll('button')].map((b) => b.outerHTML.slice(0, 200)).join('\n'),
-    );
     expect(reads().map((c) => c.url)).toEqual([`/api/admin/likeness-complaints/${id}/evidence/0`]);
     await user.click(within(drawer).getByRole('button', { name: 'File 1' }));
     await waitFor(() => expect(reads()).toHaveLength(2));
