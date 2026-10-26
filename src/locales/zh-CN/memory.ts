@@ -28,6 +28,8 @@ const messages: Record<string, string> = {
   'memory.tier.thresholdHelp': '1 到 100000 的整数',
   'memory.tier.intInvalid': '请填写 {min} 到 {max} 的整数',
   'memory.tier.confirmCreate': '将新建档位 {name}。档位建好后不能删除，确定新建吗？',
+  'memory.tier.confirmReplace':
+    '档位 {name} 已经存在。保存会把它的五项设置全部替换，并立即影响该档位下所有账号。确定替换吗？',
   'memory.tier.saved': '档位已保存',
   'memory.tier.nothingChanged': '没有改动',
   'memory.tier.created': '档位已新建',

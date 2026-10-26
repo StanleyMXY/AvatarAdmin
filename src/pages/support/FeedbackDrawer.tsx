@@ -7,6 +7,7 @@ import { StatusTag } from '../../components/StatusTag';
 import { getFeedback, type SupportFeedback } from '../../services/support';
 import { describeFailure } from '../../session/describe';
 import { formatInstant } from '../../utils/format';
+import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { categoryText, statusOptions } from './feedbackTexts';
 
@@ -125,7 +126,7 @@ export function FeedbackDrawer({ id, onClose }: { id: string | null; onClose: ()
                   ...CONTEXT_FIELDS.map((field) => ({
                     key: field,
                     label: t(`support.context.${field}`),
-                    children: <span style={WRAP}>{context[field] || DASH}</span>,
+                    children: <span style={WRAP}>{plainText(context[field]) || DASH}</span>,
                   })),
                   {
                     key: 'recentErrors',
@@ -138,7 +139,7 @@ export function FeedbackDrawer({ id, onClose }: { id: string | null; onClose: ()
                           {errors.map((line, i) => (
                             // biome-ignore lint/suspicious/noArrayIndexKey: the lines are text that can repeat
                             <li key={i} dir="auto" style={WRAP}>
-                              {line}
+                              {plainText(line)}
                             </li>
                           ))}
                         </ol>

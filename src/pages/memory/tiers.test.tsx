@@ -250,16 +250,41 @@ describe('a new tier', { timeout: 30000 }, () => {
     expect(await rowOf('gold')).toBeInTheDocument();
   });
 
-  it('does not ask when the name is already in the list, and updates that tier', async () => {
+  it('asks before the new-tier form replaces a tier that already exists, and sends nothing when refused', async () => {
+    const calls = useMockBackend(memoryMock);
+    const user = userEvent.setup();
+    renderPage(<TiersPage />);
+    const dialog = await openNew(user);
+    const before = JSON.stringify(memoryStore.tiers.get('premium'));
+    fireEvent.change(within(dialog).getByLabelText('Tier name'), { target: { value: 'premium' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await screen.findAllByText(/Tier premium already exists/);
+    expect(screen.queryAllByText(/will be created/)).toHaveLength(0);
+    expect(writes(calls)).toHaveLength(0);
+    await user.click(within(lastDialog()).getByRole('button', { name: 'Cancel' }));
+    await new Promise((r) => setTimeout(r, 150));
+    expect(writes(calls)).toHaveLength(0);
+    expect(JSON.stringify(memoryStore.tiers.get('premium'))).toBe(before);
+  });
+
+  it('replaces the existing tier with all five settings once the person confirms', async () => {
     const calls = useMockBackend(memoryMock);
     const user = userEvent.setup();
     renderPage(<TiersPage />);
     const dialog = await openNew(user);
     fireEvent.change(within(dialog).getByLabelText('Tier name'), { target: { value: 'premium' } });
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await screen.findAllByText(/Tier premium already exists/);
+    await user.click(within(lastDialog()).getByRole('button', { name: 'OK' }));
     await screen.findByText('Tier saved');
-    expect(screen.queryAllByText(/will be created/)).toHaveLength(0);
     expect(writes(calls)).toHaveLength(1);
+    expect(Object.keys(writes(calls)[0].body as object).sort()).toEqual([
+      'consolidationEnabled',
+      'consolidationThreshold',
+      'recencyChannelCount',
+      'recencyChannelEnabled',
+      'topK',
+    ]);
   });
 
   it('starts from the values of the default tier', async () => {

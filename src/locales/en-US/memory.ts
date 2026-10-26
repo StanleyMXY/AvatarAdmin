@@ -31,6 +31,8 @@ const messages: Record<string, string> = {
   'memory.tier.intInvalid': 'Enter a whole number from {min} to {max}',
   'memory.tier.confirmCreate':
     'A new tier {name} will be created. A tier cannot be deleted afterwards. Create it?',
+  'memory.tier.confirmReplace':
+    'Tier {name} already exists. Saving replaces all five of its settings, at once for every account on it. Replace it?',
   'memory.tier.saved': 'Tier saved',
   'memory.tier.nothingChanged': 'Nothing changed',
   'memory.tier.created': 'Tier created',

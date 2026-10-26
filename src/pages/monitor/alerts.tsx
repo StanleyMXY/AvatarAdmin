@@ -16,6 +16,7 @@ import {
 } from '../../services/monitor';
 import { describeFailure } from '../../session/describe';
 import { formatInstant } from '../../utils/format';
+import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 
 type Filters = { status?: 'OPEN' | 'RESOLVED'; type?: string };
@@ -79,7 +80,7 @@ export default function AlertsPage() {
       title: t('monitor.alert.col.detail'),
       dataIndex: 'detail',
       search: false,
-      render: (_, row) => <EllipsisPopoverText text={row.detail} width={320} />,
+      render: (_, row) => <EllipsisPopoverText text={plainText(row.detail) || null} width={320} />,
     },
     {
       title: t('monitor.alert.col.status'),

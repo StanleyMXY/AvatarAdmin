@@ -186,6 +186,34 @@ describe('the details', { timeout: 30000 }, () => {
     expect(within(drawer).getAllByText('—').length).toBeGreaterThan(0);
   });
 
+  it('shows a context whose fields are not text, instead of breaking the drawer', async () => {
+    const odd = feedback({
+      id: '804',
+      message: 'odd context',
+      context: {
+        appVersion: { major: 2 },
+        osVersion: 14,
+        deviceModel: null,
+        recentErrors: ['plain', { code: 'E1' }, 7],
+      } as unknown as Row['context'],
+      forwardStatus: 'FORWARDED',
+      forwardRef: 'T-4',
+    });
+    stubFetch(async ({ url }) =>
+      url.endsWith('/804')
+        ? jsonResponse(200, envelope('200', odd))
+        : jsonResponse(200, envelope('200', { items: [odd], total: 1 })),
+    );
+    const user = userEvent.setup();
+    renderPage(<FeedbackPage />);
+    const drawer = await openDetails(user, odd);
+    expect(await within(drawer).findByText('{"major":2}')).toBeInTheDocument();
+    expect(within(drawer).getByText('14')).toBeInTheDocument();
+    expect(within(drawer).getByText('plain')).toBeInTheDocument();
+    expect(within(drawer).getByText('{"code":"E1"}')).toBeInTheDocument();
+    expect(within(drawer).getByText('7')).toBeInTheDocument();
+  });
+
   it('shows a message of 4000 characters without a space, wrapped, and one in Arabic, in the right direction', async () => {
     const long = 'ก็'.repeat(2000);
     const row = feedback({

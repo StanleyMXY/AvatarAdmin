@@ -119,6 +119,20 @@ export function TierForm({ open, tierName, existing, starting, onClose, onSaved 
       consolidationThreshold: values.consolidationThreshold as number,
     };
     const isNew = !existing.includes(name);
+    if (!isNew && creating) {
+      // The new-tier form holds all five settings, so a name that is already taken would silently
+      // replace every setting of that tier (and change it for all its accounts): ask first.
+      modal.confirm({
+        title: t('memory.tier.confirmReplace', { name }),
+        okText: t('pages.common.ok'),
+        cancelText: t('pages.common.cancel'),
+        okButtonProps: { danger: true },
+        onOk: async () => {
+          await send.run(name, settings, false);
+        },
+      });
+      return;
+    }
     if (!isNew) {
       // An existing tier is changed with what the person changed and nothing else: the backend keeps
       // the settings that are left out, so another administrator's change to another setting survives.

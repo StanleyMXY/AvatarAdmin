@@ -82,6 +82,12 @@ describe('the list', { timeout: 30000 }, () => {
     expect(screen.getByText('something new')).toBeInTheDocument();
   });
 
+  it('shows a detail that is not text instead of breaking the table', async () => {
+    fixed([alertRow({ id: '9', detail: { jobId: 'J-1' } as unknown as string })]);
+    renderPage(<AlertsPage />);
+    expect(await screen.findByText('{"jobId":"J-1"}')).toBeInTheDocument();
+  });
+
   it.each([
     ['en-US', enUS],
     ['zh-CN', zhCN],
