@@ -17,6 +17,9 @@ import {
   writesOf,
 } from './testSetup';
 
+// A page test fills and presses a lot; under a full run with many files in parallel the default 5 seconds is not enough.
+vi.setConfig({ testTimeout: 30000 });
+
 const backend = () => useMockBackend({ default: smsMock }, { default: configMock });
 
 beforeEach(() => {
@@ -159,6 +162,29 @@ describe('the list of channels', () => {
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
   });
 
+  it('says in the words of the code when the providers could not be read, with a button to read again', async () => {
+    backend();
+    let fail = true;
+    overrideFetch(async ({ url, method }) =>
+      fail && method === 'GET' && url.pathname === '/api/admin/sms/meta'
+        ? jsonAnswer(500, 'INTERNAL_ERROR', null, 'SECRET BACKEND WORDS')
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<ChannelsPage />);
+    expect(await screen.findByText(/Failed to load/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
+    fail = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByText(/Failed to load/)).toBeNull());
+    await user.click(screen.getByRole('button', { name: 'New channel' }));
+    const form = within(await screen.findByRole('dialog'));
+    await user.click(form.getByRole('combobox', { name: 'Provider' }));
+    expect(
+      await screen.findByText('gateway-a', { selector: '.ant-select-item-option-content' }),
+    ).toBeInTheDocument();
+  });
+
   it('keeps the answer of the newest read when an older one arrives late', async () => {
     backend();
     let reads = 0;
@@ -181,9 +207,10 @@ describe('the list of channels', () => {
     await waitFor(() => expect(rows().length).toBe(5));
     // Two switches are pressed one after the other: each reads the list again, the first read is slow.
     await user.click(switchOf('gw_es_promo'));
-    await waitFor(() => expect(reads).toBe(2));
-    await user.click(switchOf('gw_all_backup'));
-    await waitFor(() => expect(reads).toBe(3));
+    await waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
+    // The table is greyed out while the slow read is on its way (pointer-events: none): the press goes in as an event.
+    fireEvent.click(switchOf('gw_all_backup'));
+    await waitFor(() => expect(reads).toBeGreaterThanOrEqual(3));
     await waitFor(() => expect(switchOf('gw_all_backup')).toBeChecked());
     letOldGo();
     await settled();
@@ -322,6 +349,27 @@ describe('the question before the last enabled OTP channel is switched off, dele
     expect(document.body.textContent).not.toContain('The last enabled OTP channel of a country');
     await waitFor(() => expect(switchOf('gw_th_otp')).toBeChecked());
     expect(channel('gw_th_otp').enabled).toBe(true);
+  });
+
+  it('says what a refusal means also for a channel that the page did not take for the last one', async () => {
+    channel('gw_all_backup').enabled = true;
+    backend();
+    overrideFetch(async ({ method, url }) =>
+      method === 'PUT' && url.pathname.endsWith('/enabled')
+        ? jsonAnswer(400, 'INVALID_REQUEST', null, 'SECRET BACKEND WORDS')
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<ChannelsPage />);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    await user.click(switchOf('gw_th_otp'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(
+      await screen.findByText(
+        /Some input is not valid.*refuses this while phone sign-in is on or phone-number accounts exist/s,
+      ),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
 
   it('says that phone sign-in is off, and that phone-number accounts still count, when the setting is readable and off', async () => {

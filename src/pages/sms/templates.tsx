@@ -24,6 +24,9 @@ import { useLatestRead } from './useLatestRead';
 import { useServerPage } from './useServerPage';
 
 const NO_FILTERS: Record<string, never> = {};
+/** An enabled OTP row: when the backend refuses to delete or switch it off, the reason is the rule of contract 23.4, last or not (the page may not have known that it was the last). */
+const servesCodes = (row: { enabled?: unknown; smsType?: unknown }): boolean =>
+  row.enabled === true && plainText(row.smsType) === 'OTP';
 const isRecord = (row: unknown): row is SmsTemplate => typeof row === 'object' && row !== null;
 const asCoverage = (t: Partial<SmsTemplate>) => ({
   id: plainText(t.id),
@@ -84,14 +87,14 @@ export default function TemplatesPage() {
           key: 'delete',
           label: t('sms.common.delete'),
           onClick: async () => {
-            if (await ask('delete', 'template')) await remove(row, true);
+            if (await ask('delete', 'template')) await remove(row, servesCodes(row));
           },
         }
       : {
           key: 'delete',
           label: t('sms.common.delete'),
           confirmText: t('sms.templates.deleteAsk'),
-          onClick: () => remove(row, false),
+          onClick: () => remove(row, servesCodes(row)),
         },
   ];
 
@@ -155,7 +158,7 @@ export default function TemplatesPage() {
             if (!next && isLast(row) && !(await ask('disable', 'template'))) return;
             await setTemplateEnabled(plainText(row.id), next);
           }}
-          failureText={(error, next) => guardedFailureText(intl, error, !next && isLast(row))}
+          failureText={(error, next) => guardedFailureText(intl, error, !next && servesCodes(row))}
           onDone={refresh}
         />
       ),

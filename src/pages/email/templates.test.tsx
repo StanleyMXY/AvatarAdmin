@@ -16,6 +16,9 @@ import {
   writesOf,
 } from './testSetup';
 
+// A page test fills and presses a lot; under a full run with many files in parallel the default 5 seconds is not enough.
+vi.setConfig({ testTimeout: 30000 });
+
 const backend = () => useMockBackend({ default: emailMock });
 
 beforeEach(() => {

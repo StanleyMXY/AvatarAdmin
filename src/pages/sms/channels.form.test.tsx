@@ -18,6 +18,9 @@ import {
   writesOf,
 } from './testSetup';
 
+// A page test fills and presses a lot; under a full run with many files in parallel the default 5 seconds is not enough.
+vi.setConfig({ testTimeout: 30000 });
+
 const backend = () => useMockBackend({ default: smsMock }, { default: configMock });
 
 beforeEach(() => {
@@ -508,6 +511,43 @@ describe('the dialog', () => {
     expect((form.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value.length).toBe(
       5000,
     );
+  });
+});
+
+describe('a channel that is not what the contract says', () => {
+  it('can still be opened for edit: the box is empty, the fields that are not usable are empty, and nothing is drawn as a crash', async () => {
+    backend();
+    overrideFetch(async ({ url, method }) =>
+      method === 'GET' && url.pathname === '/api/admin/sms/channels'
+        ? jsonAnswer(200, '200', {
+            items: [
+              {
+                id: 7,
+                channelCode: 'odd_one',
+                name: { a: 1 },
+                providerCode: null,
+                apiUrl: 5,
+                smsType: 'VOICE',
+                countries: 'TH',
+                priority: 'soon',
+                enabled: 'yes',
+                hasCredentials: 'maybe',
+                extConfig: [1, 2],
+                credentials: SECRET,
+              },
+            ],
+            total: 1,
+          })
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<ChannelsPage />);
+    await waitFor(() => expect(rows().length).toBe(1));
+    const form = await openEdit(user, 'odd_one');
+    expect((form.getByLabelText('Credentials') as HTMLInputElement).value).toBe('');
+    expect(form.getByRole('textbox', { name: 'Extension (JSON)' })).toHaveValue('[\n  1,\n  2\n]');
+    expect(form.getByRole('spinbutton', { name: 'Priority' })).toHaveValue('');
+    expect(document.body.innerHTML).not.toContain(SECRET);
   });
 });
 
