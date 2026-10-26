@@ -129,6 +129,34 @@ describe('the list of roles', () => {
   });
 });
 
+describe('paging', () => {
+  it('asks for the page by number, and starts from page 1 again when the page size changes', async () => {
+    for (let i = 0; i < 25; i += 1) {
+      systemState.roles.set(`9${i}`, {
+        id: `9${i}`,
+        name: `Role ${String(i).padStart(2, '0')}`,
+        remark: null,
+        createdAt: `2026-10-01T00:${String(i).padStart(2, '0')}:00Z`,
+        permissionCodes: [],
+      });
+    }
+    const { user, calls } = await load();
+    expect(tableRows()).toHaveLength(20);
+    await user.click(screen.getByTitle('2'));
+    await waitFor(() =>
+      expect(calls.some((c) => c.url === '/api/admin/roles?page=2&pageSize=20')).toBe(true),
+    );
+    await waitFor(() => expect(tableRows()).toHaveLength(12));
+    expect(screen.queryByText('Search')).not.toBeInTheDocument();
+  });
+
+  it('draws no search form: there is nothing to filter', async () => {
+    await load();
+    expect(document.querySelector('.ant-pro-table-search')).toBeNull();
+    expect(screen.queryByRole('button', { name: /查\s*询|Query|Search/ })).not.toBeInTheDocument();
+  });
+});
+
 describe('making a role', () => {
   it('reads the permission tree with the read it needs and draws it as check boxes', async () => {
     const { user, calls } = await load();
@@ -342,6 +370,24 @@ describe('editing a role', () => {
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
       'AUDIT:VIEW',
+      'STATS:VIEW',
+    ]);
+  });
+
+  it('does not send a code that is not in the tree even when nothing was touched in the tree', async () => {
+    systemState.roles.set('62', {
+      id: '62',
+      name: 'Untouched',
+      remark: null,
+      createdAt: '2026-10-05T00:00:00Z',
+      permissionCodes: ['GONE:CODE', 'STATS:VIEW'],
+    });
+    const { user, calls } = await load();
+    const box = await openEdit(user, 'Untouched');
+    await user.type(box.getByLabelText('Remark'), 'only the remark');
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
       'STATS:VIEW',
     ]);
   });

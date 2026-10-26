@@ -79,9 +79,10 @@ describe('the detail of an audit row', () => {
   });
 
   it('stops at a depth where a hostile value would take too long', () => {
-    let deep: Record<string, unknown> = { password: 'x' };
+    let deep: Record<string, unknown> = { note: 'LEAF-OF-THE-DEEP-TREE' };
     for (let i = 0; i < 200; i += 1) deep = { child: deep };
     expect(() => detailText(deep)).not.toThrow();
-    expect(detailText(deep)).not.toContain('"x"');
+    expect(detailText(deep)).not.toContain('LEAF-OF-THE-DEEP-TREE');
+    expect(detailText(deep)).toContain('…');
   });
 });

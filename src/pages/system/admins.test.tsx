@@ -149,6 +149,40 @@ describe('the list of administrators', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 
+  it('draws no row action and no new button for an administrator without ADMIN:MANAGE even when rows arrive', async () => {
+    signIn('support', { codes: ['AUDIT:VIEW'] });
+    backend();
+    overrideFetch(({ url }) =>
+      url.pathname === '/api/admin/admins'
+        ? jsonAnswer(200, '200', {
+            items: [
+              {
+                id: '77',
+                username: 'someone',
+                superAdmin: false,
+                status: 'ACTIVE',
+                mustChangePassword: false,
+                totpEnrolledAt: null,
+                lastLoginAt: null,
+                createdAt: '2026-10-01T00:00:00Z',
+                roles: [],
+              },
+            ],
+            total: 1,
+          })
+        : undefined,
+    );
+    renderPage(<AdminsPage />);
+    await waitForRows(1);
+    expect(screen.queryByRole('button', { name: 'New administrator' })).not.toBeInTheDocument();
+    for (const name of ['Edit', 'Disable', 'More']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(
+      [...document.querySelectorAll('.ant-table-thead th')].map((th) => th.textContent),
+    ).not.toContain('Actions');
+  });
+
   it('shows no write control to an administrator without ADMIN:MANAGE (the list is refused anyway)', async () => {
     signIn('support', { codes: ['AUDIT:VIEW'] });
     backend();
@@ -184,6 +218,27 @@ describe('the protections of the own account and of the last super administrator
       'aria-disabled',
       'true',
     );
+  });
+
+  it('disables disable and delete on the own row of a super administrator who is not the last one', async () => {
+    // root and support are both enabled super administrators: the own row is protected as the own row alone
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+    const { user } = await load();
+    await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeEnabled());
+    expect(await rowButton('support', 'Disable')).toBeDisabled();
+    await user.click(within(await rowOf('support')).getByRole('button', { name: 'More' }));
+    const items = await screen.findAllByRole('menuitem', { name: 'Delete' });
+    expect(items[items.length - 1]).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('reads all administrators again after a change: the one who is left becomes the last super administrator', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'] });
+    adminOf('finance').superAdmin = true;
+    const { user } = await load();
+    await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeEnabled());
+    await user.click(await rowButton('finance', 'Disable'));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeDisabled());
   });
 
   it('allows both on a super administrator when another enabled one exists', async () => {
@@ -524,6 +579,35 @@ describe('a new administrator', () => {
     expect(document.body.innerHTML).not.toContain(PASSWORD);
   });
 
+  it('sends the user name without the white space around it', async () => {
+    const { user, calls } = await load();
+    const box = await open(user);
+    await fill(user, box, { username: `  anna${String.fromCharCode(0x3000)}` });
+    await user.click(box.getByRole('button', { name: /Save$/ }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { username: string }).username).toBe('anna');
+  });
+
+  it('says the input is not valid, in the words of the language file, when the reason of a detail is not known', async () => {
+    const { user } = await load();
+    overrideFetch(({ url, method }) =>
+      method === 'POST' && url.pathname === '/api/admin/admins'
+        ? jsonAnswer(
+            400,
+            'INVALID_REQUEST',
+            { details: [{ ref: 'username', reason: 'WEIRD_REASON' }] },
+            'backend words here',
+          )
+        : undefined,
+    );
+    const box = await open(user);
+    await fill(user, box);
+    await user.click(box.getByRole('button', { name: /Save$/ }));
+    const message = await box.findAllByText(/Some input is not valid/);
+    expect(message.length).toBeGreaterThan(1);
+    expect(screen.queryByText(/backend words here/)).not.toBeInTheDocument();
+  });
+
   it('shows nothing the backend sends back about a password, whatever it is called', async () => {
     const { user } = await load();
     overrideFetch(({ url, method }) =>
@@ -679,6 +763,15 @@ describe('editing an administrator', () => {
     });
   });
 
+  it('on the own row of a super administrator who is not the last one: the roles and the flag are still disabled', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+    const { user } = await load();
+    const box = await edit(user, 'support');
+    expect(rolesBox(box)).toBeDisabled();
+    expect(box.getByRole('switch', { name: 'Super administrator' })).toBeDisabled();
+    expect(box.getByRole('button', { name: /Save$/ })).toBeDisabled();
+  });
+
   it('keeps Save off until something is changed', async () => {
     const { user } = await load();
     const box = await edit(user, 'reviewer');
@@ -825,6 +918,44 @@ describe('the own account, if the controls were not disabled', () => {
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(writesOf(calls)[0].method).toBe('PUT');
     expect(writesOf(calls)[0].body).toEqual({});
+  });
+});
+
+describe('the flag of the last enabled super administrator', () => {
+  it('is disabled with the reason when the dialog is told it is the last one', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+    backend();
+    renderPage(
+      <AdminFormModal
+        admin={{
+          id: '1001',
+          username: 'root',
+          superAdmin: true,
+          status: 'ACTIVE',
+          mustChangePassword: false,
+          totpEnrolledAt: null,
+          lastLoginAt: null,
+          createdAt: '2026-08-01T00:00:00Z',
+          roles: [],
+        }}
+        me={{
+          id: '1002',
+          username: 'support',
+          superAdmin: true,
+          mustChangePassword: false,
+          permissions: [],
+          passwordMinLength: 12,
+        }}
+        protection={{ own: false, lastSuper: true }}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    const box = within(await dialog());
+    expect(box.getByRole('switch', { name: 'Super administrator' })).toBeDisabled();
+    expect(
+      box.getByText(/the last enabled super administrator: the flag cannot be cleared/),
+    ).toBeInTheDocument();
   });
 });
 

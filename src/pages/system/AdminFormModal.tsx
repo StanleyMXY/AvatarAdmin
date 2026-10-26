@@ -111,8 +111,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
         await updateAdmin(admin, patch, me);
         message.success(t('system.common.saved'));
       }
-      // The password has gone; nothing of it stays in the form.
-      form.setFieldsValue({ password: '', confirm: '' });
+      // The dialog is unmounted by `onClose`: the form, and the password in it, is gone with it.
       onDone();
       onClose();
     } catch (error) {
@@ -137,7 +136,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
       cancelText={t('system.common.cancel')}
       okButtonProps={{ disabled: nothingToSave || pending, loading: pending }}
       cancelButtonProps={{ disabled: pending }}
-      maskClosable={false}
+      mask={{ closable: false }}
       onOk={() => void run().catch(() => {})}
       onCancel={onClose}
     >

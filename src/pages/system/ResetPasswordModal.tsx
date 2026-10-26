@@ -42,7 +42,6 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
     }
     try {
       await resetAdminPassword(admin.id, values.newPassword);
-      form.setFieldsValue({ newPassword: '', confirm: '' });
       message.success(t('system.admins.resetDone', { name: admin.username }));
       onDone();
       onClose();
@@ -60,7 +59,7 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
       okButtonProps={{ danger: true, loading: pending, disabled: pending }}
       cancelText={t('system.common.cancel')}
       cancelButtonProps={{ disabled: pending }}
-      maskClosable={false}
+      mask={{ closable: false }}
       onOk={() => void run().catch(() => {})}
       onCancel={onClose}
     >

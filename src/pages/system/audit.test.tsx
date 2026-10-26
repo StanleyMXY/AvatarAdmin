@@ -9,6 +9,7 @@ import { HIDDEN } from './auditDetail';
 import {
   jsonAnswer,
   overrideFetch,
+  settled,
   signIn,
   systemState,
   tableRows,
@@ -279,6 +280,13 @@ describe('the filters', () => {
         tableRows().every((cells) => cells[0] === 'support' || cells[0] === 'old-support'),
       ).toBe(true),
     );
+  });
+
+  it('does not even ask for the list of administrators without ADMIN:MANAGE', async () => {
+    signIn('support', { codes: ['AUDIT:VIEW'] });
+    const { calls } = await load();
+    await settled();
+    expect(calls.some((c) => c.url.startsWith('/api/admin/admins'))).toBe(false);
   });
 
   it('asks for the administrator id as a number to type when the administrators cannot be listed', async () => {

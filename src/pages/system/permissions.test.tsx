@@ -1,11 +1,13 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import system from '../../../mock/system.mock';
 import systemPermissions from '../../../mock/system.permissions.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { PERMISSION_CODES } from '../../access/permissionCodes';
+import { PermissionNodeModal } from './PermissionNodeModal';
 import PermissionsPage from './permissions';
 import {
   dialogsClosed,
@@ -499,5 +501,46 @@ describe('a new node', () => {
     await user.click(box.getByRole('combobox', { name: 'Parent node' }));
     const titles = await optionTexts();
     expect(titles.length).toBeGreaterThan(PERMISSION_CODES.length);
+  });
+});
+
+type StaleNode = Parameters<typeof PermissionNodeModal>[0]['nodes'][number];
+const staleNode = (code: string, parent: string | null): StaleNode => ({
+  code,
+  parent,
+  type: 'MENU',
+  sortOrder: 1,
+  nameZh: code,
+  nameEn: code,
+  builtin: false,
+});
+const BEFORE = [staleNode('CUSTOM:A', null), staleNode('CUSTOM:D', null)];
+let changeNodes: (nodes: StaleNode[]) => void = () => {};
+
+function StaleHarness() {
+  const [nodes, set] = useState(BEFORE);
+  changeNodes = set;
+  return (
+    <PermissionNodeModal node={BEFORE[0]} nodes={nodes} onDone={() => {}} onClose={() => {}} />
+  );
+}
+
+describe('a node that was moved by somebody else while the dialog was open', () => {
+  it('is not sent under a node that is now below it: the request is refused before it goes out', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<StaleHarness />);
+    const box = within(await dialog());
+    await user.click(box.getByRole('combobox', { name: 'Parent node' }));
+    await user.click(await screen.findByTitle('CUSTOM:D (CUSTOM:D)'));
+    // meanwhile D became a child of A: moving A under D would make a loop
+    await act(async () =>
+      changeNodes([staleNode('CUSTOM:A', null), staleNode('CUSTOM:D', 'CUSTOM:A')]),
+    );
+    await user.click(save(box));
+    expect(
+      await box.findByText('A node cannot be put under itself or under its own descendant.'),
+    ).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
   });
 });

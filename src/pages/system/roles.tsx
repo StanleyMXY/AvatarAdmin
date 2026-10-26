@@ -1,13 +1,13 @@
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
+import type { TableColumnsType } from 'antd';
 import { Alert, App, Button, Flex } from 'antd';
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
-import { PagedListTable } from '../../components/PagedListTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { type AdminRole, deleteRole, listRoles } from '../../services/system';
 import { describeFailure } from '../../session/describe';
 import { plainText } from '../../utils/plainText';
+import { PagedTable } from './PagedTable';
 import { RoleModal } from './RoleModal';
 import { instantText } from './texts';
 
@@ -24,10 +24,11 @@ export default function RolesPage() {
   const canManage = access.canAccess('ROLE:MANAGE');
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
-  const actionRef = useRef<ActionType | undefined>(undefined);
+  const reloadRef = useRef<(() => void) | null>(null);
   const [editing, setEditing] = useState<AdminRole | 'new' | null>(null);
 
-  const refresh = () => actionRef.current?.reload();
+  const load = useCallback((paging: { page: number; pageSize: number }) => listRoles(paging), []);
+  const refresh = () => reloadRef.current?.();
 
   const remove = async (row: AdminRole) => {
     try {
@@ -52,17 +53,15 @@ export default function RolesPage() {
         ]
       : [];
 
-  const columns: ProColumns<AdminRole>[] = [
+  const columns: TableColumnsType<AdminRole> = [
     {
       title: t('system.roles.col.name'),
       dataIndex: 'name',
-      search: false,
       render: (_, row) => <EllipsisPopoverText text={plainText(row.name)} lines={2} width={240} />,
     },
     {
       title: t('system.roles.col.remark'),
       dataIndex: 'remark',
-      search: false,
       render: (_, row) => (
         <EllipsisPopoverText text={plainText(row.remark)} lines={2} width={280} />
       ),
@@ -70,7 +69,6 @@ export default function RolesPage() {
     {
       title: t('system.roles.col.permissions'),
       dataIndex: 'permissionCodes',
-      search: false,
       align: 'end',
       render: (_, row) =>
         t('system.roles.count', {
@@ -80,7 +78,6 @@ export default function RolesPage() {
     {
       title: t('system.roles.col.createdAt'),
       dataIndex: 'createdAt',
-      search: false,
       render: (_, row) => instantText(intl.locale, row.createdAt),
     },
     ...(canManage
@@ -88,7 +85,6 @@ export default function RolesPage() {
           {
             title: t('system.roles.col.actions'),
             key: 'actions',
-            search: false,
             fixed: 'right' as const,
             render: (_: unknown, row: AdminRole) => <RowActions actions={actionsOf(row)} />,
           },
@@ -99,19 +95,17 @@ export default function RolesPage() {
   return (
     <Flex vertical gap={16}>
       <Alert type="info" showIcon title={t('system.roles.note')} />
-      <PagedListTable<AdminRole>
+      <PagedTable<AdminRole>
         rowKey="id"
         columns={columns}
-        actionRef={actionRef}
-        request={({ page, pageSize }) => listRoles({ page, pageSize })}
+        reloadRef={reloadRef}
+        load={load}
         toolbar={
-          canManage
-            ? [
-                <Button key="new" type="primary" onClick={() => setEditing('new')}>
-                  {t('system.roles.new')}
-                </Button>,
-              ]
-            : undefined
+          canManage ? (
+            <Button type="primary" onClick={() => setEditing('new')}>
+              {t('system.roles.new')}
+            </Button>
+          ) : undefined
         }
       />
       {editing !== null ? (

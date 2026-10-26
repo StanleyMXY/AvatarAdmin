@@ -99,7 +99,7 @@ export function RoleModal({ role, onDone, onClose }: Props) {
       cancelText={t('system.common.cancel')}
       okButtonProps={{ disabled: nodes === null || pending, loading: pending }}
       cancelButtonProps={{ disabled: pending }}
-      maskClosable={false}
+      mask={{ closable: false }}
       onOk={() => void run().catch(() => {})}
       onCancel={onClose}
     >

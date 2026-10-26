@@ -1,9 +1,8 @@
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
+import type { TableColumnsType } from 'antd';
 import { Alert, App, Button, Flex, Tag } from 'antd';
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
-import { PagedListTable } from '../../components/PagedListTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
 import {
@@ -19,6 +18,7 @@ import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { AdminFormModal } from './AdminFormModal';
 import { type RowProtection, rowProtection } from './adminRules';
+import { PagedTable } from './PagedTable';
 import { ResetPasswordModal } from './ResetPasswordModal';
 import { instantText, protectedFailureText } from './texts';
 import { useRead } from './useRead';
@@ -45,15 +45,16 @@ export default function AdminsPage() {
   const canManage = access.canAccess('ADMIN:MANAGE');
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
-  const actionRef = useRef<ActionType | undefined>(undefined);
+  const reloadRef = useRef<(() => void) | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   // Every administrator, for "the last enabled super administrator" (the table shows one page only).
   const everyone = useRead(loadAllAdmins);
   const all = everyone.state.data?.filter(isRecord) ?? null;
   const refresh = () => {
-    actionRef.current?.reload();
+    reloadRef.current?.();
     everyone.reload();
   };
+  const load = useCallback((paging: { page: number; pageSize: number }) => listAdmins(paging), []);
   const who = { id: me?.id, username: me?.username };
   const protectionOf = (row: AdminUser): RowProtection => rowProtection(row, who, all);
 
@@ -120,11 +121,10 @@ export default function AdminsPage() {
     DISABLED: { label: t('system.admins.status.DISABLED') },
   };
 
-  const columns: ProColumns<AdminUser>[] = [
+  const columns: TableColumnsType<AdminUser> = [
     {
       title: t('system.admins.col.username'),
       dataIndex: 'username',
-      search: false,
       render: (_, row) => (
         <Flex gap={6} align="center">
           <EllipsisPopoverText text={plainText(row.username)} lines={2} width={220} />
@@ -137,27 +137,23 @@ export default function AdminsPage() {
     {
       title: t('system.admins.col.superAdmin'),
       dataIndex: 'superAdmin',
-      search: false,
       render: (_, row) =>
         row.superAdmin === true ? <Tag color="gold">{t('system.admins.superYes')}</Tag> : DASH,
     },
     {
       title: t('system.admins.col.status'),
       dataIndex: 'status',
-      search: false,
       render: (_, row) => <StatusTag status={plainText(row.status)} options={statusOptions} />,
     },
     {
       title: t('system.admins.col.mustChangePassword'),
       dataIndex: 'mustChangePassword',
-      search: false,
       render: (_, row) =>
         row.mustChangePassword === true ? t('system.common.yes') : t('system.common.no'),
     },
     {
       title: t('system.admins.col.roles'),
       dataIndex: 'roles',
-      search: false,
       render: (_, row) => {
         const roles = Array.isArray(row.roles) ? row.roles : [];
         if (roles.length === 0) return t('system.admins.noRoles');
@@ -185,13 +181,11 @@ export default function AdminsPage() {
     {
       title: t('system.admins.col.lastLoginAt'),
       dataIndex: 'lastLoginAt',
-      search: false,
       render: (_, row) => instantText(intl.locale, row.lastLoginAt),
     },
     {
       title: t('system.admins.col.createdAt'),
       dataIndex: 'createdAt',
-      search: false,
       render: (_, row) => instantText(intl.locale, row.createdAt),
     },
     ...(canManage
@@ -199,7 +193,6 @@ export default function AdminsPage() {
           {
             title: t('system.admins.col.actions'),
             key: 'actions',
-            search: false,
             fixed: 'right' as const,
             render: (_: unknown, row: AdminUser) => <RowActions actions={actionsOf(row)} />,
           },
@@ -210,19 +203,17 @@ export default function AdminsPage() {
   return (
     <Flex vertical gap={16}>
       <Alert type="info" showIcon title={t('system.admins.note')} />
-      <PagedListTable<AdminUser>
+      <PagedTable<AdminUser>
         rowKey="id"
         columns={columns}
-        actionRef={actionRef}
-        request={({ page, pageSize }) => listAdmins({ page, pageSize })}
+        reloadRef={reloadRef}
+        load={load}
         toolbar={
-          canManage
-            ? [
-                <Button key="new" type="primary" onClick={() => setDialog({ kind: 'create' })}>
-                  {t('system.admins.new')}
-                </Button>,
-              ]
-            : undefined
+          canManage ? (
+            <Button type="primary" onClick={() => setDialog({ kind: 'create' })}>
+              {t('system.admins.new')}
+            </Button>
+          ) : undefined
         }
       />
       {dialog?.kind === 'create' ? (
