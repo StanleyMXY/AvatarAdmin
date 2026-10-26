@@ -67,7 +67,11 @@ export function handleForbidden(): void {
   handlers?.onForbidden();
 }
 
-/** Forgets the token, the handlers and what was read from storage (for sign-out flows and tests). */
+/**
+ * Test helper: forgets the in-memory state (token, handlers, "already read storage"). It does NOT
+ * clear sessionStorage, so a token saved there is read back by the next getToken(). Signing out
+ * is `clearToken()`.
+ */
 export function resetSessionState(): void {
   memoryToken = null;
   hydrated = false;

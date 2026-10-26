@@ -83,6 +83,19 @@ describe('token storage', () => {
     expect(getToken()).toBeNull();
   });
 
+  it('signing out is clearToken: afterwards not even a fresh page load finds the token', () => {
+    setToken('abc');
+    clearToken();
+    resetSessionState();
+    expect(getToken()).toBeNull();
+  });
+
+  it('resetSessionState alone does not sign anyone out (the token is read back from sessionStorage)', () => {
+    setToken('abc');
+    resetSessionState();
+    expect(getToken()).toBe('abc');
+  });
+
   it('does not put the token anywhere but sessionStorage', () => {
     setToken('secret-token-value');
     const everything = JSON.stringify({ ...localStorage });
