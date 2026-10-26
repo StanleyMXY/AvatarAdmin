@@ -1,0 +1,22 @@
+## 1. GET /me without a token
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json; charset=utf-8
+{"code":"ADMIN_INVALID_TOKEN","message":"The administrator token is invalid, expired or missing","data":null}
+## 2. POST /auth/login (root, fake password, fake code)
+{"code":"200","message":"success","data":{"token":"mock.32169de0-d20e-48c5-a2f1-f56c6b41043c","expiresAt":"2026-10-26T14:18:06.518Z"}}
+
+## 3. GET /me with the token (count of permission codes)
+200 root True 79 12
+
+## 4. GET /meta field count
+200 20
+
+## 5. GET /permissions node count
+200 79
+
+## 6. wrong code
+{"code":"ADMIN_TOTP_INVALID","message":"The verification code is wrong, used or expired","data":null}
+
+## 7. enroll flow (fresh)
+{"code":"200","message":"success","data":{"status":"ENROLL_REQUIRED","enrollToken":"enroll.ba0a3f23-f3c7-458a-b450-a2982572ccb0","otpauthUri":"otpauth://totp/AvatarApp:fresh?secret=MOCKMOCKMOCKMOCK&is
+
