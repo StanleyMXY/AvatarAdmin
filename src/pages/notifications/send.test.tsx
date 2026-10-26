@@ -138,6 +138,20 @@ describe('the recipients: one account id per line', () => {
     await waitFor(() => expect(within(dialog).queryByText(/At most 3 accounts/)).toBeNull());
   });
 
+  it('says the limit of GET /meta in the box, and says nothing about a limit when the meta has none', async () => {
+    useMockBackend({ default: notificationsMock });
+    const user = userEvent.setup();
+    const { unmount } = renderPage(<NotificationsPage />);
+    let dialog = await openDialog(user);
+    expect(within(dialog).getByText('Limit: 1000 accounts per batch.')).toBeInTheDocument();
+    unmount();
+    signIn('root', { meta: { ...META, maxRecipients: undefined } });
+    useMockBackend({ default: notificationsMock });
+    renderPage(<NotificationsPage />);
+    dialog = await openDialog(user);
+    expect(within(dialog).queryByText(/Limit:/)).toBeNull();
+  });
+
   it('counts the limit on the ids after the repeats are merged', async () => {
     signIn('root', { meta: { ...META, maxRecipients: 2 } });
     const calls = useMockBackend({ default: notificationsMock });

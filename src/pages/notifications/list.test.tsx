@@ -402,14 +402,11 @@ describe('the detail drawer', () => {
     const rich = notificationsState.rows.find(
       (r) => r.category === 'ADMIN' && Object.keys(r.titleI18n ?? {}).length >= 6,
     ) as (typeof notificationsState.rows)[number];
-    const all = await (async () => {
-      fireEvent.change(screen.getByRole('textbox', { name: 'Account ID' }), {
-        target: { value: rich.accountId },
-      });
-      await user.click(screen.getByRole('button', { name: 'Search' }));
-      await waitFor(() => expect(calls.at(-1)?.url).toContain(`accountId=${rich.accountId}`));
-    })();
-    void all;
+    fireEvent.change(screen.getByRole('textbox', { name: 'Account ID' }), {
+      target: { value: rich.accountId },
+    });
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(calls.at(-1)?.url).toContain(`accountId=${rich.accountId}`));
     const title = rich.titleI18n?.en as string;
     const button = await waitFor(() => {
       const found = screen

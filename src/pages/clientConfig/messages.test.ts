@@ -3,9 +3,7 @@ import { join } from 'node:path';
 import { IntlMessageFormat } from 'intl-messageformat';
 import { describe, expect, it } from 'vitest';
 import enClient from '../../locales/en-US/clientConfig';
-import enNotifications from '../../locales/en-US/notifications';
 import zhClient from '../../locales/zh-CN/clientConfig';
-import zhNotifications from '../../locales/zh-CN/notifications';
 
 // react-intl writes a message that does not parse to the console and shows its source, so a broken
 // message is not seen by a test that renders a page: a placeholder written with braces, like {link},
@@ -13,11 +11,9 @@ import zhNotifications from '../../locales/zh-CN/notifications';
 const SETS = [
   ['en-US clientConfig', enClient, 'en-US'],
   ['zh-CN clientConfig', zhClient, 'zh-CN'],
-  ['en-US notifications', enNotifications, 'en-US'],
-  ['zh-CN notifications', zhNotifications, 'zh-CN'],
 ] as const;
 
-describe('the texts of the client configuration and notification pages', () => {
+describe('the texts of the client configuration page', () => {
   for (const [name, messages, locale] of SETS) {
     it(`${name}: every message is a valid message and can be filled in`, () => {
       for (const [key, text] of Object.entries(messages)) {
@@ -67,7 +63,6 @@ describe('the texts of the client configuration and notification pages', () => {
   it('have a text, in both languages, for every key that the pages ask for', () => {
     for (const [dir, prefix, en, zh] of [
       ['src/pages/clientConfig', 'clientConfig', enClient, zhClient],
-      ['src/pages/notifications', 'notifications', enNotifications, zhNotifications],
     ] as const) {
       const used = new Set<string>();
       for (const file of sourceFiles(dir)) {

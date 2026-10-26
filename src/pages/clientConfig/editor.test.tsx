@@ -906,12 +906,11 @@ describe('values that are not what the contract says', () => {
 describe('a switch', () => {
   it('saves true or false as a boolean', async () => {
     const stored: unknown[] = [];
-    stubFetch(async ({ url, init }) => {
+    stubFetch(async ({ init }) => {
       if (init.method === 'PUT') {
         stored.push(JSON.parse(init.body as string));
         return jsonResponse(200, envelope('200', {}));
       }
-      void url;
       return jsonResponse(
         200,
         envelope('200', {

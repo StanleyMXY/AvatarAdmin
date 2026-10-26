@@ -46,6 +46,12 @@ describe('resolvePreview: the value the client gets for one requested language (
     expect(resolvePreview(many, 'zh-Hant-TW')).toMatchObject({ matched: 'zh-Hant' });
   });
 
+  it('among several entries of one language, a request with more subtags finds the entry that is its prefix, not the one that sorts first', () => {
+    const regional = item({ 'pt-BR': 'BR', 'pt-PT': 'PT' });
+    expect(resolvePreview(regional, 'pt-PT-1996')).toMatchObject({ matched: 'pt-PT', value: 'PT' });
+    expect(resolvePreview(regional, 'pt-BR-1996')).toMatchObject({ matched: 'pt-BR', value: 'BR' });
+  });
+
   it('among several entries of Chinese, picks the script the request implies', () => {
     const many = item({ 'zh-Hant': 'ZT', 'zh-Hans': 'ZS' });
     expect(resolvePreview(many, 'zh-TW')).toMatchObject({ matched: 'zh-Hant' });

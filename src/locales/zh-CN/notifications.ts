@@ -52,6 +52,7 @@ const messages: Record<string, string> = {
     '只发给下面指定的账号。要给全体用户发消息，请用推送管理里的手动推送任务。',
   'notifications.send.recipients': '收件账号',
   'notifications.send.recipientsHelp': '每行一个账号 ID，重复的只算一次。',
+  'notifications.send.recipientsMax': '每批最多 {max} 个账号。',
   'notifications.send.recipientsPlaceholder': '账号 ID，每行一个',
   'notifications.send.recipientsCount': '共 {count} 个账号',
   'notifications.send.recipientsRepeated': '已合并 {count} 行重复的账号',

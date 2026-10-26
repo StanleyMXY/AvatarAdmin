@@ -322,6 +322,9 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
           extra={
             <Flex vertical>
               <span>{t('notifications.send.recipientsHelp')}</span>
+              {typeof meta.maxRecipients === 'number' && meta.maxRecipients > 0 ? (
+                <span>{t('notifications.send.recipientsMax', { max: meta.maxRecipients })}</span>
+              ) : null}
               <span>{t('notifications.send.recipientsCount', { count: parsed.ids.length })}</span>
               {parsed.repeated > 0 ? (
                 <span>
@@ -381,7 +384,7 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
                 {field(entry, 'title')}
                 {field(entry, 'body')}
                 {entry.locale === 'en' ? null : (
-                  <div>
+                  <div style={{ marginBottom: 8 }}>
                     <Button danger size="small" onClick={() => removeTab(entry.locale)}>
                       {t('notifications.send.removeLanguage', { locale: entry.locale })}
                     </Button>

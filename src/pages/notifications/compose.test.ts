@@ -13,6 +13,8 @@ import {
 const entry = (locale: string, title = 't', body = 'b'): Entry => ({ locale, title, body });
 const IDEOGRAPHIC = String.fromCharCode(0x3000);
 const ZWJ = String.fromCharCode(0x200d);
+const NEL = String.fromCharCode(0x85);
+const BOM = String.fromCharCode(0xfeff);
 
 describe('lengthOf: trim with the contract definition, then count code points', () => {
   it('counts an emoji, a Thai word and an Arabic word by code points', () => {
@@ -21,6 +23,11 @@ describe('lengthOf: trim with the contract definition, then count code points', 
     expect(lengthOf('ก็')).toBe(2);
     expect(lengthOf('مرحبا')).toBe(5);
     expect(lengthOf(['👨', '👩', '👧'].join(ZWJ))).toBe(5);
+  });
+
+  it('counts as the contract does: U+0085 at an end is whitespace, U+FEFF is not', () => {
+    expect(lengthOf(`${NEL}ab${NEL}`)).toBe(2);
+    expect(lengthOf(`${BOM}ab`)).toBe(3);
   });
 
   it('does not count the whitespace at either end, however it is written', () => {

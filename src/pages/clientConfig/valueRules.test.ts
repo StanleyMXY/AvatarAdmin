@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cleanValue, validateValue } from './valueRules';
 
 const IDEOGRAPHIC = String.fromCharCode(0x3000);
+const NEL = String.fromCharCode(0x85);
 
 describe('URL values (contract 26.1, link rule 1.7)', () => {
   it('accepts an https link', () => {
@@ -35,6 +36,12 @@ describe('URL values (contract 26.1, link rule 1.7)', () => {
   it('judges the trimmed text, which is also what is saved', () => {
     expect(validateValue('URL', '  https://example.com/x \n')).toBeNull();
     expect(cleanValue('URL', '  https://example.com/x \n')).toBe('https://example.com/x');
+  });
+
+  it('trims with the contract definition, not String.trim: a U+0085 at an end is whitespace', () => {
+    expect(validateValue('URL', `${NEL}https://example.com/x${NEL}`)).toBeNull();
+    expect(cleanValue('URL', `${NEL}https://example.com/x${NEL}`)).toBe('https://example.com/x');
+    expect(validateValue('EMAIL', `${NEL}help@example.com${NEL}`)).toBeNull();
   });
 
   it('refuses a value that is not text', () => {

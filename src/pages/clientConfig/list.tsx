@@ -32,6 +32,8 @@ export default function ClientConfigPage() {
   const editableItem = (row: ClientConfigItem) =>
     canManage && row.readOnly !== true && plainText(row.type) !== 'STRING_LIST';
   const wrap = { overflowWrap: 'anywhere' as const };
+  // The description and the use are sentences: they wrap inside a column of a readable width instead of stretching the table.
+  const sentence = { ...wrap, display: 'inline-block', minWidth: 240, maxWidth: 380 } as const;
 
   const columns: ColumnsType<ClientConfigItem> = [
     {
@@ -51,7 +53,7 @@ export default function ClientConfigPage() {
     {
       key: 'desc',
       title: t('clientConfig.col.desc'),
-      render: (_, row) => <span style={wrap}>{keyText(intl, row.key, 'desc')}</span>,
+      render: (_, row) => <span style={sentence}>{keyText(intl, row.key, 'desc')}</span>,
     },
     {
       key: 'type',
@@ -93,7 +95,7 @@ export default function ClientConfigPage() {
     {
       key: 'usage',
       title: t('clientConfig.col.usage'),
-      render: (_, row) => <span style={wrap}>{keyText(intl, row.key, 'usage')}</span>,
+      render: (_, row) => <span style={sentence}>{keyText(intl, row.key, 'usage')}</span>,
     },
     {
       key: 'actions',

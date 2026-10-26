@@ -52,6 +52,7 @@ const messages: Record<string, string> = {
     'This goes only to the accounts named below. To message all users, use a manual push task in Push management.',
   'notifications.send.recipients': 'Recipients',
   'notifications.send.recipientsHelp': 'One account ID per line; an ID written twice counts once.',
+  'notifications.send.recipientsMax': 'Limit: {max} accounts per batch.',
   'notifications.send.recipientsPlaceholder': 'Account IDs, one per line',
   'notifications.send.recipientsCount': '{count, plural, one {# account} other {# accounts}}',
   'notifications.send.recipientsRepeated':

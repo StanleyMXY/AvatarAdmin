@@ -4,6 +4,10 @@ import { parseRecipients, recipientsProblem } from './recipients';
 const NBSP = String.fromCharCode(0xa0);
 const IDEOGRAPHIC = String.fromCharCode(0x3000);
 const LS = String.fromCharCode(0x2028);
+// In the contract's definition of whitespace but not in String.trim, and the other way round.
+const NEL = String.fromCharCode(0x85);
+const FS = String.fromCharCode(0x1c);
+const BOM = String.fromCharCode(0xfeff);
 
 describe('parseRecipients: one account id per line', () => {
   it('takes one id per line in the order written', () => {
@@ -21,6 +25,12 @@ describe('parseRecipients: one account id per line', () => {
       'b2',
       'c3',
     ]);
+  });
+
+  it('trims the characters that only the contract counts as whitespace, and keeps the one that only String.trim does', () => {
+    expect(parseRecipients(`${NEL}a1${FS}`).ids).toEqual(['a1']);
+    expect(parseRecipients(`${NEL}\n${FS}`).ids).toEqual([]);
+    expect(parseRecipients(`${BOM}a1`).ids).toEqual([`${BOM}a1`]);
   });
 
   it('drops empty lines and lines of whitespace only', () => {
