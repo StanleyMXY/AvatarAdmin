@@ -10,8 +10,8 @@ import { countText, lifecycleOptions, plainOrDash } from './texts';
 
 type State =
   | { kind: 'loading' }
-  | { kind: 'failed'; text: string; forId: string }
-  | { kind: 'loaded'; detail: CheckinActivityDetail; forId: string };
+  | { kind: 'failed'; text: string }
+  | { kind: 'loaded'; detail: CheckinActivityDetail };
 
 type Props = {
   /** The activity to show; it stays set while the dialog closes, so that the content does not change under the animation. */
@@ -25,21 +25,19 @@ export function ActivityViewModal({ id, open, onClose }: Props) {
   const intl = useIntl();
   const t = (key: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id: key }, values);
-  const [read, setRead] = useState<State>({ kind: 'loading' });
+  const [state, setState] = useState<State>({ kind: 'loading' });
   const counter = useRef(0);
-  // What was read for another activity is never shown for this one, not even for the moment before its own answer.
-  const state: State = read.kind !== 'loading' && read.forId !== id ? { kind: 'loading' } : read;
 
   const load = useCallback(
     async (target: string) => {
       const mine = ++counter.current;
-      setRead({ kind: 'loading' });
+      setState({ kind: 'loading' });
       try {
         const detail = await getCheckinActivity(target);
-        if (mine === counter.current) setRead({ kind: 'loaded', detail, forId: target });
+        if (mine === counter.current) setState({ kind: 'loaded', detail });
       } catch (error) {
         if (mine === counter.current) {
-          setRead({ kind: 'failed', text: describeFailure(intl, error).text, forId: target });
+          setState({ kind: 'failed', text: describeFailure(intl, error).text });
         }
       }
     },
