@@ -1,9 +1,8 @@
 import { history, useIntl, useLocation } from '@umijs/max';
 import { Alert, Button, Form, Input } from 'antd';
 import { useRef, useState } from 'react';
-import type { ApiError } from '../../../request/errors';
 import { hasToken, login } from '../../../services/auth';
-import { describeFailure } from '../../../session/describe';
+import { describeFailure, failureNotice, type Notice, noticeText } from '../../../session/describe';
 import { setPendingEnroll } from '../../../session/pendingEnroll';
 import { ENROLL_PATH } from '../../../session/returnUrl';
 import { useGoWhenSignedIn, useSession } from '../../../session/useSession';
@@ -21,7 +20,7 @@ export default function Login() {
   const { search } = useLocation();
   const { busy, run } = useSubmitOnce();
   const [needTotp, setNeedTotp] = useState(false);
-  const [notice, setNotice] = useState<{ type: 'error' | 'info'; text: string } | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const totpRef = useRef<{ focus: () => void } | null>(null);
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
@@ -48,27 +47,22 @@ export default function Login() {
         }
         const next = await establish(result.token, redirect);
         if (next === undefined) {
-          setNotice({ type: 'error', text: t('auth.login.accountFailed') });
+          setNotice({ type: 'error', content: { id: 'auth.login.accountFailed' } });
           return;
         }
         goWhenSignedIn(next);
       } catch (failure) {
-        const { error, text } = describeFailure(intl, failure);
+        const { error } = describeFailure(intl, failure);
         if (error.code === 'ADMIN_TOTP_REQUIRED') {
           setNeedTotp(true);
-          setNotice({ type: 'info', text: t('auth.login.totpHint') });
+          setNotice({ type: 'info', content: { id: 'auth.login.totpHint' } });
           setTimeout(() => totpRef.current?.focus(), 0);
         } else if (error.code === 'ADMIN_TOTP_INVALID') {
           form.setFieldValue('totp', '');
-          setNotice({ type: 'error', text });
+          setNotice({ type: 'error', content: { failure } });
           setTimeout(() => totpRef.current?.focus(), 0);
-        } else if (error.code === 'RATE_LIMITED' && retryMinutes(error) !== undefined) {
-          setNotice({
-            type: 'error',
-            text: t('auth.login.locked', { minutes: retryMinutes(error) as number }),
-          });
         } else {
-          setNotice({ type: 'error', text });
+          setNotice(failureNotice(failure));
         }
       }
     });
@@ -101,7 +95,7 @@ export default function Login() {
         ) : null}
         {notice ? (
           <Form.Item>
-            <Alert type={notice.type} title={notice.text} showIcon />
+            <Alert type={notice.type} title={noticeText(intl, notice)} showIcon />
           </Form.Item>
         ) : null}
         <Button type="primary" htmlType="submit" block loading={busy} disabled={busy}>
@@ -110,10 +104,4 @@ export default function Login() {
       </Form>
     </AuthFrame>
   );
-}
-
-/** Whole minutes to wait, when the answer says how many seconds. */
-function retryMinutes(error: ApiError): number | undefined {
-  const seconds = (error.data as { retryAfterSeconds?: unknown } | null)?.retryAfterSeconds;
-  return typeof seconds === 'number' && seconds > 0 ? Math.ceil(seconds / 60) : undefined;
 }

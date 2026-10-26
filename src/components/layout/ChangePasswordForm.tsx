@@ -23,7 +23,8 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
   const intl = useIntl();
   const [form] = Form.useForm<Values>();
   const { busy, run } = useSubmitOnce();
-  const [alert, setAlert] = useState<string | null>(null);
+  // The failure itself is kept, so that the bar is written again when the language changes.
+  const [alert, setAlert] = useState<{ failure: unknown } | null>(null);
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
 
@@ -46,6 +47,11 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
     },
   });
 
+  const alertText = (failure: unknown) => {
+    const { error, text } = describeFailure(intl, failure);
+    return error.code === 'INVALID_REQUEST' && error.message ? `${text}: ${error.message}` : text;
+  };
+
   const submit = (values: Values) =>
     run(async () => {
       setAlert(null);
@@ -53,7 +59,7 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
         await changePassword({ oldPassword: values.oldPassword, newPassword: values.newPassword });
         onDone();
       } catch (failure) {
-        const { error, text, fields } = describeFailure(intl, failure);
+        const { error, fields } = describeFailure(intl, failure);
         if (error.code === 'ADMIN_INVALID_CREDENTIALS') {
           form.setFields([{ name: 'oldPassword', errors: [t('auth.password.oldWrong')] }]);
           return;
@@ -65,9 +71,7 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
         }
         // The backend's own sentence is the only place the reason is spelled out for a rule the
         // browser did not know (for example a minimum length it was not told).
-        setAlert(
-          error.code === 'INVALID_REQUEST' && error.message ? `${text}: ${error.message}` : text,
-        );
+        setAlert({ failure });
       }
     });
 
@@ -96,7 +100,7 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
       </Form.Item>
       {alert ? (
         <Form.Item>
-          <Alert type="error" title={alert} showIcon />
+          <Alert type="error" title={alertText(alert.failure)} showIcon />
         </Form.Item>
       ) : null}
       <Flex gap={8} justify="flex-end">

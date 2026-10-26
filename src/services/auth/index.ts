@@ -21,7 +21,8 @@ export function enrollTotp(body: {
   enrollToken: string;
   totp: string;
 }): Promise<{ token: string; expiresAt: string }> {
-  return apiRequest({ method: 'POST', url: '/auth/totp/enroll', body });
+  // The 401 of this call means the enrollment token is void, not that a session ended.
+  return apiRequest({ method: 'POST', url: '/auth/totp/enroll', body, reportSession: false });
 }
 
 export function changePassword(body: { oldPassword: string; newPassword: string }): Promise<null> {

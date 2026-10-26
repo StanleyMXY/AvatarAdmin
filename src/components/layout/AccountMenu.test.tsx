@@ -5,7 +5,11 @@ import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { renderPage } from '../../../tests/renderPage';
 import { history, resetUmiStub, setTestInitialState } from '../../../tests/stubs/umi-max';
 import { getToken, resetSessionState, setToken } from '../../request/session';
-import { clearPendingEnroll, setPendingEnroll } from '../../session/pendingEnroll';
+import {
+  clearPendingEnroll,
+  getPendingEnroll,
+  setPendingEnroll,
+} from '../../session/pendingEnroll';
 import { AccountMenu } from './AccountMenu';
 import { TABS_STORAGE_KEY } from './TabManager';
 
@@ -91,7 +95,16 @@ describe('the account menu in the header', () => {
     expect(getToken()).toBeNull();
     expect(sessionStorage.getItem('avatar-admin.token')).toBeNull();
     expect(localStorage.getItem(TABS_STORAGE_KEY)).toBeNull();
+    expect(getPendingEnroll()).toBeUndefined();
     expect(history.replace).toHaveBeenCalledWith('/user/login');
     await waitFor(() => expect(screen.queryByRole('button', { name: /ploy/ })).toBeNull());
+  });
+
+  it('still offers the menu when the server sent no user name', async () => {
+    setTestInitialState({ me: { ...me, username: undefined } });
+    const user = userEvent.setup();
+    renderPage(<AccountMenu />);
+    await user.click(screen.getByRole('button', { name: /./ }));
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
   });
 });

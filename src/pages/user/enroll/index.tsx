@@ -3,9 +3,9 @@ import { Alert, App, Button, Flex, Form, Input, Typography } from 'antd';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useState } from 'react';
 import { enrollTotp } from '../../../services/auth';
-import { describeFailure } from '../../../session/describe';
+import { describeFailure, failureNotice, type Notice, noticeText } from '../../../session/describe';
 import { clearPendingEnroll, getPendingEnroll } from '../../../session/pendingEnroll';
-import { LOGIN_PATH } from '../../../session/returnUrl';
+import { DEFAULT_RETURN, LOGIN_PATH, safeReturnUrl } from '../../../session/returnUrl';
 import { useGoWhenSignedIn, useSession } from '../../../session/useSession';
 import { useSubmitOnce } from '../../../session/useSubmitOnce';
 import { trimSpec } from '../../../utils/trimSpec';
@@ -18,7 +18,7 @@ export default function Enroll() {
   const goWhenSignedIn = useGoWhenSignedIn();
   const { busy, run } = useSubmitOnce();
   const [form] = Form.useForm<{ totp: string }>();
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   // Read once: a successful setup clears the memory copy, and the page must not mistake that for "nothing to set up".
   const [pending] = useState(getPendingEnroll);
   const t = (id: string) => intl.formatMessage({ id });
@@ -33,12 +33,18 @@ export default function Enroll() {
   const backToLogin = (notice?: string) => {
     clearPendingEnroll();
     if (notice) message.warning(notice);
-    history.replace(LOGIN_PATH);
+    // Back to sign-in, keeping where the person was going.
+    const target = safeReturnUrl(pending.redirect);
+    history.replace(
+      pending.redirect && target !== DEFAULT_RETURN
+        ? `${LOGIN_PATH}?redirect=${encodeURIComponent(target)}`
+        : LOGIN_PATH,
+    );
   };
 
   const submit = (values: { totp: string }) =>
     run(async () => {
-      setError(null);
+      setNotice(null);
       try {
         const result = await enrollTotp({
           enrollToken: pending.enrollToken,
@@ -46,18 +52,18 @@ export default function Enroll() {
         });
         const next = await establish(result.token, pending.redirect);
         if (next === undefined) {
-          setError(t('auth.login.accountFailed'));
+          setNotice({ type: 'error', content: { id: 'auth.login.accountFailed' } });
           return;
         }
         goWhenSignedIn(next);
       } catch (failure) {
-        const { error: apiError, text } = describeFailure(intl, failure);
+        const { error: apiError } = describeFailure(intl, failure);
         if (apiError.code === 'ADMIN_INVALID_TOKEN') {
           backToLogin(t('auth.enroll.expired'));
           return;
         }
         if (apiError.code === 'ADMIN_TOTP_INVALID') form.setFieldValue('totp', '');
-        setError(text);
+        setNotice(failureNotice(failure));
       }
     });
 
@@ -87,9 +93,9 @@ export default function Enroll() {
           >
             <Input inputMode="numeric" autoComplete="one-time-code" autoFocus />
           </Form.Item>
-          {error ? (
+          {notice ? (
             <Form.Item>
-              <Alert type="error" title={error} showIcon />
+              <Alert type={notice.type} title={noticeText(intl, notice)} showIcon />
             </Form.Item>
           ) : null}
           <Button type="primary" htmlType="submit" block loading={busy} disabled={busy}>

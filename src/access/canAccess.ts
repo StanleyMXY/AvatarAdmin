@@ -1,7 +1,12 @@
 import type { PermissionCode } from './permissionCodes';
 
 /** What the access check needs to know about the signed-in administrator (`GET /me`). */
-export type AccessMe = { superAdmin: boolean; permissions: readonly string[] };
+export type AccessMe = {
+  superAdmin: boolean;
+  permissions: readonly string[];
+  /** An account that must change its password first can open no page of the shell. */
+  mustChangePassword?: boolean;
+};
 
 /**
  * A route as `config/routes` writes it. `access` is a permission code and is what Umi's access
@@ -29,6 +34,7 @@ export type AdminRoute = {
  */
 export function canAccess(me: AccessMe | undefined, code: string | undefined): boolean {
   if (!me) return false;
+  if (me.mustChangePassword === true) return false;
   if (!code) return true;
   if (me.superAdmin === true) return true;
   return Array.isArray(me.permissions) && me.permissions.includes(code);

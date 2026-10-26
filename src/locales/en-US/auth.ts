@@ -8,7 +8,8 @@ const messages: Record<string, string> = {
   'auth.login.totpRequired': 'Enter the verification code',
   'auth.login.totpHint': 'Enter the code shown in your authenticator',
   'auth.login.submit': 'Sign in',
-  'auth.login.locked': 'Too many attempts. Try again in {minutes} minutes.',
+  'auth.login.locked':
+    'Too many attempts. Try again in {minutes, plural, one {# minute} other {# minutes}}.',
   'auth.login.accountFailed': 'Signed in, but your account could not be read. Try again.',
   'auth.enroll.title': 'Set up your authenticator',
   'auth.enroll.intro':

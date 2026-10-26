@@ -56,7 +56,18 @@ export function setTestInitialState(state: Record<string, unknown> | undefined) 
 export function setTestLocation(location: Partial<StubLocation>) {
   locationStore.set({ ...locationStore.get(), ...location });
 }
+/**
+ * Umi commits `setInitialState` a moment after the call returns, so a page that mounts right after
+ * it can still see the old state. A number here (milliseconds) makes the stub do the same; null
+ * (the default) applies the change at once.
+ */
+let initialStateDelay: number | null = null;
+export function setTestInitialStateDelay(ms: number | null) {
+  initialStateDelay = ms;
+}
+
 export function resetUmiStub() {
+  initialStateDelay = null;
   accessStore.reset();
   initialStateStore.reset();
   locationStore.reset();
@@ -93,7 +104,10 @@ export function useModel(namespace: string) {
         | undefined
         | ((previous: Record<string, unknown> | undefined) => Record<string, unknown> | undefined),
     ) => {
-      initialStateStore.set(typeof next === 'function' ? next(initialStateStore.get()) : next);
+      const apply = () =>
+        initialStateStore.set(typeof next === 'function' ? next(initialStateStore.get()) : next);
+      if (initialStateDelay === null) apply();
+      else setTimeout(apply, initialStateDelay);
     },
   };
 }

@@ -27,12 +27,19 @@ export function SessionBridge({ children }: { children: ReactNode }) {
         clearPendingEnroll();
         forgetTabs();
         void setInitialState({});
-        message.warning(intl.formatMessage({ id: 'error.ADMIN_INVALID_TOKEN' }));
+        message.warning({
+          key: 'admin-expired',
+          content: intl.formatMessage({ id: 'error.ADMIN_INVALID_TOKEN' }),
+        });
         history.replace(loginUrl(window.location.pathname, window.location.search));
       },
       onForbidden: () => {
         const { intl, message, setInitialState } = latest.current;
-        message.error(intl.formatMessage({ id: 'error.ADMIN_FORBIDDEN' }));
+        // One notice however many refusals arrive together (the key makes antd show it once).
+        message.error({
+          key: 'admin-forbidden',
+          content: intl.formatMessage({ id: 'error.ADMIN_FORBIDDEN' }),
+        });
         void readMeAgain().then((me) => {
           if (me) void setInitialState((previous) => ({ ...(previous ?? {}), me }));
         });

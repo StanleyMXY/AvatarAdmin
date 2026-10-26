@@ -83,11 +83,16 @@ export function transportFailure(cause: unknown): unknown {
 }
 
 /** Unwraps an answer and reports its session signals. */
-export function unwrapAndReport<T>(httpStatus: number, text: string, sentToken: string | null): T {
+export function unwrapAndReport<T>(
+  httpStatus: number,
+  text: string,
+  sentToken: string | null,
+  reportSession = true,
+): T {
   try {
     return unwrapResponse<T>(httpStatus, text);
   } catch (error) {
-    reportSessionSignals(error, sentToken);
+    if (reportSession) reportSessionSignals(error, sentToken);
     throw error;
   }
 }
@@ -98,6 +103,11 @@ export async function apiRequest<T>(o: {
   params?: RequestParams;
   body?: unknown;
   signal?: AbortSignal;
+  /**
+   * False for a request whose 401 ADMIN_INVALID_TOKEN is about something other than the session
+   * token (the enrollment token of the authenticator setup): the session layer is not told.
+   */
+  reportSession?: boolean;
 }): Promise<T> {
   const url = `${resolveUrl(o.url)}${buildQuery(o.params)}`;
   const hasBody = o.body !== undefined;
@@ -117,5 +127,5 @@ export async function apiRequest<T>(o: {
   } catch (cause) {
     throw transportFailure(cause);
   }
-  return unwrapAndReport<T>(status, text, sentToken);
+  return unwrapAndReport<T>(status, text, sentToken, o.reportSession);
 }

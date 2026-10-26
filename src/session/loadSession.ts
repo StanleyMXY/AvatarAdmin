@@ -1,3 +1,4 @@
+import { forgetTabs } from '../components/layout/signOut';
 import { getToken } from '../request/session';
 import { getAdminMeta, getMe } from '../services/auth';
 import type { SessionState } from './state';
@@ -14,9 +15,16 @@ export async function loadSession(): Promise<SessionState> {
   try {
     me = await getMe();
   } catch {
+    // A token the server refused is gone now; the tabs of that account are not kept for the next one.
+    if (getToken() === null) forgetTabs();
     return {};
   }
   const meta = me.mustChangePassword ? undefined : await getAdminMeta();
+  // The token can be refused between the two reads: then there is no session to show.
+  if (getToken() === null) {
+    forgetTabs();
+    return {};
+  }
   return { me, meta };
 }
 

@@ -318,4 +318,19 @@ describe('the sign-in page', () => {
     expect(getToken()).toBeNull();
     expect(history.replace).not.toHaveBeenCalled();
   });
+
+  it('hands the page the person was going to on to the setup page', async () => {
+    setTestLocation({ search: `?redirect=${encodeURIComponent('/users/42?tab=x')}` });
+    stubFetch(() =>
+      jsonResponse(
+        200,
+        envelope('200', { status: 'ENROLL_REQUIRED', enrollToken: 'e', otpauthUri: 'otpauth://x' }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage(<Login />);
+    await fill(user, 'fresh', 'pw');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(getPendingEnroll()?.redirect).toBe('/users/42?tab=x'));
+  });
 });

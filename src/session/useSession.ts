@@ -1,7 +1,7 @@
 import { history, useModel } from '@umijs/max';
 import { useCallback, useEffect, useState } from 'react';
 import { signOut as forgetSession } from '../components/layout/signOut';
-import { clearToken, setToken } from '../request/session';
+import { clearToken, getToken, setToken } from '../request/session';
 import type { AdminMeta } from '../services/auth';
 import { loadSession, readMeAgain } from './loadSession';
 import { clearPendingEnroll } from './pendingEnroll';
@@ -31,7 +31,7 @@ export function useSession() {
     async (token: string, redirect?: string | null): Promise<string | undefined> => {
       setToken(token);
       const next = await loadSession();
-      if (!next.me) {
+      if (!next.me || getToken() === null) {
         // The token was given but the account cannot be read: do not stay half signed in.
         clearToken();
         return undefined;

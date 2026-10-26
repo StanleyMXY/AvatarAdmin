@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearPendingEnroll, getPendingEnroll, setPendingEnroll } from './pendingEnroll';
-import { DEFAULT_RETURN, gateFor, loginUrl, safeReturnUrl } from './returnUrl';
+import { DEFAULT_RETURN, gateFor, loginUrl, normalizePath, safeReturnUrl } from './returnUrl';
 
 describe('safeReturnUrl', () => {
   it('keeps a path of this site, with its query', () => {
@@ -115,5 +115,46 @@ describe('pending enrollment', () => {
     setPendingEnroll({ enrollToken: 'e', otpauthUri: 'u' });
     clearPendingEnroll();
     expect(getPendingEnroll()).toBeUndefined();
+  });
+});
+
+describe('normalizePath', () => {
+  it('reads a path the way the router does', () => {
+    expect(normalizePath('/USER/Login')).toBe('/user/login');
+    expect(normalizePath('/user/login/')).toBe('/user/login');
+    expect(normalizePath('/user//login')).toBe('/user/login');
+    expect(normalizePath('/user/./login')).toBe('/user/login');
+    expect(normalizePath('/user/login?a=1')).toBe('/user/login');
+    expect(normalizePath('/user/login#x')).toBe('/user/login');
+    expect(normalizePath('/')).toBe('/');
+    expect(normalizePath('')).toBe('/');
+  });
+
+  it('keeps a person away from the sign-in pages however the address is written', () => {
+    for (const raw of [
+      '/USER/login',
+      '/user/login#x',
+      '/user//login',
+      '/user/./login',
+      '/user/login/',
+      '/User/Change-Password',
+    ]) {
+      expect(safeReturnUrl(raw), raw).toBe(DEFAULT_RETURN);
+    }
+  });
+
+  it('treats the change-password page the same way for the guard', () => {
+    expect(
+      gateFor(
+        { pathname: '/USER/CHANGE-PASSWORD/', search: '' },
+        { me: { mustChangePassword: true } },
+      ),
+    ).toBeNull();
+    expect(
+      gateFor(
+        { pathname: '/user/change-password/', search: '' },
+        { me: { mustChangePassword: false } },
+      ),
+    ).toBe(DEFAULT_RETURN);
   });
 });

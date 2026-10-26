@@ -5,8 +5,14 @@ export const DEFAULT_RETURN = '/dashboard';
 
 const AUTH_PATHS = [LOGIN_PATH, ENROLL_PATH, CHANGE_PASSWORD_PATH];
 
-const isAuthPath = (path: string) =>
-  AUTH_PATHS.some((p) => path === p || path.startsWith(`${p}?`) || path.startsWith(`${p}/`));
+/** A path as the router sees it: no query or fragment, lower case, no repeated, `.` or trailing slashes. */
+export function normalizePath(path: string): string {
+  const bare = path.split(/[?#]/)[0].toLowerCase();
+  const parts = bare.split('/').filter((part) => part !== '' && part !== '.');
+  return `/${parts.join('/')}`;
+}
+
+const isAuthPath = (path: string) => AUTH_PATHS.includes(normalizePath(path));
 
 /**
  * Where to go after signing in: a path of this site that starts with exactly one `/`. Anything
@@ -29,7 +35,13 @@ export function safeReturnUrl(raw: string | null | undefined): string {
 /** The sign-in address that brings the person back to the page they were on. */
 export function loginUrl(pathname: string, search: string): string {
   const here = `${pathname}${search}`;
-  if (pathname === '/' || pathname === DEFAULT_RETURN || isAuthPath(here)) return LOGIN_PATH;
+  if (
+    normalizePath(pathname) === '/' ||
+    normalizePath(pathname) === DEFAULT_RETURN ||
+    isAuthPath(here)
+  ) {
+    return LOGIN_PATH;
+  }
   return `${LOGIN_PATH}?redirect=${encodeURIComponent(here)}`;
 }
 
@@ -46,8 +58,8 @@ export function gateFor(
   const { pathname, search } = location;
   if (!session.me) return loginUrl(pathname, search);
   if (session.me.mustChangePassword) {
-    return pathname === CHANGE_PASSWORD_PATH ? null : CHANGE_PASSWORD_PATH;
+    return normalizePath(pathname) === CHANGE_PASSWORD_PATH ? null : CHANGE_PASSWORD_PATH;
   }
-  if (pathname === CHANGE_PASSWORD_PATH) return DEFAULT_RETURN;
+  if (normalizePath(pathname) === CHANGE_PASSWORD_PATH) return DEFAULT_RETURN;
   return null;
 }
