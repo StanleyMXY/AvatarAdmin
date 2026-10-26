@@ -134,6 +134,25 @@ describe('buildConversionStack', () => {
   });
 });
 
+describe('a cumulative column that goes down (data the backend should not send)', () => {
+  const down = row('2026-09-02', 100, { d0: 10, d1: 20, d2: 18, d3: 18, d5: 17, d30: 30 });
+
+  it('never gives a bucket or a segment below 0 (a pie slice or a bar cannot be negative)', () => {
+    const buckets = buildConversionDistribution([down]);
+    expect(buckets.every((b) => b.devices >= 0)).toBe(true);
+    expect(buckets.find((b) => b.bucket === 'D2')?.devices).toBe(0);
+    expect(buckets.find((b) => b.bucket === 'D1')?.devices).toBe(10);
+    const stack = buildConversionStack([down]);
+    expect(stack.every((s) => s.devices >= 0)).toBe(true);
+    expect(stack.find((s) => s.segment === 'D2')?.devices).toBe(0);
+  });
+
+  it('gives "day 3 and later" no less than 0 when the last due column is below day 2', () => {
+    const later = row('2026-09-03', 100, { d0: 10, d1: 15, d2: 20, d30: 18 });
+    expect(buildConversionStack([later]).find((s) => s.segment === 'D3-later')?.devices).toBe(0);
+  });
+});
+
 describe('dailyConversionRate', () => {
   it('is converted over new, a dash (null) for no new devices, 0 for a real zero', () => {
     expect(dailyConversionRate({ guestDevicesNew: 200, guestDevicesConverted: 50 })).toBe(0.25);

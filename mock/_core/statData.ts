@@ -150,16 +150,25 @@ export function guestRetentionRow(
 
 export function guestCohortRow(cohortDate: string, today: string) {
   const size = between(100, 600, 'gcsize', cohortDate);
-  return {
+  const raw = cells(
     cohortDate,
-    cohortSize: size,
-    ...cells(
-      cohortDate,
-      size,
-      GUEST_COHORT_DAYS,
-      today,
-      'gco',
-      (n) => 0.05 + 0.2 * (1 - Math.exp(-n / 8)),
-    ),
-  };
+    size,
+    GUEST_COHORT_DAYS,
+    today,
+    'gco',
+    (n) => 0.05 + 0.2 * (1 - Math.exp(-n / 8)),
+  );
+  // The cells count devices converted within N days, so they never fall from one day to the next.
+  let highest = 0;
+  const cumulative: Record<string, number | null> = {};
+  for (const n of GUEST_COHORT_DAYS) {
+    const value = raw[`d${n}`];
+    if (value === null) {
+      cumulative[`d${n}`] = null;
+    } else {
+      highest = Math.max(highest, value);
+      cumulative[`d${n}`] = highest;
+    }
+  }
+  return { cohortDate, cohortSize: size, ...cumulative };
 }

@@ -31,7 +31,8 @@ function bucketOf(row: GuestCohortRow, end: Column, start: Column | null): numbe
   if (!known(last)) return null;
   if (start === null) return last;
   const first = row[start];
-  return known(first) ? last - first : null;
+  // Cumulative counts never fall; if the data says so, the bucket is empty, never negative.
+  return known(first) ? Math.max(0, last - first) : null;
 }
 
 /**
@@ -72,7 +73,7 @@ export function buildConversionStack(
       segments.push({
         cohortDate: row.cohortDate,
         segment: 'D3-later',
-        devices: (row[lastDue] as number) - row.d2,
+        devices: Math.max(0, (row[lastDue] as number) - row.d2),
       });
     }
     return segments;
