@@ -13,6 +13,7 @@ import TemplatesPage from './templates';
 import {
   chooseOption,
   dialogsClosed,
+  holdWrites,
   META,
   signIn,
   stubObjectUrls,
@@ -289,6 +290,24 @@ describe('the template page: new template', { timeout: 60000 }, () => {
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('imageUploadId');
+  });
+
+  it('sends one request when the form is submitted again while the first request is still on its way', async () => {
+    const calls = backend();
+    const slow = holdWrites();
+    const user = userEvent.setup();
+    renderPage(<TemplatesPage />);
+    const dialog = await openNew(user);
+    await fillNew(user, dialog);
+    const form = dialog.querySelector('form') as HTMLFormElement;
+    fireEvent.submit(form);
+    await waitFor(() => expect(slow.started()).toBe(1));
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(slow.started()).toBe(1);
+    slow.release();
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
   });
 
   it('sends one request when Submit is pressed twice at once', async () => {

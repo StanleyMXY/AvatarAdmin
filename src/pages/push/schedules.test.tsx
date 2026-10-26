@@ -13,6 +13,7 @@ import SchedulesPage from './schedules';
 import {
   chooseOption,
   dialogsClosed,
+  holdWrites,
   signIn,
   stubObjectUrls,
   uploads,
@@ -403,6 +404,24 @@ describe('the periodic push page: new schedule', { timeout: 60000 }, () => {
       /^up-img-/,
     );
     expect(JSON.stringify(writesOf(calls)[0].body)).not.toMatch(/imageUrl|mock-files|http/);
+  });
+
+  it('sends one request when the form is submitted again while the first request is still on its way', async () => {
+    const calls = backend();
+    const slow = holdWrites();
+    const user = userEvent.setup();
+    renderPage(<SchedulesPage />);
+    const dialog = await openNew(user);
+    fill(dialog);
+    const form = dialog.querySelector('form') as HTMLFormElement;
+    fireEvent.submit(form);
+    await waitFor(() => expect(slow.started()).toBe(1));
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(slow.started()).toBe(1);
+    slow.release();
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
   });
 
   it('sends one request when Submit is pressed twice at once', async () => {

@@ -97,3 +97,28 @@ export const dialogsClosed = () =>
 /** The calls that changed something, not counting the uploads of files (they only hand out an id). */
 export const writesOf = <T extends { method: string; url: string }>(calls: T[]) =>
   calls.filter((c) => c.method !== 'GET' && !c.url.startsWith('/api/admin/uploads/'));
+
+/**
+ * Makes every write of the page wait until `release()`, so that a second press can come while the
+ * first request is still on its way. Call it after `useMockBackend`. `started()` counts the writes
+ * that have been handed to the network so far.
+ */
+export function holdWrites() {
+  const real = globalThis.fetch;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let started = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL, init: RequestInit = {}) => {
+      if ((init.method ?? 'GET').toUpperCase() !== 'GET') {
+        started += 1;
+        await gate;
+      }
+      return real(input, init);
+    }),
+  );
+  return { release, started: () => started };
+}
