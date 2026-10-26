@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   addDecimals,
@@ -171,5 +172,20 @@ describe("isValidPrice: a non negative decimal with up to ten digits after the p
     ]) {
       expect(isValidPrice(bad), bad).toBe(false);
     }
+  });
+});
+
+describe('the decimal helper and the browser build', () => {
+  it('does not use ** (the browser build turns it into Math.pow, which refuses a BigInt: found in the browser)', () => {
+    const source = readFileSync('src/services/cost/decimal.ts', 'utf8')
+      .split('\n')
+      .filter(
+        (line) =>
+          !line.trim().startsWith('//') &&
+          !line.trim().startsWith('*') &&
+          !line.trim().startsWith('/*'),
+      )
+      .join('\n');
+    expect(source).not.toContain('**');
   });
 });

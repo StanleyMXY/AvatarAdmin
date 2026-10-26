@@ -645,6 +645,15 @@ describe('current prices', () => {
     expect(history.textContent).toContain('not in force yet');
   });
 
+  it('has no Withdraw on a batch that is replaced, rejected or withdrawn', async () => {
+    const { user } = await open(ALL, { tab: 'Current prices' });
+    await screen.findByText('model-large-1');
+    await user.click(rowOf('model-large-1').querySelector('.ant-table-row-expand-icon') as Element);
+    const history = await screen.findByTestId(/^history-/);
+    expect(history.querySelectorAll('tbody tr.ant-table-row').length).toBeGreaterThanOrEqual(3);
+    expect(within(history).queryByRole('button', { name: 'Withdraw' })).toBeNull();
+  });
+
   it('has no Withdraw, and nothing to edit, for someone without COST:PRICE', async () => {
     const { user } = await open(['COST:VIEW'], { tab: 'Current prices' });
     await screen.findByText('model-large-1');

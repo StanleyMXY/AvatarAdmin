@@ -31,7 +31,7 @@ const UNITS: Record<string, string> = {
 const STATUSES = ['PENDING_REVIEW', 'ACTIVE', 'REJECTED', 'SUPERSEDED', 'RETIRED'];
 const MAX_BANDS = 20;
 const PRICE = /^\d+(\.\d{1,10})?$/;
-const PRICE_MAX_UNITS = 1_000_000n * 10n ** 10n;
+const PRICE_MAX_UNITS = 10_000_000_000_000_000n; // 1000000 with ten decimals
 
 type Detail = { ref: string; reason: string };
 

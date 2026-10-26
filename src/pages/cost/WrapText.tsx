@@ -25,6 +25,7 @@ export function WrapText({
     <span
       dir="auto"
       data-testid={testId}
+      title={lines ? text : undefined}
       style={{
         overflowWrap: 'anywhere',
         wordBreak: 'break-word',

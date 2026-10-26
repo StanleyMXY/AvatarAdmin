@@ -155,7 +155,7 @@ export function CurrentTab() {
       render: (_, g) => (
         <Flex vertical gap={2} style={{ maxWidth: 320 }}>
           <Typography.Text strong>
-            <WrapText value={g.model} testId="current-model" />
+            <WrapText value={g.model} testId="current-model" lines={3} />
           </Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {labelOf(intl, 'cost.resourceType', g.resourceType)} · <WrapText value={g.provider} />

@@ -9,7 +9,8 @@ const PLAIN = /^-?\d+(?:\.\d+)?$/;
 const SCIENTIFIC = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/;
 const MAX_EXPONENT = 400;
 
-const pow10 = (n: number): bigint => 10n ** BigInt(n);
+// Not `10n ** BigInt(n)`: the browser build turns `**` into Math.pow, which refuses a BigInt.
+const pow10 = (n: number): bigint => BigInt(`1${'0'.repeat(n)}`);
 
 function scaledOf(text: string): Scaled | null {
   if (PLAIN.test(text)) {

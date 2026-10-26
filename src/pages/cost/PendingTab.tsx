@@ -183,7 +183,7 @@ function PendingCard({
       <Flex vertical gap={12}>
         <Flex gap={8} wrap align="baseline">
           <Typography.Text strong>
-            <WrapText value={batch.model} testId="pending-model" />
+            <WrapText value={batch.model} testId="pending-model" lines={3} />
           </Typography.Text>
           <Tag>{labelOf(intl, 'cost.resourceType', batch.resourceType)}</Tag>
           <Tag>
