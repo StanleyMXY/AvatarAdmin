@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { Descriptions, Empty } from 'antd';
+import { Descriptions, Empty, Grid } from 'antd';
 import type { Attribution } from '../../services/users';
 import { formatInstant } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
@@ -10,6 +10,7 @@ import { Cell } from './Cell';
 export function AttributionTab({ attribution }: { attribution: Attribution | null }) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
+  const wide = Grid.useBreakpoint().md === true;
   if (attribution === null || typeof attribution !== 'object') {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('users.attribution.none')} />;
   }
@@ -26,6 +27,7 @@ export function AttributionTab({ attribution }: { attribution: Attribution | nul
     <Descriptions
       bordered
       size="small"
+      layout={wide ? 'horizontal' : 'vertical'}
       column={{ xs: 1, md: 2 }}
       items={[
         item('source', <Cell value={attribution.source} />),

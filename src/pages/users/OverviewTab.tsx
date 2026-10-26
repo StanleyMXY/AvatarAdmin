@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { Descriptions, Flex, Tag } from 'antd';
+import { Descriptions, Flex, Grid, Tag } from 'antd';
 import type { ReactNode } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { MaskedText } from '../../components/MaskedText';
@@ -32,6 +32,8 @@ export function OverviewTab({ user }: { user: UserDetail }) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
   const statusOptions = useStatusOptions();
+  // A narrow screen puts the label above its value, so the value keeps the width.
+  const wide = Grid.useBreakpoint().md === true;
   const when = (value: unknown) => {
     const text = plainText(value);
     return text === '' ? DASH : formatInstant(text, intl.locale);
@@ -55,9 +57,10 @@ export function OverviewTab({ user }: { user: UserDetail }) {
       bordered
       size="small"
       title={title}
+      layout={wide ? 'horizontal' : 'vertical'}
       column={{ xs: 1, md: 2 }}
       items={items}
-      styles={{ label: { width: 220 } }}
+      styles={wide ? { label: { width: 220 } } : undefined}
     />
   );
 

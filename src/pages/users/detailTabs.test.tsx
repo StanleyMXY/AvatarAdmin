@@ -107,6 +107,39 @@ describe('the sessions tab', { timeout: 30000 }, () => {
     );
   });
 
+  it('starts the next account on the first page, not on the page the administrator left the last one', async () => {
+    const calls = stubFetch(async ({ url }) => {
+      if (url.includes('/sessions')) {
+        return jsonResponse(200, envelope('200', { items: [], total: 45 }));
+      }
+      return jsonResponse(
+        200,
+        envelope('200', { ...usersState.users[0], id: url.split('/').pop() }),
+      );
+    });
+    const user = userEvent.setup();
+    await open(USER.rich, 'sessions');
+    await screen.findByTitle('2');
+    await user.click(screen.getByTitle('2'));
+    await waitFor(() =>
+      expect(calls.some((c) => c.url.includes('/sessions') && c.url.includes('page=2'))).toBe(true),
+    );
+    setTestLocation({ pathname: `/users/${USER.negative}`, search: '?tab=sessions' });
+    await screen.findByText(`User ${USER.negative}`);
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) => c.url.includes(`/users/${USER.negative}/sessions`) && c.url.includes('page=1'),
+        ),
+      ).toBe(true),
+    );
+    expect(
+      calls.some(
+        (c) => c.url.includes(`/users/${USER.negative}/sessions`) && c.url.includes('page=2'),
+      ),
+    ).toBe(false);
+  });
+
   it('never lets a slow earlier page replace the page chosen after it', async () => {
     const gate: { release: () => void } = { release: () => {} };
     const slow = new Promise<void>((resolve) => {

@@ -167,6 +167,7 @@ export default function DeletionsPage() {
     {
       title: t('users.common.actions'),
       valueType: 'option',
+      fixed: 'right',
       onCell: tint,
       render: (_, row) => (
         <RowActions
