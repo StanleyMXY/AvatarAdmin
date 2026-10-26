@@ -11,7 +11,6 @@ const messages: Record<string, string> = {
   'activity.common.closed': '关闭',
   'activity.common.copyId': '复制账号 ID',
   'activity.day': '第 {n} 天',
-  'activity.unit.seconds': '秒',
   'activity.lifecycle.DRAFT': '草稿',
   'activity.lifecycle.ACTIVE': '进行中',
   'activity.lifecycle.ENDED': '已结束',
@@ -112,7 +111,6 @@ const messages: Record<string, string> = {
   'activity.task.enableConfirm': '确定启用该任务？',
   'activity.task.disableConfirm': '确定停用该任务？',
   'activity.task.deleteConfirm': '确定删除该任务？已有任务记录时不能删除，请改用停用。',
-  'activity.task.useDisable': '请改用“停用”。',
   'activity.task.saved': '任务已保存',
   'activity.task.enabled': '任务已启用',
   'activity.task.disabled': '任务已停用',
@@ -158,7 +156,6 @@ const messages: Record<string, string> = {
   'activity.taskRecord.status.REWARDED': '已领奖',
   'activity.taskRecord.status.EXPIRED': '已过期',
   'activity.taskRecord.progress': '{current} / {target}',
-  'activity.taskRecord.taskId': '任务 ID',
   'activity.taskRecord.idOf': 'ID {id}',
 
   // ---- 两个统计页 ----
