@@ -8,10 +8,14 @@ export function isOwnAccount(
   me: { id?: string; username?: string } | undefined,
   target: { id?: string; username?: string },
 ): boolean {
-  const meId = me?.id;
+  // An id can arrive as a number on one side and as text on the other: they are compared as text.
+  const idOf = (value: unknown): string =>
+    value === undefined || value === null ? '' : String(value);
+  const meId = idOf(me?.id);
+  const targetId = idOf(target.id);
   const meName = me?.username;
   if (!meId && !meName) return true;
-  if (meId && target.id) return meId === target.id;
+  if (meId && targetId) return meId === targetId;
   if (meName && target.username) return meName.toLowerCase() === target.username.toLowerCase();
   return false;
 }
