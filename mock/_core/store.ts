@@ -35,12 +35,21 @@ type Store = {
   admins: Map<string, MockAdmin>;
   tokens: Map<string, TokenRecord>;
   enrollTokens: Map<string, EnrollRecord>;
+  /** When each administrator exported (for the hourly limit of the export endpoint). */
+  exportUses: Map<string, number[]>;
 };
 
 const holder = globalThis as { __avatarAdminMockStore?: Store };
 const isFirstLoad = holder.__avatarAdminMockStore === undefined;
 
-holder.__avatarAdminMockStore ??= { admins: new Map(), tokens: new Map(), enrollTokens: new Map() };
+holder.__avatarAdminMockStore ??= {
+  admins: new Map(),
+  tokens: new Map(),
+  enrollTokens: new Map(),
+  exportUses: new Map(),
+};
+// A store left by an older version of this file (kept across mock reloads) gets the new field.
+holder.__avatarAdminMockStore.exportUses ??= new Map();
 
 export const store: Store = holder.__avatarAdminMockStore;
 
@@ -69,6 +78,7 @@ export function resetStore(): void {
   store.admins.clear();
   store.tokens.clear();
   store.enrollTokens.clear();
+  store.exportUses.clear();
   const seed = [
     preset('1001', 'root', { superAdmin: true, permissions: [...ALL_CODES] }),
     preset('1002', 'support', { permissions: PRESET_PERMISSIONS.support }),

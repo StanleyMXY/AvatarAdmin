@@ -19,6 +19,7 @@ export type MockRes = {
   status(code: number): MockRes;
   json(body: unknown): unknown;
   setHeader?(name: string, value: string): unknown;
+  end?(body?: unknown): unknown;
 };
 
 export type AdminReq = MockReq & { admin: MockAdmin };
@@ -112,3 +113,33 @@ export const bodyOf = (req: MockReq): Record<string, unknown> =>
   typeof req.body === 'object' && req.body !== null && !Array.isArray(req.body)
     ? (req.body as Record<string, unknown>)
     : {};
+
+/** A file answer (an export); anything else a handler returns is the usual JSON reply. */
+export type FileReply = { file: { contentType: string; filename: string; body: Buffer } };
+
+/** Like `toUmi`, for handlers that may answer with a file. */
+export function toUmiFile(
+  handler: (req: MockReq) => Reply | FileReply | Promise<Reply | FileReply>,
+) {
+  return async (req: MockReq, res: MockRes): Promise<void> => {
+    let reply: Reply | FileReply;
+    try {
+      reply = await handler(req);
+    } catch (error) {
+      reply = replyFromError(error);
+    }
+    try {
+      if ('file' in reply) {
+        res.status(200);
+        res.setHeader?.('Content-Type', reply.file.contentType);
+        res.setHeader?.('Content-Disposition', `attachment; filename="${reply.file.filename}"`);
+        res.end?.(reply.file.body);
+        return;
+      }
+      res.status(reply.status).json(reply.body);
+    } catch (error) {
+      const fallback = replyFromError(error);
+      res.status(fallback.status).json(fallback.body);
+    }
+  };
+}
