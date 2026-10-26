@@ -196,7 +196,9 @@ describe('the other reports', () => {
     const rows = (await get('tasks/summary', 'support', range)).body.data.items;
     expect(rows).toHaveLength(7);
     expect(rows.some((r: { taskName: string }) => /[฀-๿]/.test(r.taskName))).toBe(true);
-    expect(rows.some((r: { taskName: string }) => /[؀-ۿ]/.test(r.taskName))).toBe(true);
+    expect(rows.some((r: { taskName: string }) => /\p{Script=Arabic}/u.test(r.taskName))).toBe(
+      true,
+    );
   });
 
   it('streak buckets have one row per consecutive day count', async () => {
