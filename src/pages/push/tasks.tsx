@@ -40,13 +40,19 @@ export default function TasksPage() {
       title: t('push.tasks.col.title'),
       dataIndex: 'title',
       search: false,
-      render: (_, row) => <EllipsisPopoverText text={plainText(row.title)} lines={2} width={220} />,
+      render: (_, row) => <EllipsisPopoverText text={plainText(row.title)} lines={2} width={170} />,
     },
     {
       title: t('push.tasks.col.audience'),
       dataIndex: 'audience',
       search: false,
-      render: (_, row) => codeText(intl, 'push.audience', row.audience) || DASH,
+      render: (_, row) => (
+        <EllipsisPopoverText
+          text={codeText(intl, 'push.audience', row.audience) || DASH}
+          lines={2}
+          width={130}
+        />
+      ),
     },
     {
       title: t('push.tasks.col.status'),

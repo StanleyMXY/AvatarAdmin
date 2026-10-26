@@ -88,7 +88,7 @@ function Deliveries({ id }: { id: string }) {
   if (detail.deliveries.length === 0) {
     return <Typography.Text type="secondary">{t('push.records.noDeliveries')}</Typography.Text>;
   }
-  const columns: ColumnsType<PushDelivery> = [
+  const columns: ColumnsType<PushDelivery & { __key: string }> = [
     {
       title: t('push.records.col.token'),
       dataIndex: 'pushTokenId',
@@ -110,11 +110,11 @@ function Deliveries({ id }: { id: string }) {
   return (
     <Flex vertical gap={8} data-testid="deliveries">
       <Typography.Text strong>{t('push.records.deliveries')}</Typography.Text>
-      <Table<PushDelivery>
+      <Table<PushDelivery & { __key: string }>
         size="small"
-        rowKey={(row, index) => plainText(row.id) || String(index)}
+        rowKey="__key"
         columns={columns}
-        dataSource={detail.deliveries}
+        dataSource={detail.deliveries.map((d, i) => ({ ...d, __key: `${plainText(d.id)}|${i}` }))}
         pagination={false}
         scroll={{ x: 'max-content' }}
       />
@@ -152,7 +152,7 @@ export default function RecordsPage() {
     void load();
   }, [load]);
 
-  const columns: ColumnsType<PushRecord> = [
+  const columns: ColumnsType<PushRecord & { __key: string }> = [
     {
       title: t('push.records.col.account'),
       dataIndex: 'accountId',
@@ -208,12 +208,12 @@ export default function RecordsPage() {
           }
         />
       ) : null}
-      <Table<PushRecord>
+      <Table<PushRecord & { __key: string }>
         size="middle"
-        rowKey={(row, index) => plainText(row.id) || String(index)}
+        rowKey="__key"
         loading={loading}
         columns={columns}
-        dataSource={data?.items ?? []}
+        dataSource={(data?.items ?? []).map((r, i) => ({ ...r, __key: `${plainText(r.id)}|${i}` }))}
         scroll={{ x: 'max-content' }}
         locale={{ emptyText: t('push.records.empty') }}
         expandable={{ expandedRowRender: (row) => <Deliveries id={plainText(row.id)} /> }}

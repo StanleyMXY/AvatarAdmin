@@ -56,7 +56,7 @@ export default function SchedulesPage() {
       title: t('push.schedules.col.title'),
       dataIndex: 'title',
       search: false,
-      render: (_, row) => <EllipsisPopoverText text={plainText(row.title)} lines={2} width={220} />,
+      render: (_, row) => <EllipsisPopoverText text={plainText(row.title)} lines={2} width={170} />,
     },
     {
       title: t('push.schedules.col.repeat'),

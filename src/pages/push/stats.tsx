@@ -86,7 +86,7 @@ export default function PushStatsPage() {
     { field: 'pushesOpened', label: t('push.stats.col.opened') },
   ];
 
-  const columns: ColumnsType<PushStatRow> = [
+  const columns: ColumnsType<PushStatRow & { __key: string }> = [
     {
       title: t('push.stats.col.date'),
       dataIndex: 'statDate',
@@ -192,13 +192,16 @@ export default function PushStatsPage() {
             from={applied.range.from}
             to={applied.range.to}
           />
-          <Table<PushStatRow>
+          <Table<PushStatRow & { __key: string }>
             size="small"
             rowKey={(row, index) =>
               `${plainText(row.statDate)}|${plainText(row.triggerReason)}|${index}`
             }
             columns={columns}
-            dataSource={rows}
+            dataSource={rows.map((r, i) => ({
+              ...r,
+              __key: `${plainText(r.statDate)}|${plainText(r.triggerReason)}|${i}`,
+            }))}
             pagination={false}
             scroll={{ x: 'max-content' }}
             locale={{ emptyText: t('push.stats.empty') }}

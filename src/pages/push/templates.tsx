@@ -78,36 +78,6 @@ export default function TemplatesPage() {
       render: (_, row) => plainText(row.locale),
     },
     {
-      title: t('push.templates.col.title'),
-      dataIndex: 'title',
-      search: false,
-      render: (_, row) => <EllipsisPopoverText text={plainText(row.title)} lines={2} width={200} />,
-    },
-    {
-      title: t('push.templates.col.body'),
-      dataIndex: 'body',
-      search: false,
-      render: (_, row) => <EllipsisPopoverText text={plainText(row.body)} lines={2} width={260} />,
-    },
-    {
-      title: t('push.templates.col.link'),
-      dataIndex: 'linkType',
-      search: false,
-      render: (_, row) => (
-        <EllipsisPopoverText
-          text={describeLink(intl, row.linkType, row.linkTarget)}
-          lines={2}
-          width={200}
-        />
-      ),
-    },
-    {
-      title: t('push.templates.col.image'),
-      dataIndex: 'imageUrl',
-      search: false,
-      render: (_, row) => <PushImage url={row.imageUrl} />,
-    },
-    {
       title: t('push.templates.col.enabled'),
       dataIndex: 'enabled',
       search: false,
@@ -142,6 +112,36 @@ export default function TemplatesPage() {
           onDone={reload}
         />
       ),
+    },
+    {
+      title: t('push.templates.col.title'),
+      dataIndex: 'title',
+      search: false,
+      render: (_, row) => <EllipsisPopoverText text={plainText(row.title)} lines={2} width={200} />,
+    },
+    {
+      title: t('push.templates.col.body'),
+      dataIndex: 'body',
+      search: false,
+      render: (_, row) => <EllipsisPopoverText text={plainText(row.body)} lines={2} width={260} />,
+    },
+    {
+      title: t('push.templates.col.link'),
+      dataIndex: 'linkType',
+      search: false,
+      render: (_, row) => (
+        <EllipsisPopoverText
+          text={describeLink(intl, row.linkType, row.linkTarget)}
+          lines={2}
+          width={200}
+        />
+      ),
+    },
+    {
+      title: t('push.templates.col.image'),
+      dataIndex: 'imageUrl',
+      search: false,
+      render: (_, row) => <PushImage url={row.imageUrl} />,
     },
     {
       title: t('push.templates.col.actions'),

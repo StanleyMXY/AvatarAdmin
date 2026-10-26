@@ -371,6 +371,16 @@ describe('the template page: the picture', { timeout: 60000 }, () => {
     return { user, dialog };
   };
 
+  it('hides the native file box that the form style would show beside the button', async () => {
+    backend();
+    const { dialog } = await openForm();
+    const box = dialog.querySelector('.push-upload-box') as HTMLElement;
+    expect(box.querySelector('input[type="file"]')).not.toBeNull();
+    expect(box.querySelector('style')?.textContent).toMatch(
+      /input\[type="file"\] \{ display: none !important/,
+    );
+  });
+
   it('takes JPEG and PNG only and says so beside the control; a GIF is stopped before any upload', async () => {
     backend();
     const { dialog } = await openForm();

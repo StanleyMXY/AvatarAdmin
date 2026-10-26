@@ -5,6 +5,7 @@ import { UploadField } from '../../components/UploadField';
 import { trimSpec } from '../../utils/trimSpec';
 import { LinkField } from './LinkField';
 import { PushImage } from './PushImage';
+import { UploadBox } from './UploadBox';
 import type { useUploadSlot } from './uploadSlot';
 
 type Props = {
@@ -71,13 +72,15 @@ export function ContentFields({ slot, currentImageUrl, rejected }: Props) {
               <span>{t('push.content.imageCurrent')}</span>
             </Flex>
           ) : null}
-          <UploadField<{ uploadId: string }>
-            key={slot.version}
-            kind="pushImage"
-            onBusyChange={slot.fieldProps.onBusyChange}
-            onUploaded={slot.fieldProps.onUploaded}
-            onCleared={slot.fieldProps.onCleared}
-          />
+          <UploadBox>
+            <UploadField<{ uploadId: string }>
+              key={slot.version}
+              kind="pushImage"
+              onBusyChange={slot.fieldProps.onBusyChange}
+              onUploaded={slot.fieldProps.onUploaded}
+              onCleared={slot.fieldProps.onCleared}
+            />
+          </UploadBox>
           {slot.busy ? <Alert type="info" showIcon title={t('push.content.uploadWait')} /> : null}
           {rejected ? (
             <Alert type="error" showIcon title={t('push.content.imageRejected')} />
