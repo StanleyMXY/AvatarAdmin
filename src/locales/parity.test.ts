@@ -26,6 +26,7 @@ const MODULES = [
   'sessions',
   'analytics',
   'dashboard',
+  'guestStats',
   'push',
   'invite',
   'activity',

@@ -15,6 +15,7 @@ import credits from './zh-CN/credits';
 import dashboard from './zh-CN/dashboard';
 import email from './zh-CN/email';
 import error from './zh-CN/error';
+import guestStats from './zh-CN/guestStats';
 import invite from './zh-CN/invite';
 import memory from './zh-CN/memory';
 import menu from './zh-CN/menu';
@@ -52,6 +53,7 @@ export default {
   ...credits,
   ...dashboard,
   ...email,
+  ...guestStats,
   ...invite,
   ...memory,
   ...moderation,

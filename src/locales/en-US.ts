@@ -15,6 +15,7 @@ import credits from './en-US/credits';
 import dashboard from './en-US/dashboard';
 import email from './en-US/email';
 import error from './en-US/error';
+import guestStats from './en-US/guestStats';
 import invite from './en-US/invite';
 import memory from './en-US/memory';
 import menu from './en-US/menu';
@@ -52,6 +53,7 @@ export default {
   ...credits,
   ...dashboard,
   ...email,
+  ...guestStats,
   ...invite,
   ...memory,
   ...moderation,
