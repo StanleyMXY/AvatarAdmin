@@ -21,6 +21,7 @@ import { cleanTexts, type Texts } from './localized';
 import { SurfacesPicker } from './SurfacesPicker';
 import { Thumb } from './Thumb';
 import { codeText } from './texts';
+import { UploadBox } from './UploadBox';
 import { useUploadSlot } from './uploadSlot';
 
 type Values = {
@@ -210,12 +211,14 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
         <Form.Item label={t('avatar.col.preview')}>
           <Flex vertical gap={8}>
             {item ? <Thumb url={item.previewUrl} alt={item.key} size={64} /> : null}
-            <UploadField<{ uploadId: string }>
-              kind="catalogImage"
-              onBusyChange={picture.fieldProps.onBusyChange}
-              onUploaded={picture.fieldProps.onUploaded}
-              onCleared={picture.fieldProps.onCleared}
-            />
+            <UploadBox>
+              <UploadField<{ uploadId: string }>
+                kind="catalogImage"
+                onBusyChange={picture.fieldProps.onBusyChange}
+                onUploaded={picture.fieldProps.onUploaded}
+                onCleared={picture.fieldProps.onCleared}
+              />
+            </UploadBox>
             {pictureProblem ? <Alert type="error" title={pictureProblem} showIcon /> : null}
           </Flex>
         </Form.Item>

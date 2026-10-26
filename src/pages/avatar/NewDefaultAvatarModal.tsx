@@ -8,6 +8,7 @@ import { trimSpec } from '../../utils/trimSpec';
 import { nameProblem } from './avatarName';
 import { failureToForm } from './formFailure';
 import { codeText } from './texts';
+import { UploadBox } from './UploadBox';
 import { useUploadSlot } from './uploadSlot';
 
 type Values = { name: string; style: AvatarStyle | undefined; authorized: boolean };
@@ -85,12 +86,14 @@ export function NewDefaultAvatarModal({ open, onClose, onSaved }: Props) {
         onFinish={(values) => run(values)}
       >
         <Form.Item label={t('avatar.defaults.source')} extra={t('avatar.defaults.sourceHint')}>
-          <UploadField<{ uploadId: string }>
-            kind="defaultAvatarSource"
-            onBusyChange={source.fieldProps.onBusyChange}
-            onUploaded={source.fieldProps.onUploaded}
-            onCleared={source.fieldProps.onCleared}
-          />
+          <UploadBox>
+            <UploadField<{ uploadId: string }>
+              kind="defaultAvatarSource"
+              onBusyChange={source.fieldProps.onBusyChange}
+              onUploaded={source.fieldProps.onUploaded}
+              onCleared={source.fieldProps.onCleared}
+            />
+          </UploadBox>
           {sourceProblem ? <Alert type="error" title={sourceProblem} showIcon /> : null}
         </Form.Item>
         <Form.Item
