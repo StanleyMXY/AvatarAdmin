@@ -1,3 +1,218 @@
-const messages: Record<string, string> = {};
+const messages: Record<string, string> = {
+  'menu.avatar.cosmetics': 'Outfits and backgrounds',
+  'menu.avatar.actions': 'Actions',
+  'menu.avatar.declarations': 'Upload declaration',
+  'menu.avatar.rendererModels': 'Renderer models',
+  'menu.avatar.generationTasks': 'Generation tasks',
+  'menu.avatar.defaultAvatars': 'Default avatars',
+
+  // ---- shared by the pages of this module ----
+  'avatar.yes': 'Yes',
+  'avatar.no': 'No',
+  'avatar.edit': 'Edit',
+  'avatar.noPicture': 'No picture',
+  'avatar.enabledOf': 'Enabled: {key}',
+
+  'avatar.col.key': 'Key',
+  'avatar.col.kind': 'Type',
+  'avatar.col.name': 'Name',
+  'avatar.col.names': 'Names',
+  'avatar.col.preview': 'Preview',
+  'avatar.col.icon': 'Icon',
+  'avatar.col.style': 'Fits style',
+  'avatar.col.styles': 'Styles',
+  'avatar.col.surfaces': 'Shown on',
+  'avatar.col.creditPrice': 'Credit price',
+  'avatar.col.isFree': 'Free',
+  'avatar.col.isDefault': 'Default',
+  'avatar.col.enabled': 'On',
+  'avatar.col.sortOrder': 'Order',
+  'avatar.col.generationSpec': 'Generation text',
+  'avatar.col.description': 'Description for the agent',
+  'avatar.col.triggerableBy': 'Triggered by',
+  'avatar.col.actions': 'Actions',
+
+  'avatar.platform.ANDROID': 'Android',
+  'avatar.platform.IOS': 'iOS',
+  'avatar.style.STYLIZED_3D': 'Stylized 3D',
+  'avatar.style.REALISTIC': 'Realistic',
+  'avatar.triggerableBy.USER': 'User',
+  'avatar.triggerableBy.AGENT': 'Agent',
+  'avatar.triggerableBy.BOTH': 'User and agent',
+
+  'avatar.failure.CONTENT_REJECTED': 'Content rejected',
+  'avatar.failure.GENERATION_FAILED': 'Generation failed',
+  'avatar.failure.EXTERNAL_TIMEOUT': 'The generation service took too long',
+  'avatar.failure.EXTERNAL_TASK_LOST': 'The generation service lost the task',
+  'avatar.failure.SUBJECT_UNDERAGE': 'The person looks underage',
+  'avatar.failure.NO_FACE_DETECTED': 'No face found in the picture',
+  'avatar.failure.ACCOUNT_DELETED': 'The account was deleted',
+
+  'avatar.key.required': 'Enter a key.',
+  'avatar.key.fixed': 'The key cannot be changed after the item is created.',
+  'avatar.names.required': 'Enter a name in at least one language.',
+  'avatar.sortOrder.whole': 'The order must be a whole number.',
+  'avatar.spec.required': 'Enter the generation text.',
+  'avatar.spec.length': 'The generation text must be 1 to {max} characters long.',
+  'avatar.spec.hint':
+    'Only administrators write this. It goes into the generation request as English text, 1 to {max} characters once the ends are trimmed. Users cannot enter free text for outfits.',
+
+  // ---- surfaces ----
+  'avatar.surfaces.all': 'All ends',
+  'avatar.surfaces.allChannels': 'All channels of the platform',
+  'avatar.surfaces.none': 'Nothing chosen',
+  'avatar.surfaces.allNote': 'Nothing is chosen, so the item is shown on all ends.',
+  'avatar.surfaces.someNote': 'The item is shown only on the ends chosen above.',
+
+  // ---- cosmetics ----
+  'avatar.cosmetics.note':
+    'Outfits and backgrounds a user can pick for an avatar. Users cannot type their own description. Each type has one free default item.',
+  'avatar.cosmetics.kind': 'Type',
+  'avatar.cosmetics.kind.OUTFIT': 'Outfit',
+  'avatar.cosmetics.kind.BACKGROUND': 'Background',
+  'avatar.cosmetics.onShelf': 'On sale',
+  'avatar.cosmetics.offShelf': 'Off sale',
+  'avatar.cosmetics.new': 'New item',
+  'avatar.cosmetics.edit': 'Edit item',
+  'avatar.cosmetics.saved': 'Saved.',
+  'avatar.cosmetics.priceWhole': 'The price must be a whole number, 0 or more.',
+  'avatar.creditPrice.hint': 'Leave empty if the item cannot be bought with credits.',
+  'avatar.isDefault.hint': 'The one free default item of its type.',
+  'avatar.preview.required': 'Upload a preview picture first.',
+  'avatar.preview.rejected': 'The server did not accept the uploaded picture. Upload it again.',
+
+  // ---- actions ----
+  'avatar.actions.note':
+    'Every action is a clip generated in advance from its generation text. An action you add is not generated for looks that exist already: use "Generate for existing looks".',
+  'avatar.actions.new': 'New action',
+  'avatar.actions.edit': 'Edit action',
+  'avatar.actions.saved': 'Saved.',
+  'avatar.actions.backfill': 'Generate for existing looks',
+  'avatar.actions.backfillConfirm':
+    'This generates one clip for every existing look that lacks it, and generation costs money. Continue?',
+  'avatar.actions.scheduled': '{count} generation tasks scheduled.',
+  'avatar.actions.nothingToDo': 'No look needs a clip.',
+  'avatar.icon.required': 'Upload an icon first.',
+  'avatar.icon.rejected': 'The server did not accept the uploaded icon. Upload it again.',
+  'avatar.description.hint': 'English text the agent reads to know when to use the action.',
+  'avatar.description.required': 'Enter the description.',
+
+  // ---- declarations ----
+  'avatar.declarations.version': 'Version',
+  'avatar.declarations.languages': 'Languages',
+  'avatar.declarations.activeFrom': 'In force since',
+  'avatar.declarations.isActive': 'In force',
+  'avatar.declarations.active': 'In force',
+  'avatar.declarations.inactive': 'No',
+  'avatar.declarations.new': 'New version',
+  'avatar.declarations.saved': 'Saved. The new version is not in force until you set it.',
+  'avatar.declarations.activate': 'Set in force',
+  'avatar.declarations.activateConfirm':
+    'From now on a user who uploads an avatar must tick this version, and an older version held by a client will be refused. Continue?',
+  'avatar.declarations.activated': 'Version {version} is in force.',
+  'avatar.declarations.notRequired':
+    'This deployment does not require the declaration to be ticked.',
+  'avatar.declarations.texts': 'Texts',
+  'avatar.declarations.textsHint':
+    'The wording is set by the lawyers. Fill in every language you have.',
+  'avatar.declarations.textsRequired': 'Enter the text in at least one language.',
+  'avatar.declarations.versionRequired': 'Enter a version.',
+
+  // ---- renderer models ----
+  'avatar.models.note':
+    'Renderer models go to every build; there is no scope. The file is named avatar-renderer-<version>.zip.',
+  'avatar.models.new': 'Register a model',
+  'avatar.models.saved': 'Saved. The model is off until you switch it on.',
+  'avatar.models.rendererKind': 'Renderer',
+  'avatar.models.version': 'Version',
+  'avatar.models.platform': 'Platform',
+  'avatar.models.abi': 'ABI',
+  'avatar.models.formatVersion': 'Format version',
+  'avatar.models.minVersionCode': 'Lowest app version code',
+  'avatar.models.sizeBytes': 'Size',
+  'avatar.models.sha256': 'SHA-256',
+  'avatar.models.enabledOf': 'Enabled: {version} {platform} {abi}',
+  'avatar.models.file': 'Model file',
+  'avatar.models.fileHint': 'A zip file. The form cannot be sent while the upload runs.',
+  'avatar.models.fileRequired': 'Upload the model file first.',
+  'avatar.models.fileRejected': 'The server did not accept the uploaded file. Upload it again.',
+  'avatar.models.kindRequired': 'Enter the renderer.',
+  'avatar.models.versionRequired': 'Enter the version.',
+  'avatar.models.abiRequired': 'Enter the ABI.',
+  'avatar.models.formatVersionWhole': 'The format version must be a whole number, 1 or more.',
+  'avatar.models.minVersionCodeWhole': 'The version code must be a whole number, 0 or more.',
+  'avatar.models.derivedNote': 'The size and the SHA-256 are taken from the uploaded file.',
+
+  // ---- generation tasks ----
+  'avatar.tasks.note': 'Generation tasks that failed. The only filter is the type.',
+  'avatar.tasks.id': 'Task ID',
+  'avatar.tasks.account': 'Account ID',
+  'avatar.tasks.system': 'System',
+  'avatar.tasks.type': 'Type',
+  'avatar.tasks.type.AVATAR': 'Avatar',
+  'avatar.tasks.type.VOICE': 'Voice',
+  'avatar.tasks.type.LOOK': 'Look',
+  'avatar.tasks.type.LOOK_REPREPARE': 'Look package',
+  'avatar.tasks.type.ACTION_CLIP': 'Action clip',
+  'avatar.tasks.failureReason': 'Failure reason',
+  'avatar.tasks.createdAt': 'Created at',
+  'avatar.tasks.updatedAt': 'Updated at',
+
+  // ---- default avatars ----
+  'avatar.defaults.note':
+    'The avatar guests and accounts without an avatar talk to. Upload a picture, generate it, then set it active. Only one is active at a time.',
+  'avatar.defaults.name': 'Name',
+  'avatar.defaults.nameHint':
+    '1 to 30 characters, one name for every language. It is also the companion name those users see.',
+  'avatar.defaults.nameProblem.EMPTY': 'Enter a name.',
+  'avatar.defaults.nameProblem.TOO_LONG': 'The name must be 1 to 30 characters long.',
+  'avatar.defaults.nameProblem.FORBIDDEN_CHARACTER':
+    'The name has a control or text-direction override character.',
+  'avatar.defaults.style': 'Style',
+  'avatar.defaults.styleRequired': 'Choose a style.',
+  'avatar.defaults.source': 'Source picture',
+  'avatar.defaults.sourceHint': 'A picture with a portrait licence, or a synthetic one.',
+  'avatar.defaults.sourceRequired': 'Upload the source picture first.',
+  'avatar.defaults.sourceRejected':
+    'The server did not accept the uploaded picture. Upload it again.',
+  'avatar.defaults.authorized':
+    'This picture has a portrait licence or is synthetic and does not show a real person.',
+  'avatar.defaults.authorizedRequired': 'Confirm this before you continue.',
+  'avatar.defaults.preview': 'Preview',
+  'avatar.defaults.statusColumn': 'State',
+  'avatar.defaults.status.DRAFT': 'Draft',
+  'avatar.defaults.status.GENERATING': 'Generating',
+  'avatar.defaults.status.READY': 'Ready',
+  'avatar.defaults.isActive': 'Active',
+  'avatar.defaults.active': 'Active',
+  'avatar.defaults.failedWith': 'Last generation failed: {reason}',
+  'avatar.defaults.new': 'New default avatar',
+  'avatar.defaults.created': 'Created as a draft.',
+  'avatar.defaults.refresh': 'Refresh',
+  'avatar.defaults.generate': 'Generate',
+  'avatar.defaults.generating': 'Generation started.',
+  'avatar.defaults.activate': 'Set active',
+  'avatar.defaults.activateConfirm':
+    'Guests and accounts without an avatar will see it at once. The one that is active now becomes inactive but is kept. Continue?',
+  'avatar.defaults.activated': 'It is active now.',
+  'avatar.defaults.rename': 'Rename',
+  'avatar.defaults.renamed': 'Renamed.',
+  'avatar.defaults.delete': 'Delete',
+  'avatar.defaults.deleteConfirm': 'Delete this default avatar?',
+  'avatar.defaults.deleted': 'Deleted.',
+  'avatar.defaults.invalidState': 'The action is not possible now. The avatar is: {status}.',
+  'avatar.defaults.notConfigured':
+    'What the generation needs has not been configured yet, so it cannot start.',
+
+  // ---- giving a cosmetic to an account ----
+  'avatar.grant.button': 'Give a cosmetic',
+  'avatar.grant.title': 'Give a cosmetic',
+  'avatar.grant.item': 'Item',
+  'avatar.grant.itemRequired': 'Choose an item.',
+  'avatar.grant.reason': 'Reason',
+  'avatar.grant.done': 'The cosmetic was given.',
+  'avatar.grant.forbidden':
+    'COSMETIC:MANAGE or COSMETIC:GRANT is needed to list the items, so none can be chosen.',
+};
 
 export default messages;
