@@ -1,3 +1,61 @@
-const messages: Record<string, string> = {};
+const messages: Record<string, string> = {
+  'menu.monitor.pipeline': 'Pipeline',
+  'menu.monitor.alerts': 'Alerts',
+
+  'monitor.pipeline.range': 'Time range',
+  'monitor.pipeline.range.1h': 'Last hour',
+  'monitor.pipeline.range.6h': 'Last 6 hours',
+  'monitor.pipeline.range.24h': 'Last 24 hours',
+  'monitor.pipeline.range.3d': 'Last 3 days',
+  'monitor.pipeline.range.7d': 'Last 7 days',
+  'monitor.pipeline.source': 'Source',
+  'monitor.pipeline.allSources': 'All sources',
+  'monitor.pipeline.refresh': 'Refresh',
+  'monitor.pipeline.timeZone': 'Times are shown in the time zone of this browser.',
+  'monitor.pipeline.gpu': 'GPU utilization (%)',
+  'monitor.pipeline.errorCount': 'Errors',
+  'monitor.pipeline.errorRate': 'Error rate (%)',
+  'monitor.pipeline.empty': 'No data yet',
+  'monitor.pipeline.truncated':
+    'There are too many points in this time range, so only the latest are shown. Shorten the range to see all of them.',
+  'monitor.pipeline.costLink': 'Usage and cost are not here; open the cost report',
+  'monitor.pipeline.costText': 'Usage and cost are not here; see the cost report.',
+
+  'monitor.alert.status': 'Status',
+  'monitor.alert.type': 'Type',
+  'monitor.alert.status.OPEN': 'Open',
+  'monitor.alert.status.RESOLVED': 'Resolved',
+  'monitor.alert.col.type': 'Type',
+  'monitor.alert.col.account': 'Account',
+  'monitor.alert.col.ref': 'Related object',
+  'monitor.alert.col.detail': 'Detail',
+  'monitor.alert.col.status': 'Status',
+  'monitor.alert.col.createdAt': 'Created',
+  'monitor.alert.col.resolvedAt': 'Resolved',
+  'monitor.alert.col.actions': 'Actions',
+  'monitor.alert.close': 'Close',
+  'monitor.alert.closeConfirm': 'Close this alert?',
+  'monitor.alert.closeConfirmLookPackage':
+    'Closing this alert resets the failure count of this driving package to zero and queues the prepare job again. Close it?',
+  'monitor.alert.closed': 'Alert closed',
+  'monitor.alert.autoNote':
+    'When the object recovers, the backend marks the alert resolved by itself.',
+
+  'monitor.alert.type.DELETION_FAILED': 'Account deletion failed',
+  'monitor.alert.type.SUBSCRIPTION_UNACKED': 'Subscription not acknowledged',
+  'monitor.alert.type.CREDIT_UNCONSUMED': 'Credit purchase not consumed',
+  'monitor.alert.type.CREDIT_CONSUMED_BEFORE_CREDITED':
+    'Credit purchase consumed before it was credited',
+  'monitor.alert.type.CREDIT_LEDGER_MISMATCH': 'Credit balance does not match the ledger',
+  'monitor.alert.type.MEMORY_SYNC_FAILED': 'Tier sync failed',
+  'monitor.alert.type.SMS_DAILY_CAP_REACHED': 'Daily SMS total reached the limit',
+  'monitor.alert.type.FREE_CALL_MINUTES_HIGH': 'Free call minutes are too high',
+  'monitor.alert.type.USAGE_PRICE_MISSING': 'Model has no price',
+  'monitor.alert.type.LLM_PRICE_SYNC_FAILED': 'LLM price sync failed',
+  'monitor.alert.type.AVATAR_DELETION_OVERDUE': 'Avatar data deletion overdue',
+  'monitor.alert.type.LIKENESS_COMPLAINT_OVERDUE': 'Likeness complaint overdue',
+  'monitor.alert.type.GENERATION_CONFIG_MISSING': 'Avatar generation thresholds not configured',
+  'monitor.alert.type.LOOK_PACKAGE_PREPARE_FAILED': 'Look driving package failed to prepare',
+};
 
 export default messages;
