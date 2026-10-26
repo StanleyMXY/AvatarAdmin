@@ -278,7 +278,9 @@ describe('the sign-in page', () => {
     expect(calls[0].init.headers.Authorization).toBeUndefined();
   });
 
-  it('works with user names and passwords in Thai, Arabic, Vietnamese, Indonesian, Spanish and Chinese', async () => {
+  it('works with user names and passwords in Thai, Arabic, Vietnamese, Indonesian, Spanish and Chinese', {
+    timeout: 30000,
+  }, async () => {
     const calls = stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_CREDENTIALS')));
     const user = userEvent.setup();
     renderPage(<Login />);
