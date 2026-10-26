@@ -43,23 +43,29 @@ function PriceCompare({
   now,
   was,
   hasActive,
+  nowCurrency,
+  wasCurrency,
 }: {
   now: string | null;
   was: string | null;
   hasActive: boolean;
+  nowCurrency: string;
+  wasCurrency: string | undefined;
 }) {
   const intl = useIntl();
-  const changed = hasActive && !same(now, was);
+  // The same number in another currency is not the same price.
+  const changed = hasActive && (!same(now, was) || nowCurrency !== wasCurrency);
   return (
     <div
       data-changed={changed ? 'true' : undefined}
       style={changed ? { fontWeight: 600 } : undefined}
     >
       <div>
-        <Price value={now} />
+        <Price value={now} /> {nowCurrency}
       </div>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {intl.formatMessage({ id: 'cost.prices.band.current' })}: <Price value={was} />
+        {was !== null && wasCurrency ? ` ${wasCurrency}` : ''}
       </Typography.Text>
     </div>
   );
@@ -100,6 +106,8 @@ function CompareTable({ batch, intl }: { batch: PendingBatch; intl: Intl }) {
                     now={batch.unitPrice}
                     was={batch.active?.unitPrice ?? null}
                     hasActive={hasActive}
+                    nowCurrency={batch.currency}
+                    wasCurrency={batch.active?.currency}
                   />
                   <span>{labelOf(intl, 'cost.unit', batch.unit)}</span>
                 </Flex>
@@ -144,6 +152,8 @@ function CompareTable({ batch, intl }: { batch: PendingBatch; intl: Intl }) {
                 now={row.now?.[field] ?? null}
                 was={row.was?.[field] ?? null}
                 hasActive={hasActive}
+                nowCurrency={batch.currency}
+                wasCurrency={batch.active?.currency}
               />
             ),
           })),

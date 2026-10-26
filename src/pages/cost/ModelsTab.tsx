@@ -25,6 +25,7 @@ import {
 } from '../../services/cost';
 import { countCodePoints } from '../../utils/codePoints';
 import { formatInstant } from '../../utils/format';
+import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { ActionModal } from './ActionModal';
@@ -51,7 +52,7 @@ function EditModel({
   const { message } = App.useApp();
   const isLlm = model.resourceType === 'LLM';
   const [adapter, setAdapter] = useState<string>(model.syncAdapter ?? NONE);
-  const [name, setName] = useState(model.syncModelId ?? model.model);
+  const [name, setName] = useState(plainText(model.syncModelId) || plainText(model.model));
   const [attempted, setAttempted] = useState(false);
   const length = countCodePoints(trimSpec(name));
   const nameProblem = length < 1 || length > 128;
@@ -60,7 +61,10 @@ function EditModel({
     <ActionModal
       open
       title={t('cost.models.editTitle', {
-        model: model.model.length > 60 ? `${[...model.model].slice(0, 60).join('')}…` : model.model,
+        model:
+          plainText(model.model).length > 60
+            ? `${[...plainText(model.model)].slice(0, 60).join('')}…`
+            : plainText(model.model),
       })}
       okText={t('cost.models.save')}
       onClose={onClose}

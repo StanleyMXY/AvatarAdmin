@@ -208,6 +208,21 @@ describe('pending prices', () => {
     expect(card.getByTestId('compare-table').querySelector('[data-changed="true"]')).toBeNull();
   });
 
+  it('marks and names the currencies when the new price has the same number as the current one but another currency', async () => {
+    await open(ALL, {
+      prepare: () => {
+        const pending = batchOf(BATCH.pendingImage);
+        pending.unitPrice = '0.04';
+        pending.currency = 'EUR';
+      },
+    });
+    const card = await cardOf(BATCH.pendingImage);
+    const table = card.getByTestId('compare-table');
+    expect(table.querySelector('[data-changed="true"]')).not.toBeNull();
+    expect(table.textContent).toContain('EUR');
+    expect(table.textContent).toContain('USD');
+  });
+
   it('compares the unit price of a type that is not LLM, with its unit', async () => {
     await open();
     const card = await cardOf(BATCH.pendingImage);
@@ -1226,6 +1241,27 @@ describe('models', () => {
     expect(puts[0].body).toEqual({ syncAdapter: 'DASHSCOPE_INTL', syncModelId: 'sync-name' });
     await dialogsClosed();
     await waitFor(() => expect(rowOf('نموذج-كبير-٢').textContent).toContain('sync-name'));
+  });
+
+  it('opens the registration dialog for a model whose names are not text, instead of a blank page', async () => {
+    const { user } = await open(ALL, {
+      tab: 'Models',
+      prepare: () => {
+        const odd = costState.models.find((m) => m.model === 'model-large-1');
+        if (odd) {
+          Object.assign(odd, { syncModelId: ['a', 'b'], model: { name: 'x' } });
+        }
+      },
+    });
+    const row = (await screen.findAllByRole('row')).find((r) =>
+      r.textContent?.includes('{"name":"x"}'),
+    );
+    expect(row).toBeDefined();
+    await user.click(within(row as HTMLElement).getByRole('button', { name: 'Edit registration' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByRole('textbox', { name: 'Model name for the sync' }),
+    ).toBeInTheDocument();
   });
 
   it('can clear the adapter: sends null', async () => {
