@@ -453,7 +453,11 @@ describe('making a campaign', { timeout: 30000 }, () => {
     const hold = holdWrites();
     const button = within(await dialog()).getByRole('button', { name: 'Submit' });
     fireEvent.click(button);
+    await waitFor(() => expect(hold.started()).toBe(1));
+    // the second press comes after the form was checked and while the request is on its way: Enter in a field
+    fireEvent.submit((await dialog()).querySelector('form') as HTMLFormElement);
     fireEvent.click(button);
+    await new Promise((resolve) => setTimeout(resolve, 100));
     hold.release();
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(hold.started()).toBe(1);
@@ -724,6 +728,29 @@ describe('the link dialog', { timeout: 30000 }, () => {
     fireEvent.click(button);
     hold();
     await waitFor(() => expect(linkCalls(calls)).toHaveLength(1));
+  });
+
+  it('does not show a link that was asked for with fields that were changed while it was on its way', async () => {
+    baseUrl('https://go.example');
+    const { user } = await open();
+    const box = within(await dialog());
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let asked = false;
+    overrideFetch(async ({ url }) => {
+      if (!/\/link$/.test(url.pathname)) return undefined;
+      asked = true;
+      await gate;
+      return undefined;
+    });
+    await user.click(box.getByRole('button', { name: 'Generate' }));
+    await waitFor(() => expect(asked).toBe(true));
+    await user.type(box.getByLabelText('UTM campaign'), 'changed');
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(box.queryByTestId('campaign-link')).not.toBeInTheDocument();
   });
 
   it('takes the link away when the platform or a UTM value is changed after it was made', async () => {

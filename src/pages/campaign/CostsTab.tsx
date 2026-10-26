@@ -146,7 +146,13 @@ export function CostsTab({ campaigns, settings }: Props) {
             value={draft.range}
             onChange={(range) => setDraft((d) => ({ ...d, range }))}
           />
-          <Button type="primary" onClick={() => setApplied({ ...draft })}>
+          <Button
+            type="primary"
+            onClick={() => {
+              setApplied({ ...draft });
+              state.search();
+            }}
+          >
             {t('stat.common.query')}
           </Button>
         </Flex>

@@ -67,7 +67,10 @@ export function ClicksTab({ campaigns }: { campaigns: CampaignList }) {
     status: applied.status,
     keyword: trimSpec(applied.keyword),
   });
-  const search = () => setApplied({ ...draft });
+  const search = () => {
+    setApplied({ ...draft });
+    state.search();
+  };
 
   const statusOptions = Object.fromEntries(
     CLICK_STATUSES.map((s) => [

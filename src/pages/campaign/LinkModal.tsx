@@ -1,6 +1,6 @@
 import { Link, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Radio, Typography } from 'antd';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type AttributionCampaign,
@@ -38,7 +38,10 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
   const [link, setLink] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
+  // Counts the changes of the fields: an answer for fields that were changed since is dropped.
+  const version = useRef(0);
   const change = (apply: () => void) => {
+    version.current += 1;
     apply();
     setLink(null);
     setProblem(null);
@@ -49,6 +52,7 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
   const { run, pending } = useSingleFlight(async () => {
     setProblem(null);
     setLink(null);
+    const mine = version.current;
     if (!campaign[PLATFORM_FIELDS[platform].pixel]) {
       setProblem(t('campaign.link.noPixel'));
       return;
@@ -60,9 +64,9 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
         utmMedium: utmMedium.trim(),
         utmCampaign: utmCampaign.trim(),
       });
-      setLink(typeof answer.url === 'string' ? answer.url : null);
+      if (mine === version.current) setLink(typeof answer.url === 'string' ? answer.url : null);
     } catch (error) {
-      setProblem(describeFailure(intl, error).text);
+      if (mine === version.current) setProblem(describeFailure(intl, error).text);
     }
   });
 
@@ -86,7 +90,7 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
       onCancel={onClose}
       footer={<Button onClick={onClose}>{t('pages.common.cancel')}</Button>}
     >
-      <Form layout="vertical" requiredMark={false} onFinish={() => void run()}>
+      <Form layout="vertical" requiredMark={false}>
         <Form.Item label={t('campaign.link.platform')}>
           <Radio.Group
             value={platform}

@@ -13,6 +13,8 @@ export type ServerPage<T> = {
   /** The words of the error code of the last read, or null. */
   failure: string | null;
   setPaging: (page: number, pageSize: number) => void;
+  /** Reads again from page 1, also when the filters are the same as before (the Search button). */
+  search: () => void;
   reload: () => void;
 };
 
@@ -73,6 +75,11 @@ export function useServerPage<T, F extends Record<string, unknown>>(
     [key, pageSize],
   );
   const reload = useCallback(() => setTick((n) => n + 1), []);
+  // Two updates in one event: the filters (when they changed) and this one make a single read.
+  const search = useCallback(() => {
+    setPagingState((before) => ({ ...before, page: 1 }));
+    setTick((n) => n + 1);
+  }, []);
 
-  return { rows, total, page, pageSize, loading, failure, setPaging, reload };
+  return { rows, total, page, pageSize, loading, failure, setPaging, search, reload };
 }

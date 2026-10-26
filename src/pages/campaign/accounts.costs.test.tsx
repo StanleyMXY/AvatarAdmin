@@ -145,6 +145,13 @@ describe('the cost list', { timeout: 30000 }, () => {
     );
   });
 
+  it('reads again when Search is pressed with the filters that are already in force', async () => {
+    const { calls, user } = await openCosts();
+    const before = costReads(calls).length;
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(costReads(calls).length).toBe(before + 1));
+  });
+
   it('shows the words of the error code, not the backend words, and reads again with the retry button', async () => {
     backend();
     let failing = true;
@@ -333,7 +340,11 @@ describe('entering a cost', { timeout: 30000 }, () => {
     const hold = holdWrites();
     const button = within(await dialog()).getByRole('button', { name: 'Submit' });
     fireEvent.click(button);
+    await waitFor(() => expect(hold.started()).toBe(1));
+    // the second press comes after the form was checked and while the request is on its way: Enter in a field
+    fireEvent.submit((await dialog()).querySelector('form') as HTMLFormElement);
     fireEvent.click(button);
+    await new Promise((resolve) => setTimeout(resolve, 100));
     hold.release();
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(hold.started()).toBe(1);
@@ -440,7 +451,11 @@ describe('changing a cost', { timeout: 30000 }, () => {
     const hold = holdWrites();
     const button = box.getByRole('button', { name: 'Submit' });
     fireEvent.click(button);
+    await waitFor(() => expect(hold.started()).toBe(1));
+    // the second press comes after the form was checked and while the request is on its way: Enter in a field
+    fireEvent.submit((await dialog()).querySelector('form') as HTMLFormElement);
     fireEvent.click(button);
+    await new Promise((resolve) => setTimeout(resolve, 100));
     hold.release();
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(hold.started()).toBe(1);

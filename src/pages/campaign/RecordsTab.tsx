@@ -208,7 +208,13 @@ export function RecordsTab({ campaigns }: { campaigns: CampaignList }) {
             }
           />
         </Flex>
-        <Button type="primary" onClick={() => setApplied({ ...draft })}>
+        <Button
+          type="primary"
+          onClick={() => {
+            setApplied({ ...draft });
+            state.search();
+          }}
+        >
           {t('stat.common.query')}
         </Button>
       </Flex>

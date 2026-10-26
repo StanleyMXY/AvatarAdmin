@@ -306,10 +306,12 @@ describe('the summary', { timeout: 30000 }, () => {
     await waitFor(() => expect(reads).toBe(1));
     await groupBy(user, 'Media source');
     await waitFor(() => expect(heads()).toContain('Media source'));
-    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    await waitFor(() => expect(rows().length).toBeGreaterThan(2));
+    const newer = rows().map((r) => cellsOf(r));
     for (const release of releases) release();
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(heads()).toContain('Media source');
+    // the answer that was held back is the one for the grouping by source (two rows)
+    expect(rows().map((r) => cellsOf(r))).toEqual(newer);
   });
 
   it('keeps a key of 5000 characters, Arabic, Thai and emoji inside the table', async () => {

@@ -209,6 +209,16 @@ describe('the click details', { timeout: 30000 }, () => {
     await waitFor(() => expect(rows().every((r) => cellsOf(r)[3] === 'Matched')).toBe(true));
   });
 
+  it('reads the first page again when Search is pressed with the filters that are already in force', async () => {
+    const { calls, user } = await load();
+    await user.click(document.querySelector('.ant-pagination-item-2') as HTMLElement);
+    await waitFor(() => expect(clickReads(calls).some((r) => r.get('page') === '2')).toBe(true));
+    const before = clickReads(calls).length;
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(clickReads(calls).length).toBe(before + 1));
+    expect(clickReads(calls)[before].get('page')).toBe('1');
+  });
+
   it('offers the three states and no other', async () => {
     const { user } = await load();
     await user.click(screen.getByRole('combobox', { name: 'Status' }));
