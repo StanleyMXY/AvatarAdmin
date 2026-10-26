@@ -43,7 +43,14 @@ export function ExportButton({ name, params, viewCode, url, requiredCodes }: Pro
       });
       message.success(intl.formatMessage({ id: 'pages.export.saved' }, { name: filename }));
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      const { error: failure, text } = describeFailure(intl, error);
+      // The backend refuses an export with too many rows as 400 INVALID_REQUEST; its message is not
+      // shown (codes are translated here), so the text says what to try.
+      message.error(
+        failure.code === 'INVALID_REQUEST'
+          ? `${text} ${intl.formatMessage({ id: 'pages.export.narrowRange' })}`
+          : text,
+      );
     } finally {
       setReceived(null);
     }

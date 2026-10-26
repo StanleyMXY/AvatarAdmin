@@ -1,10 +1,11 @@
 import { history, useIntl, useLocation } from '@umijs/max';
 import { Alert, Button, Form, Input } from 'antd';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { getToken } from '../../../request/session';
 import { hasToken, login } from '../../../services/auth';
 import { describeFailure, failureNotice, type Notice, noticeText } from '../../../session/describe';
 import { setPendingEnroll } from '../../../session/pendingEnroll';
-import { ENROLL_PATH } from '../../../session/returnUrl';
+import { CHANGE_PASSWORD_PATH, ENROLL_PATH, safeReturnUrl } from '../../../session/returnUrl';
 import { useGoWhenSignedIn, useSession } from '../../../session/useSession';
 import { useSubmitOnce } from '../../../session/useSubmitOnce';
 import { trimSpec } from '../../../utils/trimSpec';
@@ -15,7 +16,7 @@ type Values = { username: string; password: string; totp?: string };
 export default function Login() {
   const intl = useIntl();
   const [form] = Form.useForm<Values>();
-  const { establish } = useSession();
+  const { me, establish } = useSession();
   const goWhenSignedIn = useGoWhenSignedIn();
   const { search } = useLocation();
   const { busy, run } = useSubmitOnce();
@@ -26,6 +27,15 @@ export default function Login() {
     intl.formatMessage({ id }, values);
 
   const redirect = new URLSearchParams(search).get('redirect');
+
+  // Someone who is already signed in has no use for this page. The token is checked as well: right
+  // after a sign-out the state can still hold the account for a moment.
+  const signedIn = me !== undefined && getToken() !== null;
+  useEffect(() => {
+    if (signedIn) {
+      history.replace(me?.mustChangePassword ? CHANGE_PASSWORD_PATH : safeReturnUrl(redirect));
+    }
+  }, [signedIn, me?.mustChangePassword, redirect]);
 
   const submit = (values: Values) =>
     run(async () => {

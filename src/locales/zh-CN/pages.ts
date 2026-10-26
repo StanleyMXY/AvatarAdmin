@@ -62,6 +62,7 @@ const messages: Record<string, string> = {
   'pages.export.button': '导出',
   'pages.export.received': '已接收 {bytes}',
   'pages.export.saved': '已保存 {name}',
+  'pages.export.narrowRange': '如果范围很大，请缩小日期范围或筛选条件（一次导出有行数上限）。',
   'pages.masked.needsPermission': '需要 {name} 权限才能看完整值',
   'pages.json.invalid': 'JSON 格式不对',
 };

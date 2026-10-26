@@ -100,7 +100,11 @@ describe('ExportButton', () => {
   it.each([
     [429, 'RATE_LIMITED', 'Too many requests. Please try again later.'],
     [403, 'ADMIN_FORBIDDEN', 'You do not have permission to do this.'],
-    [400, 'INVALID_REQUEST', 'Some input is not valid. Please check the fields and try again.'],
+    [
+      400,
+      'INVALID_REQUEST',
+      'Some input is not valid. Please check the fields and try again. If the range is large, narrow the date range or the filters (an export has a row limit).',
+    ],
   ])('shows the backend refusal %s %s and saves nothing', async (status, code, text) => {
     stubFetch(() => jsonResponse(status, envelope(code)));
     mount();

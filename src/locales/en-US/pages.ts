@@ -64,6 +64,8 @@ const messages: Record<string, string> = {
   'pages.export.button': 'Export',
   'pages.export.received': 'Received {bytes}',
   'pages.export.saved': 'Saved {name}',
+  'pages.export.narrowRange':
+    'If the range is large, narrow the date range or the filters (an export has a row limit).',
   'pages.masked.needsPermission': 'Needs the {name} permission to see the full value',
   'pages.json.invalid': 'Not valid JSON',
 };

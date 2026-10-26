@@ -9,7 +9,7 @@ import {
   setTestInitialState,
   setTestLocation,
 } from '../../../../tests/stubs/umi-max';
-import { getToken, resetSessionState } from '../../../request/session';
+import { clearToken, getToken, resetSessionState, setToken } from '../../../request/session';
 import { clearPendingEnroll, getPendingEnroll } from '../../../session/pendingEnroll';
 import Login from './index';
 
@@ -332,5 +332,52 @@ describe('the sign-in page', () => {
     await fill(user, 'fresh', 'pw');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
     await waitFor(() => expect(getPendingEnroll()?.redirect).toBe('/users/42?tab=x'));
+  });
+});
+
+describe('someone who is already signed in opens the sign-in page', () => {
+  const signedIn = (extra: Record<string, unknown> = {}) => {
+    setToken('tok-existing');
+    setTestInitialState({
+      me: {
+        id: '1',
+        username: 'ploy',
+        superAdmin: false,
+        mustChangePassword: false,
+        permissions: ['USER:VIEW'],
+        passwordMinLength: 12,
+        ...extra,
+      },
+      meta: {},
+    });
+  };
+
+  it('is sent to the page named in the address', async () => {
+    signedIn();
+    setTestLocation({ search: `?redirect=${encodeURIComponent('/users/42?tab=x')}` });
+    renderPage(<Login />);
+    await waitFor(() => expect(history.replace).toHaveBeenCalledWith('/users/42?tab=x'));
+  });
+
+  it('is sent to the overview when the address names none, or names an address outside this site', async () => {
+    signedIn();
+    setTestLocation({ search: `?redirect=${encodeURIComponent('//evil.example')}` });
+    renderPage(<Login />);
+    await waitFor(() => expect(history.replace).toHaveBeenCalledWith('/dashboard'));
+  });
+
+  it('is sent to the password change when the password must be changed first', async () => {
+    signedIn({ mustChangePassword: true });
+    renderPage(<Login />);
+    await waitFor(() => expect(history.replace).toHaveBeenCalledWith('/user/change-password'));
+  });
+
+  it('stays on the page when the token is gone, whatever the state still says (just signed out)', async () => {
+    signedIn();
+    clearToken();
+    renderPage(<Login />);
+    await act(async () => {});
+    expect(history.replace).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('User name')).toBeInTheDocument();
   });
 });
