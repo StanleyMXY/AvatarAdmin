@@ -1,5 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Flex, Select } from 'antd';
+import { validateServerLink } from '../utils/linkRule';
 import { SCREEN_TARGETS } from '../utils/screenTargets';
 import { LinkInput } from './LinkInput';
 
@@ -13,6 +14,26 @@ type Props = {
 };
 
 const TYPES: readonly LinkType[] = ['NONE', 'SCREEN', 'URL'];
+
+/**
+ * A rule for `Form.Item` around `LinkTargetField`: NONE needs nothing, SCREEN needs a screen of the
+ * shared list, URL needs a link that passes the link rule (contract 1.7). The message is the
+ * reason text of the problem, so the form cannot be submitted with a target the backend refuses.
+ */
+export function linkTargetRule(intl: { formatMessage: (d: { id: string }) => string }) {
+  return {
+    validator: async (_: unknown, value: LinkTargetValue | undefined) => {
+      const { linkType, linkTarget } = value ?? { linkType: 'NONE', linkTarget: '' };
+      if (linkType === 'SCREEN' && !SCREEN_TARGETS.includes(linkTarget)) {
+        throw new Error(intl.formatMessage({ id: 'pages.link.target.screenRequired' }));
+      }
+      if (linkType === 'URL') {
+        const check = validateServerLink(linkTarget);
+        if (!check.ok) throw new Error(intl.formatMessage({ id: `reason.${check.reasonKey}` }));
+      }
+    },
+  };
+}
 
 /** What a push, a notification or an ad opens: nothing, an app screen from the shared list, or an https link. */
 export function LinkTargetField({

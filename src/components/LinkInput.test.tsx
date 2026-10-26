@@ -39,8 +39,10 @@ describe('LinkInput', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('checks an empty value when it is required', () => {
+  it('does not mark an empty required box before it was touched, and does after the person leaves it', () => {
     renderPage(<LinkInput value="" required />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.blur(screen.getByRole('textbox'));
     expect(screen.getByRole('alert')).toHaveTextContent(enUS['reason.NOT_HTTPS']);
   });
 

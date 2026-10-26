@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { renderPage } from '../../tests/renderPage';
 import enUS from '../locales/en-US';
 import { SCREEN_TARGETS } from '../utils/screenTargets';
-import { LinkTargetField, type LinkTargetValue } from './LinkTargetField';
+import { LinkTargetField, type LinkTargetValue, linkTargetRule } from './LinkTargetField';
 
 let latest: LinkTargetValue = { linkType: 'NONE', linkTarget: '' };
 function Harness({ initial }: { initial?: LinkTargetValue }) {
@@ -81,5 +81,56 @@ describe('LinkTargetField', () => {
     await choose(user, screen.getAllByRole('combobox')[0], 'No link');
     expect(latest).toEqual({ linkType: 'NONE', linkTarget: '' });
     expect(screen.queryByRole('textbox')).toBeNull();
+  });
+});
+
+describe('linkTargetRule', () => {
+  const rule = linkTargetRule({ formatMessage: ({ id }) => enUS[id] });
+  const check = (value?: LinkTargetValue) => rule.validator({}, value);
+
+  it('lets NONE through, with or without a value', async () => {
+    await expect(check({ linkType: 'NONE', linkTarget: '' })).resolves.toBeUndefined();
+    await expect(check(undefined)).resolves.toBeUndefined();
+  });
+
+  it('needs a screen of the shared list for SCREEN', async () => {
+    await expect(check({ linkType: 'SCREEN', linkTarget: 'store' })).resolves.toBeUndefined();
+    await expect(check({ linkType: 'SCREEN', linkTarget: '' })).rejects.toThrow('Choose a screen');
+    await expect(check({ linkType: 'SCREEN', linkTarget: 'assets' })).rejects.toThrow(
+      'Choose a screen',
+    );
+  });
+
+  it('needs a link that passes the link rule for URL, with the reason text', async () => {
+    await expect(
+      check({ linkType: 'URL', linkTarget: 'https://example.com/a' }),
+    ).resolves.toBeUndefined();
+    await expect(check({ linkType: 'URL', linkTarget: 'http://bad' })).rejects.toThrow(
+      enUS['reason.NOT_HTTPS'],
+    );
+    await expect(check({ linkType: 'URL', linkTarget: '' })).rejects.toThrow(
+      enUS['reason.NOT_HTTPS'],
+    );
+  });
+
+  it('stops a form from being submitted with a bad target', async () => {
+    const { Form } = await import('antd');
+    let submitted = 0;
+    renderPage(
+      <Form
+        onFinish={() => {
+          submitted += 1;
+        }}
+        initialValues={{ target: { linkType: 'URL', linkTarget: 'http://bad' } }}
+      >
+        <Form.Item name="target" rules={[rule]}>
+          <LinkTargetField />
+        </Form.Item>
+        <button type="submit">go</button>
+      </Form>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'go' }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(submitted).toBe(0);
   });
 });

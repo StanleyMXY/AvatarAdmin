@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Input, Typography } from 'antd';
 import type { Rule } from 'antd/es/form';
+import { useState } from 'react';
 import { type LinkReasonKey, validateServerLink } from '../utils/linkRule';
 
 type Translate = { formatMessage: (d: { id: string }) => string };
@@ -48,8 +49,12 @@ export function LinkInput({
   disabled,
 }: Props) {
   const intl = useIntl();
+  // An empty required box is not marked before the person has typed in it or left it.
+  const [touched, setTouched] = useState(false);
   const check =
-    value === '' && !required ? ({ ok: true } as const) : validateServerLink(value, { maxLength });
+    value === '' && (!required || !touched)
+      ? ({ ok: true } as const)
+      : validateServerLink(value, { maxLength });
   return (
     <div>
       <Input
@@ -57,7 +62,11 @@ export function LinkInput({
         placeholder={placeholder}
         disabled={disabled}
         status={check.ok ? undefined : 'error'}
-        onChange={(event) => onChange?.(event.target.value)}
+        onChange={(event) => {
+          setTouched(true);
+          onChange?.(event.target.value);
+        }}
+        onBlur={() => setTouched(true)}
         inputMode="url"
         spellCheck={false}
       />

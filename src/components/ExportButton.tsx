@@ -1,6 +1,7 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { App, Button } from 'antd';
 import { useState } from 'react';
+import type { PermissionCode } from '../access/permissionCodes';
 import { useSingleFlight } from '../hooks/useSingleFlight';
 import { downloadFile } from '../request/download';
 import { describeFailure } from '../session/describe';
@@ -13,11 +14,11 @@ type Props = {
   name: string;
   params: Record<string, unknown>;
   /** The permission to see the page the export belongs to; it is needed together with `STATS:EXPORT`. */
-  viewCode: string;
+  viewCode: PermissionCode;
   /** Another export address (the user list and others have their own). */
   url?: string;
   /** Replaces the default `['STATS:EXPORT', viewCode]`: every one of these is needed. */
-  requiredCodes?: string[];
+  requiredCodes?: PermissionCode[];
 };
 
 /**

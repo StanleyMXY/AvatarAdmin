@@ -108,4 +108,56 @@ describe('RowActions', () => {
     await waitFor(() => expect(onClick).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByRole('button', { name: 'Go' })).not.toBeDisabled());
   });
+
+  it('runs an action from the menu once when it is chosen twice while it runs', async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => {};
+    const slow = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const actions: RowAction[] = [...make(3), { key: 'slow', label: 'Slow one', onClick: slow }];
+    renderPage(<RowActions actions={actions} />);
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    const item = within(await screen.findByRole('menu')).getByText('Slow one');
+    fireEvent.click(item);
+    fireEvent.click(item);
+    expect(slow).toHaveBeenCalledTimes(1);
+    release();
+  });
+
+  it('shows a dangerous action in the menu in red, and a disabled one as disabled and not callable', async () => {
+    const user = userEvent.setup();
+    const off = vi.fn();
+    const actions: RowAction[] = [
+      ...make(2),
+      { key: 'danger', label: 'Remove', onClick: vi.fn(), confirmText: 'Sure?' },
+      { key: 'off', label: 'Off one', onClick: off, disabled: true },
+    ];
+    renderPage(<RowActions actions={actions} />);
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByText('Remove').closest('li')?.className).toContain(
+      'ant-dropdown-menu-item-danger',
+    );
+    const disabled = within(menu).getByText('Off one').closest('li') as HTMLElement;
+    expect(disabled.className).toContain('ant-dropdown-menu-item-disabled');
+    fireEvent.click(disabled);
+    expect(off).not.toHaveBeenCalled();
+  });
+
+  it('does not call a disabled action that asks first', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    renderPage(
+      <RowActions
+        actions={[{ key: 'd', label: 'Del', onClick, confirmText: 'Sure?', disabled: true }]}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Del' }));
+    expect(screen.queryByText('Sure?')).toBeNull();
+    expect(onClick).not.toHaveBeenCalled();
+  });
 });

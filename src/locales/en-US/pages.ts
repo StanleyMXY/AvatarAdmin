@@ -46,6 +46,7 @@ const messages: Record<string, string> = {
   'pages.link.screen.subscription': 'Subscription',
   'pages.link.screen.checkin': 'Check-in',
   'pages.link.screen.daily_tasks': 'Daily tasks',
+  'pages.link.target.screenRequired': 'Choose a screen',
   'pages.link.target.placeholderUrl': 'https://…',
   'pages.link.target.placeholderScreen': 'Choose a screen',
   'pages.upload.choose': 'Choose file',

@@ -5,6 +5,7 @@ import { useSingleFlight } from '../hooks/useSingleFlight';
 import { uploadFile } from '../request/upload';
 import { describeFailure } from '../session/describe';
 import { useAdminMeta } from '../session/useSession';
+import { readImageSize } from '../utils/imageHeader';
 import {
   checkUploadFile,
   describeUploadLimits,
@@ -24,8 +25,16 @@ type Props<T extends { uploadId: string }> = {
   kind: UploadKind;
   onUploaded: (result: T) => void;
   onBusyChange: (busy: boolean) => void;
+  /**
+   * Called when the upload the form holds is no longer shown (a new file was chosen, so the
+   * `uploadId` from the earlier one must not be submitted any more).
+   */
+  onCleared?: () => void;
   disabled?: boolean;
 };
+
+/** A picture is shown as a preview only when its header says it is no larger than this many pixels. */
+export const PREVIEW_MAX_PIXELS = 16_000_000;
 
 /**
  * A file control for one of the six upload entries. The limits come from `GET /meta` and are shown
@@ -38,6 +47,7 @@ export function UploadField<T extends { uploadId: string }>({
   kind,
   onUploaded,
   onBusyChange,
+  onCleared,
   disabled,
 }: Props<T>) {
   const intl = useIntl();
@@ -65,7 +75,7 @@ export function UploadField<T extends { uploadId: string }>({
   ): string => {
     const shown = (field: keyof UploadLimitMeta | undefined, value: number | undefined) =>
       field && value !== undefined
-        ? describeUploadLimits(kind, { [field]: value }, intl.locale)
+        ? describeUploadLimits(kind, { [field]: value }, intl.locale, { note: false })
         : undefined;
     switch (check.problem) {
       case 'EMPTY':
@@ -85,38 +95,88 @@ export function UploadField<T extends { uploadId: string }>({
     }
   };
 
+  // The upload in progress is cancelled when the control goes away, and nothing is reported after that.
+  const alive = useRef(true);
+  const abort = useRef<AbortController | null>(null);
+  const busy = useRef(false);
+  const holdsResult = useRef(false);
+  const latest = useRef({ onUploaded, onBusyChange, onCleared });
+  latest.current = { onUploaded, onBusyChange, onCleared };
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      abort.current?.abort();
+      if (busy.current) latest.current.onBusyChange(false);
+    };
+  }, []);
+
   const { run, pending } = useSingleFlight(async (file: File) => {
     setProblem(null);
     setFailure(null);
     setDoneName(null);
     setPercent(null);
     setPreview(null);
-    const check = await checkUploadFile(kind, file, meta);
+    if (holdsResult.current) {
+      holdsResult.current = false;
+      latest.current.onCleared?.();
+    }
+    let check: Awaited<ReturnType<typeof checkUploadFile>>;
+    try {
+      check = await checkUploadFile(kind, file, meta);
+    } catch {
+      // the file could not be read at all
+      if (alive.current) setFailure(t('error.UNKNOWN'));
+      return;
+    }
+    if (!alive.current) return;
     if (!check.ok) {
       setProblem(problemText(check));
       return;
     }
-    // Only a file that passed the check is shown as a picture.
+    // A picture is shown only after the check, and only when its header says it is small: the
+    // browser decodes the whole picture to show it, and a small file can declare a huge one.
     if (file.type.startsWith('image/') || /\.(png|jpe?g)$/i.test(file.name)) {
-      setPreview(URL.createObjectURL(file));
+      const size = await readImageSize(file).catch(() => null);
+      if (alive.current && size && size.width * size.height <= PREVIEW_MAX_PIXELS) {
+        setPreview(URL.createObjectURL(file));
+      }
     }
-    onBusyChange(true);
+    if (!alive.current) return;
+    busy.current = true;
+    latest.current.onBusyChange(true);
+    abort.current = new AbortController();
+    let result: T | null = null;
     try {
       setPercent(0);
-      const result = await uploadFile<T>({
+      result = await uploadFile<T>({
         url: entry.endpoint,
         file,
-        onProgress: (loaded, total) =>
-          setPercent(total > 0 ? Math.round((loaded / total) * 100) : 0),
+        signal: abort.current.signal,
+        onProgress: (loaded, total) => {
+          if (alive.current) setPercent(total > 0 ? Math.round((loaded / total) * 100) : 0);
+        },
       });
-      setDoneName(file.name);
-      onUploaded(result);
     } catch (error) {
-      setPreview(null);
-      setFailure(describeFailure(intl, error).text);
+      if (alive.current) {
+        setPreview(null);
+        setFailure(describeFailure(intl, error).text);
+      }
     } finally {
-      setPercent(null);
-      onBusyChange(false);
+      abort.current = null;
+      if (busy.current) {
+        busy.current = false;
+        if (alive.current) {
+          setPercent(null);
+          latest.current.onBusyChange(false);
+        }
+      }
+    }
+    // Reported outside the try: a failure of the parent is not an upload failure.
+    if (result && alive.current) {
+      holdsResult.current = true;
+      setDoneName(file.name);
+      latest.current.onUploaded(result);
     }
   });
 
@@ -136,7 +196,7 @@ export function UploadField<T extends { uploadId: string }>({
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = '';
-            if (file) void run(file);
+            if (file) void run(file).catch(() => {});
           }}
         />
         <Button

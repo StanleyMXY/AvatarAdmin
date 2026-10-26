@@ -45,6 +45,7 @@ const messages: Record<string, string> = {
   'pages.link.screen.subscription': '订阅',
   'pages.link.screen.checkin': '签到',
   'pages.link.screen.daily_tasks': '每日任务',
+  'pages.link.target.screenRequired': '请选择页面',
   'pages.link.target.placeholderUrl': 'https://…',
   'pages.link.target.placeholderScreen': '选择页面',
   'pages.upload.choose': '选择文件',

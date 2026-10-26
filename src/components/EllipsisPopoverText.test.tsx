@@ -25,14 +25,14 @@ describe('EllipsisPopoverText', () => {
   it.each(SAMPLES)('opens to the whole text on click: %s', async (_name, text) => {
     const user = userEvent.setup();
     renderPage(<EllipsisPopoverText text={text} />);
-    await user.click(screen.getByRole('button', { name: 'Show full text' }));
+    await user.click(screen.getByTitle('Show full text'));
     const full = await screen.findByTestId('full-text');
     expect(full.textContent).toBe(text);
   });
 
   it.each(SAMPLES)('breaks the words anywhere so it never widens the table: %s', (_name, text) => {
     renderPage(<EllipsisPopoverText text={text} />);
-    const cell = screen.getByRole('button', { name: 'Show full text' });
+    const cell = screen.getByTitle('Show full text');
     expect(cell.style.overflowWrap).toBe('anywhere');
     expect(cell.style.wordBreak).toBe('break-word');
     expect(cell.style.overflow).toBe('hidden');
@@ -42,10 +42,7 @@ describe('EllipsisPopoverText', () => {
   it('cuts to the number of lines asked for', () => {
     renderPage(<EllipsisPopoverText text="hello" lines={3} />);
     // (the DOM test library drops the vendor-prefixed clamp properties, so the number is read from the element)
-    expect(screen.getByRole('button', { name: 'Show full text' })).toHaveAttribute(
-      'data-lines',
-      '3',
-    );
+    expect(screen.getByTitle('Show full text')).toHaveAttribute('data-lines', '3');
   });
 
   it('copies the whole text, not the cut one', async () => {
@@ -54,7 +51,7 @@ describe('EllipsisPopoverText', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     const text = 'ก'.repeat(500);
     renderPage(<EllipsisPopoverText text={text} />);
-    await user.click(screen.getByRole('button', { name: 'Show full text' }));
+    await user.click(screen.getByTitle('Show full text'));
     await user.click(await screen.findByRole('button', { name: 'Copy' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(text));
     expect(await screen.findByText('Copied')).toBeInTheDocument();
@@ -64,7 +61,7 @@ describe('EllipsisPopoverText', () => {
     const user = userEvent.setup();
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
     renderPage(<EllipsisPopoverText text="abc" />);
-    await user.click(screen.getByRole('button', { name: 'Show full text' }));
+    await user.click(screen.getByTitle('Show full text'));
     await user.click(await screen.findByRole('button', { name: 'Copy' }));
     expect(await screen.findByText('Something went wrong.')).toBeInTheDocument();
   });
@@ -73,5 +70,18 @@ describe('EllipsisPopoverText', () => {
     renderPage(<EllipsisPopoverText text={null} />);
     expect(screen.getByText('—')).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('lets each text choose its own direction, so Arabic is not laid out from the left', async () => {
+    const user = userEvent.setup();
+    renderPage(<EllipsisPopoverText text={'مرحبا بالعالم'} />);
+    expect(screen.getByTitle('Show full text')).toHaveAttribute('dir', 'auto');
+    await user.click(screen.getByTitle('Show full text'));
+    expect(await screen.findByTestId('full-text')).toHaveAttribute('dir', 'auto');
+  });
+
+  it('keeps the text of the cell as the readable name of the button', () => {
+    renderPage(<EllipsisPopoverText text="Hello there" />);
+    expect(screen.getByRole('button', { name: 'Hello there' })).toBeInTheDocument();
   });
 });

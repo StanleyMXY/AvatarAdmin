@@ -1,5 +1,6 @@
 import { useAccess } from '@umijs/max';
 import type { ReactNode } from 'react';
+import type { PermissionCode } from '../access/permissionCodes';
 
 type Access = { canAccess: (code?: string) => boolean };
 
@@ -9,7 +10,7 @@ export function Can({
   children,
   fallback = null,
 }: {
-  code: string;
+  code: PermissionCode;
   children: ReactNode;
   fallback?: ReactNode;
 }) {

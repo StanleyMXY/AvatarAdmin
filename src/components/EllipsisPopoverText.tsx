@@ -43,8 +43,8 @@ export function EllipsisPopoverText({ text, lines = 2, width = 240 }: Props) {
   };
 
   const full = (
-    <Space direction="vertical" size={8} style={{ maxWidth: 420 }}>
-      <div data-testid="full-text" style={{ ...WRAP, maxHeight: 320, overflow: 'auto' }}>
+    <Space orientation="vertical" size={8} style={{ maxWidth: 420 }}>
+      <div dir="auto" data-testid="full-text" style={{ ...WRAP, maxHeight: 320, overflow: 'auto' }}>
         {text}
       </div>
       <Button size="small" onClick={copy}>
@@ -57,7 +57,9 @@ export function EllipsisPopoverText({ text, lines = 2, width = 240 }: Props) {
     <Popover trigger="click" content={full}>
       <button
         type="button"
-        aria-label={intl.formatMessage({ id: 'pages.common.expand' })}
+        dir="auto"
+        aria-haspopup="dialog"
+        title={intl.formatMessage({ id: 'pages.common.expand' })}
         data-lines={lines}
         style={{
           ...WRAP,

@@ -1,5 +1,6 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { Space, Typography } from 'antd';
+import type { PermissionCode } from '../access/permissionCodes';
 import { DASH } from '../utils/ratio';
 
 type Access = { canAccess: (code?: string) => boolean };
@@ -14,7 +15,7 @@ export function MaskedText({
   needsCode,
 }: {
   value: string | null | undefined;
-  needsCode?: string;
+  needsCode?: PermissionCode;
 }) {
   const intl = useIntl();
   const access = useAccess() as unknown as Access;

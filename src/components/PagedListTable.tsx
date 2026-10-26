@@ -8,7 +8,8 @@ import { describeFailure } from '../session/describe';
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 export const DEFAULT_PAGE_SIZE = 20;
 
-type Props<T extends Record<string, unknown>, F extends Record<string, unknown>> = {
+// biome-ignore lint/suspicious/noExplicitAny: ProTable's own row constraint
+type Props<T extends Record<string, any>, F extends Record<string, unknown>> = {
   rowKey: string | ((row: T) => string);
   columns: ProColumns<T>[];
   /** Asks the backend for one page. `page` starts at 1; the other fields are the search form's. */
@@ -28,7 +29,8 @@ type Props<T extends Record<string, unknown>, F extends Record<string, unknown>>
  * error above the table, with a retry, and the table does not break.
  */
 export function PagedListTable<
-  T extends Record<string, unknown>,
+  // biome-ignore lint/suspicious/noExplicitAny: ProTable's own row constraint, so that `interface` rows work
+  T extends Record<string, any>,
   F extends Record<string, unknown> = Record<string, never>,
 >({ rowKey, columns, request, toolbar, defaultCollapsed = true, actionRef }: Props<T, F>) {
   const intl = useIntl();
@@ -36,32 +38,24 @@ export function PagedListTable<
   const ref = actionRef ?? innerRef;
   const [failure, setFailure] = useState<string | null>(null);
   const counter = useRef(0);
-  const newest = useRef<Promise<{ data: T[]; total: number; success: boolean }>>(
-    Promise.resolve({ data: [], total: 0, success: true }),
-  );
 
+  // ProTable cancels the older of two overlapping requests itself; the counter only makes sure the
+  // error shown is the error of the newest request.
   const load = async (params: Record<string, unknown>) => {
     const { current, pageSize, ...search } = params;
     const mine = ++counter.current;
-    const promise = (async () => {
-      try {
-        const page = await request({
-          ...(search as Record<string, unknown>),
-          page: Number(current ?? 1),
-          pageSize: Number(pageSize ?? DEFAULT_PAGE_SIZE),
-        } as { page: number; pageSize: number } & F);
-        return { data: page.items, total: page.total, success: true };
-      } catch (error) {
-        if (mine === counter.current) setFailure(describeFailure(intl, error).text);
-        return { data: [] as T[], total: 0, success: false };
-      }
-    })();
-    newest.current = promise;
-    const result = await promise;
-    // An older request that finished after a newer one started shows the newer one's answer.
-    if (mine !== counter.current) return newest.current;
-    if (result.success) setFailure(null);
-    return result;
+    try {
+      const page = await request({
+        ...(search as Record<string, unknown>),
+        page: Number(current ?? 1),
+        pageSize: Number(pageSize ?? DEFAULT_PAGE_SIZE),
+      } as { page: number; pageSize: number } & F);
+      if (mine === counter.current) setFailure(null);
+      return { data: page.items, total: page.total, success: true };
+    } catch (error) {
+      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      return { data: [] as T[], total: 0, success: false };
+    }
   };
 
   return (

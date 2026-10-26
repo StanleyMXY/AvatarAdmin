@@ -138,4 +138,36 @@ describe('ReasonModalForm', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it.each([
+    ['Arabic', 'حساب مزعج ينشر رسائل غير مرغوبة'],
+    ['Indonesian', 'Akun spam yang mengirim pesan berulang'],
+    ['Vietnamese', 'Tài khoản gửi tin nhắn rác liên tục'],
+    ['Spanish', 'Cuenta de spam: envía mensajes repetidos ¿verdad?'],
+    ['Chinese', '该账号反复发送垃圾信息'],
+    ['English', 'Spam account sending repeated messages'],
+  ])('sends a reason written in %s as it is', async (_language, reason) => {
+    const { onSubmit } = mount();
+    type(`  ${reason}  `);
+    submit();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(reason));
+  });
+
+  it('forgets an old failure when it is submitted again', async () => {
+    const onSubmit = vi
+      .fn<(reason: string) => Promise<void>>()
+      .mockRejectedValueOnce(
+        new ApiError({ code: 'ADMIN_FORBIDDEN', httpStatus: 403, message: '', data: null }),
+      )
+      .mockResolvedValueOnce(undefined);
+    mount({ onSubmit });
+    type('spam');
+    submit();
+    expect(await screen.findByText('You do not have permission to do this.')).toBeInTheDocument();
+    submit();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByText('You do not have permission to do this.')).toBeNull(),
+    );
+  });
 });

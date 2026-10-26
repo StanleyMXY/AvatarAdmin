@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Input, Typography } from 'antd';
 import { useEffect } from 'react';
+import { trimSpec } from '../utils/trimSpec';
 
 /** The parsed value of `text`, or `{ ok: false }` when it is not JSON. */
 export function parseJson(text: string): { ok: true; value: unknown } | { ok: false } {
@@ -24,11 +25,13 @@ type Props = {
 /** A text box for a JSON value: says when the text is not JSON and tells the parent form. */
 export function JsonField({ value = '', onChange, onValidityChange, allowEmpty, rows = 6 }: Props) {
   const intl = useIntl();
-  const empty = value.trim() === '';
+  const empty = trimSpec(value) === '';
   const valid = empty ? Boolean(allowEmpty) : parseJson(value).ok;
   useEffect(() => {
     onValidityChange?.(valid);
   }, [valid, onValidityChange]);
+  // A box that is gone cannot hold the form back.
+  useEffect(() => () => onValidityChange?.(true), [onValidityChange]);
   return (
     <div>
       <Input.TextArea

@@ -67,4 +67,26 @@ describe('DangerConfirmButton', () => {
     await user.click(screen.getByRole('button', { name: 'Delete' }));
     expect(screen.queryByText('Sure?')).toBeNull();
   });
+
+  it('shows the confirm button in the danger colour and disables it while the action runs', async () => {
+    let release: () => void = () => {};
+    const onConfirm = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    renderPage(
+      <DangerConfirmButton confirmText="Sure?" onConfirm={onConfirm}>
+        Delete
+      </DangerConfirmButton>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    const ok = await screen.findByRole('button', { name: 'OK' });
+    expect(ok.className).toContain('ant-btn-dangerous');
+    fireEvent.click(ok);
+    await waitFor(() => expect(screen.getByRole('button', { name: /OK/ })).toBeDisabled());
+    release();
+  });
 });

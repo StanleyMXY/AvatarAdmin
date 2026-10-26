@@ -141,6 +141,7 @@ export function describeUploadLimits(
   kind: UploadKind,
   meta: Partial<UploadLimitMeta>,
   locale: string,
+  options: { note?: boolean } = {},
 ): { types: string; maxBytes?: string; maxPixels?: string } {
   const entry = UPLOAD_ENTRIES[kind];
   const types = entry.extensions
@@ -157,9 +158,11 @@ export function describeUploadLimits(
     const megapixels = maxPixels / 1_000_000;
     const unit = megapixels === 1 ? words.one : words.other;
     const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(megapixels);
-    const imagesOnly = entry.accept.some((k) => k !== 'JPEG' && k !== 'PNG')
-      ? words.imagesOnly
-      : '';
+    // The note "(images only)" belongs beside the control, not inside a message about one image.
+    const imagesOnly =
+      options.note !== false && entry.accept.some((k) => k !== 'JPEG' && k !== 'PNG')
+        ? words.imagesOnly
+        : '';
     result.maxPixels = `${number} ${unit}${imagesOnly}`;
   }
   return result;

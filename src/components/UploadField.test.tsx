@@ -272,3 +272,82 @@ describe('isUploadIdRejection', () => {
     expect(isUploadIdRejection(null)).toBe(false);
   });
 });
+
+describe('UploadField: review fixes', () => {
+  it('shows no preview for a small file that declares a huge picture, but still uploads it', async () => {
+    setTestInitialState({ me: {}, meta: {} });
+    mount('pushImage');
+    choose(fileOf(pngBytes(20000, 20000), 'huge.png'));
+    await waitFor(() => expect(xhrs).toHaveLength(1));
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(document.querySelector('img')).toBeNull();
+  });
+
+  it('shows a preview for a picture whose header says it is small, and none when the size cannot be read', async () => {
+    mount('pushImage');
+    choose(fileOf(pngBytes(800, 600), 'ok.png'));
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(1));
+    expect(document.querySelector('img')).not.toBeNull();
+  });
+
+  it('cancels the upload when the control goes away, and reports nothing afterwards but "not busy"', async () => {
+    const { onUploaded, onBusyChange, unmount } = mount('pushImage');
+    choose(GOOD.pushImage());
+    await waitFor(() => expect(xhrs).toHaveLength(1));
+    unmount();
+    expect(xhrs[0].aborted).toBe(true);
+    await flush();
+    expect(onUploaded).not.toHaveBeenCalled();
+    expect(onBusyChange.mock.calls.map((c) => c[0])).toEqual([true, false]);
+  });
+
+  it('tells the form to forget the uploadId when another file is chosen, also when that file is refused', async () => {
+    const onCleared = vi.fn();
+    const { onUploaded } = mount('pushImage', { onCleared });
+    choose(GOOD.pushImage());
+    await waitFor(() => expect(xhrs).toHaveLength(1));
+    xhrs[0].respond(200, JSON.stringify(envelope('200', { uploadId: 'u-1' })));
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith({ uploadId: 'u-1' }));
+    expect(onCleared).not.toHaveBeenCalled();
+    choose(new File([], 'empty.png'));
+    expect(await screen.findByText('The file is empty')).toBeInTheDocument();
+    expect(onCleared).toHaveBeenCalledTimes(1);
+    choose(new File([], 'empty2.png'));
+    await screen.findByText('The file is empty');
+    expect(onCleared).toHaveBeenCalledTimes(1); // nothing held any more
+  });
+
+  it('writes the "images only" note beside the control once, not in the message about one picture', async () => {
+    setTestInitialState({ me: {}, meta: { ...META, adImageMaxPixels: 1_000_000 } });
+    mount('adMedia');
+    expect(document.body.textContent?.match(/images only/g)).toHaveLength(1);
+    choose(fileOf(pngBytes(4000, 3000), 'big.png'));
+    const alert = await screen.findByText(/too many pixels/);
+    expect(alert.textContent).not.toContain('images only');
+  });
+
+  it("does not show an upload failure when the form's own handler throws", async () => {
+    const onUploaded = vi.fn(() => {
+      throw new Error('form bug');
+    });
+    mount('pushImage', { onUploaded });
+    choose(GOOD.pushImage());
+    await waitFor(() => expect(xhrs).toHaveLength(1));
+    xhrs[0].respond(200, JSON.stringify(envelope('200', { uploadId: 'u' })));
+    await waitFor(() => expect(onUploaded).toHaveBeenCalled());
+    expect(screen.queryByText('Network error. Check your connection and try again.')).toBeNull();
+  });
+
+  it('says so when the chosen file cannot be read at all', async () => {
+    mount('pushImage');
+    const bad = new File([new Uint8Array(10)], 'x.png');
+    Object.defineProperty(bad, 'slice', {
+      value: () => {
+        throw new Error('unreadable');
+      },
+    });
+    choose(bad);
+    expect(await screen.findByText('Something went wrong.')).toBeInTheDocument();
+    expect(xhrs).toHaveLength(0);
+  });
+});

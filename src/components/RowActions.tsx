@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { App, Button, Dropdown, Space } from 'antd';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 import { useSingleFlight } from '../hooks/useSingleFlight';
 import { DangerConfirmButton } from './DangerConfirmButton';
 
@@ -53,9 +53,23 @@ function InlineAction({ action }: { action: RowAction }) {
 export function RowActions({ actions }: { actions: RowAction[] }) {
   const intl = useIntl();
   const { modal } = App.useApp();
+  // Actions chosen from the menu that are still running: choosing one again does nothing.
+  const running = useRef(new Set<string>());
   if (actions.length === 0) return null;
   const inline = actions.length <= MAX_INLINE ? actions : actions.slice(0, MAX_INLINE - 1);
   const rest = actions.length <= MAX_INLINE ? [] : actions.slice(MAX_INLINE - 1);
+
+  const runOnce = async (action: RowAction) => {
+    if (running.current.has(action.key)) return;
+    running.current.add(action.key);
+    try {
+      await action.onClick();
+    } catch {
+      // the action shows its own failure
+    } finally {
+      running.current.delete(action.key);
+    }
+  };
 
   const fromMenu = (action: RowAction) => {
     if (action.confirmText) {
@@ -65,16 +79,12 @@ export function RowActions({ actions }: { actions: RowAction[] }) {
         okText: intl.formatMessage({ id: 'pages.common.ok' }),
         cancelText: intl.formatMessage({ id: 'pages.common.cancel' }),
         onOk: async () => {
-          try {
-            await action.onClick();
-          } catch {
-            // the action shows its own failure
-          }
+          await runOnce(action);
         },
       });
       return;
     }
-    void Promise.resolve(action.onClick()).catch(() => {});
+    void runOnce(action);
   };
 
   return (

@@ -136,4 +136,44 @@ describe('ExportButton', () => {
     release(sheet());
     await waitFor(() => expect(saved).toHaveLength(1));
   });
+
+  it('writes the report name into the address safely', async () => {
+    const calls = stubFetch(() => sheet());
+    mount({ name: 'a b/c' });
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].url.startsWith('/api/admin/stats/export/a%20b%2Fc?')).toBe(true);
+  });
+
+  it('is disabled while the file is being fetched', async () => {
+    let release: (r: Response) => void = () => {};
+    stubFetch(
+      () =>
+        new Promise<Response>((r) => {
+          release = r;
+        }),
+    );
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Export/ })).toBeDisabled());
+    release(sheet());
+    await waitFor(() => expect(saved).toHaveLength(1));
+  });
+
+  it('refuses a lost session with its own text and saves nothing', async () => {
+    stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(
+      await screen.findByText('Your session has expired. Please sign in again.'),
+    ).toBeInTheDocument();
+    expect(saved).toEqual([]);
+  });
+
+  it('shows the texts in Chinese too', async () => {
+    stubFetch(() => jsonResponse(429, envelope('RATE_LIMITED')));
+    renderPage(<ExportButton name="daily" params={{}} viewCode="STATS:VIEW" />, 'zh-CN');
+    fireEvent.click(screen.getByRole('button', { name: /导\s*出/ }));
+    expect(await screen.findByText('请求过于频繁，请稍后再试')).toBeInTheDocument();
+  });
 });
