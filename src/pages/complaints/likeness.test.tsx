@@ -117,6 +117,57 @@ describe('the complaint list', { timeout: 30000 }, () => {
   });
 });
 
+describe('the complaint list and drawer: answers that arrive out of order or say something odd', {
+  timeout: 30000,
+}, () => {
+  it('does not mark a closed complaint even when the backend says it is overdue', async () => {
+    backend();
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      const response = await real(input, init);
+      if (!String(input).startsWith('/api/admin/likeness-complaints?')) return response;
+      const body = await response.json();
+      body.data.items = body.data.items.map((item: object) => ({ ...item, overdue: true }));
+      return jsonResponse(200, body);
+    });
+    renderPage(<LikenessComplaintsPage />);
+    expect((await rowOf(1)).querySelector('td.complaint-overdue')).not.toBeNull();
+    // 5 is RESOLVED_REMOVED, 6 RESOLVED_NOT_FOUND, 7 REJECTED: closed, so never marked.
+    for (const n of [5, 6, 7]) {
+      expect((await rowOf(n)).querySelector('td.complaint-overdue'), `complaint ${n}`).toBeNull();
+      expect(within(await rowOf(n)).queryByText('Overdue')).not.toBeInTheDocument();
+    }
+  });
+
+  it('shows the complaint that was opened last when the answer for the one opened before comes later', async () => {
+    backend();
+    const real = globalThis.fetch;
+    const slow = complaint(3).id;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      // The answer for the first complaint is held back until the test lets it go.
+      if (String(input).endsWith(`/likeness-complaints/${slow}`)) await gate;
+      return real(input, init);
+    });
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    await user.click(within(await rowOf(3)).getByRole('button', { name: 'Details' }));
+    await user.click(await screen.findByRole('button', { name: 'Close' }));
+    await user.click(within(await rowOf(4)).getByRole('button', { name: 'Details' }));
+    const drawer = await screen.findByRole('dialog');
+    const text = await within(drawer).findByTestId('complaint-description');
+    expect(text.textContent).toBe(complaint(4).description);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(within(drawer).getByTestId('complaint-description').textContent).toBe(
+      complaint(4).description,
+    );
+  });
+});
+
 describe('the complaint drawer: evidence', { timeout: 60000 }, () => {
   it('has one button for each file and the notice that viewing is recorded', async () => {
     backend();

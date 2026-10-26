@@ -14,7 +14,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { StatusTag } from '../../components/StatusTag';
@@ -76,13 +76,17 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
   const [problem, setProblem] = useState<string | null>(null);
   const options = statusOptions(intl);
 
+  // Only the newest read is shown: an answer for a complaint that was closed or replaced is dropped.
+  const newest = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++newest.current;
     if (id === null) return;
     setLoadFailure(null);
     try {
-      setDetail(await getComplaint(id));
+      const read = await getComplaint(id);
+      if (mine === newest.current) setDetail(read);
     } catch (error) {
-      setLoadFailure(describeFailure(intl, error).text);
+      if (mine === newest.current) setLoadFailure(describeFailure(intl, error).text);
     }
   }, [id, intl]);
 

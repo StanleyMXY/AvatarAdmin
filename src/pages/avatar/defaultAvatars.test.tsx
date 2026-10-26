@@ -98,6 +98,17 @@ describe('the default avatar page: the list', { timeout: 30000 }, () => {
     }
   });
 
+  it('shows the reason only beside a draft: a READY or generating avatar that still carries one shows none', async () => {
+    for (const d of avatarState.defaultAvatars) {
+      if (d.id === 'da-4' || d.id === 'da-2') d.failureReason = 'GENERATION_FAILED';
+    }
+    backend();
+    renderPage(<DefaultAvatarsPage />);
+    expect(within(await rowOf(THAI)).queryByTestId('failure-reason')).not.toBeInTheDocument();
+    expect(within(await rowOf(LUNA)).queryByTestId('failure-reason')).not.toBeInTheDocument();
+    expect(within(await rowOf(ARABIC)).getByTestId('failure-reason')).toBeInTheDocument();
+  });
+
   it('shows no reason on a draft that has none, and none on an avatar that is not a draft', async () => {
     backend();
     renderPage(<DefaultAvatarsPage />);
