@@ -432,6 +432,20 @@ describe('changing a cost', { timeout: 30000 }, () => {
     expect(await screen.findByText('321.09')).toBeInTheDocument();
   });
 
+  it('sends one request when the button is pressed twice while the first is on its way', async () => {
+    const { calls, user } = await open();
+    const box = within(await dialog());
+    await user.clear(box.getByLabelText('Cost'));
+    await user.type(box.getByLabelText('Cost'), '55.55');
+    const hold = holdWrites();
+    const button = box.getByRole('button', { name: 'Submit' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    hold.release();
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(hold.started()).toBe(1);
+  });
+
   it('refuses the same amounts as a new cost', async () => {
     const { calls, user } = await open();
     const box = within(await dialog());
