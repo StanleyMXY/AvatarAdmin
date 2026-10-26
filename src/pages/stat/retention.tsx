@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { Alert, Button, Flex, Select, Spin, Table, Tabs, Typography } from 'antd';
+import { Alert, Button, Flex, Select, Spin, Table, Tabs } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
@@ -97,14 +97,7 @@ export default function RetentionReportPage() {
 
   const retentionView = retention ? (
     <>
-      <Flex gap={16} wrap>
-        {chosenDays.map((day) => (
-          <div key={day} style={{ flex: '1 1 320px', minWidth: 0 }}>
-            <Typography.Text strong>{t('stat.retention.chart', { n: day })}</Typography.Text>
-            <RetentionTrendChart rows={retention} day={day} />
-          </div>
-        ))}
-      </Flex>
+      <RetentionTrendChart rows={retention} days={chosenDays} />
       <RetentionMatrix rows={retention} days={chosenDays} />
     </>
   ) : null;

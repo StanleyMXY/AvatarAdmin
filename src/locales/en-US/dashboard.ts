@@ -57,7 +57,6 @@ const messages: Record<string, string> = {
   'stat.retention.tab.reactivation': 'Reactivation',
   'stat.retention.days': 'Retention days',
   'stat.retention.dayOption': 'D{n}',
-  'stat.retention.chart': 'D{n} retention',
   'stat.retention.silenceDays': 'Silent days',
   'stat.retention.silenceOption': '{n} days',
   'stat.retention.land.date': 'Check day (UTC)',

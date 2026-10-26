@@ -53,7 +53,6 @@ const messages: Record<string, string> = {
   'stat.retention.tab.reactivation': '回流留存',
   'stat.retention.days': '留存天数',
   'stat.retention.dayOption': 'D{n}',
-  'stat.retention.chart': 'D{n} 留存率',
   'stat.retention.silenceDays': '沉默天数',
   'stat.retention.silenceOption': '{n} 天',
   'stat.retention.land.date': '检查日（UTC）',

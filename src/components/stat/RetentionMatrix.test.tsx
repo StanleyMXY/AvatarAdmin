@@ -49,8 +49,30 @@ describe('RetentionMatrix', () => {
       />,
     );
     expect(screen.getAllByTestId('cell-2026-10-01-d1').map((e) => e.textContent)).toEqual([
-      '10%',
-      '20%',
+      '20 · 10%',
+      '40 · 20%',
     ]);
+  });
+
+  it('shows the number of people next to the percentage, and nothing but a dash where there is no value', () => {
+    renderPage(
+      <RetentionMatrix rows={[row({ cohortSize: 1200, d1: 1234 - 34, d7: null })]} days={[1, 7]} />,
+    );
+    expect(screen.getByTestId('cell-2026-10-01-d1')).toHaveTextContent('1,200 · 100%');
+    expect(screen.getByTestId('cell-2026-10-01-d7').textContent).toBe('—');
+  });
+
+  it('tints a cell green in proportion to its share, and leaves a dash cell and a 0% cell without a tint', () => {
+    renderPage(
+      <RetentionMatrix rows={[row({ d1: 100, d3: 20, d5: 0, d7: null })]} days={[1, 3, 5, 7]} />,
+    );
+    const tint = (day: number) =>
+      (screen.getByTestId(`cell-2026-10-01-d${day}`).closest('td') as HTMLElement).style
+        .backgroundColor;
+    expect(tint(1)).not.toBe('');
+    expect(tint(3)).not.toBe('');
+    expect(tint(1)).not.toBe(tint(3));
+    expect(tint(5)).toBe('');
+    expect(tint(7)).toBe('');
   });
 });

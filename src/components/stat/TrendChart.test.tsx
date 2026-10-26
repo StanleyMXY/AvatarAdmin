@@ -99,8 +99,27 @@ describe('RetentionTrendChart', () => {
       />,
     );
     expect(dataOf()).toEqual([
-      { cohortDate: '2026-10-01', rate: 0.2 },
-      { cohortDate: '2026-10-04', rate: 0 },
+      { cohortDate: '2026-10-01', rate: 0.2, series: 'Day 7' },
+      { cohortDate: '2026-10-04', rate: 0, series: 'Day 7' },
     ]);
+  });
+
+  it('draws several days as lines of one chart, one series per day, each leaving out its own gaps', () => {
+    renderPage(
+      <RetentionTrendChart
+        days={[1, 7]}
+        rows={[
+          { ...row('2026-10-01', 100, 20), d1: 50 },
+          { ...row('2026-10-02', 100, null), d1: 40 },
+        ]}
+      />,
+    );
+    expect(dataOf()).toEqual([
+      { cohortDate: '2026-10-01', rate: 0.5, series: 'Day 1' },
+      { cohortDate: '2026-10-02', rate: 0.4, series: 'Day 1' },
+      { cohortDate: '2026-10-01', rate: 0.2, series: 'Day 7' },
+    ]);
+    expect(configOf().colorField).toBe('series');
+    expect(screen.getAllByTestId('chart-line')).toHaveLength(1);
   });
 });

@@ -165,11 +165,13 @@ describe('the retention report: the page', () => {
 });
 
 describe('the retention report: the active and call tabs', () => {
-  it('shows D1, D7 and D30 by default: three charts and three columns', async () => {
+  it('shows D1, D7 and D30 by default: one chart with three lines and three columns', async () => {
     backend({ retention: () => [cohort('2026-10-01')] });
     renderPage(<RetentionPage />);
     await waitFor(() => expect(bodyRows()).toHaveLength(1));
-    expect(charts()).toHaveLength(3);
+    expect(charts()).toHaveLength(1);
+    const series = JSON.parse(charts()[0].textContent ?? '[]') as { series: string }[];
+    expect([...new Set(series.map((d) => d.series))]).toEqual(['Day 1', 'Day 7', 'Day 30']);
     expect(headerTexts()).toEqual(['Sign-up day', 'Size', 'Day 1', 'Day 7', 'Day 30']);
   });
 
@@ -187,7 +189,14 @@ describe('the retention report: the active and call tabs', () => {
     await waitFor(() =>
       expect(headerTexts()).toEqual(['Sign-up day', 'Size', 'Day 1', 'Day 3', 'Day 7', 'Day 30']),
     );
-    expect(charts()).toHaveLength(4);
+    expect(charts()).toHaveLength(1);
+    const series = JSON.parse(charts()[0].textContent ?? '[]') as { series: string }[];
+    expect([...new Set(series.map((d) => d.series))]).toEqual([
+      'Day 1',
+      'Day 3',
+      'Day 7',
+      'Day 30',
+    ]);
   });
 
   it('shows a cell that has not come yet as a dash and a real zero as 0%', async () => {
@@ -209,8 +218,14 @@ describe('the retention report: the active and call tabs', () => {
     backend({ retention: () => [cohort('2026-10-25', { d1: null }), cohort('2026-10-01')] });
     renderPage(<RetentionPage />);
     await waitFor(() => expect(bodyRows()).toHaveLength(2));
-    const first = JSON.parse(charts()[0].textContent ?? '[]') as { cohortDate: string }[];
-    expect(first.map((d) => d.cohortDate)).toEqual(['2026-10-01']);
+    const points = JSON.parse(charts()[0].textContent ?? '[]') as {
+      cohortDate: string;
+      series: string;
+    }[];
+    // D1 has no value for 2026-10-25, so that day is missing from the D1 line only
+    expect(points.filter((d) => d.series === 'Day 1').map((d) => d.cohortDate)).toEqual([
+      '2026-10-01',
+    ]);
   });
 
   it('asks for the platform and the channel package and keeps them off the reactivation tab', async () => {
