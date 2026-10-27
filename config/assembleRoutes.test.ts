@@ -58,6 +58,37 @@ describe('mergeMenus', () => {
     ]);
   });
 
+  it('puts a page with a parameter (/users/:id) after the pages with fixed paths of its menu, so the layout does not take its title for the others', () => {
+    const merged = mergeMenus([
+      [menuGroup('users', [page('/users/list'), page('/users/abuse'), page('/users/:id')])],
+      [menuGroup('users', [page('/users/deletions')])],
+      [menuGroup('users', [page('/users/notifications')])],
+    ]);
+    expect(merged[0].routes?.map((r) => r.path)).toEqual([
+      '/users/list',
+      '/users/abuse',
+      '/users/deletions',
+      '/users/notifications',
+      '/users/:id',
+    ]);
+    const moderation = mergeMenus([
+      [
+        menuGroup('moderation', [
+          page('/moderation/queue'),
+          page('/moderation/:id'),
+          page('/moderation/rules'),
+          page('/moderation/stats'),
+        ]),
+      ],
+    ]);
+    expect(moderation[0].routes?.map((r) => r.path)).toEqual([
+      '/moderation/queue',
+      '/moderation/rules',
+      '/moderation/stats',
+      '/moderation/:id',
+    ]);
+  });
+
   it('keeps pages that are not in the table after the known ones, in the given order', () => {
     const merged = mergeMenus([
       [menuGroup('users', [page('/users/zzz'), page('/users/list'), page('/users/aaa')])],

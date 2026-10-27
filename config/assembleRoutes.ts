@@ -9,6 +9,9 @@ function rank(order: readonly string[], value: string | undefined): number {
   return index === -1 ? Number.POSITIVE_INFINITY : index;
 }
 
+const isParameterPath = (path: string | undefined) =>
+  path?.split('/').some((part) => part.startsWith(':')) ?? false;
+
 function byRank<T>(key: (item: T) => number) {
   return (a: T, b: T) => {
     const [x, y] = [key(a), key(b)];
@@ -48,6 +51,13 @@ export function mergeMenus(modules: AdminRoute[][]): AdminRoute[] {
   const ordered = [...groups.values()].sort(byRank((group) => rank(MENU_KEYS, group.name)));
   for (const group of ordered) {
     group.routes = [...(group.routes ?? [])].sort(byRank((page) => rank(ROUTE_ORDER, page.path)));
+    // A page with a parameter (`/users/:id`) goes after the pages with fixed paths: the router ranks
+    // fixed segments first anyway, but the layout takes the title of the first path that matches,
+    // so `/users/deletions` would be titled as a user.
+    group.routes = [
+      ...group.routes.filter((page) => !isParameterPath(page.path)),
+      ...group.routes.filter((page) => isParameterPath(page.path)),
+    ];
   }
   return [...ordered, ...pages];
 }

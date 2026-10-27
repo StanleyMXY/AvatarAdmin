@@ -29,9 +29,14 @@ describe('the moderation routes (spec 5.0, content moderation rows)', () => {
     expect(moderation[0]).toMatchObject({ key: 'moderation', name: 'moderation' });
   });
 
-  it('are in the assembled table in the order of the spec', () => {
+  it('are in the assembled table in the order of the spec, the detail (with a parameter) after the fixed paths', () => {
     const paths = flattenPages(routes).map((p) => p.path);
-    expect(paths.filter((p) => p?.startsWith('/moderation/'))).toEqual(pages.map((p) => p.path));
+    expect(paths.filter((p) => p?.startsWith('/moderation/'))).toEqual([
+      '/moderation/queue',
+      '/moderation/rules',
+      '/moderation/stats',
+      '/moderation/:id',
+    ]);
   });
 
   it('have a menu text in both languages for each page', () => {

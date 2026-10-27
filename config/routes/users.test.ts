@@ -36,14 +36,14 @@ describe('the user routes (spec 5.0, user rows except notifications)', () => {
     ]);
   });
 
-  it('are in the assembled table in the order of the spec', () => {
+  it('are in the assembled table in the order of the spec, the detail (with a parameter) after the fixed paths', () => {
     const paths = flattenPages(routes).map((p) => p.path);
     const mine = paths.filter((p) => p?.startsWith('/users/'));
     expect(mine.filter((p) => p !== '/users/notifications')).toEqual([
       '/users/list',
       '/users/abuse',
-      '/users/:id',
       '/users/deletions',
+      '/users/:id',
     ]);
   });
 
