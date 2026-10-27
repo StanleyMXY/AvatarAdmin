@@ -80,6 +80,9 @@ const messages: Record<string, string> = {
     'You cannot reset your own password here. To change your own password, use Change password in the account menu.',
   'system.admins.ownResetTotpReason':
     'You cannot reset your own two-factor authentication. Ask another administrator to do it.',
+  'system.admins.ownDisableReason': 'You cannot disable or delete your own account.',
+  'system.admins.lastSuperReason':
+    'This is the last enabled super administrator: it cannot be disabled or deleted.',
   'system.admins.ownNote':
     'This is your own account: you cannot change your own roles or super administrator flag.',
   'system.admins.createDone':
@@ -93,7 +96,7 @@ const messages: Record<string, string> = {
 
   // ---- roles ----
   'system.roles.note':
-    'The permissions of a role are replaced as a whole when you save. Checking a node checks everything below it. Unchecking a function keeps the page it belongs to, so a role can hold a page with only some of its functions; unchecking the page takes the page and everything below it. Custom nodes cannot be given to a role.',
+    'The permissions of a role are replaced as a whole when you save. Checking a node checks everything below it and the pages it is on. Unchecking a function keeps the page it belongs to, so a role can hold a page with only some of its functions; unchecking the page takes the page and everything below it. Custom nodes cannot be given to a role.',
   'system.roles.new': 'New role',
   'system.roles.col.name': 'Name',
   'system.roles.col.remark': 'Remark',

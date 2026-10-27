@@ -121,6 +121,17 @@ describe('PermissionTreeSelect', () => {
     expect(seen).toHaveBeenLastCalledWith(['USER:BAN', 'USER:EXPORT', 'USER:VIEW']);
   });
 
+  it('checks the page together with a function that is checked alone, and not the other functions', () => {
+    const seen = vi.fn();
+    renderPage(<Harness onValue={seen} />);
+    fireEvent.click(box(/Ban/));
+    expect(seen).toHaveBeenLastCalledWith(['USER:BAN', 'USER:VIEW']);
+    expect(box(/View users/)).toBeChecked();
+    expect(box(/Ban/)).toBeChecked();
+    expect(box(/Export users/)).not.toBeChecked();
+    expect(half(/View users/)).toBe(false);
+  });
+
   it('shows what the value holds and nothing more: a parent alone does not check its children', () => {
     renderPage(<Harness initial={['USER:VIEW']} />);
     expect(box(/View users/)).toBeChecked();
@@ -151,7 +162,7 @@ describe('PermissionTreeSelect', () => {
     expect(box(/A page from the future/)).toBeDisabled();
     expect(box(/A page from the future/)).not.toBeChecked();
     fireEvent.click(box(/Export users/));
-    expect(seen).toHaveBeenLastCalledWith(['STATS:VIEW', 'USER:EXPORT']);
+    expect(seen).toHaveBeenLastCalledWith(['STATS:VIEW', 'USER:EXPORT', 'USER:VIEW']);
   });
 
   it('cannot choose a custom node: its box is disabled and a click changes nothing', () => {

@@ -160,8 +160,8 @@ export function stateOf(
 
 /**
  * The value after a click on the box of `code` (the complete, sorted list of codes).
- * - Checking a node checks it and every descendant that may be chosen; then each node above it is
- *   checked too if everything below that node is now checked.
+ * - Checking a node checks it and every descendant that may be chosen, and every node above it that
+ *   may be chosen (the pages it is on), the rest of what is below those nodes left as it was.
  * - Unchecking a node (it was checked) takes out the node and every descendant. The nodes above it
  *   keep their codes: a role may hold a page and only a part of the functions of that page, and
  *   taking one function away must not take the page away. A node above leaves the value only when
@@ -186,11 +186,9 @@ export function toggleCode(
   } else {
     chosen.add(code);
     for (const c of below) if (selectable.has(c)) chosen.add(c);
-    for (const c of above) {
-      if (!selectable.has(c)) continue;
-      const rest = descendantsOf(index, c).filter((d) => selectable.has(d));
-      if (rest.every((d) => chosen.has(d))) chosen.add(c);
-    }
+    // A function cannot be used without the page it is on: every node above that may be chosen comes
+    // with it, whether or not the rest of what is below that node is checked.
+    for (const c of above) if (selectable.has(c)) chosen.add(c);
   }
   return [...chosen].sort();
 }

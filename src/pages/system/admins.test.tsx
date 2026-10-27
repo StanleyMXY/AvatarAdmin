@@ -210,12 +210,13 @@ describe('the protections of the own account and of the last super administrator
     expect(items.some((item) => item.getAttribute('aria-disabled') !== 'true')).toBe(true);
   });
 
-  it('shows no disable or delete on the last enabled super administrator to an administrator who is not one: the whole row is closed to them', async () => {
+  it('shows no action at all on the last enabled super administrator to an administrator who is not one: the whole row is closed to them', async () => {
     signIn('support', { codes: ['ADMIN:MANAGE'] });
     await load();
     const root = within(await rowOf('root'));
     expect(root.queryByRole('button', { name: 'Disable' })).not.toBeInTheDocument();
     expect(root.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
+    expect(root.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
 
   it('disables disable and delete on the own row of a super administrator who is not the last one', async () => {
@@ -295,15 +296,38 @@ describe('the protections of the own account and of the last super administrator
 describe('the row of a super administrator is closed to an administrator who is not one', () => {
   const asNonSuper = () => signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: false });
   const PRIVILEGED = ['Disable', 'Reset password', 'Reset two-factor', 'Delete'];
+  const EVERY = ['Edit', 'Enable', ...PRIVILEGED, 'More'];
 
-  it('draws no reset password, reset two-factor, disable or delete on the row of a super administrator', async () => {
+  it('draws no edit, reset password, reset two-factor, disable or delete on the row of a super administrator: the cell has no button', async () => {
     asNonSuper();
     await load();
-    const root = within(await rowOf('root'));
-    for (const name of [...PRIVILEGED, 'More']) {
-      expect(root.queryByRole('button', { name }), name).not.toBeInTheDocument();
+    const row = await rowOf('root');
+    for (const name of EVERY) {
+      expect(within(row).queryByRole('button', { name }), name).not.toBeInTheDocument();
     }
-    expect(root.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    const cell = row.querySelector('td:last-child') as HTMLElement;
+    expect(within(cell).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('draws no Edit and no Enable on the row of a disabled super administrator either', async () => {
+    asNonSuper();
+    adminOf('finance').superAdmin = true;
+    adminOf('finance').status = 'DISABLED';
+    await load();
+    const finance = within(await rowOf('finance'));
+    for (const name of EVERY) {
+      expect(finance.queryByRole('button', { name }), name).not.toBeInTheDocument();
+    }
+  });
+
+  it('leaves Edit and Enable on the row of a disabled super administrator to a super administrator', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+    adminOf('finance').superAdmin = true;
+    adminOf('finance').status = 'DISABLED';
+    await load();
+    const finance = within(await rowOf('finance'));
+    expect(finance.getByRole('button', { name: 'Edit' })).toBeEnabled();
+    expect(finance.getByRole('button', { name: 'Enable' })).toBeEnabled();
   });
 
   it('draws none of the four under More either', async () => {
@@ -311,10 +335,10 @@ describe('the row of a super administrator is closed to an administrator who is 
     adminOf('finance').superAdmin = true;
     adminOf('finance').status = 'DISABLED';
     const { user } = await load();
-    // a disabled super administrator has Enable and Edit only: nothing is left for a menu
+    // nothing is left on the row of a super administrator: no menu either
     const finance = within(await rowOf('finance'));
     expect(finance.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
-    for (const name of PRIVILEGED) {
+    for (const name of EVERY) {
       expect(finance.queryByRole('button', { name }), name).not.toBeInTheDocument();
     }
     // and the menu of an ordinary row still has them
@@ -365,16 +389,11 @@ describe('the row of a super administrator is closed to an administrator who is 
     });
     await load();
     const root = within(await rowOf('root'));
-    for (const name of PRIVILEGED)
-      expect(root.queryByRole('button', { name })).not.toBeInTheDocument();
+    for (const name of EVERY) expect(root.queryByRole('button', { name })).not.toBeInTheDocument();
   });
 });
 
 describe('the own account cannot reset its own password or second factor', () => {
-  const hoverReason = async (user: ReturnType<typeof userEvent.setup>, item: HTMLElement) => {
-    await user.hover(within(item).getByText(/Reset/));
-  };
-
   it('disables reset password and reset two-factor on the own row, and leaves them on the others', async () => {
     const { user } = await load();
     await user.click(within(await rowOf('root')).getByRole('button', { name: 'More' }));
@@ -390,19 +409,6 @@ describe('the own account cannot reset its own password or second factor', () =>
     await user.click(within(await rowOf('reviewer')).getByRole('button', { name: 'More' }));
     const passwords = await screen.findAllByRole('menuitem', { name: 'Reset password' });
     expect(passwords.some((item) => item.getAttribute('aria-disabled') !== 'true')).toBe(true);
-  });
-
-  it('says why, and says where to change the own password', async () => {
-    const { user } = await load();
-    await user.click(within(await rowOf('root')).getByRole('button', { name: 'More' }));
-    const password = await screen.findByRole('menuitem', { name: 'Reset password' });
-    await hoverReason(user, password);
-    expect(
-      await screen.findByText(/own password.*Change password.*account menu/),
-    ).toBeInTheDocument();
-    const totp = screen.getByRole('menuitem', { name: 'Reset two-factor' });
-    await hoverReason(user, totp);
-    expect(await screen.findByText(/cannot reset your own two-factor/)).toBeInTheDocument();
   });
 
   it('opens no dialog and sends nothing when the disabled item is pressed', async () => {
@@ -428,16 +434,86 @@ describe('the own account cannot reset its own password or second factor', () =>
       'true',
     );
   });
+});
+
+describe('the reasons of the buttons that are off are written in the row', () => {
+  const REASONS = [
+    /You cannot disable or delete your own account\./,
+    /You cannot reset your own password here\. To change your own password, use Change password in the account menu\./,
+    /You cannot reset your own two-factor authentication\. Ask another administrator to do it\./,
+    /This is your own account: you cannot change your own roles or super administrator flag\./,
+  ];
+  const cellOf = async (row: string) =>
+    (await rowOf(row)).querySelector('td:last-child') as HTMLElement;
+
+  it('shows every reason of the own row as small text in the row, with nothing pressed or hovered', async () => {
+    await load();
+    const cell = within(await cellOf('root'));
+    for (const reason of REASONS) expect(cell.getByText(reason)).toBeVisible();
+    // not a hover tip: no tip is open or needed
+    expect(document.querySelector('.ant-tooltip')).toBeNull();
+  });
+
+  it('shows no reason on a row where nothing is off', async () => {
+    await load();
+    const cell = within(await cellOf('reviewer'));
+    for (const reason of REASONS) expect(cell.queryByText(reason)).not.toBeInTheDocument();
+    expect(cell.queryByText(/last enabled super administrator/)).not.toBeInTheDocument();
+  });
+
+  it('shows the reasons of the own row of an administrator who is not a super one, found by name', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: false });
+    await load();
+    const cell = within(await cellOf('support'));
+    for (const reason of REASONS) expect(cell.getByText(reason)).toBeInTheDocument();
+    // the reason of the last super administrator is for the last one only
+    expect(cell.queryByText(/last enabled super administrator/)).not.toBeInTheDocument();
+  });
+
+  it('says why the last enabled super administrator cannot be disabled or deleted, also on a row that is not the own one', async () => {
+    // the session says super administrator; the list has one enabled super administrator, root
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+    adminOf('support').superAdmin = false;
+    const { user } = await load();
+    const cell = within(await cellOf('root'));
+    expect(
+      await cell.findByText(/last enabled super administrator: it cannot be disabled or deleted/),
+    ).toBeVisible();
+    expect(cell.queryByText(REASONS[0])).not.toBeInTheDocument();
+    expect(await rowButton('root', 'Disable')).toBeDisabled();
+    await user.click(within(await rowOf('root')).getByRole('button', { name: 'More' }));
+    const items = await screen.findAllByRole('menuitem', { name: 'Delete' });
+    expect(items[items.length - 1]).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('gives the own row both reasons when it is also the last enabled super administrator', async () => {
+    await load();
+    const cell = within(await cellOf('root'));
+    expect(
+      await cell.findByText(/last enabled super administrator: it cannot be disabled or deleted/),
+    ).toBeInTheDocument();
+    expect(cell.getByText(REASONS[0])).toBeInTheDocument();
+  });
+
+  it('keeps the reasons when the menu is open and when it is closed again', async () => {
+    const { user } = await load();
+    await user.click(within(await rowOf('root')).getByRole('button', { name: 'More' }));
+    await screen.findByRole('menuitem', { name: 'Reset password' });
+    await user.keyboard('{Escape}');
+    const cell = within(await cellOf('root'));
+    for (const reason of REASONS) expect(cell.getByText(reason)).toBeInTheDocument();
+  });
 
   it('gives the reasons in Chinese', async () => {
     backend();
-    const user = userEvent.setup();
     renderPage(<AdminsPage />, 'zh-CN');
     await waitForRows();
-    await user.click(within(await rowOf('root')).getByRole('button', { name: '更多' }));
-    const password = await screen.findByRole('menuitem', { name: '重置密码' });
-    await user.hover(within(password).getByText('重置密码'));
-    expect(await screen.findByText(/修改密码/)).toBeInTheDocument();
+    const cell = within(await cellOf('root'));
+    expect(cell.getByText('不能停用或删除自己的账号。')).toBeInTheDocument();
+    expect(cell.getByText(/不能在这里重置自己的密码.*修改密码/)).toBeInTheDocument();
+    expect(cell.getByText(/不能重置自己的二次验证/)).toBeInTheDocument();
+    expect(cell.getByText(/这是你自己的账号/)).toBeInTheDocument();
+    expect(cell.getByText(/最后一个启用的超级管理员：不能停用或删除/)).toBeInTheDocument();
   });
 });
 
@@ -966,10 +1042,12 @@ describe('editing an administrator', () => {
     expect(edit).toBeDisabled();
     await user.click(edit);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    await user.hover(within(await rowOf('root')).getByText('Edit'));
+    // the reason is written in the row, not shown on hover
     expect(
-      await screen.findByText(/you cannot change your own roles or super administrator flag/),
-    ).toBeInTheDocument();
+      within(await rowOf('root')).getByText(
+        /This is your own account: you cannot change your own roles or super administrator flag/,
+      ),
+    ).toBeVisible();
     expect(writesOf(calls)).toHaveLength(0);
   });
 

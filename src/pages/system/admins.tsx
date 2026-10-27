@@ -1,7 +1,7 @@
 import { useAccess, useIntl } from '@umijs/max';
 import type { TableColumnsType } from 'antd';
-import { Alert, App, Button, Flex, Tag, Tooltip } from 'antd';
-import { type ReactNode, useCallback, useRef, useState } from 'react';
+import { Alert, App, Button, Flex, Tag, Typography } from 'antd';
+import { useCallback, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
@@ -31,19 +31,6 @@ type Dialog =
 const isRecord = (row: unknown): row is AdminUser => typeof row === 'object' && row !== null;
 
 /**
- * A label with the reason it is off, shown when the pointer rests on it. A button that is off takes
- * no pointer events itself, so the label takes them back.
- */
-const withReason = (label: string, reason: string | undefined): ReactNode =>
-  reason === undefined ? (
-    label
-  ) : (
-    <Tooltip title={reason}>
-      <span style={{ pointerEvents: 'auto' }}>{label}</span>
-    </Tooltip>
-  );
-
-/**
  * 管理员 (`ADMIN:MANAGE`): the administrator accounts. Every control is for that one code, the code
  * of every endpoint of this page. The protections of the account are in the controls and again in the
  * request: nobody changes their own roles or super administrator flag, disables or deletes themselves
@@ -51,8 +38,10 @@ const withReason = (label: string, reason: string | undefined): ReactNode =>
  * the flag. Nobody resets their own password or second factor here (the buttons are off, with the
  * reason; the own password is changed from the account menu), and the row of a super administrator
  * has no reset, disable or delete for an administrator who is not one: whoever may reset that
- * password can sign in as that account. A refusal of the backend is shown as the text of its code,
- * never its message.
+ * password can sign in as that account, so that row has no action at all for such an administrator,
+ * not even Edit or Enable. The reason a button is off is written as small text in the row, where the
+ * keyboard and the touch screen see it as well as the pointer. A refusal of the backend is shown as
+ * the text of its code, never its message.
  */
 export default function AdminsPage() {
   const intl = useIntl();
@@ -85,14 +74,27 @@ export default function AdminsPage() {
     refresh();
   };
 
+  /** The reasons the buttons of a row are off, in the order of the buttons. */
+  const reasonsOf = (row: AdminUser): string[] => {
+    if (!canManage || isClosedTo(row, me)) return [];
+    const { own, lastSuper } = protectionOf(row);
+    return [
+      ...(own ? [t('system.admins.ownNote')] : []),
+      ...(own ? [t('system.admins.ownDisableReason')] : []),
+      ...(lastSuper ? [t('system.admins.lastSuperReason')] : []),
+      ...(own ? [t('system.admins.ownResetPasswordReason')] : []),
+      ...(own ? [t('system.admins.ownResetTotpReason')] : []),
+    ];
+  };
+
   const actionsOf = (row: AdminUser): RowAction[] => {
     if (!canManage) return [];
     const protection = protectionOf(row);
     const name = plainText(row.username);
     const id = plainText(row.id);
     const enabled = row.status === 'ACTIVE';
-    // The row of a super administrator is closed to anyone who is not one: none of the four below.
-    const closed = isClosedTo(row, me);
+    // The row of a super administrator is closed to anyone who is not one: no action at all.
+    if (isClosedTo(row, me)) return [];
     const own = protection.own;
     const disable: RowAction = {
       key: 'disable',
@@ -108,19 +110,13 @@ export default function AdminsPage() {
     };
     const resetPassword: RowAction = {
       key: 'password',
-      label: withReason(
-        t('system.admins.resetPassword'),
-        own ? t('system.admins.ownResetPasswordReason') : undefined,
-      ),
+      label: t('system.admins.resetPassword'),
       disabled: own,
       onClick: () => setDialog({ kind: 'password', admin: row }),
     };
     const resetTotp: RowAction = {
       key: 'totp',
-      label: withReason(
-        t('system.admins.resetTotp'),
-        own ? t('system.admins.ownResetTotpReason') : undefined,
-      ),
+      label: t('system.admins.resetTotp'),
       confirmText: t('system.admins.resetTotpAsk', { name }),
       disabled: own,
       onClick: () => attempt(() => resetAdminTotp(id), t('system.admins.resetTotpDone')),
@@ -134,12 +130,11 @@ export default function AdminsPage() {
     };
     const edit: RowAction = {
       key: 'edit',
-      // Nothing in the dialog can be changed on the own row: the button is off and says why.
-      label: withReason(t('system.common.edit'), own ? t('system.admins.ownNote') : undefined),
+      // Nothing in the dialog can be changed on the own row: the button is off (the reason is in the row).
+      label: t('system.common.edit'),
       disabled: own,
       onClick: () => setDialog({ kind: 'edit', admin: row }),
     };
-    if (closed) return [edit, ...(enabled ? [] : [enable])];
     return [edit, enabled ? disable : enable, resetPassword, resetTotp, remove];
   };
 
@@ -221,7 +216,19 @@ export default function AdminsPage() {
             title: t('system.admins.col.actions'),
             key: 'actions',
             fixed: 'right' as const,
-            render: (_: unknown, row: AdminUser) => <RowActions actions={actionsOf(row)} />,
+            render: (_: unknown, row: AdminUser) => {
+              const reasons = reasonsOf(row);
+              return (
+                <Flex vertical gap={4} style={{ maxWidth: 260 }}>
+                  <RowActions actions={actionsOf(row)} />
+                  {reasons.map((reason) => (
+                    <Typography.Text key={reason} type="secondary" style={{ fontSize: 12 }}>
+                      {reason}
+                    </Typography.Text>
+                  ))}
+                </Flex>
+              );
+            },
           },
         ]
       : []),

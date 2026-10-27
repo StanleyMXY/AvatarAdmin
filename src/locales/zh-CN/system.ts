@@ -73,6 +73,8 @@ const messages: Record<string, string> = {
   'system.admins.ownResetPasswordReason':
     '不能在这里重置自己的密码。要改自己的密码，请用账户菜单里的“修改密码”。',
   'system.admins.ownResetTotpReason': '不能重置自己的二次验证，请让另一位管理员来做。',
+  'system.admins.ownDisableReason': '不能停用或删除自己的账号。',
+  'system.admins.lastSuperReason': '这是最后一个启用的超级管理员：不能停用或删除。',
   'system.admins.ownNote': '这是你自己的账号：不能修改自己的角色和超级管理员标志。',
   'system.admins.createDone': '管理员已创建。第一次登录时必须改密码。',
   'system.admins.resetTitle': '重置密码：{name}',
@@ -84,7 +86,7 @@ const messages: Record<string, string> = {
 
   // ---- 角色 ----
   'system.roles.note':
-    '保存时角色的权限整体替换。勾选一个节点会同时勾选它下面的全部节点。取消一个功能不会取消它所在的页面，所以角色可以只有页面加一部分功能；取消页面本身会把页面和它下面的全部节点一起取消。自定义节点不能分配给角色。',
+    '保存时角色的权限整体替换。勾选一个节点会同时勾选它下面的全部节点和它所在的页面。取消一个功能不会取消它所在的页面，所以角色可以只有页面加一部分功能；取消页面本身会把页面和它下面的全部节点一起取消。自定义节点不能分配给角色。',
   'system.roles.new': '新建角色',
   'system.roles.col.name': '名称',
   'system.roles.col.remark': '备注',

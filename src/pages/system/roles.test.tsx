@@ -218,6 +218,23 @@ describe('making a role', () => {
     ]);
   });
 
+  it('checks the page together with a function that is checked alone, and saves both', async () => {
+    const { user, calls } = await load();
+    const box = await openNew(user);
+    await user.type(box.getByLabelText('Name'), 'Soporte ฝ่ายสนับสนุน');
+    await user.click(checkbox(box, 'USER:BAN'));
+    expect(checkbox(box, 'USER:BAN')).toBeChecked();
+    expect(checkbox(box, 'USER:VIEW')).toBeChecked();
+    expect(checkbox(box, 'USER:EXPORT')).not.toBeChecked();
+    expect(box.getByText('2 codes chosen')).toBeInTheDocument();
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+  });
+
   it('cannot give a role a custom node: the box is off and the node is not in the list that is saved', async () => {
     const { user, calls } = await load();
     systemState.nodes.set('CUSTOM:GROUP', {
