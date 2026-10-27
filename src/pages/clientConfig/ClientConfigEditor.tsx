@@ -200,9 +200,17 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
     onChanged();
   });
 
+  // A reset deletes every language of the key, also what another administrator saved after this
+  // editor opened, so it is checked like a save: the key is read again and must be the one opened.
   const resetKey = async () => {
     setFailure(null);
+    setRefused(false);
+    setConflict(false);
     try {
+      if (!sameVersion(item, await readClientConfigKey(key))) {
+        setConflict(true);
+        return;
+      }
       await resetClientConfig(key);
     } catch (error) {
       setFailure(describeFailure(intl, error).text);

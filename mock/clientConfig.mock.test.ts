@@ -263,3 +263,42 @@ describe('saving with the version that was read (expectedUpdatedAt)', () => {
     expect(second > first).toBe(true);
   });
 });
+
+describe('resetting with the version that was read (expectedUpdatedAt)', () => {
+  const resetWith = (key: string, expectedUpdatedAt: unknown) =>
+    call(h(RESET), {
+      headers: { authorization: token('root') },
+      params: { key },
+      body: { expectedUpdatedAt },
+    });
+
+  it('resets when the time is the one the key has now', async () => {
+    const read = (await itemOf('privacyPolicyUrl')).updatedAt;
+    expect((await resetWith('privacyPolicyUrl', read)).status).toBe(200);
+    expect((await itemOf('privacyPolicyUrl')).configured).toBe(false);
+  });
+
+  it('refuses with 409 INVALID_STATE and the current time when another administrator saved in between, and deletes nothing', async () => {
+    const read = (await itemOf('privacyPolicyUrl')).updatedAt;
+    simulateOtherAdminEdit('privacyPolicyUrl', {
+      '': 'https://example.com/theirs',
+      th: 'https://example.com/th/theirs',
+    });
+    const theirs = await itemOf('privacyPolicyUrl');
+    const answer = await resetWith('privacyPolicyUrl', read);
+    expect(answer.status).toBe(409);
+    expect(answer.body.code).toBe('INVALID_STATE');
+    expect(answer.body.data).toEqual({ updatedAt: theirs.updatedAt });
+    expect((await itemOf('privacyPolicyUrl')).values).toEqual(theirs.values);
+  });
+
+  it('treats null as "there was no row": a 409 once someone configured the key', async () => {
+    simulateOtherAdminEdit('supportUrl', { '': 'https://example.com/support' });
+    expect((await resetWith('supportUrl', null)).status).toBe(409);
+    expect((await itemOf('supportUrl')).configured).toBe(true);
+  });
+
+  it('without the field resets as before', async () => {
+    expect((await reset('privacyPolicyUrl')).status).toBe(200);
+  });
+});

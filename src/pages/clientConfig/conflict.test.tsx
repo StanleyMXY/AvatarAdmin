@@ -8,7 +8,7 @@ import { envelope, jsonResponse } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import ClientConfigPage from './list';
-import { clientConfigState, signIn } from './testSetup';
+import { clientConfigState, signIn, writesOf } from './testSetup';
 
 vi.setConfig({ testTimeout: 30000 });
 
@@ -246,5 +246,125 @@ describe('a backend that sends no time for the key', () => {
     await user.click(save(drawer));
     expect(await within(drawer).findByText('Modified by someone else')).toBeInTheDocument();
     expect(puts(calls)).toHaveLength(0);
+  });
+});
+
+describe('resetting a key another administrator changed after the editor opened', () => {
+  const reset = async (drawer: HTMLElement, user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(within(drawer).getByRole('button', { name: 'Reset' }));
+    // The popup of a first confirmation may still be fading out (no animation end in the test
+    // DOM), and then its button still carries the loading icon in its name.
+    await user.click(await screen.findByRole('button', { name: /OK$/ }));
+  };
+
+  it('sends nothing, says it was changed by someone else, and leaves their values in place', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    simulateOtherAdminEdit('privacyPolicyUrl', {
+      '': 'https://example.com/theirs',
+      th: THEIRS_TH,
+      ar: ARABIC_TITLE,
+    });
+    const theirs = JSON.stringify([...(clientConfigState.rows.get('privacyPolicyUrl') ?? [])]);
+    await reset(drawer, user);
+    expect(await within(drawer).findByText('Modified by someone else')).toBeInTheDocument();
+    expect(within(drawer).getByRole('button', { name: 'Reload' })).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+    expect(JSON.stringify([...(clientConfigState.rows.get('privacyPolicyUrl') ?? [])])).toBe(
+      theirs,
+    );
+    expect(screen.queryByText('Reset done')).toBeNull();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('shows their version on Reload, and a second reset then goes through', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'inviteShareTitle');
+    simulateOtherAdminEdit('inviteShareTitle', { '': 'Join me 🎉', th: THEIRS_TH });
+    await reset(drawer, user);
+    await user.click(await within(drawer).findByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(within(drawer).queryByText('Modified by someone else')).toBeNull());
+    expect((valueBox(drawer) as HTMLInputElement).value).toBe('Join me 🎉');
+    expect(writesOf(calls)).toHaveLength(0);
+    await reset(drawer, user);
+    await screen.findByText('Reset done');
+    expect(writesOf(calls)).toHaveLength(1);
+    expect(clientConfigState.rows.has('inviteShareTitle')).toBe(false);
+  });
+
+  it('is a conflict when the other administrator reset the key first', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    clientConfigState.rows.delete('privacyPolicyUrl');
+    await reset(drawer, user);
+    expect(await within(drawer).findByText('Modified by someone else')).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('is a conflict when the answer no longer has the key', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    interceptListRead(() => jsonResponse(200, envelope('200', { items: [] })));
+    await reset(drawer, user);
+    expect(await within(drawer).findByText('Modified by someone else')).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+});
+
+describe('resetting a key nobody else changed', () => {
+  it('reads the key again first and then sends the one reset; no notice of a conflict', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    const readsBefore = calls.filter((c) => c.method === 'GET').length;
+    await user.click(within(drawer).getByRole('button', { name: 'Reset' }));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    await screen.findByText('Reset done');
+    expect(calls.map((c) => c.method).slice(readsBefore)).toEqual(['GET', 'POST', 'GET']);
+    expect(screen.queryByText('Modified by someone else')).toBeNull();
+  });
+
+  it('sends one check and one reset when the confirmation is pressed three times at once', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    const readsBefore = calls.filter((c) => c.method === 'GET').length;
+    await user.click(within(drawer).getByRole('button', { name: 'Reset' }));
+    const ok = await screen.findByRole('button', { name: 'OK' });
+    fireEvent.click(ok);
+    fireEvent.click(ok);
+    fireEvent.click(ok);
+    await screen.findByText('Reset done');
+    await new Promise((r) => setTimeout(r, 100));
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
+    // The check before the reset is one read; the one after is the list reloading.
+    expect(calls.filter((c) => c.method === 'GET').length - readsBefore).toBe(2);
+  });
+});
+
+describe('when the key cannot be read again before a reset', () => {
+  it('sends nothing and shows the words of the error', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    interceptListRead(() => jsonResponse(403, envelope('ADMIN_FORBIDDEN', null, 'raw words')));
+    await user.click(within(drawer).getByRole('button', { name: 'Reset' }));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(await within(drawer).findByText(/You do not have permission/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('raw words');
+    expect(writesOf(calls)).toHaveLength(0);
+    expect(within(drawer).queryByText('Modified by someone else')).toBeNull();
+    expect(screen.queryByText('Reset done')).toBeNull();
   });
 });

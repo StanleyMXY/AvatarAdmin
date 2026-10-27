@@ -20,7 +20,7 @@
 
 已有完整的变更请求，不重复：`docs/contract-requests/2026-10-21-admin-frontend.md` 第 4.4 条（`PUT /client-config/{key}` 加 `expectedUpdatedAt`，409 `INVALID_STATE`，`data` 带当前的 `updatedAt`）。假后端已按那一条实现（`mock/clientConfig.mock.ts`），带 `expectedUpdatedAt` 的请求和不带的都按那一条的测试清单测过（`mock/clientConfig.mock.test.ts`）。
 
-4.4 里写"`POST …/reset` 要不要同样接受它，由改契约的人定"。重置会删掉这个键的全部语言值，也会删掉别人刚保存的值；前端的重置现在没有版本检查。希望一起定：重置也接受 `expectedUpdatedAt`，规则和 `PUT` 相同。
+4.4 里写"`POST …/reset` 要不要同样接受它，由改契约的人定"。重置会删掉这个键的全部语言值，也会删掉别人刚保存的值。前端的重置现在和保存做同一层检查：重置前重读这个键，和抽屉打开时读到的版本比较，不一致就不发重置，提示"已被他人修改"并给"重新载入"；读和写之间仍有时间窗，只有后端比较才能关上。希望一起定：重置也接受 `expectedUpdatedAt`，规则和 `PUT` 相同（与键当前的最近更新时间不同，含 `null` 的两种情形，返回 409 `INVALID_STATE`，`data` 带当前的 `updatedAt`，什么都不删）。假后端已按此实现。前端现在同样不把 `expectedUpdatedAt` 放进重置请求，原因同 `PUT`。
 
 ## 三、规则词表（新的请求）
 

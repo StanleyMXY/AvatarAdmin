@@ -1,4 +1,4 @@
-立即修未修 0、记录项 1、未运行 0、阻塞 0（记录项和变更候选 1 条都在第六节；全量测试和构建按约定没有跑，留到全部任务做完后统一跑）
+立即修未修 0、记录项 0、未运行 0、阻塞 0（第九节：重置的版本检查已做，规则页第 145 行测试超时已修；全量测试和构建按约定没有跑，留到全部任务做完后统一跑）
 
 # 已定变更项 3：客户端配置和审核规则词表的并发保存（区域 conflict）
 
@@ -104,3 +104,61 @@
 `src/pages/clientConfig/ClientConfigEditor.tsx`、`src/pages/clientConfig/version.ts`、`src/pages/clientConfig/version.test.ts`、`src/pages/clientConfig/conflict.test.tsx`、`src/pages/clientConfig/list.test.tsx`、`src/services/clientConfig/index.ts`、`src/services/clientConfig/clientConfig.test.ts`、`src/pages/moderation/rules.tsx`、`src/pages/moderation/ruleRows.ts`、`src/pages/moderation/ruleRows.conflict.test.ts`、`src/pages/moderation/rules.conflict.test.tsx`、`src/locales/{zh-CN,en-US}/clientConfig.ts`、`src/locales/{zh-CN,en-US}/moderation.ts`、`mock/clientConfig.mock.ts`、`mock/clientConfig.mock.test.ts`、`mock/moderation.mock.test.ts`、`mock/_core/clientConfigData.ts`、`mock/_core/moderationData.ts`、`docs/contract-requests/2026-10-27-admin-frontend-concurrent-save.md`（新）、`docs/contract-requests/2026-10-21-admin-frontend.md`（一行）、`docs/contract-requests/2026-10-26-admin-frontend-notifications.md`（一行）、本报告。
 
 覆盖的语言：测试里的值含泰语、阿拉伯语、日语、英语、emoji、中文（规则种子数据里的西班牙语、印尼语、越南语也在页面测试的列表里出现）；界面文字只验证了 en-US 的显示，zh-CN 只验证了键对等。
+
+## 九、追加：客户端配置的"重置"也做版本检查，和规则页测试超时
+
+负责人按业界通行做法补充决定：客户端配置的"重置"要做版本检查，和保存同一套规则。同时把第六节里的记录项（`src/pages/moderation/rules.test.tsx` 第 145 行测试超时）修掉。第六节里"重置没有版本检查"那条变更候选因此已经做完，不再是待定。
+
+### 做了什么
+
+1. **重置的版本检查**（`src/pages/clientConfig/ClientConfigEditor.tsx`，`resetKey`）：行内确认之后、发 `POST …/reset` 之前，先读一次 `GET /client-config` 取出这个键，用 `sameVersion` 和抽屉打开时（或上次"重新载入"后）的那一份比较。
+   - 一致才发重置。
+   - 不一致（含键已不在回复里）：不发重置，抽屉里出现和保存同一条警告"已被他人修改"，带"重新载入"，什么都不删；"重新载入"沿用保存的那一个（重读、重建草稿、更新比较基准）。重载之后再点重置，以新版本为基准通过。
+   - 检查读取失败（403、断网）：不重置，显示错误码对应的文字（不显示后端原话），不出现"已被他人修改"。
+   - 三击确认只发一次检查读取和一次重置（行内确认按钮自带防重复）。
+   - 没有新增语言文字：沿用保存的 `clientConfig.editor.conflict`、`conflictDetail`、`conflictReload`。
+2. **假后端**（`mock/clientConfig.mock.ts`）：`POST /client-config/:key/reset` 接受 `expectedUpdatedAt`，规则与 `PUT` 相同（抽成同一个 `checkExpectedVersion`）：与键当前的最近更新时间不同（含 `null` 的两种情形）返回 409 `INVALID_STATE`，`data` 带当前的 `updatedAt`，什么都不删；不带该字段和以前一样。前端现在不把 `expectedUpdatedAt` 放进重置请求（原因同保存：后端还没承诺接受）。
+3. **问题文件**：`docs/contract-requests/2026-10-27-admin-frontend-concurrent-save.md` 第二节，把"前端的重置现在没有版本检查"改成现在的做法，并写明希望后端重置也接受 `expectedUpdatedAt` 及其规则。
+4. **规则页测试超时**（`src/pages/moderation/rules.test.tsx`，"can save an empty list"）：给这一个用例加 60000 ms 的超时。说明：同文件其他用例的上限已经是 30000 ms（来自 `describe` 的 `{ timeout: 30000 }`），而这个用例在机器负载高时耗时 32375 ms，超过的正是这个值，所以"和同文件其他用例一致"（30000）不会让它变绿；我取了仓库里最慢用例已经在用的 60000（`describe('the form: creating', { timeout: 60000 })`）。单独跑这个用例 17.2 s，没有改它的步骤和断言。这一条是超时数值，没有写"会失败的测试"（没有一个能稳定复现负载的测试），也没有做变异检查。
+
+### 测试文件和行号
+
+- `src/pages/clientConfig/conflict.test.tsx`（新增 `describe` 在文件末尾，约 245 行起）：
+  - 别人在中间保存后重置：不发重置、提示、别人的值原样留在库里、没有"Reset done"。
+  - "重新载入"后显示别人的版本（泰语、阿拉伯语），再重置通过（一次写入，键被删）。
+  - 别人先重置了键、回复里没有这个键：都算不一致，不发重置。
+  - 没人改时顺序是读、重置、读（列表刷新）；三击确认一次检查读、一次重置。
+  - 检查读取返回 403：不重置，显示错误码文字，不显示后端原话，没有"已被他人修改"。
+  - 测试里一个注意点：antd 的行内确认在测试 DOM 里没有动画结束事件，第二次打开时确认按钮的名字带加载图标，所以第二次重置按 `/OK$/` 找按钮（已在测试里写了注释）。这只是测试 DOM 的表现，不是页面问题。
+- `mock/clientConfig.mock.test.ts` 末尾（4 个用例）：时间相同成功；别人先保存得 409、`data` 是当前时间、库里是别人的值；`null` 的情形；不带字段兼容。
+
+### 红到绿
+
+先写测试，实现前：`npx vitest run mock/clientConfig.mock.test.ts src/pages/clientConfig/conflict.test.tsx` → `Tests 9 failed | 30 passed (39)`。失败原因是"功能不存在"：假后端对带旧时间的重置照样返回 200（2 个）；页面在重置时没有读取、没有警告条（找不到"Modified by someone else"，顺序是 `POST, GET` 而不是 `GET, POST, GET`，403 时没有错误文字）（7 个）。其余 2 个假后端用例（时间相同成功、不带字段兼容）本来就该过，是防回退。
+
+实现后：`npx vitest run mock/clientConfig.mock.test.ts src/pages/clientConfig` → `Test Files 9 passed (9)`，`Tests 168 passed (168)`。
+
+### 变异检查（跑 `conflict.test.tsx` 和 `clientConfig.mock.test.ts`，共 39 个用例）
+
+| 变异 | 结果 |
+|---|---|
+| 重置前不做检查 | 7 个红 |
+| 检查读取失败时吞掉错误继续重置 | 1 个红（403 用例） |
+| 不一致时静默返回，不显示警告 | 4 个红 |
+| 键不在回复里时放行重置 | 1 个红 |
+| "重新载入"不更新比较基准 | 2 个红（含新的"重载后再重置"） |
+| 假后端重置不看 `expectedUpdatedAt` | 2 个红 |
+| 假后端的检查永不失败 | 5 个红（保存和重置共用） |
+| 假后端 409 不带当前时间 | 2 个红 |
+
+每次变异后文件都还原，并用 `cmp` 确认和备份逐字节相同；之后重跑全绿。
+
+### 其余检查
+
+- `npx biome check`（clientConfig、假后端、规则页测试）：`Checked 22 files ... No fixes applied`；类型检查由提交钩子跑。
+- 最终相关测试：`npx vitest run src/pages/clientConfig src/pages/moderation/rules.test.tsx src/pages/moderation/rules.conflict.test.tsx mock/clientConfig.mock.test.ts src/services/clientConfig src/locales/parity.test.ts tests/noHardcodedText.test.ts` → `Test Files 14 passed (14)`，`Tests 269 passed (269)`。全量测试和构建没有跑（约定留到全部任务做完后统一跑）。
+- 只用英文界面验证了显示；中文文字沿用已有的语言文件对等测试（没有新增键）。测试里的值含泰语、阿拉伯语、日语、英语、emoji。
+
+### 文件
+
+`src/pages/clientConfig/ClientConfigEditor.tsx`、`src/pages/clientConfig/conflict.test.tsx`、`mock/clientConfig.mock.ts`、`mock/clientConfig.mock.test.ts`、`src/pages/moderation/rules.test.tsx`、`docs/contract-requests/2026-10-27-admin-frontend-concurrent-save.md`、本报告。

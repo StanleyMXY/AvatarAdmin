@@ -155,7 +155,9 @@ describe('saving the list', { timeout: 30000 }, () => {
     expect(screen.getByText('The list is empty, so there is no rule layer.')).toBeInTheDocument();
     await save(user);
     await waitFor(() => expect(moderationState.rules).toHaveLength(0));
-  });
+    // Eight confirmed removals plus the save take about 30 s on a loaded machine, as long as the
+    // whole describe's limit; 60 s is the limit the slowest form tests of the project use.
+  }, 60000);
 
   it('puts the changes back on "Discard changes"', async () => {
     const user = userEvent.setup();
