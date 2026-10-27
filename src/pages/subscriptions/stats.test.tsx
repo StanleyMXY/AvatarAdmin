@@ -143,6 +143,65 @@ describe('the subscription statistics', { timeout: 30000 }, () => {
     ).toBeInTheDocument();
   });
 
+  it('names the day the active count was taken from', async () => {
+    answering([
+      row({ statDate: '2026-10-25', productId: 'a', active: 10 }),
+      row({ statDate: '2026-10-26', productId: 'a', active: 20 }),
+    ]);
+    renderPage(<StatsPage />);
+    const card = await screen.findByTestId('subscription-total-active');
+    await waitFor(() => expect(within(card).getByText('20')).toBeInTheDocument());
+    expect(
+      within(card).getByText('Snapshot of 2026-10-26 (UTC), not added across days'),
+    ).toBeInTheDocument();
+  });
+
+  it('takes the last day that has a snapshot when the last days of the range have none, and says which day', async () => {
+    answering([
+      row({ statDate: '2026-10-24', productId: 'a', active: 7 }),
+      row({ statDate: '2026-10-24', productId: 'b', active: 8 }),
+      row({ statDate: '2026-10-25', productId: 'a', active: 11 }),
+      row({ statDate: '2026-10-25', productId: 'b', active: 12 }),
+      row({ statDate: '2026-10-26', productId: 'a', active: null }),
+      row({ statDate: '2026-10-26', productId: 'b', active: null }),
+    ]);
+    renderPage(<StatsPage />);
+    const card = await screen.findByTestId('subscription-total-active');
+    await waitFor(() => expect(within(card).getByText('23')).toBeInTheDocument());
+    expect(
+      within(card).getByText('Snapshot of 2026-10-25 (UTC), not added across days'),
+    ).toBeInTheDocument();
+  });
+
+  it('does not count a day where only some products have a snapshot, it goes back to the last complete day', async () => {
+    answering([
+      row({ statDate: '2026-10-25', productId: 'a', active: 11 }),
+      row({ statDate: '2026-10-25', productId: 'b', active: 12 }),
+      row({ statDate: '2026-10-26', productId: 'a', active: 20 }),
+      row({ statDate: '2026-10-26', productId: 'b', active: null }),
+    ]);
+    renderPage(<StatsPage />);
+    const card = await screen.findByTestId('subscription-total-active');
+    await waitFor(() => expect(within(card).getByText('23')).toBeInTheDocument());
+    expect(
+      within(card).getByText('Snapshot of 2026-10-25 (UTC), not added across days'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a dash and says there is no snapshot when no day of the range has one', async () => {
+    answering([
+      row({ statDate: '2026-10-25', active: null }),
+      row({ statDate: '2026-10-26', active: null }),
+    ]);
+    renderPage(<StatsPage />);
+    const card = await screen.findByTestId('subscription-total-active');
+    await waitFor(() => expect(within(card).getByText('—')).toBeInTheDocument());
+    expect(
+      within(card).getByText('No day in the selected range has a snapshot'),
+    ).toBeInTheDocument();
+    expect(within(card).queryByText(/Snapshot of/)).toBeNull();
+  });
+
   it('shows a dash, never 0 or null, for a snapshot that is missing and a price that is missing', async () => {
     answering([row({ active: null, listPriceAmount: null, listPriceCurrency: null, new: 0 })]);
     renderPage(<StatsPage />);

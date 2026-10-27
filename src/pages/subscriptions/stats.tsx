@@ -27,13 +27,22 @@ export function formatListPrice(
   }
 }
 
-/** The active subscriptions of the last day in the rows (a snapshot of one day, never added across days); null if any is missing. */
-export function activeOnLastDay(rows: readonly SubscriptionStatRow[]): number | null {
-  if (rows.length === 0) return null;
-  const last = rows.map((r) => r.statDate).sort()[rows.length - 1];
-  const ofLast = rows.filter((r) => r.statDate === last);
-  if (ofLast.some((r) => r.active === null)) return null;
-  return ofLast.reduce((sum, r) => sum + (r.active ?? 0), 0);
+/**
+ * The active subscriptions of the last day in the rows that has a complete snapshot (every row of the day has one),
+ * with that day. A snapshot is of one day and is never added across days; a day with no or a partial snapshot
+ * (today is still being counted) is skipped. Null if no day qualifies.
+ */
+export function activeOnLastSnapshotDay(
+  rows: readonly SubscriptionStatRow[],
+): { day: string; value: number } | null {
+  const days = [...new Set(rows.map((r) => r.statDate))].sort().reverse();
+  for (const day of days) {
+    const ofDay = rows.filter((r) => r.statDate === day);
+    if (ofDay.every((r) => r.active !== null)) {
+      return { day, value: ofDay.reduce((sum, r) => sum + (r.active ?? 0), 0) };
+    }
+  }
+  return null;
 }
 
 const SUMS = ['new', 'renewed', 'canceled', 'expired', 'refunded'] as const;
@@ -70,8 +79,9 @@ export default function SubscriptionStatsPage() {
     return Object.fromEntries(SUMS.map((name) => [name, rows.reduce((n, r) => n + r[name], 0)]));
   }, [rows]);
 
+  const snapshot = useMemo(() => (rows ? activeOnLastSnapshotDay(rows) : null), [rows]);
   const cards: { name: string; value: number | null }[] = [
-    { name: 'active', value: rows ? activeOnLastDay(rows) : null },
+    { name: 'active', value: snapshot ? snapshot.value : null },
     ...SUMS.map((name) => ({ name, value: totals ? totals[name] : null })),
   ];
 
@@ -116,7 +126,9 @@ export default function SubscriptionStatsPage() {
                 />
                 {name === 'active' ? (
                   <Typography.Text type="secondary">
-                    {t('subscriptions.stats.activeHint')}
+                    {snapshot
+                      ? t('subscriptions.stats.activeAsOf', { date: snapshot.day })
+                      : t('subscriptions.stats.activeNone')}
                   </Typography.Text>
                 ) : null}
               </Card>
