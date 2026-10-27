@@ -76,6 +76,10 @@ const messages: Record<string, string> = {
   'system.admins.superNeedsSuper': 'Only a super administrator can change this.',
   'system.admins.superLast':
     'This is the last enabled super administrator: the flag cannot be cleared.',
+  'system.admins.ownResetPasswordReason':
+    'You cannot reset your own password here. To change your own password, use Change password in the account menu.',
+  'system.admins.ownResetTotpReason':
+    'You cannot reset your own two-factor authentication. Ask another administrator to do it.',
   'system.admins.ownNote':
     'This is your own account: you cannot change your own roles or super administrator flag.',
   'system.admins.createDone':
@@ -89,7 +93,7 @@ const messages: Record<string, string> = {
 
   // ---- roles ----
   'system.roles.note':
-    'The permissions of a role are replaced as a whole when you save. Checking a node checks everything below it; a node with only some of its descendants checked is half checked and is not in the role. Custom nodes can be given to a role and have no effect on any endpoint.',
+    'The permissions of a role are replaced as a whole when you save. Checking a node checks everything below it. Unchecking a function keeps the page it belongs to, so a role can hold a page with only some of its functions; unchecking the page takes the page and everything below it. Custom nodes cannot be given to a role.',
   'system.roles.new': 'New role',
   'system.roles.col.name': 'Name',
   'system.roles.col.remark': 'Remark',
@@ -109,11 +113,11 @@ const messages: Record<string, string> = {
   'system.roles.treeRetry': 'Read again',
   'system.roles.treeLoading': 'Reading the permission tree…',
   'system.roles.unknownCodes':
-    'These codes of the role are not in the permission tree and will be dropped when you save: {codes}',
+    'These codes of the role cannot be given to a role (custom nodes and codes the application does not know) and will be dropped when you save: {codes}',
 
   // ---- permission tree ----
   'system.permissions.note':
-    'Custom nodes can be given to roles, to group permissions or to keep a place for pages that come later. They have no effect on the existing endpoints: the endpoints and pages check only the built-in permission codes of the system.',
+    'Custom nodes group permissions or keep a place for pages that come later. They cannot be given to roles and have no effect on the existing endpoints: the endpoints and pages check only the built-in permission codes of the system.',
   'system.permissions.new': 'New node',
   'system.permissions.col.name': 'Name',
   'system.permissions.col.code': 'Permission code',

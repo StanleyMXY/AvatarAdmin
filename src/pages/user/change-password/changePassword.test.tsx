@@ -71,6 +71,33 @@ describe('the forced password change page', () => {
     expect(localStorage.getItem(TABS_STORAGE_KEY)).toBeNull();
   });
 
+  it('has a sign out button, so a person who cannot change the password now is not stuck', async () => {
+    localStorage.setItem(TABS_STORAGE_KEY, '["/dashboard"]');
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', null)));
+    const user = userEvent.setup();
+    renderPage(<ChangePasswordPage />);
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(history.replace).toHaveBeenCalledWith('/user/login');
+    expect(getToken()).toBeNull();
+    expect(localStorage.getItem(TABS_STORAGE_KEY)).toBeNull();
+    // nothing is sent: leaving does not ask the server for anything
+    expect(calls).toHaveLength(0);
+  });
+
+  it('empties the account of the session when the person signs out', async () => {
+    const user = userEvent.setup();
+    renderPage(<ChangePasswordPage />);
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    // the gate shows nothing to a session that has no account any more
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull());
+    expect(screen.queryByLabelText('Old password')).toBeNull();
+  });
+
+  it('says sign out in Chinese too', () => {
+    renderPage(<ChangePasswordPage />, 'zh-CN');
+    expect(screen.getByRole('button', { name: '退出登录' })).toBeInTheDocument();
+  });
+
   it.each([
     ['empty old password', ['', 'a-new-password-1', 'a-new-password-1'], 'Enter your old password'],
     ['empty new password', ['old', '', ''], 'Enter a new password'],

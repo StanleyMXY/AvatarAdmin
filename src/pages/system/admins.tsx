@@ -1,7 +1,7 @@
 import { useAccess, useIntl } from '@umijs/max';
 import type { TableColumnsType } from 'antd';
-import { Alert, App, Button, Flex, Tag } from 'antd';
-import { useCallback, useRef, useState } from 'react';
+import { Alert, App, Button, Flex, Tag, Tooltip } from 'antd';
+import { type ReactNode, useCallback, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
@@ -17,7 +17,7 @@ import { useSession } from '../../session/useSession';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { AdminFormModal } from './AdminFormModal';
-import { type RowProtection, rowProtection } from './adminRules';
+import { isClosedTo, type RowProtection, rowProtection } from './adminRules';
 import { PagedTable } from './PagedTable';
 import { ResetPasswordModal } from './ResetPasswordModal';
 import { instantText, protectedFailureText } from './texts';
@@ -31,11 +31,28 @@ type Dialog =
 const isRecord = (row: unknown): row is AdminUser => typeof row === 'object' && row !== null;
 
 /**
+ * A label with the reason it is off, shown when the pointer rests on it. A button that is off takes
+ * no pointer events itself, so the label takes them back.
+ */
+const withReason = (label: string, reason: string | undefined): ReactNode =>
+  reason === undefined ? (
+    label
+  ) : (
+    <Tooltip title={reason}>
+      <span style={{ pointerEvents: 'auto' }}>{label}</span>
+    </Tooltip>
+  );
+
+/**
  * 管理员 (`ADMIN:MANAGE`): the administrator accounts. Every control is for that one code, the code
  * of every endpoint of this page. The protections of the account are in the controls and again in the
  * request: nobody changes their own roles or super administrator flag, disables or deletes themselves
  * or the last enabled super administrator (the buttons are off), and only a super administrator sets
- * the flag. A refusal of the backend is shown as the text of its code, never its message.
+ * the flag. Nobody resets their own password or second factor here (the buttons are off, with the
+ * reason; the own password is changed from the account menu), and the row of a super administrator
+ * has no reset, disable or delete for an administrator who is not one: whoever may reset that
+ * password can sign in as that account. A refusal of the backend is shown as the text of its code,
+ * never its message.
  */
 export default function AdminsPage() {
   const intl = useIntl();
@@ -74,46 +91,56 @@ export default function AdminsPage() {
     const name = plainText(row.username);
     const id = plainText(row.id);
     const enabled = row.status === 'ACTIVE';
-    return [
-      {
-        key: 'edit',
-        label: t('system.common.edit'),
-        onClick: () => setDialog({ kind: 'edit', admin: row }),
-      },
-      enabled
-        ? {
-            key: 'disable',
-            label: t('system.admins.disable'),
-            confirmText: t('system.admins.disableAsk', { name }),
-            disabled: protection.own || protection.lastSuper,
-            onClick: () =>
-              attempt(() => setAdminStatus(id, 'DISABLED'), t('system.admins.disabledDone')),
-          }
-        : {
-            key: 'enable',
-            label: t('system.admins.enable'),
-            onClick: () =>
-              attempt(() => setAdminStatus(id, 'ACTIVE'), t('system.admins.enabledDone')),
-          },
-      {
-        key: 'password',
-        label: t('system.admins.resetPassword'),
-        onClick: () => setDialog({ kind: 'password', admin: row }),
-      },
-      {
-        key: 'totp',
-        label: t('system.admins.resetTotp'),
-        confirmText: t('system.admins.resetTotpAsk', { name }),
-        onClick: () => attempt(() => resetAdminTotp(id), t('system.admins.resetTotpDone')),
-      },
-      {
-        key: 'delete',
-        label: t('system.common.delete'),
-        confirmText: t('system.admins.deleteAsk', { name }),
-        disabled: protection.own || protection.lastSuper,
-        onClick: () => attempt(() => deleteAdmin(id), t('system.common.deleted')),
-      },
-    ];
+    // The row of a super administrator is closed to anyone who is not one: none of the four below.
+    const closed = isClosedTo(row, me);
+    const own = protection.own;
+    const disable: RowAction = {
+      key: 'disable',
+      label: t('system.admins.disable'),
+      confirmText: t('system.admins.disableAsk', { name }),
+      disabled: own || protection.lastSuper,
+      onClick: () => attempt(() => setAdminStatus(id, 'DISABLED'), t('system.admins.disabledDone')),
+    };
+    const enable: RowAction = {
+      key: 'enable',
+      label: t('system.admins.enable'),
+      onClick: () => attempt(() => setAdminStatus(id, 'ACTIVE'), t('system.admins.enabledDone')),
+    };
+    const resetPassword: RowAction = {
+      key: 'password',
+      label: withReason(
+        t('system.admins.resetPassword'),
+        own ? t('system.admins.ownResetPasswordReason') : undefined,
+      ),
+      disabled: own,
+      onClick: () => setDialog({ kind: 'password', admin: row }),
+    };
+    const resetTotp: RowAction = {
+      key: 'totp',
+      label: withReason(
+        t('system.admins.resetTotp'),
+        own ? t('system.admins.ownResetTotpReason') : undefined,
+      ),
+      confirmText: t('system.admins.resetTotpAsk', { name }),
+      disabled: own,
+      onClick: () => attempt(() => resetAdminTotp(id), t('system.admins.resetTotpDone')),
+    };
+    const remove: RowAction = {
+      key: 'delete',
+      label: t('system.common.delete'),
+      confirmText: t('system.admins.deleteAsk', { name }),
+      disabled: own || protection.lastSuper,
+      onClick: () => attempt(() => deleteAdmin(id), t('system.common.deleted')),
+    };
+    const edit: RowAction = {
+      key: 'edit',
+      // Nothing in the dialog can be changed on the own row: the button is off and says why.
+      label: withReason(t('system.common.edit'), own ? t('system.admins.ownNote') : undefined),
+      disabled: own,
+      onClick: () => setDialog({ kind: 'edit', admin: row }),
+    };
+    if (closed) return [edit, ...(enabled ? [] : [enable])];
+    return [edit, enabled ? disable : enable, resetPassword, resetTotp, remove];
   };
 
   const statusOptions = {

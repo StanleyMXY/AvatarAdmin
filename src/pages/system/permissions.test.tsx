@@ -85,11 +85,11 @@ const optionTexts = async () => {
 };
 
 describe('the page of the permission tree', () => {
-  it('says at the top that custom nodes have no effect on the existing endpoints', async () => {
+  it('says at the top that custom nodes cannot be given to roles and have no effect on the existing endpoints', async () => {
     await load();
     expect(
       screen.getByText(
-        /Custom nodes can be given to roles, to group permissions or to keep a place for pages that come later\. They have no effect on the existing endpoints/,
+        /Custom nodes group permissions or keep a place for pages that come later\. They cannot be given to roles and have no effect on the existing endpoints/,
       ),
     ).toBeInTheDocument();
     expect(
@@ -103,7 +103,7 @@ describe('the page of the permission tree', () => {
     await load('zh-CN');
     expect(
       screen.getByText(
-        '自定义节点可以分配给角色，用来给权限分组或为以后的页面预留，对现有接口没有效力；接口和页面只检查系统内置的权限码。',
+        '自定义节点用来给权限分组或为以后的页面预留，不能分配给角色，对现有接口没有效力；接口和页面只检查系统内置的权限码。',
       ),
     ).toBeInTheDocument();
     const headers = [...document.querySelectorAll('.ant-table-thead th')].map(
@@ -409,6 +409,56 @@ describe('a new node', () => {
     expect(box.getByLabelText('Name (Chinese)')).toBeEnabled();
     expect(box.getByLabelText('Name (English)')).toBeEnabled();
     expect(box.getByLabelText('Order')).toBeEnabled();
+  });
+
+  it('offers the end of the siblings as the order: one more than the last node under the same parent', async () => {
+    seedChain();
+    const { user } = await load();
+    const box = await openNew(user);
+    // no parent: after the last root (CUSTOM:E has 905)
+    expect(box.getByLabelText('Order')).toHaveValue('906');
+    await user.click(box.getByRole('combobox', { name: 'Parent node' }));
+    await user.click(await screen.findByTitle(/\(USER:VIEW\)/));
+    // the last child of USER:VIEW is USER:PHONE_VIEW with 5
+    await waitFor(() => expect(box.getByLabelText('Order')).toHaveValue('6'));
+    await user.click(box.getByRole('combobox', { name: 'Parent node' }));
+    await user.click(await screen.findByTitle('CUSTOM:A English (CUSTOM:A)'));
+    await waitFor(() => expect(box.getByLabelText('Order')).toHaveValue('903'));
+  });
+
+  it('offers 1 as the order under a parent that has no child yet', async () => {
+    const { user } = await load();
+    const box = await openNew(user);
+    await user.click(box.getByRole('combobox', { name: 'Parent node' }));
+    await user.click(await screen.findByTitle(/\(AUDIT:VIEW\)/));
+    await waitFor(() => expect(box.getByLabelText('Order')).toHaveValue('1'));
+  });
+
+  it('sends the offered order when the person does not touch it, and puts the node last among its siblings', async () => {
+    seedChain();
+    const { user, calls } = await load();
+    const box = await openNew(user);
+    await user.type(box.getByLabelText('Permission code'), 'CUSTOM:LAST');
+    await user.type(box.getByLabelText('Name (Chinese)'), '最后');
+    await user.type(box.getByLabelText('Name (English)'), 'Last');
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { sortOrder: number }).sortOrder).toBe(906);
+    await dialogsClosed();
+    // the node is drawn after the other roots
+    const keys = rows().map((tr) => tr.getAttribute('data-row-key'));
+    expect(keys.indexOf('CUSTOM:LAST')).toBeGreaterThan(keys.indexOf('CUSTOM:E'));
+  });
+
+  it('keeps an order the person typed when the parent is changed afterwards', async () => {
+    const { user } = await load();
+    const box = await openNew(user);
+    await user.clear(box.getByLabelText('Order'));
+    await user.type(box.getByLabelText('Order'), '7');
+    await user.click(box.getByRole('combobox', { name: 'Parent node' }));
+    await user.click(await screen.findByTitle(/\(USER:VIEW\)/));
+    await settled();
+    expect(box.getByLabelText('Order')).toHaveValue('7');
   });
 
   it('makes the node with the parent and type chosen, and it appears in the tree', async () => {

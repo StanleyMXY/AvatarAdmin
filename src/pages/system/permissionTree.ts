@@ -18,12 +18,13 @@ export function isBuiltinNode(node: Pick<PermissionNode, 'code' | 'builtin'>): b
 }
 
 /**
- * Whether a role may be given this node. Every code of the real permission list may. A custom node
- * may too (contract 17.3: it can be given to a role, it has no effect on any endpoint). A node that is
- * built in but whose code the application does not have in its list may not: nothing would check it.
+ * Whether a role may be given this node. Only a code of the real permission list may: the system
+ * nodes. A custom node may not (it has no effect on any endpoint, so giving it to a role grants
+ * nothing), and neither may a built-in node whose code the application does not have in its list:
+ * nothing would check it.
  */
-export function isSelectable(node: Pick<PermissionNode, 'code' | 'builtin'>): boolean {
-  return REAL_CODES.has(node.code) || node.builtin === false;
+export function isSelectable(node: Pick<PermissionNode, 'code'>): boolean {
+  return REAL_CODES.has(node.code);
 }
 
 const usable = (name: unknown): name is string => typeof name === 'string' && trimSpec(name) !== '';
@@ -161,8 +162,10 @@ export function stateOf(
  * The value after a click on the box of `code` (the complete, sorted list of codes).
  * - Checking a node checks it and every descendant that may be chosen; then each node above it is
  *   checked too if everything below that node is now checked.
- * - Unchecking a node (it was checked) takes out the node and every descendant, and every node above
- *   it: those are no longer fully checked, so they leave the value and show half checked.
+ * - Unchecking a node (it was checked) takes out the node and every descendant. The nodes above it
+ *   keep their codes: a role may hold a page and only a part of the functions of that page, and
+ *   taking one function away must not take the page away. A node above leaves the value only when
+ *   the person unchecks that node itself.
  * - A click on a node that is not there or may not be chosen changes nothing.
  * Codes in `value` that are not nodes a role may have are dropped.
  */
@@ -180,7 +183,6 @@ export function toggleCode(
   if (stateIn(index, chosen, code) === 'checked') {
     chosen.delete(code);
     for (const c of below) chosen.delete(c);
-    for (const c of above) chosen.delete(c);
   } else {
     chosen.add(code);
     for (const c of below) if (selectable.has(c)) chosen.add(c);

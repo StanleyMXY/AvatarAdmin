@@ -198,25 +198,27 @@ describe('making a role', () => {
     );
   });
 
-  it('takes the parent out of the value when one descendant is unchecked', async () => {
+  it('keeps the parent in the value when one descendant is unchecked: a page with only a part of its functions', async () => {
     const { user, calls } = await load();
     const box = await openNew(user);
     await user.type(box.getByLabelText('Name'), 'Partial');
     await user.click(checkbox(box, 'USER:VIEW'));
     await user.click(checkbox(box, 'USER:BAN'));
     const parent = checkbox(box, 'USER:VIEW');
-    expect(parent).not.toBeChecked();
-    expect(parent.closest('.ant-checkbox')?.className).toContain('ant-checkbox-indeterminate');
+    expect(parent).toBeChecked();
+    expect(parent.closest('.ant-checkbox')?.className).not.toContain('ant-checkbox-indeterminate');
+    expect(checkbox(box, 'USER:BAN')).not.toBeChecked();
     await user.click(save(box));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
       'USER:EMAIL_VIEW',
       'USER:EXPORT',
       'USER:PHONE_VIEW',
+      'USER:VIEW',
     ]);
   });
 
-  it('can give a role a custom node, and the node is part of the list that is saved', async () => {
+  it('cannot give a role a custom node: the box is off and the node is not in the list that is saved', async () => {
     const { user, calls } = await load();
     systemState.nodes.set('CUSTOM:GROUP', {
       code: 'CUSTOM:GROUP',
@@ -230,12 +232,39 @@ describe('making a role', () => {
     });
     const box = await openNew(user);
     await user.type(box.getByLabelText('Name'), 'With custom');
-    await user.click(checkbox(box, 'CUSTOM:GROUP'));
+    expect(checkbox(box, 'CUSTOM:GROUP')).toBeDisabled();
+    fireEvent.click(checkbox(box, 'CUSTOM:GROUP'));
+    expect(checkbox(box, 'CUSTOM:GROUP')).not.toBeChecked();
+    expect(box.getByText('0 codes chosen')).toBeInTheDocument();
+    await user.click(checkbox(box, 'AUDIT:VIEW'));
     await user.click(save(box));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
-      'CUSTOM:GROUP',
+      'AUDIT:VIEW',
     ]);
+  });
+
+  it('does not check a custom node below a parent that is checked', async () => {
+    const { user, calls } = await load();
+    systemState.nodes.set('CUSTOM:UNDER_USER', {
+      code: 'CUSTOM:UNDER_USER',
+      parent: 'USER:VIEW',
+      type: 'FUNCTION',
+      sortOrder: 900,
+      nameZh: '自定义功能',
+      nameEn: 'Custom function',
+      builtin: false,
+      createdByUsername: 'root',
+    });
+    const box = await openNew(user);
+    await user.type(box.getByLabelText('Name'), 'Below');
+    await user.click(checkbox(box, 'USER:VIEW'));
+    expect(checkbox(box, 'CUSTOM:UNDER_USER')).not.toBeChecked();
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(
+      (writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes,
+    ).not.toContain('CUSTOM:UNDER_USER');
   });
 
   it('asks for a name, and does not send anything without one', async () => {
@@ -337,6 +366,22 @@ describe('editing a role', () => {
     expect(box.getByText('1 code chosen')).toBeInTheDocument();
   });
 
+  it('keeps the page code of a role with the page and one function when that function is unchecked', async () => {
+    // "Soporte al cliente" holds USER:VIEW and USER:BAN among others
+    const { user, calls } = await load();
+    const box = await openEdit(user, 'Soporte al cliente');
+    expect(checkbox(box, 'USER:VIEW')).toBeChecked();
+    expect(checkbox(box, 'USER:BAN')).toBeChecked();
+    await user.click(checkbox(box, 'USER:BAN'));
+    expect(checkbox(box, 'USER:VIEW')).toBeChecked();
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    const sent = (writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes;
+    expect(sent).toContain('USER:VIEW');
+    expect(sent).not.toContain('USER:BAN');
+    expect(sent).not.toContain('USER:EXPORT');
+  });
+
   it('replaces the whole set of codes: the body holds every code that is checked', async () => {
     const { user, calls } = await load();
     const box = await openEdit(user, 'Pengguna baru');
@@ -363,13 +408,42 @@ describe('editing a role', () => {
     const { user, calls } = await load();
     const box = await openEdit(user, 'Old codes');
     expect(
-      box.getByText(/not in the permission tree and will be dropped when you save: GONE:CODE/),
+      box.getByText(/cannot be given to a role .*will be dropped when you save: GONE:CODE/),
     ).toBeInTheDocument();
     await user.click(checkbox(box, 'AUDIT:VIEW'));
     await user.click(save(box));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
       'AUDIT:VIEW',
+      'STATS:VIEW',
+    ]);
+  });
+
+  it('names a custom node the role holds, and drops it when saving: custom nodes cannot be given to a role', async () => {
+    systemState.nodes.set('CUSTOM:GROUP', {
+      code: 'CUSTOM:GROUP',
+      parent: null,
+      type: 'MENU',
+      sortOrder: 900,
+      nameZh: '自定义分组',
+      nameEn: 'Custom group',
+      builtin: false,
+      createdByUsername: 'root',
+    });
+    systemState.roles.set('63', {
+      id: '63',
+      name: 'Had custom',
+      remark: null,
+      createdAt: '2026-10-05T00:00:00Z',
+      permissionCodes: ['CUSTOM:GROUP', 'STATS:VIEW'],
+    });
+    const { user, calls } = await load();
+    const box = await openEdit(user, 'Had custom');
+    expect(box.getByText(/will be dropped when you save: CUSTOM:GROUP/)).toBeInTheDocument();
+    expect(checkbox(box, 'CUSTOM:GROUP')).not.toBeChecked();
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
       'STATS:VIEW',
     ]);
   });

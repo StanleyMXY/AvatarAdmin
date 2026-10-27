@@ -38,17 +38,19 @@ function random(seed: number) {
 const pick = <T>(rand: () => number, items: readonly T[]): T =>
   items[Math.floor(rand() * items.length)];
 
-/** A random forest: every node has a parent among the nodes before it, or none. A tenth cannot be chosen. */
+/**
+ * A random forest: every node has a parent among the nodes before it, or none. A node can be chosen
+ * when its code is in the real permission list; a tenth are custom nodes and a tenth are built-in
+ * nodes the list lacks, and neither can be chosen.
+ */
 function randomForest(rand: () => number): PermissionNode[] {
   const size = 1 + Math.floor(rand() * 24);
   const nodes: PermissionNode[] = [];
   for (let i = 0; i < size; i += 1) {
     const parent = i === 0 || rand() < 0.25 ? null : nodes[Math.floor(rand() * i)].code;
-    // A built-in node whose code the application does not know cannot be chosen; a custom one can.
-    const unknownBuiltin = rand() < 0.1;
-    nodes.push(
-      node(`N${i}`, parent, { builtin: unknownBuiltin, sortOrder: Math.floor(rand() * 5) }),
-    );
+    const kind = rand();
+    const code = kind < 0.1 ? `CUSTOM:${i}` : kind < 0.2 ? `NEW:${i}` : PERMISSION_CODES[i];
+    nodes.push(node(code, parent, { builtin: kind >= 0.1, sortOrder: Math.floor(rand() * 5) }));
   }
   // shuffle: the order of the backend's answer carries no meaning
   for (let i = nodes.length - 1; i > 0; i -= 1) {
@@ -64,7 +66,7 @@ type RefNode = { code: string; selectable: boolean; children: RefNode[] };
 function nest(nodes: PermissionNode[]): RefNode[] {
   const make = (n: PermissionNode): RefNode => ({
     code: n.code,
-    selectable: !(n.builtin && !(PERMISSION_CODES as readonly string[]).includes(n.code)),
+    selectable: (PERMISSION_CODES as readonly string[]).includes(n.code),
     children: nodes.filter((c) => c.parent === n.code).map(make),
   });
   return nodes.filter((n) => n.parent === null).map(make);
@@ -93,7 +95,6 @@ function refToggle(roots: RefNode[], set: Set<string>, code: string): Set<string
   if (!target.selectable) return out;
   if (refState(roots, set, code) === 'checked') {
     for (const n of flatten(target)) out.delete(n.code);
-    for (const a of path.slice(0, -1)) out.delete(a.code);
   } else {
     for (const n of flatten(target)) if (n.selectable) out.add(n.code);
     for (let i = path.length - 2; i >= 0; i -= 1) {
@@ -136,9 +137,11 @@ describe('which nodes are built in and which can be chosen', () => {
     expect(isBuiltinNode(node('USER:VIEW', null, { builtin: false }))).toBe(true);
   });
 
-  it('lets a code of the real permission list be chosen, a custom node too, but not a built-in one the list lacks', () => {
+  it('lets only a code of the real permission list be chosen: not a custom node, not a built-in one the list lacks', () => {
     expect(isSelectable(node('USER:VIEW', null, { builtin: true }))).toBe(true);
-    expect(isSelectable(node('CUSTOM:A', null, { builtin: false }))).toBe(true);
+    // a real code stays a system node whatever the backend says about it
+    expect(isSelectable(node('USER:VIEW', null, { builtin: false }))).toBe(true);
+    expect(isSelectable(node('CUSTOM:A', null, { builtin: false }))).toBe(false);
     expect(isSelectable(node('NEW:BUILTIN', null, { builtin: true }))).toBe(false);
     expect(isSelectable(node('NEW:BUILTIN', null, { builtin: undefined as never }))).toBe(false);
   });
@@ -183,24 +186,84 @@ describe('choosing nodes of the permission tree', () => {
     node('USER:EXPORT', 'USER:VIEW', { builtin: true, sortOrder: 3 }),
     node('STATS:VIEW', null, { builtin: true, sortOrder: 4 }),
     node('STATS:EXPORT', 'STATS:VIEW', { builtin: true, sortOrder: 5 }),
-    node('CUSTOM:G', null, { sortOrder: 6 }),
-    node('CUSTOM:G1', 'CUSTOM:G', { sortOrder: 7 }),
-    node('CUSTOM:G1X', 'CUSTOM:G1', { sortOrder: 8 }),
+    node('SMS:RECORD', null, { builtin: true, sortOrder: 6 }),
+    node('SMS:RECORD:EXPORT', 'SMS:RECORD', { builtin: true, sortOrder: 7 }),
+    node('SMS:RECORD:PHONE_VIEW', 'SMS:RECORD:EXPORT', { builtin: true, sortOrder: 8 }),
+    node('CUSTOM:G', null, { sortOrder: 9 }),
+    node('CUSTOM:G1', 'CUSTOM:G', { sortOrder: 10 }),
   ];
   const state = (value: string[], code: string) => stateOf(tree, value, code);
 
   it('checks the parent and every descendant together', () => {
     expect(toggleCode(tree, [], 'USER:VIEW')).toEqual(['USER:BAN', 'USER:EXPORT', 'USER:VIEW']);
-    expect(toggleCode(tree, [], 'CUSTOM:G')).toEqual(['CUSTOM:G', 'CUSTOM:G1', 'CUSTOM:G1X']);
+    expect(toggleCode(tree, [], 'SMS:RECORD')).toEqual([
+      'SMS:RECORD',
+      'SMS:RECORD:EXPORT',
+      'SMS:RECORD:PHONE_VIEW',
+    ]);
   });
 
-  it('takes one descendant away: the parent goes out of the value and shows half checked', () => {
+  it('never checks a custom node, not by a click on it and not through its parent', () => {
+    expect(toggleCode(tree, [], 'CUSTOM:G')).toEqual([]);
+    expect(toggleCode(tree, ['STATS:VIEW'], 'CUSTOM:G1')).toEqual(['STATS:VIEW']);
+    const mixed = [
+      node('USER:VIEW', null, { builtin: true }),
+      node('CUSTOM:UNDER', 'USER:VIEW'),
+      node('USER:BAN', 'USER:VIEW', { builtin: true }),
+    ];
+    expect(toggleCode(mixed, [], 'USER:VIEW')).toEqual(['USER:BAN', 'USER:VIEW']);
+    // a custom code in the value is dropped; it does not count for the completeness of its parent
+    expect(toggleCode(mixed, ['CUSTOM:UNDER'], 'USER:BAN')).toEqual(['USER:BAN', 'USER:VIEW']);
+    expect(toggleCode(mixed, ['CUSTOM:UNDER', 'STATS:VIEW'], 'STATS:VIEW')).toEqual([]);
+  });
+
+  it('takes one descendant away: the parent keeps its code, so the role holds the page and a part of its functions', () => {
     const all = toggleCode(tree, [], 'USER:VIEW');
     const less = toggleCode(tree, all, 'USER:BAN');
-    expect(less).toEqual(['USER:EXPORT']);
-    expect(state(less, 'USER:VIEW')).toBe('half');
+    expect(less).toEqual(['USER:EXPORT', 'USER:VIEW']);
+    expect(state(less, 'USER:VIEW')).toBe('checked');
     expect(state(less, 'USER:BAN')).toBe('none');
     expect(state(less, 'USER:EXPORT')).toBe('checked');
+  });
+
+  it('keeps the page code of a role that holds the page and one function when that function is taken away', () => {
+    // the role "customer service": the page code and one function code
+    expect(toggleCode(tree, ['USER:BAN', 'USER:VIEW'], 'USER:BAN')).toEqual(['USER:VIEW']);
+    // taking away every function leaves the page alone
+    expect(toggleCode(tree, ['USER:VIEW', 'USER:EXPORT'], 'USER:EXPORT')).toEqual(['USER:VIEW']);
+  });
+
+  it('keeps every node above when a deep node is taken away', () => {
+    const all = toggleCode(tree, [], 'SMS:RECORD');
+    expect(toggleCode(tree, all, 'SMS:RECORD:PHONE_VIEW')).toEqual([
+      'SMS:RECORD',
+      'SMS:RECORD:EXPORT',
+    ]);
+    expect(toggleCode(tree, all, 'SMS:RECORD:EXPORT')).toEqual(['SMS:RECORD']);
+  });
+
+  it('can make a role of the page alone, and of the page with any part of its functions', () => {
+    // every set of the codes of the page USER:VIEW that has the page code is reachable by clicks
+    const seen = new Set<string>(['']);
+    const queue: string[][] = [[]];
+    while (queue.length > 0) {
+      const value = queue.shift() as string[];
+      for (const code of ['USER:VIEW', 'USER:BAN', 'USER:EXPORT']) {
+        const next = toggleCode(tree, value, code);
+        if (!seen.has(next.join('|'))) {
+          seen.add(next.join('|'));
+          queue.push(next);
+        }
+      }
+    }
+    for (const wanted of [
+      ['USER:VIEW'],
+      ['USER:BAN', 'USER:VIEW'],
+      ['USER:EXPORT', 'USER:VIEW'],
+      ['USER:BAN', 'USER:EXPORT', 'USER:VIEW'],
+    ]) {
+      expect(seen.has(wanted.join('|')), wanted.join(',')).toBe(true);
+    }
   });
 
   it('checks the parent when the last missing descendant is checked, all the way up', () => {
@@ -209,21 +272,29 @@ describe('choosing nodes of the permission tree', () => {
       'USER:EXPORT',
       'USER:VIEW',
     ]);
-    expect(toggleCode(tree, ['CUSTOM:G1'], 'CUSTOM:G1X')).toEqual([
-      'CUSTOM:G',
-      'CUSTOM:G1',
-      'CUSTOM:G1X',
+    expect(toggleCode(tree, ['SMS:RECORD:EXPORT'], 'SMS:RECORD:PHONE_VIEW')).toEqual([
+      'SMS:RECORD',
+      'SMS:RECORD:EXPORT',
+      'SMS:RECORD:PHONE_VIEW',
     ]);
     expect(toggleCode(tree, [], 'USER:BAN')).toEqual(['USER:BAN']);
     expect(state(['USER:BAN'], 'USER:VIEW')).toBe('half');
   });
 
-  it('unchecking a parent clears every descendant, and unchecking a deep node clears the nodes above it', () => {
+  it('unchecking a parent clears the parent and every descendant, and nothing else', () => {
     expect(
       toggleCode(tree, ['USER:BAN', 'USER:EXPORT', 'USER:VIEW', 'STATS:VIEW'], 'USER:VIEW'),
     ).toEqual(['STATS:VIEW']);
-    const all = toggleCode(tree, [], 'CUSTOM:G');
-    expect(toggleCode(tree, all, 'CUSTOM:G1X')).toEqual([]);
+    // a node in the middle goes with what is below it; the node above it stays
+    expect(
+      toggleCode(
+        tree,
+        ['SMS:RECORD', 'SMS:RECORD:EXPORT', 'SMS:RECORD:PHONE_VIEW'],
+        'SMS:RECORD:EXPORT',
+      ),
+    ).toEqual(['SMS:RECORD']);
+    // the page itself is taken away by unchecking the page
+    expect(toggleCode(tree, ['SMS:RECORD'], 'SMS:RECORD')).toEqual([]);
   });
 
   it('clicking a half checked parent checks it with everything below', () => {
@@ -330,8 +401,10 @@ describe('the same rules against a reference, on random trees and random clicks'
       if (!selectable.has(click.code)) {
         expect(after, label).toEqual([...before].sort());
       } else if (before.includes(click.code)) {
-        for (const code of [...below, ...above])
-          expect(after.includes(code), `${label} off ${code}`).toBe(false);
+        for (const code of below) expect(after.includes(code), `${label} off ${code}`).toBe(false);
+        // the nodes above keep what they had
+        for (const code of above)
+          expect(after.includes(code), `${label} kept ${code}`).toBe(before.includes(code));
       } else {
         for (const code of below) {
           if (selectable.has(code)) expect(after.includes(code), `${label} on ${code}`).toBe(true);

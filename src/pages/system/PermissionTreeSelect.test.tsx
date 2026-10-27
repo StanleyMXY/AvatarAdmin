@@ -80,15 +80,31 @@ describe('PermissionTreeSelect', () => {
     expect(box(/Export users/)).toBeChecked();
   });
 
-  it('shows the parent half checked and takes its code out of the value when one descendant is unchecked', () => {
+  it('keeps the code of the parent when one descendant is unchecked: the role keeps the page and the rest of its functions', () => {
     const seen = vi.fn();
     renderPage(<Harness initial={['USER:BAN', 'USER:EXPORT', 'USER:VIEW']} onValue={seen} />);
     expect(box(/View users/)).toBeChecked();
     fireEvent.click(box(/Ban/));
-    expect(seen).toHaveBeenLastCalledWith(['USER:EXPORT']);
-    expect(box(/View users/)).not.toBeChecked();
-    expect(half(/View users/)).toBe(true);
+    expect(seen).toHaveBeenLastCalledWith(['USER:EXPORT', 'USER:VIEW']);
+    expect(box(/View users/)).toBeChecked();
+    expect(half(/View users/)).toBe(false);
+    expect(box(/Ban/)).not.toBeChecked();
     expect(box(/Export users/)).toBeChecked();
+  });
+
+  it('does not take the page code of a role that holds the page and one function when that function is unchecked', () => {
+    const seen = vi.fn();
+    renderPage(<Harness initial={['USER:BAN', 'USER:VIEW']} onValue={seen} />);
+    fireEvent.click(box(/Ban/));
+    expect(seen).toHaveBeenLastCalledWith(['USER:VIEW']);
+    expect(box(/View users/)).toBeChecked();
+  });
+
+  it('takes the page code and everything below it away when the page itself is unchecked', () => {
+    const seen = vi.fn();
+    renderPage(<Harness initial={['USER:BAN', 'USER:VIEW']} onValue={seen} />);
+    fireEvent.click(box(/View users/));
+    expect(seen).toHaveBeenLastCalledWith([]);
   });
 
   it('shows a parent with only some descendants chosen as half checked', () => {
@@ -138,12 +154,22 @@ describe('PermissionTreeSelect', () => {
     expect(seen).toHaveBeenLastCalledWith(['STATS:VIEW', 'USER:EXPORT']);
   });
 
-  it('can choose a custom node', () => {
+  it('cannot choose a custom node: its box is disabled and a click changes nothing', () => {
     const seen = vi.fn();
     renderPage(<Harness onValue={seen} />);
-    expect(screen.getByRole('checkbox', { name: /CUSTOM:G/ })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: /CUSTOM:G/ })).toBeDisabled();
     fireEvent.click(screen.getByRole('checkbox', { name: /CUSTOM:G/ }));
-    expect(seen).toHaveBeenLastCalledWith(['CUSTOM:G']);
+    expect(seen).not.toHaveBeenCalled();
+    expect(screen.getByRole('checkbox', { name: /CUSTOM:G/ })).not.toBeChecked();
+  });
+
+  it('does not check a custom node below a parent that is checked', () => {
+    const seen = vi.fn();
+    const list = [...nodes, node('CUSTOM:UNDER', 'USER:VIEW', { builtin: false })];
+    renderPage(<Harness list={list} onValue={seen} />);
+    fireEvent.click(box(/View users/));
+    expect(seen).toHaveBeenLastCalledWith(['USER:BAN', 'USER:EXPORT', 'USER:VIEW']);
+    expect(screen.getByRole('checkbox', { name: /CUSTOM:UNDER/ })).not.toBeChecked();
   });
 
   it('draws the whole built-in tree: every code of the real list once, and only codes of it can end up in the value', () => {

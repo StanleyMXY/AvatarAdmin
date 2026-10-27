@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import system from '../../../mock/system.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
+import { AuditAdminFilter } from './AuditAdminFilter';
 import AuditPage from './audit';
 import { HIDDEN } from './auditDetail';
 import {
@@ -289,15 +290,41 @@ describe('the filters', () => {
     expect(calls.some((c) => c.url.startsWith('/api/admin/admins'))).toBe(false);
   });
 
-  it('asks for the administrator id as a number to type when the administrators cannot be listed', async () => {
+  it('draws no administrator filter at all without ADMIN:MANAGE: neither the choice nor a box for an id', async () => {
     signIn('support', { codes: ['AUDIT:VIEW'] });
     const { calls, user } = await load();
     await expand(user);
     expect(screen.queryByRole('combobox', { name: 'Administrator' })).not.toBeInTheDocument();
-    await user.type(screen.getByRole('textbox', { name: 'Administrator ID' }), ' 1003 ');
-    await search(user);
-    await waitFor(() => expect(lastAudit(calls).searchParams.get('adminId')).toBe('1003'));
-    await waitFor(() => expect(tableRows()).toHaveLength(1));
+    expect(screen.queryByRole('textbox', { name: 'Administrator ID' })).not.toBeInTheDocument();
+    const search = document.querySelector('.ant-pro-table-search') as HTMLElement;
+    expect(search.textContent).not.toContain('Administrator');
+    // the other filters are there
+    expect(screen.getByRole('textbox', { name: 'Action' })).toBeInTheDocument();
+    await settled();
+    expect(auditCalls(calls).every((call) => !call.searchParams.has('adminId'))).toBe(true);
+  });
+
+  it('draws nothing from the filter itself without ADMIN:MANAGE, whatever the page does around it', async () => {
+    signIn('support', { codes: ['AUDIT:VIEW'] });
+    const calls = backend();
+    const { container } = renderPage(<AuditAdminFilter />);
+    await settled();
+    expect(container.querySelector('input, .ant-select')).toBeNull();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(calls.some((c) => c.url.startsWith('/api/admin/admins'))).toBe(false);
+  });
+
+  it('keeps a box for the id when the administrator may list the administrators but the list cannot be read', async () => {
+    backend();
+    overrideFetch(({ url }) =>
+      url.pathname === '/api/admin/admins' ? jsonAnswer(500, 'INTERNAL_ERROR') : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<AuditPage />);
+    await waitForRows();
+    await expand(user);
+    expect(await screen.findByRole('textbox', { name: 'Administrator ID' })).toBeInTheDocument();
   });
 
   it('sends a UTC day range as [first day 00:00:00Z, the day after the last day 00:00:00Z)', async () => {

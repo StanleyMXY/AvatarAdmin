@@ -1,5 +1,5 @@
 import type { ProColumns } from '@ant-design/pro-components';
-import { useIntl } from '@umijs/max';
+import { useAccess, useIntl } from '@umijs/max';
 import { Alert, Flex } from 'antd';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
@@ -25,10 +25,14 @@ type Filters = {
  * changes or deletes a row. The administrator column shows the name written with the row, never the
  * current name of the account; when the row has no name the first eight characters of the id stand in.
  * The detail has no fixed type, so it goes through `plainText`, and a value that belongs to a credential
- * is hidden (auditDetail.ts); nothing of a row is written to the console.
+ * is hidden (auditDetail.ts); nothing of a row is written to the console. The filter by administrator is
+ * only there for an administrator who may list the administrators (ADMIN:MANAGE); for anyone else it is
+ * not drawn at all, not even as a box for an id.
  */
 export default function AuditPage() {
   const intl = useIntl();
+  const access = useAccess() as unknown as { canAccess: (code?: string) => boolean };
+  const canFilterByAdmin = access.canAccess('ADMIN:MANAGE');
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
 
@@ -49,6 +53,7 @@ export default function AuditPage() {
       title: t('system.audit.col.admin'),
       dataIndex: 'adminId',
       hideInTable: true,
+      search: canFilterByAdmin ? undefined : false,
       formItemRender: () => <AuditAdminFilter />,
     },
     {
