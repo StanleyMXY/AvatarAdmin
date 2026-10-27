@@ -184,6 +184,7 @@ const messages: Record<string, string> = {
   'avatar.defaults.new': '新建默认数字人',
   'avatar.defaults.created': '已创建为草稿。',
   'avatar.defaults.refresh': '刷新',
+  'avatar.defaults.pollStopped': '自动刷新已在 5 分钟后停止，请点击“刷新”再查看。',
   'avatar.defaults.generate': '生成',
   'avatar.defaults.generating': '已开始生成。',
   'avatar.defaults.activate': '设为生效',

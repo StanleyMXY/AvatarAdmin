@@ -1,7 +1,7 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Flex, Tag, Typography } from 'antd';
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
@@ -18,6 +18,7 @@ import { NewDefaultAvatarModal } from './NewDefaultAvatarModal';
 import { RenameDefaultAvatarModal } from './RenameDefaultAvatarModal';
 import { Thumb } from './Thumb';
 import { codeText } from './texts';
+import { useGenerationPolling } from './useGenerationPolling';
 
 /**
  * 系统默认数字人 (`DEFAULT_AVATAR:MANAGE`): the avatar guests and accounts without one talk to. One
@@ -35,7 +36,15 @@ export default function DefaultAvatarsPage() {
   const ref = useRef<ActionType | undefined>(undefined);
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<DefaultAvatar | null>(null);
-  const reload = () => ref.current?.reload();
+  const [generating, setGenerating] = useState(false);
+  const [asked, setAsked] = useState(0);
+  const poll = useCallback(() => ref.current?.reload(), []);
+  const { gaveUp } = useGenerationPolling(generating, poll, asked);
+  /** A read the person asked for (a button, a write): it also starts the 5 minutes of reading by itself again. */
+  const reload = () => {
+    setAsked((n) => n + 1);
+    ref.current?.reload();
+  };
 
   /** Runs one action on a row. Whatever the answer, the list is read again: after a refusal the row has another state. */
   const act = async (done: string, call: () => Promise<unknown>) => {
@@ -151,6 +160,11 @@ export default function DefaultAvatarsPage() {
   return (
     <>
       <Typography.Paragraph type="secondary">{t('avatar.defaults.note')}</Typography.Paragraph>
+      {gaveUp ? (
+        <Typography.Paragraph type="warning">
+          {t('avatar.defaults.pollStopped')}
+        </Typography.Paragraph>
+      ) : null}
       <PagedListTable<DefaultAvatar>
         rowKey="id"
         columns={columns}
@@ -158,6 +172,7 @@ export default function DefaultAvatarsPage() {
         // The list is not paged by the backend (a short list, newest first): the page is cut here.
         request={async ({ page, pageSize }) => {
           const { items } = await listDefaultAvatars();
+          setGenerating(items.some((d) => d.status === 'GENERATING'));
           return {
             items: items.slice((page - 1) * pageSize, page * pageSize),
             total: items.length,

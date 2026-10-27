@@ -190,6 +190,8 @@ const messages: Record<string, string> = {
   'avatar.defaults.new': 'New default avatar',
   'avatar.defaults.created': 'Created as a draft.',
   'avatar.defaults.refresh': 'Refresh',
+  'avatar.defaults.pollStopped':
+    'Automatic refresh stopped after 5 minutes. Press Refresh to check again.',
   'avatar.defaults.generate': 'Generate',
   'avatar.defaults.generating': 'Generation started.',
   'avatar.defaults.activate': 'Set active',
