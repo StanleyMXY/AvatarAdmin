@@ -70,6 +70,30 @@ There are no secrets in this repository.
 | `ADMIN_QUALITY_MAX_SLOW_SHARE`                                         | `0.05`                                  |
 | `ADMIN_API_PROXY_TARGET` (dev only)                                    | `http://127.0.0.1:8080`                 |
 
+## Deployment
+
+`docs/deploy.md` describes how to serve the build: same-domain reverse proxy (`/api/` to the
+backend, every other path falls back to `index.html`), a complete nginx example, cache headers for
+the hashed files, the build variables above and the checks after a release.
+
+## Checks before a release
+
+Run these from the repository root and keep the output:
+
+```sh
+npm run lint
+npm run tsc
+npm test
+npm run build
+npm run check:routes -- <spec path>
+npm run check:codes -- <spec path> <contract path>
+npm run check:config-keys -- <contract path>
+```
+
+The spec and the contract are the snapshots in `docs/shared-snapshots/` (see the README there);
+`check:codes` reads the exclusions from `docs/superpowers/handoff/permission-code-exclusions.txt`.
+`grep -r "mock-password" dist/` must find nothing: the fake backend is not part of the build.
+
 ## Why these choices
 
 - **`legacy-peer-deps=true` in `.npmrc`.** `@ant-design/pro-components` 3.1.14 is a prerelease
