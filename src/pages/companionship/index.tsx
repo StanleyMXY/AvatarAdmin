@@ -6,6 +6,9 @@ import { type ConfigItem, listConfig, saveConfig } from '../../services/config';
 import { describeFailure } from '../../session/describe';
 import { specOf, validateValue } from '../config/configSchema';
 
+/** The prefix text takes about 70px; antd's default of 90px for a number box would leave no room for the number. */
+const STAGE_BOX_WIDTH = 200;
+
 const KEYS = [
   'companionship.stage_thresholds',
   'milestone.days',
@@ -38,6 +41,9 @@ const draftOf = (items: ConfigItem[]): Draft => {
   };
 };
 
+type Field = 'stages' | 'days' | 'burst';
+type Problem = { reason: string } | { failure: unknown; key: (typeof KEYS)[number] };
+
 /** 养成管理: the stage thresholds, the milestone days and the text interaction gap, in one form. */
 export default function CompanionshipPage() {
   const intl = useIntl();
@@ -45,9 +51,11 @@ export default function CompanionshipPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [items, setItems] = useState<ConfigItem[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  // What failed is kept (a reason code, or the failed request), not its text, so that the texts are
+  // written again when the language is switched. The same goes for the failure to load.
+  const [failure, setFailure] = useState<{ failure: unknown } | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [errors, setErrors] = useState<Partial<Record<'stages' | 'days' | 'burst', string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<Field, Problem>>>({});
 
   const load = useCallback(async () => {
     try {
@@ -57,15 +65,21 @@ export default function CompanionshipPage() {
       setDraft(draftOf(mine));
       setFailure(null);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      setFailure({ failure: error });
     }
-  }, [intl]);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const reason = (code: string) => (intl.messages[`reason.${code}`] ? t(`reason.${code}`) : code);
+  const problemText = (problem: Problem | undefined) => {
+    if (!problem) return undefined;
+    if ('reason' in problem) return reason(problem.reason);
+    const { text, fields } = describeFailure(intl, problem.failure);
+    return fields.find((f) => f.ref === problem.key)?.text ?? text;
+  };
 
   const { run, pending } = useSingleFlight(async () => {
     if (!items || !draft) return;
@@ -84,15 +98,15 @@ export default function CompanionshipPage() {
       'companionship.text_burst_minutes': before.burst !== draft.burst,
     };
     const found: typeof errors = {};
-    const field = {
+    const field: Record<(typeof KEYS)[number], Field> = {
       'companionship.stage_thresholds': 'stages',
       'milestone.days': 'days',
       'companionship.text_burst_minutes': 'burst',
-    } as const;
+    };
     for (const key of KEYS) {
       const spec = specOf(key);
       const problem = spec ? validateValue(spec, next[key]) : null;
-      if (problem) found[field[key]] = reason(problem);
+      if (problem) found[field[key]] = { reason: problem };
     }
     setErrors(found);
     if (Object.keys(found).length > 0) return;
@@ -106,9 +120,8 @@ export default function CompanionshipPage() {
       try {
         await saveConfig(key, next[key]);
       } catch (error) {
-        const { text, fields } = describeFailure(intl, error);
         // What was typed stays in the form; the values already saved are read again only on success.
-        setErrors({ [field[key]]: fields.find((f) => f.ref === key)?.text ?? text });
+        setErrors({ [field[key]]: { failure: error, key } });
         return;
       }
     }
@@ -118,7 +131,13 @@ export default function CompanionshipPage() {
 
   if (failure)
     return (
-      <Alert type="error" showIcon title={t('pages.common.loadFailed', { message: failure })} />
+      <Alert
+        type="error"
+        showIcon
+        title={t('pages.common.loadFailed', {
+          message: describeFailure(intl, failure.failure).text,
+        })}
+      />
     );
   if (!items || !draft) return <Spin />;
 
@@ -127,7 +146,7 @@ export default function CompanionshipPage() {
       <Form layout="vertical" onFinish={() => void run()}>
         <Form.Item
           label={t('config.companionship.stage_thresholds.label')}
-          help={errors.stages}
+          help={problemText(errors.stages)}
           validateStatus={errors.stages ? 'error' : undefined}
           extra={t('config.companionship.stage_thresholds.desc')}
         >
@@ -135,6 +154,7 @@ export default function CompanionshipPage() {
             <InputNumber
               aria-label={t('companionship.bonding')}
               prefix="BONDING"
+              style={{ width: STAGE_BOX_WIDTH }}
               precision={0}
               value={draft.bonding}
               onChange={(v) => setDraft({ ...draft, bonding: v })}
@@ -142,6 +162,7 @@ export default function CompanionshipPage() {
             <InputNumber
               aria-label={t('companionship.close')}
               prefix="CLOSE"
+              style={{ width: STAGE_BOX_WIDTH }}
               precision={0}
               value={draft.close}
               onChange={(v) => setDraft({ ...draft, close: v })}
@@ -150,7 +171,7 @@ export default function CompanionshipPage() {
         </Form.Item>
         <Form.Item
           label={t('companionship.days')}
-          help={errors.days ?? t('companionship.daysHelp')}
+          help={problemText(errors.days) ?? t('companionship.daysHelp')}
           validateStatus={errors.days ? 'error' : undefined}
         >
           <Select
@@ -164,7 +185,7 @@ export default function CompanionshipPage() {
         </Form.Item>
         <Form.Item
           label={t('companionship.burst')}
-          help={errors.burst}
+          help={problemText(errors.burst)}
           validateStatus={errors.burst ? 'error' : undefined}
           extra={t('config.companionship.text_burst_minutes.desc')}
         >

@@ -76,22 +76,21 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
 
   // ---- the steps of the activity being edited ----
   const [detail, setDetail] = useState<CheckinActivityDetail | null>(null);
-  const [loadFailure, setLoadFailure] = useState<string | null>(null);
+  // The failed request is kept, not its text: the text is written when drawn, so a language switch
+  // changes it without reading the activity again (which would empty the form being typed in).
+  const [loadFailure, setLoadFailure] = useState<{ failure: unknown } | null>(null);
   const counter = useRef(0);
-  const load = useCallback(
-    async (id: string) => {
-      const mine = ++counter.current;
-      setDetail(null);
-      setLoadFailure(null);
-      try {
-        const answer = await getCheckinActivity(id);
-        if (mine === counter.current) setDetail(answer);
-      } catch (error) {
-        if (mine === counter.current) setLoadFailure(describeFailure(intl, error).text);
-      }
-    },
-    [intl],
-  );
+  const load = useCallback(async (id: string) => {
+    const mine = ++counter.current;
+    setDetail(null);
+    setLoadFailure(null);
+    try {
+      const answer = await getCheckinActivity(id);
+      if (mine === counter.current) setDetail(answer);
+    } catch (error) {
+      if (mine === counter.current) setLoadFailure({ failure: error });
+    }
+  }, []);
   useEffect(() => {
     if (rowId === null) {
       // Closed, or a new activity: an answer that is still on its way belongs to nobody.
@@ -203,7 +202,9 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
         <Alert
           type="error"
           showIcon
-          title={t('pages.common.loadFailed', { message: loadFailure })}
+          title={t('pages.common.loadFailed', {
+            message: describeFailure(intl, loadFailure.failure).text,
+          })}
           action={
             <Button size="small" onClick={() => rowId !== null && void load(rowId)}>
               {t('pages.common.retry')}

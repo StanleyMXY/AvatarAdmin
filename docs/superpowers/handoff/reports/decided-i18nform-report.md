@@ -63,3 +63,53 @@ GREEN：
 - 这个页面不是 antd 规则校验，钩子管不到；修法是存键和参数，渲染时翻译（像 `invite/FissionTab.tsx` 那样）。
 
 契约缺口、需要改共享文件、规格需要在 main 上修改的地方：无。
+
+## 补充：评审的两条立即修（养成管理页切换语言丢输入；两个阶段起点输入框看不见）
+
+立即修未修 0、记录项 2、未运行 2、阻塞 0。
+
+### 立即修 1：养成管理页切换语言会重新读数据并丢掉还没保存的输入（已修）
+
+- 根因（我读了代码和提交前的行为）：`src/pages/companionship/index.tsx` 的 `load` 是 `useCallback(..., [intl])`，里面 `setDraft(draftOf(mine))` 把草稿重置成服务器的值；`useEffect` 以 `load` 为依赖，语言一换 `intl` 变了，`load` 变了，副作用重新跑。
+- 修法：`load` 不再依赖 `intl`（依赖数组为空）。读取失败存失败对象 `{ failure }`，渲染时才用 `describeFailure(intl, …)` 翻译；`errors` 状态存"原因代码"或"失败对象加键"（`{ reason }` / `{ failure, key }`），渲染时翻译。做法和 `ChangePasswordForm.tsx` 的 `alert` 状态一样。所以语言切换不再重读、不丢输入，三处错误文字（校验拒绝、保存失败、加载失败）也跟着语言变。评审记录项里"该页 errors 存译文"（上文"新发现的问题"记录 2 里养成管理页那一处）随之解决。
+- 先写会失败的测试（`src/pages/companionship/companionship.test.tsx`，新增 `when the language is switched` 四条）。RED（修前，`npx vitest run src/pages/companionship`）：4 failed | 7 passed：
+  - 不重读且保留输入：`expected [ { method: 'GET', …(2) }, …(1) ] to have a length of 1 but got 2`（语言一换多读了一次）。
+  - 校验拒绝换语言：`Unable to find an element with the text: 超出允许的范围`。
+  - 保存失败换语言：`Unable to find an element with the text: 服务端出错，请稍后重试`。
+  - 加载失败换语言且不重读：`expected [ '/api/admin/config', …(1) ] to have a length of 1 but got 2`。
+  - GREEN（修后）：同一命令 12 passed（含下面的宽度那条）。
+- 真实浏览器（Playwright Chromium，1280 宽，从草稿目录的拷贝起 `max dev`，浅色和暗色各做一遍）：英文界面把阶段起点改成 42、CLOSE 改成 10、间隔改成 99，点保存得到英文拒绝文字 "The value is outside the allowed range."，再用页头语言选择切到简体中文：读取配置的 GET 请求数切换前后都是 1；输入框的值切换后是 `["42","10","99"]`（不丢）；拒绝文字变成 "超出允许的范围"。
+
+评审点名的另外四处，我逐个读了：
+
+| 位置 | 语言一换会重读并重置草稿吗 | 依据 |
+|---|---|---|
+| `src/pages/config/ConfigForm.tsx:49` | 会重读，但不重置草稿 | 重读只换 `items`；每一行 `ConfigRow`（`key={item.key}`）自己用 `useState` 持有草稿，初值只在挂载时取（`ConfigRow.tsx:46-48`），`item` 变了也不会再写回草稿 |
+| `src/pages/subscriptions/gates.tsx:181` | 会重读，但不重置草稿 | 表格里唯一有草稿的是 `CreditCostCell`，它的 `useEffect(() => setDraft(gate.creditCost), [gate.creditCost])` 只在服务器值变了才重置，重读得到同一个值就不会；编辑默认值的弹窗存的是点开时选中的 `editing` 对象，不随重读变 |
+| `src/pages/activity/ActivityFormModal.tsx:93` | 会，真的丢（已修，下面） | 见下 |
+| `src/pages/avatar/GrantCosmetic.tsx:62` | 会重读目录，不重置草稿 | `load` 只写 `items`、`loadFailure`、`forbidden`；表单字段和理由在 antd 表单里，没有被碰 |
+
+评审说没有逐个读的六处（`moderation/queue.tsx:59`、`push/templates.tsx:54`、`memory/tiers.tsx:30`、`memory/models.tsx:29`、`subscriptions/products.tsx:275`、`subscriptions/entitlements.tsx:292`），我也读了各自的 `load`：它们只写列表数据和失败文字，不碰任何草稿或表单；`entitlements.tsx` 里有草稿的是弹窗组件，草稿由点开时选中的 `def` 初始化，不随列表重读变。所以这六处没有"重读并重置草稿"。这十处共有的小问题是：语言一换就多读一次（没有必要），失败文字存的是译文，切语言后停在旧语言；归记录 1。
+
+`ActivityFormModal`（签到活动的新建和编辑弹窗）确有同样的缺陷，已一并修：
+- 触发：编辑一个活动时，`load` 依赖 `intl`，语言一变 `useEffect` 重新跑 `load(rowId)`，里面第一句 `setDetail(null)`，`ready` 变假，`<Form>` 被卸载，输入全丢，再读完重新挂载成服务器的值。
+- 修法：`load` 依赖数组改为空；`loadFailure` 存 `{ failure }`，渲染时翻译。
+- 测试（新文件 `src/pages/activity/ActivityFormModal.locale.test.tsx`，两条）：RED（修前）两条都是 `expected 2 to be 1`（语言一换读了第二次）；GREEN（修后）：`npx vitest run src/pages/activity` 9 个文件 151 个测试全过。
+- 说明：弹窗打开时页头的语言选择够不着（评审第四节第 1 条），所以用户在界面上遇不到这一条；它是代码层面的同一个写法，一并修掉，没有改变可见行为。我没有在真实浏览器里验证这一条（原因同上，界面做不到）。
+
+### 立即修 2：养成管理页的两个阶段起点输入框宽度为 0 或被截断（已修）
+
+- 根因（在真实浏览器里量出来的，不是猜测）：antd 的 `InputNumber` 外框默认宽度是 90px；`prefix="BONDING"` 和 `prefix="CLOSE"` 的前缀文字本身占约 70px，剩给真正输入数字的 `<input>` 的宽度，修前量得 BONDING 为 0px、CLOSE 为 16px（`getBoundingClientRect().width`）。这和主题无关：浅色、dim、deep 三个主题修前量到的数字完全一样（评审只在暗色里看到，不是暗色特有）。同页第三个没有前缀的数字框 90px 宽、输入框 66px，正常，不动。
+- 修法：给两个带前缀的 `InputNumber` 加 `style={{ width: STAGE_BOX_WIDTH }}`（200px，常量上有注释）。
+- 测试：`companionship.test.tsx` 新增 `gives the two stage boxes room for the prefix text and the number, not the 90px default`，断言两个框外层 `.ant-input-number` 的内联宽度 ≥ 180。RED（修前）：`AssertionError: expected NaN to be greater than or equal to 180`（没有内联宽度）；GREEN（修后）通过。这条测试守的是"设了宽度"，happy-dom 不做排版，不能量出真实像素，所以真实像素在下面的浏览器里量。
+- 真实浏览器（Playwright Chromium，1280 宽；light、dim、deep 三个主题都做了，截图自查）：
+  - 修前：三个主题里 BONDING 框的输入框宽 0、CLOSE 框 16，截图里只剩 "BONDING"、"CLOSE 15"；`waitForSelector` 报元素 hidden。
+  - 修后：三个主题里外框 200px，输入框 BONDING 107px、CLOSE 126px，截图里显示 "BONDING 50"、"CLOSE 150"；`fill('42')`、`fill('10')` 成功，保存按钮点下去得到拒绝文字（见立即修 1 的浏览器检查）。
+- 截图在草稿目录 `/tmp/claude-0/-home-user-AvatarAdmin/430adf2a-3186-5642-af52-8b3912cf69c3/scratchpad/i18nform2/`（`before-*.png`、`after-*.png`、`switch-*.png`），不进仓库。开发服务器按进程号停了，端口已关。
+
+### 新发现的问题（按 CLAUDE.md 分类）
+
+- 记录 1（接评审记录 2）：上面十处（`config/ConfigForm.tsx`、`subscriptions/gates.tsx`、`avatar/GrantCosmetic.tsx`、`moderation/queue.tsx`、`push/templates.tsx`、`memory/tiers.tsx`、`memory/models.tsx`、`subscriptions/products.tsx`、`subscriptions/entitlements.tsx`，以及 `ActivityFormModal` 的保存失败文字 `setFailure(failureToForm(…).text)` `ActivityFormModal.tsx:141`）的 `load` 依赖 `intl`，并把译好的失败文字存在状态里。触发：英文界面里这些页的读取失败，出现英文的"加载失败：…"，切到中文，页面先重读一次；读成功就清掉，读再失败得到中文文字，读取中间的这一段文字停在旧语言。后果小（不丢数据，文字对、语言有时不对，多一次读取）。建议改成存失败对象、`load` 不依赖 `intl`，和本次养成管理页、`ActivityFormModal` 同样做法，全部修。
+- 记录 2：`src/pages/activity/ActivityFormModal.tsx` 里保存失败的提示条（`failure` 状态）存的是译文，切语言后停在旧语言（弹窗里界面切不了语言，见评审第四节第 1 条）。归记录 1 同一批处理。
+- 未运行 2：全量测试和构建（按约定留到全部任务做完后跑一次）；弹窗里的 `ActivityFormModal` 修法没有在真实浏览器里验证（遮罩盖住页头的语言选择，界面做不到）。
+- 语言覆盖：测试里的输入用了泰语文字（`ActivityFormModal.locale.test.tsx`），界面文字只有 zh-CN 和 en-US 两种，真实浏览器检查只覆盖这两种；这两处修法与具体语言无关，阿拉伯语、印尼语、越南语、西班牙语没有单独测试。
