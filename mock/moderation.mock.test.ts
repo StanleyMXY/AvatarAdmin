@@ -6,6 +6,7 @@ import {
   moderationState,
   RECORD_ID,
   resetModerationStore,
+  simulateOtherRuleListEdit,
 } from './_core/moderationData';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
@@ -532,5 +533,22 @@ describe('GET and PUT /moderation/text-rules', () => {
       const { status } = await send(SAVE_RULES, 'reviewer', body);
       expect(status).toBe(400);
     }
+  });
+});
+
+describe('standing in for a second administrator who saves the rule list', () => {
+  it('changes the list the next GET gives, keeps the ids of the rules that stay, and does not touch the list the caller already holds', async () => {
+    const before = (await get(RULES, 'reviewer')).body.data.items as { id: string; note: string }[];
+    simulateOtherRuleListEdit((rules) => [
+      { ...rules[0], note: 'changed by someone else' },
+      ...rules.slice(2),
+      { id: 'other-new', pattern: 'ใหม่', matchMode: 'SUBSTRING', level: 'BLOCK', note: '' },
+    ]);
+    const after = (await get(RULES, 'reviewer')).body.data.items as { id: string; note: string }[];
+    expect(after[0].id).toBe(before[0].id);
+    expect(after[0].note).toBe('changed by someone else');
+    expect(after.map((r) => r.id)).not.toContain(before[1].id);
+    expect(after[after.length - 1].id).toBe('other-new');
+    expect(before[0].note).not.toBe('changed by someone else');
   });
 });

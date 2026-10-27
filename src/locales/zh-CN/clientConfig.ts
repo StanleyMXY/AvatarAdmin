@@ -53,6 +53,10 @@ const messages: Record<string, string> = {
   'clientConfig.editor.noValue': '至少要有一个值；要删掉全部的值，请用“重置”。',
   'clientConfig.editor.refused': '后端没有接受，整个键没有保存。',
   'clientConfig.editor.save': '保存',
+  'clientConfig.editor.conflict': '已被他人修改',
+  'clientConfig.editor.conflictDetail':
+    '这个键在你打开之后被别人改过，你的修改没有保存。点“重新载入”会读取他们保存的内容，你在这里改的部分会被放弃。',
+  'clientConfig.editor.conflictReload': '重新载入',
   'clientConfig.editor.saved': '已保存',
   'clientConfig.editor.unchanged': '没有改动',
   'clientConfig.editor.updated': '最后修改：{who}，{when}',

@@ -159,6 +159,10 @@ const messages: Record<string, string> = {
     'Take this rule out of the list? It is not deleted until you press Save.',
   'moderation.rules.save': 'Save the list',
   'moderation.rules.discard': 'Discard changes',
+  'moderation.rules.conflict': 'Modified by someone else',
+  'moderation.rules.conflictDetail':
+    'The rule list was saved by someone else after you opened it, so your changes were not saved. Reload shows the list they saved; what you changed here is then dropped.',
+  'moderation.rules.conflictReload': 'Reload',
   'moderation.rules.saved': 'The list is saved',
   'moderation.rules.empty': 'The list is empty, so there is no rule layer.',
   'moderation.rules.unsaved': 'There are unsaved changes',

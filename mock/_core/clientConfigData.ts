@@ -115,6 +115,42 @@ export const systemValue = (def: MockKey): unknown =>
 
 const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 
+/** The newest `updatedAt` among the rows of a key; null when it has none (the contract's "time of the key"). */
+export const latestUpdatedAt = (key: string): string | null => {
+  const rows = [...(clientConfigState.rows.get(key)?.values() ?? [])];
+  return rows.reduce<string | null>(
+    (newest, row) => (newest === null || row.updatedAt > newest ? row.updatedAt : newest),
+    null,
+  );
+};
+
+/** A time after `after`, also when the clock has not moved since: two saves never share one. */
+export const instantAfter = (after: string | null): string =>
+  new Date(Math.max(Date.now(), after === null ? 0 : Date.parse(after) + 1)).toISOString();
+
+/**
+ * What a test does to stand in for a second administrator who saved the key after the first one
+ * opened it: replaces every language of the key with `values`, as a real save would, and returns
+ * the new time of the key. `byAdminId` defaults to the preset `support` administrator.
+ */
+export function simulateOtherAdminEdit(
+  key: string,
+  values: Record<string, unknown>,
+  byAdminId = '1002',
+): string {
+  const updatedAt = instantAfter(latestUpdatedAt(key));
+  clientConfigState.rows.set(
+    key,
+    new Map(
+      Object.entries(values).map(([locale, value]) => [
+        locale,
+        { value, updatedBy: byAdminId, updatedAt },
+      ]),
+    ),
+  );
+  return updatedAt;
+}
+
 export function resetClientConfigStore(): void {
   clientConfigState.rows = new Map();
   const put = (key: string, locale: string, value: unknown, days: number) => {

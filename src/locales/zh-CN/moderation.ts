@@ -144,6 +144,10 @@ const messages: Record<string, string> = {
   'moderation.rules.removeConfirm': '把这条规则从列表里去掉？点“保存”之前不会真正删除。',
   'moderation.rules.save': '保存词表',
   'moderation.rules.discard': '放弃修改',
+  'moderation.rules.conflict': '已被他人修改',
+  'moderation.rules.conflictDetail':
+    '规则列表在你打开之后被别人保存过，你的修改没有保存。点“重新载入”会读取他们保存的列表，你在这里改的部分会被放弃。',
+  'moderation.rules.conflictReload': '重新载入',
   'moderation.rules.saved': '词表已保存',
   'moderation.rules.empty': '词表是空的，没有规则这一层。',
   'moderation.rules.unsaved': '有未保存的修改',

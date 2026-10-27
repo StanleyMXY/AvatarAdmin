@@ -16,6 +16,7 @@ import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type ClientConfigItem,
+  readClientConfigKey,
   resetClientConfig,
   saveClientConfig,
 } from '../../services/clientConfig';
@@ -44,6 +45,7 @@ import {
   typeText,
 } from './texts';
 import { ValueControl } from './ValueControl';
+import { sameVersion } from './version';
 
 type Props = {
   item: ClientConfigItem;
@@ -64,13 +66,15 @@ const tabKey = (locale: string) => (locale === '' ? '__default__' : `lang:${loca
  * whole: every language is checked first, and one that fails stops the save of all of them. The
  * preview resolves the value of a chosen language the way the client's request would.
  */
-export function ClientConfigEditor({ item, editable, onClose, onChanged }: Props) {
+export function ClientConfigEditor({ item: opened, editable, onClose, onChanged }: Props) {
   const intl = useIntl();
   const { message } = App.useApp();
   const access = useAccess() as unknown as { canAccess: (code?: string) => boolean };
   const meta = useAdminMeta();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
+  // The key as this editor last read it: what the open drawer compares the backend with before a save.
+  const [item, setItem] = useState(opened);
   const key = plainText(item.key);
   const type = plainText(item.type);
 
@@ -80,6 +84,7 @@ export function ClientConfigEditor({ item, editable, onClose, onChanged }: Props
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [refused, setRefused] = useState(false);
+  const [conflict, setConflict] = useState(false);
   const [newLanguage, setNewLanguage] = useState('');
   const [languageProblem, setLanguageProblem] = useState<string | null>(null);
 
@@ -129,10 +134,22 @@ export function ClientConfigEditor({ item, editable, onClose, onChanged }: Props
   const { run: save, pending } = useSingleFlight(async () => {
     setFailure(null);
     setRefused(false);
+    setConflict(false);
     setAttempted(true);
     if (problems.length > 0) {
       const first = problems.find((p) => p.locale !== null);
       if (first?.locale !== undefined && first.locale !== null) setActive(tabKey(first.locale));
+      return;
+    }
+    // A key is saved as a whole, so a save over a newer version would delete what the other
+    // administrator added. Read the key again; if it is no longer the one that was opened, stop.
+    try {
+      if (!sameVersion(item, await readClientConfigKey(key))) {
+        setConflict(true);
+        return;
+      }
+    } catch (error) {
+      setFailure(describeFailure(intl, error).text);
       return;
     }
     try {
@@ -157,6 +174,30 @@ export function ClientConfigEditor({ item, editable, onClose, onChanged }: Props
     message.success(t('clientConfig.editor.saved'));
     onChanged();
     onClose();
+  });
+
+  // Takes the key as the backend has it now and drops the edit, the tabs and the marks on them.
+  const { run: reload, pending: reloading } = useSingleFlight(async () => {
+    setFailure(null);
+    let fresh: ClientConfigItem | undefined;
+    try {
+      fresh = await readClientConfigKey(key);
+    } catch (error) {
+      setFailure(describeFailure(intl, error).text);
+      return;
+    }
+    if (!fresh) {
+      setFailure(t('error.RESOURCE_NOT_FOUND'));
+      return;
+    }
+    setItem(fresh);
+    setDraft(draftOf(fresh));
+    setActive(tabKey(draftOf(fresh)[0]?.locale ?? ''));
+    setAttempted(false);
+    setServerErrors({});
+    setRefused(false);
+    setConflict(false);
+    onChanged();
   });
 
   const resetKey = async () => {
@@ -292,6 +333,19 @@ export function ClientConfigEditor({ item, editable, onClose, onChanged }: Props
             showIcon
             title={failure}
             description={refused ? t('clientConfig.editor.refused') : undefined}
+          />
+        ) : null}
+        {conflict ? (
+          <Alert
+            type="warning"
+            showIcon
+            title={t('clientConfig.editor.conflict')}
+            description={t('clientConfig.editor.conflictDetail')}
+            action={
+              <Button size="small" loading={reloading} onClick={() => reload()}>
+                {t('clientConfig.editor.conflictReload')}
+              </Button>
+            }
           />
         ) : null}
         {attempted && failedCount > 0 ? (

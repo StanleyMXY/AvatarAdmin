@@ -35,6 +35,7 @@ import {
   type RuleRow,
   regexCompiles,
   rowProblem,
+  sameRules,
   sortDetails,
   toInputs,
   toRows,
@@ -63,6 +64,7 @@ export default function ModerationRulesPage() {
   const [tableErrors, setTableErrors] = useState<string[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
+  const [conflict, setConflict] = useState(false);
 
   const fetchRules = useCallback(async () => {
     setLoad({ phase: 'loading' });
@@ -99,6 +101,7 @@ export default function ModerationRulesPage() {
   };
 
   const { run: save, pending } = useSingleFlight(async () => {
+    setConflict(false);
     setChecked(true);
     const bad = rows.filter((row) => hasProblem(rowProblem(row))).length;
     if (bad > 0) {
@@ -108,6 +111,17 @@ export default function ModerationRulesPage() {
     setFailure(null);
     setTableErrors([]);
     setRowErrors(new Map());
+    // The list is saved as a whole, so a save over a newer list would delete the rules another
+    // administrator added. Read the list again; if it is no longer the one that was loaded, stop.
+    try {
+      if (!sameRules(saved, toRows((await getTextRules()).items))) {
+        setConflict(true);
+        return;
+      }
+    } catch (error) {
+      setFailure(describeFailure(intlRef.current, error).text);
+      return;
+    }
     try {
       const { items } = await saveTextRules(toInputs(rows));
       const fresh = toRows(items);
@@ -125,6 +139,21 @@ export default function ModerationRulesPage() {
           ? t('moderation.rules.fixRows', { count: byRow.size })
           : t('moderation.rules.saveFailed', { message: [described.text, ...other].join(' ') }),
       );
+    }
+  });
+
+  // Takes the list as the backend has it now and drops the edit; the page stays as it is when the read fails.
+  const { run: reload, pending: reloading } = useSingleFlight(async () => {
+    try {
+      const { items } = await getTextRules();
+      const fresh = toRows(items);
+      setSaved(fresh);
+      setRows(fresh.map((row) => ({ ...row })));
+      clearErrors();
+      setChecked(false);
+      setConflict(false);
+    } catch (error) {
+      setFailure(describeFailure(intlRef.current, error).text);
     }
   });
 
@@ -217,6 +246,19 @@ export default function ModerationRulesPage() {
           </Space>
         </Flex>
 
+        {conflict ? (
+          <Alert
+            type="warning"
+            showIcon
+            title={t('moderation.rules.conflict')}
+            description={t('moderation.rules.conflictDetail')}
+            action={
+              <Button size="small" loading={reloading} onClick={() => void reload()}>
+                {t('moderation.rules.conflictReload')}
+              </Button>
+            }
+          />
+        ) : null}
         {failure ? <Alert type="error" showIcon title={failure} /> : null}
         {tableErrors.map((text) => (
           <Alert

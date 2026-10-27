@@ -8,7 +8,9 @@ import { validateServerLink } from '../src/utils/linkRule';
 import { guard } from './_core/auth';
 import {
   clientConfigState,
+  instantAfter,
   keyOf,
+  latestUpdatedAt,
   type MockKey,
   type MockRow,
   REGISTRY,
@@ -104,7 +106,18 @@ export default {
         'This key comes from the system configuration',
       );
     }
-    const values = bodyOf(req).values;
+    const body = bodyOf(req);
+    // Contract request 4.4: the time of the key the caller read (null: it had no row) must still be
+    // the time of the key, or another administrator saved in between and nothing is changed.
+    if ('expectedUpdatedAt' in body) {
+      const current = latestUpdatedAt(def.key);
+      if (body.expectedUpdatedAt !== current) {
+        throw new MockHttpError(409, 'INVALID_STATE', 'The key was changed by someone else', {
+          updatedAt: current,
+        });
+      }
+    }
+    const values = body.values;
     if (typeof values !== 'object' || values === null || Array.isArray(values)) {
       throw invalidRequest('values must be an object', [
         { ref: 'values', reason: 'EMPTY_NOT_ALLOWED' },
@@ -126,7 +139,7 @@ export default {
       if (reason !== null) details.push({ ref: locale === '' ? 'default' : locale, reason });
     }
     if (details.length > 0) throw invalidRequest('invalid request', details);
-    const now = new Date().toISOString();
+    const now = instantAfter(latestUpdatedAt(def.key));
     clientConfigState.rows.set(
       def.key,
       new Map(

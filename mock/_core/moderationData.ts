@@ -330,6 +330,16 @@ export function resetModerationStore(now: Date = new Date()): void {
 export const findRecord = (id: string): MockRecord | undefined =>
   moderationState.records.find((record) => record.id === id);
 
+/**
+ * What a test does to stand in for a second administrator who saved the rule list after the first
+ * one read it: `change` gets a copy of the list and returns the list that is saved (a rule that
+ * keeps its `id` stays the same rule). Returns the saved list.
+ */
+export function simulateOtherRuleListEdit(change: (rules: MockRule[]) => MockRule[]): MockRule[] {
+  moderationState.rules = change(moderationState.rules.map((rule) => ({ ...rule })));
+  return moderationState.rules;
+}
+
 export const nextRuleId = (): string =>
   `00000000-0000-4000-8000-00000001${String(moderationState.next.rule++).padStart(4, '0')}`;
 

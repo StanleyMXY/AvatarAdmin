@@ -61,6 +61,10 @@ const messages: Record<string, string> = {
   'clientConfig.editor.noValue': 'At least one value is needed; to delete all values, use Reset.',
   'clientConfig.editor.refused': 'The backend did not accept it; the whole key was not saved.',
   'clientConfig.editor.save': 'Save',
+  'clientConfig.editor.conflict': 'Modified by someone else',
+  'clientConfig.editor.conflictDetail':
+    'This key was changed by someone else after you opened it, so your changes were not saved. Reload shows what they saved; what you changed here is then dropped.',
+  'clientConfig.editor.conflictReload': 'Reload',
   'clientConfig.editor.saved': 'Saved',
   'clientConfig.editor.unchanged': 'No changes',
   'clientConfig.editor.updated': 'Last changed by {who}, {when}',

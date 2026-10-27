@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { resetSessionState, setToken } from '../../request/session';
-import { listClientConfig, resetClientConfig, saveClientConfig } from './index';
+import {
+  listClientConfig,
+  readClientConfigKey,
+  resetClientConfig,
+  saveClientConfig,
+} from './index';
 
 beforeEach(() => {
   resetSessionState();
@@ -30,6 +35,21 @@ describe('the client configuration', () => {
     expect(await listClientConfig()).toEqual([]);
     answer(null);
     expect(await listClientConfig()).toEqual([]);
+  });
+
+  it('reads one key from the same list and gives undefined for a key that is not in it', async () => {
+    const calls = answer({
+      items: [
+        { key: 'b', values: {} },
+        { key: 'a', values: { '': 'x' } },
+      ],
+    });
+    expect(await readClientConfigKey('a')).toEqual({ key: 'a', values: { '': 'x' } });
+    expect(await readClientConfigKey('missing')).toBeUndefined();
+    expect(calls.map((c) => [c.init.method, urlOf(c).pathname])).toEqual([
+      ['GET', '/api/admin/client-config'],
+      ['GET', '/api/admin/client-config'],
+    ]);
   });
 
   it('saves with PUT /client-config/{key} and the whole values map', async () => {
