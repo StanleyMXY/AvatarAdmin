@@ -72,6 +72,16 @@ describe('layout', () => {
     expect(screen.getByText('Page not found')).toBeInTheDocument();
   });
 
+  it('draws no menu or header only while the account could not be read because the service is unreachable', () => {
+    expect(layout({ initialState: { unavailable: true } }).pure).toBe(true);
+    expect(layout({ initialState: { me: signedIn(false, []), unavailable: true } }).pure).toBe(
+      false,
+    );
+    expect(layout({ initialState: {} }).pure).toBe(false);
+    expect(layout({ initialState: undefined }).pure).toBe(false);
+    expect(layout({ initialState: { me: signedIn(false, []) } }).pure).toBe(false);
+  });
+
   it('writes the identifier of a parameter page in the window title, and leaves the others alone', () => {
     const { pageTitleRender } = config();
     expect(

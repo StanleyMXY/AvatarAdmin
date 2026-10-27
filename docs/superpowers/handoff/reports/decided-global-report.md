@@ -146,3 +146,57 @@
 ## 问题文件
 
 无新增（这一项只涉及前端自己的行为）。
+
+---
+
+# 追加：评审 `decided-global-review.md` 第一节两条立即修的处理
+
+立即修未修 0、记录项 2、未运行 3、阻塞 0
+
+（这一节只追加，前面的内容没有改。评审者复现的两条都已修，带测试。）
+
+## 修了什么
+
+### 1. 网关 502/503/504 回答"发送站内通知"后，对话框又说"不知道有没有发出去"
+
+- 原因：`src/pages/notifications/SendModal.tsx` 的 `maybeSent` 靠 `httpStatus === 0` 或 `INVALID_RESPONSE` 判断，提交 `adebfdd` 把网关页改成了新码 `GATEWAY_UNAVAILABLE`，这一行没有跟着改，所以网关页之后对话框只说"稍后重试"，管理员照做会把同一批通知发两遍。
+- 修法：`src/request/errors.ts` 新增 `isOutcomeUnknown(error)`（没有回答即 `httpStatus === 0`，也就是网络失败和超时；网关页 `GATEWAY_UNAVAILABLE`；不是信封的回答 `INVALID_RESPONSE`），`SendModal.tsx` 改用它。
+- 超时：`REQUEST_TIMEOUT` 的 `httpStatus` 是 0，所以原来的判断其实已经把它算进去了，只有网关页漏了。我补了超时的页面测试和函数测试，它们在修之前就是绿的（守卫测试，不是失败重现）。失败重现的是 502、503、504 三条页面测试。
+- 全 `src` 的排查：`grep` 了 `INVALID_RESPONSE`、`NETWORK_ERROR`、`REQUEST_TIMEOUT`、`GATEWAY_UNAVAILABLE` 和所有 `httpStatus` 比较。非测试代码里按这些码做判断的只有：`SendModal.tsx`（已修）、`src/request/apiClient.ts` 的 `NO_BACKEND_ANSWER`/`noteServiceStatus`（只管全局警告条，网关码在它前面的分支单独处理，不受影响）、`src/utils/uploadErrors.ts`、`useCampaigns.ts`、`GrantCosmetic.tsx`、`AdminFormModal.tsx`、`ads/useOptions.ts`、`ads/CreativeModal.tsx`、`appVersions/VersionModal.tsx`，它们比较的是 400/403/404/409 这类后端自己的回答，不判断"结果不明"。没有别的地方靠 `INVALID_RESPONSE` 或 `httpStatus === 0` 判断"结果不明"或"可安全重试"，所以没有第二处要修。
+
+### 2. 后端不可用时刷新页面被送到登录页
+
+- `src/session/loadSession.ts`：读 `GET /me` 失败时分三种：令牌被拒（令牌已被请求层清掉）返回 `{}`，行为不变；有令牌且是网络错误、超时、网关页（`isServiceUnreachable`，同样在 `errors.ts`）返回 `{ unavailable: true }`；有令牌但是后端自己的别的错误（例如 500 带信封、403）仍返回 `{}`（见记录项 1）。令牌不清除，状态里只有一个布尔值，没有错误对象、地址、令牌。
+- `src/session/state.ts`：`SessionState` 加 `unavailable?: boolean`。
+- `src/session/SessionGate.tsx`：没有 `me` 且 `unavailable` 时不去登录页，显示 `src/session/ServiceUnavailable.tsx`（整页的"服务暂时不可用，请稍后重试"加"重试"按钮）。重试就是再调一次 `loadSession()` 并写回状态：读成功就进入应用，地址不变（不 `history.replace`/`push`）；还是读不到就留在提示上，按钮可再点；这时令牌被拒就走原来的过期流程去登录页并带 `redirect`；账号要先改密码就去改密码页。同一时刻只读一次（防连点）。
+- `src/app.tsx`：`layout` 在 `!me && unavailable` 时 `pure: true`，菜单和页头不画，提示占满整页。
+- 文案：用已有的 `error.GATEWAY_UNAVAILABLE` 和 `pages.common.retry`（zh-CN 和 en-US 都已有），没有新增键，所以语言文件键相同的检查和"禁止写死文字"扫描不受影响，两者都跑过且通过。
+- 登出后的行为不变：`signOut` 和 `onExpired` 都把状态设成 `{}`，`unavailable` 随之消失，门卫按"未登录"去登录页（有测试：先显示提示，再变成 `{}`，会去登录页）。登录后立刻读 `/me` 失败的路径（`useSession.establish`）没有改：`!next.me` 仍然清令牌并给原来的提示。
+
+## RED 到 GREEN
+
+- 失败证据（改实现之前，测试已写好）：`npx vitest run src/session/loadSession.test.tsx src/session/SessionGate.test.tsx src/pages/notifications/send.test.tsx -t "gateway answers|ran out of time|unavailable|retry|Retry|signing out|notice|another error|token was refused"`，输出 `Tests 15 failed | 3 passed | 48 skipped (66)`、`Test Files 3 failed (3)`；15 个红的是 3 条网关页（502/503/504）发送测试、5 条 `loadSession`（3 个网关码、网络、超时）、7 条 `SessionGate`（提示、中文提示、重试成功、重试仍失败、重试遇令牌被拒、重试遇要改密码、登出后）。输出存在 scratchpad 的 `red.txt`。3 条绿的是守卫：超时发送、"后端别的错误仍是空"、"令牌被拒不是 unavailable"。
+- 修后：`npx vitest run src/session src/app.test.tsx src/request src/locales tests/noHardcodedText.test.ts src/pages/user src/components/layout src/pages/notifications` 是 44 个文件 1170 个测试全过；`npx biome check` 对改动的目录无诊断；`npx tsc --noEmit` 在 `src/session`、`src/request`、`src/app`、`src/pages/notifications` 下没有报错。
+
+## 变异检查（改一处，只跑守这条的测试，立刻还原，全部变红）
+
+`loadSession` 对任何错误都返回 unavailable（1 红）；永不返回 unavailable（5）；不可达时清令牌（5）；令牌被拒也算 unavailable（2）；网关码、超时码、网络码各自不算"读不到"（3、1、1）；门卫有 `me` 时仍显示提示（1）；门卫忽略标志（8）；unavailable 时仍跳登录页（4）；重试结果不写回状态（3）；重试防连点去掉（1，一开始是存活的：antd 的加载按钮会挡后续点击，所以我把测试改成两次点击落在重绘之前，改后变红）；`isOutcomeUnknown` 去掉网关码、去掉无回答、去掉 `INVALID_RESPONSE`（4、3、1）；`layout` 不设 `pure`、有账号也设 `pure`（各 1）。没有存活的变异。每次变异后文件都从备份还原，`git diff` 里只有我的改动。
+
+## 令牌和日志
+
+- 令牌不被清除：有测试断言 `sessionStorage` 和内存里的令牌在 503、网络失败、超时之后仍在，重试仍失败之后仍在；变异"不可达时清令牌"变红。
+- 令牌不进状态、日志或错误文字：`{ unavailable: true }` 只有一个布尔值；测试让网络错误的原文里带 `token=tok` 和地址，断言结果序列化后不含令牌；页面文字是固定的语言文件文字，不显示网关页内容。新代码里没有 `console.*`。
+- 真实浏览器（假后端，Chromium，登录 `root` 后把 `GET /me` 换成 503 的 HTML 页，打开 `/users/list?x=1`）：页面只有"The service is temporarily unavailable. Please try again later."和"Retry"，地址仍是 `/users/list?x=1`，`sessionStorage` 里令牌还在；把 `/me` 换成连接失败再点"Retry"，仍是提示；恢复后点"Retry"，进入应用，地址不变，菜单和用户列表正常；控制台没有令牌。用完停了开发服务。
+
+## 记录项（2）
+
+1. 有令牌但 `GET /me` 回后端自己的错误（例如 500 带信封、`INTERNAL_ERROR`）时，刷新仍会去登录页：`src/session/loadSession.ts` 的 `isServiceUnreachable(error) ? … : {}`。触发：以有效令牌打开任何页面，把 `/me` 换成 `500` 带 `INTERNAL_ERROR` 的 JSON，刷新；结果是被送到登录页，令牌仍在，再刷新一次后端恢复就回来。我按评审者给的范围（网关页、网络、超时）做，没有把后端自己的 5xx 算进去，因为 403 之类不该说"服务暂时不可用"；5xx 要不要算是产品上的取舍，建议算进去（500、`INTERNAL_ERROR`、`INVALID_RESPONSE` 同样不是"已退出"），改动只在 `isServiceUnreachable` 一处，要先由负责人确认。
+2. 菜单和页头在提示期间不画，而 404 页（`noFound`）没有被门卫包住：`src/app.tsx` 的 `noFound: <NotFoundPage />`。触发：令牌在、`/me` 读不到时打开一个不存在的路径，显示 404 页而不是提示。这条在读不到账号时本来就显示 404（原来未登录也是），只影响打错地址的人；建议和上一条一起处理。
+
+## 未运行（3）
+
+全量测试和构建（按规矩留到全部任务做完后跑一次）；暗色模式下提示页的对比度没有逐项核对（用的是 antd 的 `Result` 和主按钮，随主题）；阿拉伯语、泰语等右到左或长文字界面下的提示页没有看（提示只用 zh-CN 和 en-US 两种界面语言，文字来自已有的键，没有数据内容）。
+
+## 改动的文件
+
+`src/pages/notifications/SendModal.tsx`、`src/pages/notifications/send.test.tsx`、`src/request/errors.ts`、`src/request/errors.test.ts`、`src/session/loadSession.ts`、`src/session/loadSession.test.tsx`、`src/session/SessionGate.tsx`、`src/session/SessionGate.test.tsx`（新）、`src/session/ServiceUnavailable.tsx`（新）、`src/session/state.ts`、`src/app.tsx`、`src/app.test.tsx`。没有碰共享的语言文件、`tests/`、`config/`。

@@ -1,8 +1,8 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { envelope, jsonResponse, stubFetch } from '../../tests/httpStubs';
+import { envelope, jsonResponse, stubFetch, textResponse } from '../../tests/httpStubs';
 import { resetUmiStub, setTestInitialState } from '../../tests/stubs/umi-max';
-import { resetSessionState, setToken } from '../request/session';
+import { getToken, resetSessionState, setToken } from '../request/session';
 import { loadSession } from './loadSession';
 import { useAdminMeta } from './useSession';
 
@@ -78,12 +78,65 @@ describe('loadSession', () => {
     expect(sessionStorage.getItem('avatar-admin.token')).toBeNull();
   });
 
-  it('is empty when the account cannot be read for another reason', async () => {
+  it.each([502, 503, 504])(
+    'says the service is unavailable, and keeps the token, when the gateway answers %i with its own page',
+    async (status) => {
+      setToken('tok');
+      const calls = stubFetch(() => textResponse(status, '<html>gateway</html>'));
+      const state = await loadSession();
+      expect(state).toEqual({ unavailable: true });
+      expect(sessionStorage.getItem('avatar-admin.token')).toBe('tok');
+      expect(getToken()).toBe('tok');
+      expect(calls.map((c) => c.url)).toEqual(['/api/admin/me']);
+    },
+  );
+
+  it('says the service is unavailable, and keeps the token, when the network fails', async () => {
     setToken('tok');
     stubFetch(() => {
-      throw new TypeError('offline');
+      throw new TypeError('offline https://secret.example/me?token=tok');
     });
+    const state = await loadSession();
+    expect(state).toEqual({ unavailable: true });
+    expect(JSON.stringify(state)).not.toContain('tok');
+    expect(getToken()).toBe('tok');
+  });
+
+  it('says the service is unavailable, and keeps the token, when the answer does not come in time', async () => {
+    vi.useFakeTimers();
+    try {
+      setToken('tok');
+      stubFetch(
+        ({ init }) =>
+          new Promise<Response>((_, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError')),
+            );
+          }),
+      );
+      const pending = loadSession();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(await pending).toEqual({ unavailable: true });
+      expect(getToken()).toBe('tok');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('is empty (not unavailable) when the backend itself answers with another error', async () => {
+    setToken('tok');
+    stubFetch(() => jsonResponse(500, envelope('INTERNAL_ERROR')));
     expect(await loadSession()).toEqual({});
+    stubFetch(() => jsonResponse(403, envelope('ADMIN_FORBIDDEN')));
+    expect(await loadSession()).toEqual({});
+  });
+
+  it('is empty, not unavailable, when the token was refused: nothing to retry', async () => {
+    setToken('old');
+    stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
+    const state = await loadSession();
+    expect(state.unavailable).toBeUndefined();
+    expect(getToken()).toBeNull();
   });
 });
 

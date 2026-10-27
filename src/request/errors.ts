@@ -63,6 +63,34 @@ export function timeoutError(): ApiError {
   });
 }
 
+/**
+ * True when a failed write may nevertheless have been carried out: no answer came back (network,
+ * time limit), or the answer was the gateway's own page or something that is not the envelope. Only
+ * an answer of the backend itself says what happened to the request. Anyone who shows "not done,
+ * try again" for such a failure invites a repeat of something that may have been done.
+ */
+export function isOutcomeUnknown(error: ApiError): boolean {
+  // `httpStatus` is 0 when there was no answer: the network failed or the time limit ran out.
+  return (
+    error.httpStatus === 0 ||
+    error.code === 'GATEWAY_UNAVAILABLE' ||
+    error.code === 'INVALID_RESPONSE'
+  );
+}
+
+/**
+ * True when no usable answer came from the service: the network failed, the time ran out, or the
+ * gateway's own "unavailable" page came back. Different from the backend refusing a request.
+ */
+export function isServiceUnreachable(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.code === 'NETWORK_ERROR' ||
+      error.code === 'REQUEST_TIMEOUT' ||
+      error.code === 'GATEWAY_UNAVAILABLE')
+  );
+}
+
 export function abortError(): DOMException {
   return new DOMException('The request was aborted.', 'AbortError');
 }

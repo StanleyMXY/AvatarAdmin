@@ -20,6 +20,7 @@ import {
 } from '../../components/LinkTargetField';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { isOutcomeUnknown } from '../../request/errors';
 import { sendNotifications } from '../../services/notifications';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
@@ -211,7 +212,7 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
       setFailure({
         text,
         notSent: failed.code === 'INVALID_REQUEST' && failed.httpStatus === 400,
-        maybeSent: failed.httpStatus === 0 || failed.code === 'INVALID_RESPONSE',
+        maybeSent: isOutcomeUnknown(failed),
         lines,
         accountLines,
       });

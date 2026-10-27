@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { USER, usersState } from '../../../mock/_core/usersData';
 import notificationsMock from '../../../mock/notifications.mock';
-import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
+import { envelope, jsonResponse, stubFetch, textResponse } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import enUS from '../../locales/en-US';
@@ -686,6 +686,56 @@ describe('sending', () => {
     expect(
       within(dialog).queryByText('This batch was not sent: not one notification was written.'),
     ).toBeNull();
+  });
+
+  it.each([502, 503, 504])(
+    'when the gateway answers %i with its own page it says it is not known whether the batch went out, and offers no plain "try later"',
+    async (status) => {
+      const calls = stubFetch(async ({ url }) =>
+        new URL(url, 'http://x').pathname.endsWith('/send')
+          ? textResponse(status, '<html>gateway</html>')
+          : jsonResponse(200, envelope('200', { items: [], total: 0 })),
+      );
+      const user = userEvent.setup();
+      renderPage(<NotificationsPage />);
+      const dialog = await openDialog(user);
+      fill(dialog);
+      await user.click(submit(dialog));
+      expect(
+        await within(dialog).findByText(/it is not known whether this batch was sent/),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).queryByText('This batch was not sent: not one notification was written.'),
+      ).toBeNull();
+      expect(calls.filter((c) => c.url.endsWith('/send'))).toHaveLength(1);
+    },
+  );
+
+  it('when the request ran out of time it says it is not known whether the batch went out', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const calls = stubFetch(({ url, init }) =>
+        new URL(url, 'http://x').pathname.endsWith('/send')
+          ? new Promise<Response>((_, reject) => {
+              init.signal?.addEventListener('abort', () =>
+                reject(new DOMException('aborted', 'AbortError')),
+              );
+            })
+          : Promise.resolve(jsonResponse(200, envelope('200', { items: [], total: 0 }))),
+      );
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderPage(<NotificationsPage />);
+      const dialog = await openDialog(user);
+      fill(dialog);
+      await user.click(submit(dialog));
+      await waitFor(() => expect(calls.some((c) => c.url.endsWith('/send'))).toBe(true));
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(
+        await within(dialog).findByText(/it is not known whether this batch was sent/),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows the words of another refusal (no permission) and keeps the dialog', async () => {
