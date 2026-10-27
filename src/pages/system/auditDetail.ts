@@ -204,7 +204,8 @@ const TEXT_PAIR = new RegExp(
   'giu',
 );
 // "https://user:secret@host/": the part after the colon of the user information.
-const ADDRESS_USER = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]*:)([^\s@/]+)(@)/gi;
+// The parts are bounded so that the search stays linear on a long text.
+const ADDRESS_USER = /(\b[a-z][a-z0-9+.-]{0,30}:\/\/[^\s:@/]{0,100}:)([^\s@/]+)(@)/gi;
 // A value that is a flag, or a number of a key that counts something, is not a credential.
 const FLAG = /^(?:true|false|null|undefined)$/i;
 const COUNTING_WORDS = new Set([

@@ -311,14 +311,18 @@ describe('text that carries a credential: 33 shapes', () => {
     expect(cases.length).toBeGreaterThanOrEqual(33);
   });
 
-  it('does not take long on a very long text with no spaces or with many separators', () => {
+  it('stays linear on a very long text with no spaces, with many separators or with a value that never ends', () => {
+    // a search that is quadratic in the length takes minutes on these; a linear one a fraction of a second
     const started = Date.now();
-    detailText('a'.repeat(50000));
-    detailText('a-'.repeat(25000));
-    detailText(`password=${'x'.repeat(50000)}`);
-    detailText(`{"password":"${'x'.repeat(50000)}`);
-    expect(Date.now() - started).toBeLessThan(2000);
-  });
+    detailText('a'.repeat(200000));
+    detailText('a-'.repeat(100000));
+    detailText('token '.repeat(40000));
+    detailText('token-'.repeat(40000));
+    detailText('http://u:'.repeat(30000));
+    detailText(`password=${'x'.repeat(200000)}`);
+    detailText(`{"password":"${'x'.repeat(200000)}`);
+    expect(Date.now() - started).toBeLessThan(10000);
+  }, 60000);
 
   it('keeps Arabic, Thai and emoji around a hidden value', () => {
     expect(detailText(`مرحبا password=hunter2 ก็ก็ ${String.fromCodePoint(0x1f600)}`)).toBe(
