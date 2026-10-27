@@ -1,0 +1,28 @@
+const messages: Record<string, string> = {
+  'stat.common.utcNotice': '统计日按 UTC 计算，和本地日期可能相差一天。',
+  'stat.common.query': '查询',
+  'stat.common.today': '今天（UTC）',
+  'stat.common.yesterday': '昨天（UTC）',
+  'stat.common.last7': '最近 7 天',
+  'stat.common.last30': '最近 30 天',
+  'stat.common.rangeTooLong': '一次最多查询 {days} 天',
+  'stat.common.platform': '平台',
+  'stat.common.platform.ALL': '全部',
+  'stat.common.platform.ANDROID': 'Android',
+  'stat.common.platform.IOS': 'iOS',
+  'stat.common.channel': '渠道包',
+  'stat.common.channelAll': '全部',
+  'stat.common.channelUnknown': '未知',
+  'stat.common.land.date': '日期（UTC）',
+  'stat.common.land.button': '重新落地该日',
+  'stat.common.land.done': '已重新落地 {date}',
+  'stat.common.land.hint': '重新计算所选 UTC 日的汇总。',
+  'stat.common.unit.percentPoint': '个百分点',
+  'stat.common.cohortDate': '注册日',
+  'stat.common.cohortSize': '人数',
+  'stat.common.dayN': '第 {n} 天',
+  'stat.common.backfilled': '回填值',
+  'stat.common.noPrevious': '没有对比数据',
+};
+
+export default messages;

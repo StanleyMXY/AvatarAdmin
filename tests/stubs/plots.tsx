@@ -4,15 +4,41 @@
  */
 type ChartProps = { data?: unknown; [key: string]: unknown };
 
-function ChartStub({ kind, data }: { kind: string; data: unknown }) {
-  return <div data-testid={`chart-${kind}`}>{JSON.stringify(data ?? [])}</div>;
+function ChartStub({ kind, data, config }: { kind: string; data: unknown; config: unknown }) {
+  return (
+    <div data-testid={`chart-${kind}`} data-config={JSON.stringify(config)}>
+      {JSON.stringify(data ?? [])}
+    </div>
+  );
 }
 
-export const Line = (props: ChartProps) => <ChartStub kind="line" data={props.data} />;
-export const Column = (props: ChartProps) => <ChartStub kind="column" data={props.data} />;
-export const Bar = (props: ChartProps) => <ChartStub kind="bar" data={props.data} />;
-export const Area = (props: ChartProps) => <ChartStub kind="area" data={props.data} />;
-export const Pie = (props: ChartProps) => <ChartStub kind="pie" data={props.data} />;
-export const Funnel = (props: ChartProps) => <ChartStub kind="funnel" data={props.data} />;
-export const Heatmap = (props: ChartProps) => <ChartStub kind="heatmap" data={props.data} />;
-export const DualAxes = (props: ChartProps) => <ChartStub kind="dual-axes" data={props.data} />;
+/** Everything a chart was given except its data, so tests can assert theme and axes. */
+const configOf = (props: ChartProps) => {
+  const { data: _data, ...rest } = props;
+  return rest;
+};
+
+export const Line = (props: ChartProps) => (
+  <ChartStub kind="line" data={props.data} config={configOf(props)} />
+);
+export const Column = (props: ChartProps) => (
+  <ChartStub kind="column" data={props.data} config={configOf(props)} />
+);
+export const Bar = (props: ChartProps) => (
+  <ChartStub kind="bar" data={props.data} config={configOf(props)} />
+);
+export const Area = (props: ChartProps) => (
+  <ChartStub kind="area" data={props.data} config={configOf(props)} />
+);
+export const Pie = (props: ChartProps) => (
+  <ChartStub kind="pie" data={props.data} config={configOf(props)} />
+);
+export const Funnel = (props: ChartProps) => (
+  <ChartStub kind="funnel" data={props.data} config={configOf(props)} />
+);
+export const Heatmap = (props: ChartProps) => (
+  <ChartStub kind="heatmap" data={props.data} config={configOf(props)} />
+);
+export const DualAxes = (props: ChartProps) => (
+  <ChartStub kind="dual-axes" data={props.data} config={configOf(props)} />
+);

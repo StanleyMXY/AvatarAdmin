@@ -1,0 +1,27 @@
+const messages: Record<string, string> = {
+  'menu.dashboard': '总览',
+  'menu.users': '用户',
+  'menu.moderation': '内容审核',
+  'menu.avatar': '形象与装扮',
+  'menu.complaints': '投诉',
+  'menu.sessions': '通话',
+  'menu.companionship': '养成管理',
+  'menu.subscriptions': '订阅与额度',
+  'menu.ads': '应用内广告',
+  'menu.push': '推送',
+  'menu.invite': '邀请',
+  'menu.activity': '活动管理',
+  'menu.campaign': '投放管理',
+  'menu.stats': '统计报表',
+  'menu.analytics': '埋点管理',
+  'menu.support': '客服',
+  'menu.memory': '记忆服务',
+  'menu.monitor': '系统监控',
+  'menu.cost': '成本',
+  'menu.config': '系统配置',
+  'menu.email': '邮件模板',
+  'menu.sms': '短信管理',
+  'menu.system': '系统管理',
+};
+
+export default messages;

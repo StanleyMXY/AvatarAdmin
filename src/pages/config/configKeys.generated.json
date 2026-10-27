@@ -1,0 +1,902 @@
+[
+  {
+    "key": "auth.access_ttl_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "auth.refresh_ttl_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "auth.refresh_reuse_grace_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "guest.call_minutes_total",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "auth.reset_token_ttl_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "admin.jwt_ttl_hours",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "admin.rate_limit_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.guest_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "guest.session_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "integrity.check_enabled",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.guest_per_device_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.register_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.email_otp_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.reset_confirm_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.deletion_confirm_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.api_per_account_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "internal.signature_window_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.sensitive_per_account_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.login_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "auth.login_max_failures_per_account",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "auth.login_failure_window_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "auth.password_max_length",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "auth.log_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "email.link_base_url",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "abuse.audit_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "tokens.cleanup_grace_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "maintenance.done_job_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "maintenance.resolved_alert_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "abuse.cluster_min_free_accounts",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "call.free_daily_alert_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "email.otp_ttl_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "email.otp_resend_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "email.otp_max_attempts",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "email.max_per_address_per_day",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.login_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.refresh_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.reset_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.push_token_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.chat_per_account_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.link_mail_per_email_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.public_deletion_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "persona.max_length",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.conversation_languages",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "upload.max_bytes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "voice.transcript_max_chars",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "generation.poll_interval_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "generation.voice_timeout_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "generation.voice_min_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "generation.voice_max_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "generation.avatar_timeout_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "generation.max_attempts",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "generation.reprepare_max_attempts",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "avatar.download_url_ttl_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "generation.mouth_open_min_area",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "generation.mouth_open_min_brightness",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "generation.ai_label_enabled",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "avatar.realistic_enabled",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "avatar.declaration_required",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "avatar.source_photo_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "avatar.deletion_due_hours",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "avatar.look_credit_price",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "render.cloud_enabled",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "retry.initial_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "retry.max_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "retry.max_attempts",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.history_max_limit",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.messages_max_batch",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.message_max_chars",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.turn_timeout_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.turn_lock_grace_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.ingest_timeout_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.sse_keepalive_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.turn_sweep_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.text_context_messages",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "attribution.link_base_url",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "attribution.play_store_url",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "attribution.other_platform_url",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "attribution.click_retention_days",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "attribution.fingerprint_window_hours",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "attribution.record_retention_days",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "attribution.cost_currency",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "attribution.cost_batch_max",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "attribution.click_expired_keep_days",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "ratelimit.attribution_click_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.attribution_claim_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.invite_event_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "events.max_batch",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "export.max_rows",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.export_per_admin_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "events.max_body_kb",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "events.rate_limit_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "events.ttl_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "recall.scan_interval_minutes",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "recall.local_send_hour",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "recall.window_minutes",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "recall.min_gap_hours",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "recall.inactive_hours",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "recall.streak_min_days",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "app.display_name",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "app.supported_locales",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "push.default_locale",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "push.schedule_scan_seconds",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "push.guest_token_retention_days",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "push.schedule_catchup_minutes",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "invite.reward_enabled",
+    "editPermission": "INVITE:CONFIG"
+  },
+  {
+    "key": "invite.inviter_reward_credits",
+    "editPermission": "INVITE:CONFIG"
+  },
+  {
+    "key": "invite.invitee_reward_credits",
+    "editPermission": "INVITE:CONFIG"
+  },
+  {
+    "key": "invite.reward_trigger",
+    "editPermission": "INVITE:CONFIG"
+  },
+  {
+    "key": "invite.first_call_min_seconds",
+    "editPermission": "INVITE:CONFIG"
+  },
+  {
+    "key": "invite.max_rewarded_per_inviter",
+    "editPermission": "INVITE:CONFIG"
+  },
+  {
+    "key": "invite.chain_max_depth",
+    "editPermission": "INVITE:CONFIG"
+  },
+  {
+    "key": "tasks.sweep_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "invite.reward_start_at",
+    "editPermission": "INVITE:CONFIG"
+  },
+  {
+    "key": "invite.reward_end_at",
+    "editPermission": "INVITE:CONFIG"
+  },
+  {
+    "key": "companionship.text_burst_minutes",
+    "editPermission": "COMPANIONSHIP:CONFIG"
+  },
+  {
+    "key": "companionship.stage_thresholds",
+    "editPermission": "COMPANIONSHIP:CONFIG"
+  },
+  {
+    "key": "milestone.days",
+    "editPermission": "COMPANIONSHIP:CONFIG"
+  },
+  {
+    "key": "moderation.block_score",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "moderation.review_score",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "moderation.call_timeout_seconds",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "memory.tei_allowed_hosts",
+    "editPermission": "MEMORY:MODEL_REGISTER"
+  },
+  {
+    "key": "moderation.text_rules",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "moderation.text_rules_max",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "moderation.age_check_enabled",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "moderation.underage_reject_below_age",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "moderation.face_min_det_score",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "moderation.generated_output_review",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "complaint.likeness_due_hours",
+    "editPermission": "COMPLAINT:MANAGE"
+  },
+  {
+    "key": "complaint.retention_days",
+    "editPermission": "COMPLAINT:MANAGE"
+  },
+  {
+    "key": "support.rate_limit_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "export.min_interval_hours",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "export.ttl_hours",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "export.job_timeout_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "export.lease_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "export.max_attempts",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "export.sweep_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "export.memory_timeout_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "deletion.alert_after_failures",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "deletion.web_token_ttl_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "deletion.grace_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "deletion.abuse_marker_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "deletion.lease_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "deletion.tombstone_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "pipeline_metrics.retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "monitor.max_range_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "monitor.max_points",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "usage.max_batch",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "usage.max_tokens_per_record",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "usage.max_quantity_per_record",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "entitlement.limit_max",
+    "editPermission": "SUBSCRIPTION:CONFIG"
+  },
+  {
+    "key": "credits.spend_max_quantity",
+    "editPermission": "SUBSCRIPTION:CONFIG"
+  },
+  {
+    "key": "usage.rate_limit_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "usage.retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "usage_price.sync_enabled",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "usage_price.sync_hour_utc",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "usage_price.default_currency",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "usage_price.allowed_currencies",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "usage_price.max_bands",
+    "editPermission": "COST:PRICE"
+  },
+  {
+    "key": "usage_price.source_url",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "subscription.accept_sandbox",
+    "editPermission": "SUBSCRIPTION:CONFIG"
+  },
+  {
+    "key": "subscription.reconcile_interval_minutes",
+    "editPermission": "SUBSCRIPTION:CONFIG"
+  },
+  {
+    "key": "subscription.orphan_retention_days",
+    "editPermission": "SUBSCRIPTION:CONFIG"
+  },
+  {
+    "key": "subscription.unacked_alert_hours",
+    "editPermission": "SUBSCRIPTION:CONFIG"
+  },
+  {
+    "key": "entitlement.expiry_scan_minutes",
+    "editPermission": "SUBSCRIPTION:CONFIG"
+  },
+  {
+    "key": "credits.unconsumed_alert_hours",
+    "editPermission": "SUBSCRIPTION:CONFIG"
+  },
+  {
+    "key": "session.deadline_scan_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "session.max_duration_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "session.agent_join_timeout_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "session.agent_join_retries",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "session.user_join_timeout_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "session.user_leave_grace_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "session.liveness_check_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.sync_overlap_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "push.task_lease_minutes",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "push.task_image_retention_days",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "chat.model_tiers_allowed",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "stats.land_window_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "stats.land_interval_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "admin.totp_enroll_ttl_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "admin.totp_max_failures",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "admin.totp_lockout_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "stats.max_range_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "analytics.live_max_range_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "admin.totp_required",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "admin.password_min_length",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "admin.permission_cache_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.admin_login_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "moderation.content_url_ttl_seconds",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "upload.push_image_max_bytes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ads.enabled",
+    "editPermission": "ADS:PLACEMENT"
+  },
+  {
+    "key": "ads.preload_enabled",
+    "editPermission": "ADS:PLACEMENT"
+  },
+  {
+    "key": "ads.preload_ttl_minutes",
+    "editPermission": "ADS:PLACEMENT"
+  },
+  {
+    "key": "ads.skip_after_seconds",
+    "editPermission": "ADS:PLACEMENT"
+  },
+  {
+    "key": "ads.force_close_seconds",
+    "editPermission": "ADS:PLACEMENT"
+  },
+  {
+    "key": "ads.history_feed_interval",
+    "editPermission": "ADS:PLACEMENT"
+  },
+  {
+    "key": "ads.call_end_interval",
+    "editPermission": "ADS:PLACEMENT"
+  },
+  {
+    "key": "ads.log_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ads.creative_aspect_tolerance_percent",
+    "editPermission": "ADS:PLACEMENT"
+  },
+  {
+    "key": "ads.reward_complete_grace_seconds",
+    "editPermission": "ADS:PLACEMENT"
+  },
+  {
+    "key": "upload.orphan_hours",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "upload.ad_media_max_bytes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "upload.public_base_url",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "upload.render_asset_max_bytes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "auth.phone_login_enabled",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.otp_ttl_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.otp_resend_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.otp_max_attempts",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.max_per_phone_per_day",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.otp_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.allowed_country_codes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.daily_global_cap",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.send_timeout_ms",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.record_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.dlr_max_skew_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.dlr_pending_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "sms.test_per_day",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "appversion.cache_seconds",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "upload.apk_max_bytes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.public_config_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.likeness_complaint_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.sms_dlr_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "notification.max_recipients",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "notification.read_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "notification.unread_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "notification.max_per_account",
+    "editPermission": "CONFIG:MANAGE"
+  }
+]

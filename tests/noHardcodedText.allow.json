@@ -1,0 +1,12 @@
+[
+  {
+    "file": "src/pages/companionship/index.tsx",
+    "text": "BONDING",
+    "reason": "The name of the stage in the configuration value companionship.stage_thresholds (a protocol key, not wording)."
+  },
+  {
+    "file": "src/pages/companionship/index.tsx",
+    "text": "CLOSE",
+    "reason": "The name of the stage in the configuration value companionship.stage_thresholds (a protocol key, not wording)."
+  }
+]

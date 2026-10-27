@@ -1,0 +1,27 @@
+const messages: Record<string, string> = {
+  'menu.dashboard': 'Overview',
+  'menu.users': 'Users',
+  'menu.moderation': 'Content moderation',
+  'menu.avatar': 'Avatars and cosmetics',
+  'menu.complaints': 'Complaints',
+  'menu.sessions': 'Calls',
+  'menu.companionship': 'Companionship',
+  'menu.subscriptions': 'Subscriptions and credits',
+  'menu.ads': 'In-app ads',
+  'menu.push': 'Push',
+  'menu.invite': 'Invites',
+  'menu.activity': 'Activities',
+  'menu.campaign': 'Campaigns',
+  'menu.stats': 'Statistics',
+  'menu.analytics': 'Analytics',
+  'menu.support': 'Support',
+  'menu.memory': 'Memory service',
+  'menu.monitor': 'Monitoring',
+  'menu.cost': 'Costs',
+  'menu.config': 'System settings',
+  'menu.email': 'Email templates',
+  'menu.sms': 'SMS',
+  'menu.system': 'System',
+};
+
+export default messages;

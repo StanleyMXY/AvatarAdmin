@@ -1,7 +1,7 @@
 /**
  * Build-time variables. Read from the process environment (Umi loads `.env` and `.env.local`
  * before this file is evaluated). They are injected into the bundle through `define` in
- * `config.ts`, so application code reads them as plain globals declared in `src/typings.d.ts`.
+ * `config.ts`, so application code reads them through `src/buildVars.ts`, the only file that names the globals.
  *
  * Defaults follow the design spec (section 7 and section 11). Nothing here is a secret.
  */
@@ -54,9 +54,10 @@ export const buildVars = {
   ADMIN_QUALITY_MAX_SLOW_SHARE: readFraction('ADMIN_QUALITY_MAX_SLOW_SHARE', 0.05),
 } as const;
 
-/** Shape expected by Umi's `define`: every value JSON-encoded so strings stay strings. */
+/**
+ * The values for Umi's `define`. Umi encodes each value as JSON itself, so they are passed as they
+ * are: encoding them here too would put quote marks inside every string in the browser.
+ */
 export function toDefine(vars: Record<string, string | number>): Record<string, string | number> {
-  return Object.fromEntries(
-    Object.entries(vars).map(([key, value]) => [key, JSON.stringify(value)]),
-  );
+  return { ...vars };
 }

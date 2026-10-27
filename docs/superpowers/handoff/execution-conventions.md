@@ -29,6 +29,7 @@
 | 4 | `tests/stubs/umi-max.tsx` 现在只导出 `IntlProvider`、`useIntl`、`history`；任务 6–8 补 `useAccess`、`useModel`、`useLocation`、`Link`、`getLocale`、`setLocale`；模块任务不改它，需要时 NEEDS_CONTEXT |
 | 5 | pre-commit 钩子 = lint-staged（对暂存文件跑 biome）+ `scripts/typecheck-staged`（tsc 跑全项目，只在暂存文件里有诊断时失败）。整个项目的 tsc 由每批任务做完后跑一次，任务 32 再跑一次 |
 | 6 | 任务 6 的"禁止写死文字"扫描：外部 https 地址规则跳过 `*.test.*`、`mock/`、`tests/`、`docs/`；禁用名称和固定 token 规则对除 `docs/` 外的所有文件生效 |
+| 6a | 任务 6 的"禁止写死文字"扫描的放行清单：共用的 `tests/noHardcodedText.allow.json` 只放地基文件的条目；模块任务（11–31）把自己页面的条目放在自己目录下的 `hardcodedText.allow.json`（扫描会合并读取），每条要写理由，不用的条目会让测试失败；模块任务不改共用清单 |
 | 7 | 任务 9 建 `services/channels` 和 `mock/channels.mock.ts`（读接口）；任务 29 可以改这两个文件加写接口，别的任务不碰 |
 | 8 | 任务 10 的测试只断言配置键到页面的映射覆盖；任务 32 断言承载配置的路由都存在 |
 | 9 | 模块任务 11–31 可以并行（见交接文档里的执行方式），每个并行的任务只提交自己路径；地基任务 1–10 严格按顺序 |

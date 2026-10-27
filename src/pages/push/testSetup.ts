@@ -1,0 +1,124 @@
+// Shared by the page tests of the push module: signs in as one of the preset administrators of the
+// mock backend, tells the Umi stand-in who that is, and lets the upload control reach the mock
+// backend (the real upload uses XMLHttpRequest, which a test does not have).
+import { within as scoped, screen, waitFor } from '@testing-library/react';
+import type userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
+import { META_DEFAULTS } from '../../../mock/_core/meta';
+import { pushState, resetPushStore } from '../../../mock/_core/pushData';
+import { resetStore } from '../../../mock/_core/store';
+import { adminOf } from '../../../mock/_core/testing';
+import { signInAs } from '../../../tests/mockBackend';
+import { resetUmiStub, setTestAccess, setTestInitialState } from '../../../tests/stubs/umi-max';
+import access from '../../access';
+import { apiRequest } from '../../request/apiClient';
+
+/** The values of `GET /meta` with three supported languages. */
+export const META = { ...META_DEFAULTS, supportedLocales: ['en', 'th', 'ar'] };
+
+export const uploads: { url: string; name: string; size: number }[] = [];
+
+/** What `vi.mock('../../request/upload', ...)` returns: the upload goes to the mock backend and hands back its record id. */
+export const uploadModule = {
+  uploadFile: async (options: { url: string; file: File }) => {
+    uploads.push({ url: options.url, name: options.file.name, size: options.file.size });
+    return apiRequest({ method: 'POST', url: options.url });
+  },
+};
+
+export function resetAll(): void {
+  resetUmiStub();
+  resetStore();
+  resetPushStore();
+  uploads.length = 0;
+}
+
+/**
+ * Signs in as `username`; `codes` replaces the preset's permissions; `meta` replaces the values of
+ * `GET /meta`. The mock backend is told the same supported languages as `meta`, so that what the
+ * page warns about and what the backend refuses agree.
+ */
+export function signIn(
+  username: string,
+  options: { codes?: string[]; meta?: Record<string, unknown> } = {},
+) {
+  resetAll();
+  const admin = adminOf(username);
+  if (options.codes) admin.permissions = options.codes as typeof admin.permissions;
+  signInAs(username);
+  const me = {
+    id: admin.id,
+    username,
+    superAdmin: admin.superAdmin,
+    mustChangePassword: false,
+    permissions: admin.permissions,
+  };
+  const meta = options.meta ?? META;
+  if (Array.isArray(meta.supportedLocales)) {
+    pushState.supportedLocales = meta.supportedLocales as string[];
+  }
+  setTestAccess(access({ me }));
+  setTestInitialState({ me, meta });
+  return admin;
+}
+
+/** Object URLs for the preview of a chosen picture (happy-dom has none). */
+export function stubObjectUrls(): void {
+  (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => 'blob:preview');
+  (URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = vi.fn();
+}
+
+/** Opens an Ant Design select by its label and clicks the option with this text. */
+export async function chooseOption(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string | RegExp,
+  optionText: string | RegExp,
+  within: HTMLElement | Document = document,
+) {
+  const box = within === document ? screen : scoped(within as HTMLElement);
+  await user.click(box.getByRole('combobox', { name: label }));
+  const options = await screen.findAllByText(optionText, {
+    selector: '.ant-select-item-option-content',
+  });
+  await user.click(options[options.length - 1]);
+}
+
+/**
+ * Resolves once every dialog has started to close or is gone. happy-dom never fires the animation
+ * events that remove a closed Ant Design dialog, so a dialog that is closing keeps its role for good.
+ */
+export const dialogsClosed = () =>
+  waitFor(() => {
+    for (const dialog of document.querySelectorAll('.ant-modal')) {
+      expect(dialog.className, 'a dialog is still open').toMatch(/-leave|-hidden/);
+    }
+  });
+
+/** The calls that changed something, not counting the uploads of files (they only hand out an id). */
+export const writesOf = <T extends { method: string; url: string }>(calls: T[]) =>
+  calls.filter((c) => c.method !== 'GET' && !c.url.startsWith('/api/admin/uploads/'));
+
+/**
+ * Makes every write of the page wait until `release()`, so that a second press can come while the
+ * first request is still on its way. Call it after `useMockBackend`. `started()` counts the writes
+ * that have been handed to the network so far.
+ */
+export function holdWrites() {
+  const real = globalThis.fetch;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let started = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL, init: RequestInit = {}) => {
+      if ((init.method ?? 'GET').toUpperCase() !== 'GET') {
+        started += 1;
+        await gate;
+      }
+      return real(input, init);
+    }),
+  );
+  return { release, started: () => started };
+}

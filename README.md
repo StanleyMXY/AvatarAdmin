@@ -35,10 +35,29 @@ backend contract live in the AvatarApp repository and are not copied here.
 `postinstall` runs `max setup` (generates `src/.umi`, which is git-ignored); `prepare` installs the
 husky hooks.
 
+## Mock backend
+
+`npm run dev:mock` serves `/api/admin/**` from `mock/` (Umi's mock loader, development server only, never part of the build). The state is in memory; it survives saving a mock file (the loader reads the files again, the state stays) and starts again when the dev server restarts. There is no proxy in this mode: an endpoint that has no mock is answered with the app's HTML page (the request layer reports `INVALID_RESPONSE`) instead of reaching whatever listens on `ADMIN_API_PROXY_TARGET`. `npm run dev:api` turns it off (`MOCK=none`) and proxies `/api` to `ADMIN_API_PROXY_TARGET`; the front end code is the same in both modes. The loader skips `mock/_core/**` (helpers) and `mock/**/*.test.ts`.
+
+**The accounts, passwords and the verification code below exist only in the mock backend. They are fakes, not secrets, and the real backend does not know them.**
+
+| User name | Password | State | Permissions |
+|---|---|---|---|
+| `root` | `mock-password-root` | super administrator | all 79 codes |
+| `support` | `mock-password-support` | normal | sessions, users (view, ban), support, complaints (view), notifications (view), statistics (view) |
+| `finance` | `mock-password-finance` | normal | subscriptions, credits, finance statistics, costs and prices, statistics (view, export, re-land) |
+| `reviewer` | `mock-password-reviewer` | normal | moderation (view, review, rules), complaints (view, manage) |
+| `newhire` | `mock-password-newhire` | must change the password first | users (view), statistics (view) |
+| `fresh` | `mock-password-fresh` | has no authenticator yet (login answers `ENROLL_REQUIRED`) | statistics (view), monitor (view) |
+
+The verification code is `000000` for every account, also for the first enrollment. Five wrong codes in a row lock the user name for 5 minutes (429 `RATE_LIMITED` with `data.retryAfterSeconds`), the defaults of `admin.totp_max_failures` and `admin.totp_lockout_minutes`; on enrollment the same count voids the enrollment token. The contract does not say whether the lock answers on the fifth wrong code or the sixth attempt, nor whether the 429 carries `retryAfterSeconds` (open question in `docs/contract-requests/2026-10-26-admin-frontend-auth-and-permissions.md`). `GET /api/admin/meta` returns the defaults of contract 17.5 (so `supportedLocales` is `["en"]`) and the upload limits of the backend's third reply. `GET /api/admin/permissions` is the built-in permission tree, derived from spec table 5.0 (`scripts/permissionTree.ts`; the data is `mock/_core/permissionTree.generated.json`, rewritten with `npm run gen:permission-tree -- <spec path>`, and a test keeps the two equal). A code that table 5.0 does not tie to one page (`COSMETIC:GRANT`, `STATS:EXPORT`, `STATS:LAND`) is put under the page of its own area; that is an inference, asked in the same contract request.
+
+Each module's mock file exports `{ 'METHOD /api/admin/path': handler }`; wrap handlers with `guard(permission, handler)` from `mock/_core/auth.ts`, which gives the contract's 401 and 403 answers and `req.admin`. Sample data comes from `mock/_core/fixtures.ts` (Thai, Arabic, Indonesian, Vietnamese, Spanish, English and Chinese, with long strings without spaces and emoji). Tests call a handler directly with `call` from `mock/_core/testing.ts`; no server is started.
+
 ## Build variables
 
 Set in the environment or in `.env.local` (git-ignored; copy `.env.example`). They are injected at
-build time by `config/buildVars.ts` and declared in `src/typings.d.ts`. Invalid values (a
+build time by `config/buildVars.ts` and read through `src/buildVars.ts`. Invalid values (a
 non-hex color, a logo that is not a same-origin path, a threshold outside 0..1) fail the build.
 There are no secrets in this repository.
 
@@ -50,6 +69,30 @@ There are no secrets in this repository.
 | `ADMIN_QUALITY_MIN_SUCCESS_RATE`                                       | `0.95`                                  |
 | `ADMIN_QUALITY_MAX_SLOW_SHARE`                                         | `0.05`                                  |
 | `ADMIN_API_PROXY_TARGET` (dev only)                                    | `http://127.0.0.1:8080`                 |
+
+## Deployment
+
+`docs/deploy.md` describes how to serve the build: same-domain reverse proxy (`/api/` to the
+backend, every other path falls back to `index.html`), a complete nginx example, cache headers for
+the hashed files, the build variables above and the checks after a release.
+
+## Checks before a release
+
+Run these from the repository root and keep the output:
+
+```sh
+npm run lint
+npm run tsc
+npm test
+npm run build
+npm run check:routes -- <spec path>
+npm run check:codes -- <spec path> <contract path>
+npm run check:config-keys -- <contract path>
+```
+
+The spec and the contract are the snapshots in `docs/shared-snapshots/` (see the README there);
+`check:codes` reads the exclusions from `docs/superpowers/handoff/permission-code-exclusions.txt`.
+`grep -r "mock-password" dist/` must find nothing: the fake backend is not part of the build.
 
 ## Why these choices
 

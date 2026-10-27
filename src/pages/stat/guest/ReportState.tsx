@@ -1,0 +1,30 @@
+import { useIntl } from '@umijs/max';
+import { Alert, Button, Spin } from 'antd';
+
+/** The failure bar (with a retry) or the spinner of a report that is being read. */
+export function ReportState({
+  failure,
+  loading,
+  onRetry,
+}: {
+  failure: string | null;
+  loading: boolean;
+  onRetry: () => void;
+}) {
+  const intl = useIntl();
+  if (failure) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        title={intl.formatMessage({ id: 'pages.common.loadFailed' }, { message: failure })}
+        action={
+          <Button size="small" onClick={onRetry}>
+            {intl.formatMessage({ id: 'pages.common.retry' })}
+          </Button>
+        }
+      />
+    );
+  }
+  return loading ? <Spin /> : null;
+}
