@@ -145,7 +145,7 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
         remark: null,
       },
     ]);
-    expect(await screen.findByText('Imported 3 rows')).toBeInTheDocument();
+    expect(await screen.findByText('Imported 3 rows: 3 added, 0 overwritten')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(
       campaignState.costs.filter((c) => c.statDate >= '2026-09-01' && c.statDate <= '2026-09-03'),
@@ -164,6 +164,37 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
     await waitFor(() =>
       expect(campaignState.costs.find((c) => c.id === existing.id)?.amount).toBe(777.77),
     );
+  });
+
+  it('writes after the import how many rows were added and how many overwrote a cost', async () => {
+    const { user } = await open();
+    const [first, second] = campaignState.costs;
+    const codeOf = (campaignId: string) =>
+      campaignState.campaigns.find((c) => c.id === campaignId)?.code;
+    await putJson(
+      jsonRows([
+        row({ campaignCode: codeOf(first.campaignId), statDate: first.statDate, amount: 1 }),
+        row({ campaignCode: codeOf(second.campaignId), statDate: second.statDate, amount: 2 }),
+        row({ statDate: '2026-01-05' }),
+        row({ statDate: '2026-01-06' }),
+        row({ statDate: '2026-01-07' }),
+      ]),
+    );
+    await user.click(await importButton());
+    expect(await screen.findByText('Imported 5 rows: 3 added, 2 overwritten')).toBeInTheDocument();
+  });
+
+  it('writes only the number of rows when the backend does not say how many were overwritten', async () => {
+    const { user } = await open();
+    overrideFetch(({ url, method }) =>
+      url.pathname.endsWith('/attribution/costs/batch') && method === 'POST'
+        ? jsonAnswer(200, '200', null)
+        : undefined,
+    );
+    await putJson(jsonRows([row(), row({ statDate: '2026-01-05' })]));
+    await user.click(await importButton());
+    expect(await screen.findByText('Imported 2 rows')).toBeInTheDocument();
+    expect(screen.queryByText(/overwritten/)).not.toBeInTheDocument();
   });
 
   it('lists each bad row with its line and the reason in words, imports nothing, and keeps the button off', async () => {

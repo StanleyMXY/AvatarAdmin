@@ -156,6 +156,29 @@ describe('the costs', () => {
     expect(calls[0].url).toBe('/api/admin/attribution/costs/batch');
     expect(body(calls[0])).toEqual(rows);
   });
+
+  it('hands back how many rows were written and how many of them overwrote a cost, when the answer says so', async () => {
+    answer({ imported: 5, overwritten: 2 });
+    expect(await batchCosts([])).toEqual({ imported: 5, overwritten: 2 });
+    answer({ imported: 0, overwritten: 0 });
+    expect(await batchCosts([])).toEqual({ imported: 0, overwritten: 0 });
+  });
+
+  it('hands back nothing when the answer has no counts, or counts that cannot be right', async () => {
+    for (const data of [
+      null,
+      {},
+      { imported: 5 },
+      { imported: '5', overwritten: '2' },
+      { imported: 3, overwritten: 4 },
+      { imported: -1, overwritten: 0 },
+      { imported: 2.5, overwritten: 1 },
+      { imported: 3, overwritten: null },
+    ]) {
+      answer(data);
+      expect(await batchCosts([]), JSON.stringify(data)).toBeNull();
+    }
+  });
 });
 
 describe('the reports', () => {

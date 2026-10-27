@@ -487,6 +487,8 @@ describe('the batch of costs', () => {
     ]);
     expect(result.status).toBe(200);
     expect(campaignState.costs).toHaveLength(count + 1);
+    // the rows written, and how many of them overwrote a cost (the page writes the others as added)
+    expect(result.body.data).toEqual({ imported: 2, overwritten: 1 });
     const overwritten = campaignState.costs.find((c) => c.id === existing.id);
     expect(overwritten).toMatchObject({ amount: 777.77, remark: 'over' });
   });

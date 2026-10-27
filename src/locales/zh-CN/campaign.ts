@@ -177,6 +177,7 @@ const messages: Record<string, string> = {
   'campaign.batch.errors.line': '第 {line} 行：{reason}',
   'campaign.batch.import': '导入',
   'campaign.batch.imported': '已导入 {count} 行',
+  'campaign.batch.importedSplit': '已导入 {count} 行：新增 {added} 行，覆盖 {overwritten} 行',
   'campaign.batch.refused': '后端拒绝了这一批，没有导入任何行：',
   'campaign.batch.refused.ref': '{ref}：{reason}',
   'campaign.batch.template.remark1': '示例第一行',

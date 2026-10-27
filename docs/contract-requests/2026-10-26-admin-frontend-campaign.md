@@ -26,7 +26,7 @@
 2. **`from`、`to` 的写法。** **暂定：** `YYYY-MM-DD`（UTC 日，含两端），页面默认最近 30 天。
 3. **单笔 `POST`、`PUT` 的请求体。** 契约没写。**暂定：** `{campaignId, statDate, amount, currency, remark}`，`campaignId` 是字符串，`amount` 是 JSON 数（页面先检查：不小于 0、最多两位小数、整数位不超过 13 位，保证 JSON 数不丢精度）；`PUT` 也带 `campaignId`、`statDate`（值不变，页面里是只读的）。页面读不到 `attribution.cost_currency` 时不带 `currency`。`remark` 为空时传 `null`。
 4. **`POST /attribution/costs/batch` 的响应和错误细节。** **暂定：** 成功时页面不读响应，提示用自己的行数。失败时（400 `INVALID_REQUEST`）页面逐条显示 `data.details`：`ref` 原样显示，`reason` 显示 `reason.<码>` 的译文（没有译文就显示码本身，不显示后端的 `message`）。契约没有写 `ref` 的格式。**暂定假后端：** 某一行的问题是 `"<行下标，从 0 起>.<字段>"`（如 `"2.campaignCode"`，投放账户编码不存在用 `OUT_OF_RANGE`），批内重复的 `(campaignCode, statDate)` 是 `"<后一行的下标>"`，条数超限或不是数组是 `"body"`。请给出真实的格式和原因码；有了行号的约定，页面可以写成"第 N 行"。
-5. **覆盖的结果。** 契约写批量里已存在的 `(campaignId, statDate)` 按覆盖处理。**暂定：** 页面在弹窗里一直写明这一点（提交前就可见），不统计会覆盖几行。如果后端在响应里给出"新增几行、覆盖几行"，页面可以在成功提示里写出来。
+5. **覆盖的结果。** 契约写批量里已存在的 `(campaignId, statDate)` 按覆盖处理。**暂定：** 页面在弹窗里一直写明这一点（提交前就可见）；成功后，如果响应是 `{"imported": n, "overwritten": m}`（`imported` 是写入的行数，其中 `m` 行覆盖了原来的花费，其余 `n - m` 行是新增；两个都是整数且 `0 <= m <= n`），提示写成"已导入 n 行：新增 n-m 行，覆盖 m 行"。响应里没有这两个数、或数不合理时，提示只写"已导入 n 行"（n 取自己提交的行数），页面不自己去数。请后端确认这两个字段名，或给出真实的字段名。
 6. **页面自己加的两条保护（不是契约的要求）。** 一个 CSV 文件大于 5 MB 页面不读（读进浏览器内存之前拒绝，提示拆成几个文件）；金额整数位超过 13 位拒绝。批内行数的上限按 `attribution.cost_batch_max`（页面读 `GET /config`，读不到就不检查，由后端拒绝）。
 
 ## 四、归因明细

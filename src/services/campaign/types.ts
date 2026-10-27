@@ -99,6 +99,9 @@ export type CostQuery = {
 
 export type { CostRow } from './parseCostBatch';
 
+/** What a batch import did: the rows written, and how many of them overwrote a cost (the others were added). */
+export type BatchCostsResult = { imported: number; overwritten: number };
+
 // ---- performance (投放效果, ATTRIBUTION:VIEW) ----
 
 export const PERFORMANCE_GROUPS = ['campaign', 'day'] as const;

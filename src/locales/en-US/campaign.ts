@@ -194,6 +194,7 @@ const messages: Record<string, string> = {
   'campaign.batch.errors.line': 'Line {line}: {reason}',
   'campaign.batch.import': 'Import',
   'campaign.batch.imported': 'Imported {count} rows',
+  'campaign.batch.importedSplit': 'Imported {count} rows: {added} added, {overwritten} overwritten',
   'campaign.batch.refused': 'The backend refused the batch, and nothing was imported:',
   'campaign.batch.refused.ref': '{ref}: {reason}',
   'campaign.batch.template.remark1': 'First example row',
