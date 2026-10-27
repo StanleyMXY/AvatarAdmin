@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 type Calls = ReturnType<typeof useMockBackend>;
-const funnelCalls = (calls: Calls) =>
+const funnelCalls = (calls: { url: string }[]) =>
   calls.filter((c) => new URL(c.url, 'http://x').pathname.endsWith('/analytics/funnel'));
 const writes = (calls: Calls, method: string) => calls.filter((c) => c.method === method);
 const lastFunnel = (calls: Calls) => new URL(funnelCalls(calls).at(-1)?.url as string, 'http://x');
@@ -112,13 +112,75 @@ describe('the funnel page: saved funnels', { timeout: 40000 }, () => {
     }
   });
 
-  it('fills the steps and the window from the chosen funnel, and does not query by itself', async () => {
+  it('fills the steps and the window from the chosen funnel and asks at once, with the steps, the window and the days now in the form', async () => {
     const { user, calls } = await openPage();
     const second = analyticsStore.funnels.filter((f) => f.isPreset)[1];
     await choose(user, second.name);
     await waitFor(() => expect(stepTags()).toEqual(second.steps));
     expect(windowBox().value).toBe(String(second.windowHours));
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    const url = lastFunnel(calls);
+    expect(url.searchParams.get('steps')).toBe(second.steps.join(','));
+    expect(url.searchParams.get('windowHours')).toBe(String(second.windowHours));
+    expect(url.searchParams.get('to')).toBe(new Date().toISOString().slice(0, 10));
+    expect(await screen.findByTestId('funnel-result')).toBeInTheDocument();
+  });
+
+  it('asks at once for a custom funnel too, and for an administrator who can only view', async () => {
+    signIn('support', { codes: VIEW });
+    seed('Mine', ['a', 'b', 'c'], 12);
+    const { user, calls } = await openPage();
+    await choose(user, 'Mine');
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    expect(lastFunnel(calls).searchParams.get('steps')).toBe('a,b,c');
+    expect(lastFunnel(calls).searchParams.get('windowHours')).toBe('12');
+  });
+
+  it('asks again for each funnel chosen, but not when the choice is cleared and not when a step or the window is edited', async () => {
+    seed('First', ['a', 'b'], 6);
+    seed('Second', ['c', 'd'], 8);
+    const { user, calls } = await openPage();
+    await choose(user, 'First');
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    await choose(user, 'Second');
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(2));
+    expect(lastFunnel(calls).searchParams.get('steps')).toBe('c,d');
+    await addStep(user, 'e');
+    fireEvent.change(windowBox(), { target: { value: '9' } });
+    await user.click(
+      document.querySelector('#analytics-funnel-saved')?.closest('.ant-select') as HTMLElement,
+    );
+    const clear = document.querySelector('.ant-select-clear') as HTMLElement;
+    fireEvent.mouseDown(clear);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(funnelCalls(calls)).toHaveLength(2);
+  });
+
+  it('does not ask for a saved funnel that could not be asked (a step with a comma), and says why', async () => {
+    const calls = stubBackend({
+      funnels: [funnelRow('Broken', ['a,b', 'c'])],
+      funnel: () => [],
+    });
+    const user = userEvent.setup();
+    renderPage(<FunnelPage />);
+    await choose(user, 'Broken');
+    expect(await screen.findByText(/comma/i)).toBeInTheDocument();
+    expect(queryButton()).toBeDisabled();
+    await new Promise((r) => setTimeout(r, 150));
     expect(funnelCalls(calls)).toHaveLength(0);
+  });
+
+  it('does not ask again when a funnel is saved: that is not choosing one', async () => {
+    const { user, calls } = await openPage();
+    await choose(user, presetName(0));
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    await user.click(button(/Save as/) as HTMLElement);
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Name'), 'Brand new');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes(calls, 'POST')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(funnelCalls(calls)).toHaveLength(1);
   });
 
   it('gives a preset no Edit and no Delete, but Save as stays (to make a copy)', async () => {
@@ -148,8 +210,9 @@ describe('the funnel page: saved funnels', { timeout: 40000 }, () => {
     expect(button(/Save as/)).toBeNull();
     expect(button('Edit')).toBeNull();
     expect(button('Delete')).toBeNull();
-    await user.click(queryButton());
     await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    await user.click(queryButton());
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(2));
   });
 
   it('saves the current steps and window under a new name with one POST, however often the button is pressed', async () => {
@@ -316,7 +379,6 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     const { user, calls } = await openPage();
     await choose(user, presetName(1));
     await waitFor(() => expect(stepTags().length).toBe(4));
-    await user.click(queryButton());
     await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
     const url = lastFunnel(calls);
     expect(url.searchParams.get('steps')).toBe(
@@ -338,7 +400,6 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
       const { user, calls } = await openPage(userEvent.setup({ advanceTimers: () => {} }));
       await choose(user, presetName(0));
       await waitFor(() => expect(stepTags().length).toBe(2));
-      await user.click(queryButton());
       await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
       expect(lastFunnel(calls).searchParams.get('to')).toBe('2026-10-26');
       expect(lastFunnel(calls).searchParams.get('from')).toBe('2026-10-20');
@@ -358,7 +419,6 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     const user = userEvent.setup();
     renderPage(<FunnelPage />);
     await choose(user, 'F');
-    await user.click(queryButton());
     const table = await screen.findByTestId('funnel-result');
     const rows = Array.from(table.querySelectorAll('tbody tr.ant-table-row')).map((r) =>
       Array.from(r.querySelectorAll('td')).map((td) => td.textContent),
@@ -402,7 +462,6 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     const user = userEvent.setup();
     renderPage(<FunnelPage />);
     await choose(user, 'F');
-    await user.click(queryButton());
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain(enUS['error.INVALID_REQUEST']);
     expect(alert.textContent).not.toContain('range is longer than 31 days');
@@ -426,9 +485,7 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     const user = userEvent.setup();
     renderPage(<FunnelPage />);
     await choose(user, 'Short');
-    await user.click(queryButton());
     await choose(user, 'Long');
-    await user.click(queryButton());
     await screen.findByText('c', { selector: 'td *, td' });
     release?.();
     await new Promise((r) => setTimeout(r, 100));
@@ -478,7 +535,9 @@ describe('the funnel page: what may be asked', { timeout: 40000 }, () => {
     await addStep(user, 'x,y');
     expect(queryButton()).toBeDisabled();
     expect(screen.getByText('An event name cannot contain a comma')).toBeInTheDocument();
-    expect(funnelCalls(calls)).toHaveLength(0);
+    // only the ask made when the funnel was chosen: the broken form is not asked
+    await new Promise((r) => setTimeout(r, 150));
+    expect(funnelCalls(calls)).toHaveLength(1);
   });
 
   it('refuses a step that is only blanks', async () => {

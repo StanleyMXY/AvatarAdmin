@@ -87,13 +87,13 @@ export default function FunnelPage() {
   const [queryFailure, setQueryFailure] = useState<string | null>(null);
   const [querying, setQuerying] = useState(false);
   const counter = useRef(0);
-  const query = async () => {
-    if (!valid) return;
+  /** Asks for `asked` (the form as it is by default). */
+  const query = async (asked: { steps: string[]; windowHours: number } = body()) => {
     const mine = ++counter.current;
     setQuerying(true);
     setQueryFailure(null);
     try {
-      const answer = await getFunnel({ ...body(), ...range });
+      const answer = await getFunnel({ ...asked, ...range });
       if (mine === counter.current) setResult(answer.steps);
     } catch (error) {
       if (mine === counter.current) {
@@ -105,6 +105,11 @@ export default function FunnelPage() {
     }
   };
 
+  /** The Query button and Retry: the form as it is, if it can be asked. */
+  const ask = () => {
+    if (valid) void query(body());
+  };
+
   const choose = (id: string | undefined) => {
     setSelectedId(id);
     const funnel = savedList.find((f) => f.id === id);
@@ -112,6 +117,10 @@ export default function FunnelPage() {
       setSteps(funnel.steps);
       setWindowHours(funnel.windowHours);
       setTouched(true);
+      // A saved funnel is chosen to see its numbers: it is asked at once, if it can be asked.
+      if (funnelProblems(funnel.steps, funnel.windowHours).length === 0) {
+        void query({ steps: normalizeSteps(funnel.steps), windowHours: funnel.windowHours });
+      }
     }
   };
 
@@ -235,7 +244,7 @@ export default function FunnelPage() {
           </Flex>
         ) : null}
         <Flex gap={8} wrap>
-          <Button type="primary" disabled={!valid} onClick={() => void query()}>
+          <Button type="primary" disabled={!valid} onClick={ask}>
             {t('analytics.common.query')}
           </Button>
           {canManage ? (
@@ -259,7 +268,7 @@ export default function FunnelPage() {
         </Flex>
       </Form>
 
-      <ReadState failure={queryFailure} loading={querying} onRetry={() => void query()} />
+      <ReadState failure={queryFailure} loading={querying} onRetry={ask} />
       {saved.failure ? (
         <ReadState failure={saved.failure} loading={false} onRetry={saved.reload} />
       ) : null}
