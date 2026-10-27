@@ -74,7 +74,6 @@ const messages: Record<string, string> = {
 
   // 总览 /dashboard (spec 5.1).
   'menu.dashboard.overview': '总览',
-  'dashboard.temp': '临时值',
   'dashboard.explain.landInterval': '今日数据是临时值，每隔 {minutes} 分钟刷新一次。',
   'dashboard.explain.provisional': '今日数据是临时值。',
   'dashboard.empty': '你的账号没有可显示的总览卡片。',

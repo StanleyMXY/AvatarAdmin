@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { fillMissingDays } from '../../services/stats/fillMissingDays';
 import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
+import { hollowPointsMark, provisionalPoints } from './provisionalChart';
 
 export type TrendSeries = { field: string; label: string; dashed?: boolean };
 
@@ -12,13 +13,24 @@ type Props<T extends { statDate: string }> = {
   series: TrendSeries[];
   from: string;
   to: string;
+  /**
+   * The UTC day of today. When given, the value of a day that is not over is drawn as a hollow
+   * point (the line itself is not cut). Leave it out for a chart without that distinction.
+   */
+  today?: string;
 };
 
 /**
  * A line chart of daily numbers. Every day of the range is on the axis; a day the backend sent no
  * row for is 0. The chart follows the theme mode and is drawn again when the mode changes.
  */
-export function TrendChart<T extends { statDate: string }>({ rows, series, from, to }: Props<T>) {
+export function TrendChart<T extends { statDate: string }>({
+  rows,
+  series,
+  from,
+  to,
+  today,
+}: Props<T>) {
   const [mode] = useThemeMode();
   const theme = getChartTheme(mode);
 
@@ -39,6 +51,7 @@ export function TrendChart<T extends { statDate: string }>({ rows, series, from,
   }, [rows, series, from, to]);
 
   const dashed = series.filter((s) => s.dashed).map((s) => s.label);
+  const hollow = today === undefined ? [] : provisionalPoints(data, today);
   return (
     <Line
       data={data}
@@ -51,6 +64,7 @@ export function TrendChart<T extends { statDate: string }>({ rows, series, from,
         lineDash: (d: unknown) =>
           dashed.includes((Array.isArray(d) ? d[0] : d)?.series) ? [4, 4] : [],
       }}
+      annotations={hollow.length > 0 ? [hollowPointsMark(hollow, theme.background)] : undefined}
       axis={{
         x: { labelFill: theme.textColor },
         y: { labelFill: theme.textColor, gridStroke: theme.gridColor },

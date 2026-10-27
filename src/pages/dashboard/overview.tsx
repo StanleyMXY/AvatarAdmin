@@ -2,16 +2,17 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Col, Empty, Flex, Row, Typography } from 'antd';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount, formatPercent } from '../../utils/ratio';
+import { isProvisionalDay } from '../../utils/settledDay';
 import { formatDuration } from '../moderation/duration';
 import {
   type CardChange,
   type ChangeKind,
+  changeFinality,
   computeCardChange,
   type DailyMetric,
   dailySeries,
   latestCohortWithD1,
   retentionD1Series,
-  shiftDay,
 } from './cardChange';
 import { describeChange } from './changeText';
 import {
@@ -45,6 +46,9 @@ const DAILY_CARDS_AFTER_D1: ReadonlyArray<{ id: DailyMetric; titleKey: string }>
 const validMinutes = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
 
+/** The D1 of a cohort is counted on the day after the cohort day. */
+const D1_LAG_DAYS = 1;
+
 const colProps = { xs: 24, sm: 12, lg: 8, xl: 6 } as const;
 
 /**
@@ -71,15 +75,25 @@ export default function OverviewPage() {
   const openAlerts = useSource(loadOpenAlertCount, canMonitor);
 
   const pointUnit = t('stat.common.unit.percentPoint');
-  const views = (change: CardChange, kind: ChangeKind) => ({
-    yesterday: describeChange(change.vsYesterday, kind, intl.locale, pointUnit),
-    weekAgo: describeChange(change.vs7DaysAgo, kind, intl.locale, pointUnit),
+  // A comparison is judged (green, red) only when both of its days are complete; otherwise the
+  // figure is shown in neutral grey. `day` is the day of the card, `lagDays` how long its figure is
+  // still counted after that day (D1 retention is counted on the day after the cohort day).
+  const views = (
+    change: CardChange,
+    kind: ChangeKind,
+    judged: { yesterday: boolean; weekAgo: boolean },
+  ) => ({
+    yesterday: describeChange(change.vsYesterday, kind, intl.locale, pointUnit, judged.yesterday),
+    weekAgo: describeChange(change.vs7DaysAgo, kind, intl.locale, pointUnit, judged.weekAgo),
   });
 
   const dailyCard = ({ id, titleKey }: { id: DailyMetric; titleKey: string }) => {
     const data = daily.data;
+    // The daily cards show today, which is not over: its value is provisional.
+    const today = data?.today ?? '';
+    const day = today;
     const change = data
-      ? computeCardChange(dailySeries(data.rows, id), data.today)
+      ? computeCardChange(dailySeries(data.rows, id), day)
       : { current: null, vsYesterday: null, vs7DaysAgo: null };
     const value =
       id === 'callMinutes'
@@ -96,8 +110,8 @@ export default function OverviewPage() {
           error={daily.error}
           onRetry={daily.reload}
           value={value}
-          temporary={change.current !== null}
-          changes={views(change, 'relative')}
+          temporary={change.current !== null && isProvisionalDay(day, today)}
+          changes={views(change, 'relative', changeFinality(day, today))}
         />
       </Col>
     );
@@ -105,7 +119,10 @@ export default function OverviewPage() {
 
   const d1Card = () => {
     const data = retention.data;
+    const today = data?.today ?? '';
     const cohort = data ? latestCohortWithD1(data.rows) : null;
+    // The D1 of a cohort is counted on the day after it, so it is complete from two days on.
+    const day = cohort?.cohortDate ?? '';
     const change =
       data && cohort
         ? computeCardChange(retentionD1Series(data.rows), cohort.cohortDate, 'points')
@@ -119,12 +136,9 @@ export default function OverviewPage() {
           error={retention.error}
           onRetry={retention.reload}
           value={formatPercent(change.current, intl.locale)}
-          // The D1 of the cohort of yesterday is counted on today, so it is still being counted.
-          temporary={
-            data !== null && cohort !== null && shiftDay(cohort.cohortDate, 1) === data.today
-          }
+          temporary={cohort !== null && isProvisionalDay(day, today, D1_LAG_DAYS)}
           caption={cohort ? t('dashboard.card.d1.cohort', { date: cohort.cohortDate }) : undefined}
-          changes={views(change, 'points')}
+          changes={views(change, 'points', changeFinality(day, today, D1_LAG_DAYS))}
         />
       </Col>
     );

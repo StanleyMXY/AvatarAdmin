@@ -1,6 +1,7 @@
 import { history, useIntl } from '@umijs/max';
-import { Button, Card, Skeleton, Tag, Typography } from 'antd';
+import { Button, Card, Skeleton, Typography } from 'antd';
 import type { ReactNode } from 'react';
+import { ProvisionalTag } from '../../components/stat/ProvisionalTag';
 import { describeFailure } from '../../session/describe';
 import { FALL_COLOR, RISE_COLOR } from '../../theme/tokens';
 import type { ChangeView } from './changeText';
@@ -23,16 +24,27 @@ type Props = {
   link?: { to: string; label: string };
 };
 
+// Only a change of complete days is green or red; a provisional change keeps the grey of the text.
 const colourOf = (tone: ChangeView['tone']) =>
   tone === 'rise' ? RISE_COLOR : tone === 'fall' ? FALL_COLOR : undefined;
 
 function Change({ id, label, view }: { id: string; label: string; view: ChangeView }) {
+  const intl = useIntl();
   const colour = colourOf(view.tone);
   return (
     <div>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {label}{' '}
-        <span data-testid={id} style={colour ? { color: colour } : undefined}>
+        <span
+          data-testid={id}
+          data-tone={view.tone}
+          style={colour ? { color: colour } : undefined}
+          title={
+            view.tone === 'provisional'
+              ? intl.formatMessage({ id: 'stat.common.provisional.changeTip' })
+              : undefined
+          }
+        >
           {view.text}
         </span>
       </Typography.Text>
@@ -91,13 +103,7 @@ export function OverviewCard({
             >
               {value}
             </span>
-            {temporary ? (
-              <span data-testid={`dashboard-temp-${id}`}>
-                <Tag color="warning" style={{ marginInlineEnd: 0 }}>
-                  {t('dashboard.temp')}
-                </Tag>
-              </span>
-            ) : null}
+            {temporary ? <ProvisionalTag testId={`dashboard-temp-${id}`} /> : null}
           </div>
           {caption ? (
             <div>

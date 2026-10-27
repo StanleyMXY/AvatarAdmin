@@ -173,6 +173,7 @@ type Child = {
   type?: string;
   data: { statDate: string; series: string; value: number | null }[];
   style?: { lineDash?: number[] };
+  shapeField?: string;
   axis?: { y?: { title?: string; position?: string } | false; x?: unknown };
 };
 const chartConfig = () =>
@@ -182,7 +183,16 @@ const chartConfig = () =>
 const lines = () => chartConfig().children.filter((c) => c.type === 'line');
 const solid = () => lines().filter((c) => !c.style?.lineDash?.length);
 const dashed = () => lines().filter((c) => c.style?.lineDash?.length);
-const markers = () => chartConfig().children.filter((c) => c.type === 'point');
+const points = () => chartConfig().children.filter((c) => c.type === 'point');
+const markers = () => points().filter((c) => c.shapeField !== 'hollowCircle');
+const hollowChildren = () => points().filter((c) => c.shapeField === 'hollowCircle');
+// The hollow marker child holds every row of the solid line (radius 0 for the days that are over);
+// the rows with `provisional` are the points that are drawn.
+const hollow = () =>
+  hollowChildren().map((c) => ({
+    ...c,
+    data: c.data.filter((d) => (d as { provisional?: boolean }).provisional),
+  }));
 const rowsOf = (children: Child[]) => children.flatMap((c) => c.data);
 const seriesIn = (children: Child[]) => [...new Set(rowsOf(children).map((d) => d.series))];
 
@@ -346,15 +356,79 @@ describe('the overview: the numbers on the cards', () => {
     expect(text('dashboard-vs-7d-callMinutes')).toBe('-50%');
   });
 
-  it('colours a rise and a fall, and leaves no change uncoloured', async () => {
+  it('colours the rise and the fall of a complete day, and leaves a change of 0 uncoloured', async () => {
+    backend({
+      cohorts: {
+        '2026-10-24': { cohortSize: 200, d1: 60 },
+        '2026-10-23': { cohortSize: 200, d1: 50 },
+        '2026-10-17': { cohortSize: 200, d1: 80 },
+      },
+    });
+    renderPage(<Overview />);
+    await waitForValue('d1');
+    // the D1 of cohort 10-24 was counted on 10-25: a complete day, so its changes are judged
+    expect(screen.getByTestId('dashboard-vs-yesterday-d1')).toHaveStyle({ color: '#22C55E' });
+    expect(text('dashboard-vs-7d-d1')).toBe('-10 pp');
+    expect(screen.getByTestId('dashboard-vs-7d-d1')).toHaveStyle({ color: '#EF4444' });
+  });
+
+  it('leaves the change of a complete day with no change at all uncoloured', async () => {
+    backend({
+      cohorts: {
+        '2026-10-24': { cohortSize: 200, d1: 60 },
+        '2026-10-23': { cohortSize: 200, d1: 60 },
+        '2026-10-17': { cohortSize: 200, d1: 60 },
+      },
+    });
+    renderPage(<Overview />);
+    await waitForValue('d1');
+    expect(text('dashboard-vs-yesterday-d1')).toBe('0 pp');
+    expect(screen.getByTestId('dashboard-vs-yesterday-d1').getAttribute('style')).toBeNull();
+  });
+
+  it('writes the change of today in neutral grey, with its figure, because today is not over: no green, no red', async () => {
     backend();
     renderPage(<Overview />);
     await waitForValue('dau');
-    expect(screen.getByTestId('dashboard-vs-yesterday-dau')).toHaveStyle({ color: '#22C55E' });
-    expect(screen.getByTestId('dashboard-vs-yesterday-newAccounts')).toHaveStyle({
-      color: '#EF4444',
+    // +20% and -10% would be green and red if 10-26 were a complete day
+    for (const id of ['dashboard-vs-yesterday-dau', 'dashboard-vs-yesterday-newAccounts']) {
+      expect(screen.getByTestId(id).getAttribute('style'), id).toBeNull();
+      expect(screen.getByTestId(id)).toHaveAttribute('data-tone', 'provisional');
+    }
+    expect(text('dashboard-vs-yesterday-dau')).toBe('+20%');
+    expect(text('dashboard-vs-yesterday-newAccounts')).toBe('-10%');
+    expect(screen.getByTestId('dashboard-vs-7d-dau').getAttribute('style')).toBeNull();
+    expect(screen.getByTestId('dashboard-vs-yesterday-dau')).toHaveAttribute(
+      'title',
+      'One of the two days is not over yet (UTC), so this change is shown in grey and is not judged as a rise or a fall.',
+    );
+  });
+
+  it('writes the change of a D1 that is still being counted in grey too, and says so in Chinese', async () => {
+    backend({
+      cohorts: {
+        '2026-10-25': { cohortSize: 200, d1: 70 },
+        '2026-10-24': { cohortSize: 200, d1: 60 },
+      },
     });
-    expect(screen.getByTestId('dashboard-vs-7d-newAccounts').getAttribute('style')).toBeNull();
+    renderPage(<Overview />, 'zh-CN');
+    await waitForValue('d1');
+    expect(text('dashboard-vs-yesterday-d1')).toBe('+5 个百分点');
+    expect(screen.getByTestId('dashboard-vs-yesterday-d1').getAttribute('style')).toBeNull();
+    expect(screen.getByTestId('dashboard-vs-yesterday-d1')).toHaveAttribute(
+      'title',
+      '其中一天（UTC）还没结束，涨跌只作参考，用灰色显示，不判断好坏。',
+    );
+  });
+
+  it('does not say anything about provisional values on a change that cannot be told', async () => {
+    backend();
+    renderPage(<Overview />);
+    await waitForValue('newSubscriptions');
+    expect(text('dashboard-vs-yesterday-newSubscriptions')).toBe('—');
+    expect(screen.getByTestId('dashboard-vs-yesterday-newSubscriptions')).not.toHaveAttribute(
+      'title',
+    );
   });
 
   it('shows a dash for a change whose earlier day is 0 or missing, and keeps the value', async () => {
@@ -679,6 +753,41 @@ describe('the overview: the trend chart', () => {
     expect(solid().length).toBeGreaterThan(0);
   });
 
+  it('draws the point of today hollow, and only that one: the days that are over keep the plain line', async () => {
+    backend();
+    renderPage(<Overview />);
+    await waitFor(() => expect(screen.getByTestId('chart-dual-axes')).toBeInTheDocument());
+    const rows = rowsOf(hollow());
+    expect(rows.map((d) => [d.series, d.statDate, d.value]).sort()).toEqual([
+      ['Daily active users', TODAY, 120],
+      ['New accounts', TODAY, 36],
+    ]);
+    // the dashed lines of last week hold no provisional value: last week is over
+    expect(rowsOf(hollow()).some((d) => d.series.includes('last week'))).toBe(false);
+    // the solid line still has the point of today, so the line itself is not cut
+    expect(rowsOf(solid()).filter((d) => d.statDate === TODAY)).toHaveLength(2);
+  });
+
+  it('draws no hollow point when today has no number yet', async () => {
+    backend({ daily: { '2026-10-25': { dau: 100 } }, onlyDays: ['2026-10-25'] });
+    renderPage(<Overview />);
+    await waitFor(() => expect(screen.getByTestId('chart-dual-axes')).toBeInTheDocument());
+    expect(rowsOf(hollow())).toEqual([]);
+  });
+
+  it('draws the D1 of the cohort of yesterday hollow (it is counted today) and the cohort before it solid', async () => {
+    backend({ cohorts: { '2026-10-25': { cohortSize: 200, d1: 70 } } });
+    const user = userEvent.setup();
+    renderPage(<Overview />);
+    await waitFor(() => expect(screen.getByTestId('chart-dual-axes')).toBeInTheDocument());
+    await user.click(screen.getByRole('combobox', { name: 'Metrics' }));
+    await waitFor(() => expect(optionOf('D1 retention')).toBeDefined());
+    await user.click(optionOf('D1 retention') as HTMLElement);
+    await waitFor(() => expect(seriesIn(solid())).toContain('D1 retention'));
+    const d1 = rowsOf(hollow()).filter((d) => d.series === 'D1 retention');
+    expect(d1.map((d) => [d.statDate, d.value])).toEqual([['2026-10-25', 35]]);
+  });
+
   it('puts the unit on the axis: accounts for DAU and new accounts', async () => {
     backend();
     renderPage(<Overview />);
@@ -779,9 +888,13 @@ describe('the overview: the trend chart', () => {
     // one day has no line to draw: the values are drawn as markers, and written beside them
     expect(markers().length).toBeGreaterThan(0);
     expect(rowsOf(markers()).every((d) => d.statDate === TODAY)).toBe(true);
+    // the value of today is not over: its marker is the hollow one, and not also a filled one
+    expect(rowsOf(markers()).some((d) => !d.series.includes('last week'))).toBe(false);
+    expect(rowsOf(hollow()).map((d) => d.series)).toEqual(['Daily active users', 'New accounts']);
     fireEvent.click(screen.getByRole('radio', { name: 'Last 7 days' }));
     await waitFor(() => expect(days()).toHaveLength(7));
     expect(markers()).toHaveLength(0);
+    expect(rowsOf(hollow())).toHaveLength(2);
   });
 
   it('shows a day of 0 for a day without a row, and a gap for today before its row is there', async () => {

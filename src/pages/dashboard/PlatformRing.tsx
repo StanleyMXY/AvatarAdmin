@@ -1,6 +1,7 @@
 import { Pie } from '@ant-design/plots';
 import { useIntl } from '@umijs/max';
-import { Button, Card, Flex, Skeleton, Tag, Typography } from 'antd';
+import { Button, Card, Flex, Skeleton, Typography } from 'antd';
+import { ProvisionalTag } from '../../components/stat/ProvisionalTag';
 import { describeFailure } from '../../session/describe';
 import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
@@ -61,9 +62,7 @@ export function PlatformRing({ android, ios }: Props) {
       ) : (
         <Flex vertical gap={8}>
           <Flex gap={8} align="center">
-            <span data-testid="dashboard-temp-platform">
-              <Tag color="warning">{t('dashboard.temp')}</Tag>
-            </span>
+            <ProvisionalTag testId="dashboard-temp-platform" />
           </Flex>
           <Pie
             data={known.map((v) => ({ platform: v.label, value: v.dau }))}

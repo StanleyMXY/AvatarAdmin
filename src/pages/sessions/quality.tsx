@@ -18,13 +18,15 @@ import { buildVars } from '../../buildVars';
 import { ExportButton } from '../../components/ExportButton';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
+import { ProvisionalTag } from '../../components/stat/ProvisionalTag';
 import { ReportHelper } from '../../components/stat/ReportHelper';
 import { UtcNotice } from '../../components/stat/UtcNotice';
 import { getSessionQuality } from '../../services/stats/reports';
 import type { SessionQualityRow } from '../../services/stats/types';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount, formatPercent } from '../../utils/ratio';
-import { daysBetween, lastNDaysUtc } from '../../utils/utcDay';
+import { hasProvisionalDay, isProvisionalDay } from '../../utils/settledDay';
+import { daysBetween, lastNDaysUtc, todayUtc } from '../../utils/utcDay';
 import { type ColumnPoint, DayLineChart, type LinePoint, StackedDayChart } from './charts';
 import { formatDecimal } from './format';
 import {
@@ -57,9 +59,11 @@ type CardProps = {
   alert: boolean;
   /** Written under the figure: which limit the frame follows. */
   limit?: string;
+  /** The total includes a day that is not over. */
+  provisional?: boolean;
 };
 
-function QualityCard({ name, title, tip, value, alert, limit }: CardProps) {
+function QualityCard({ name, title, tip, value, alert, limit, provisional }: CardProps) {
   const { token } = theme.useToken();
   return (
     <Card
@@ -80,6 +84,7 @@ function QualityCard({ name, title, tip, value, alert, limit }: CardProps) {
         styles={alert ? { content: { color: token.colorError } } : undefined}
         formatter={(v) => <span data-testid="quality-value">{v}</span>}
       />
+      {provisional ? <ProvisionalTag testId={`quality-provisional-${name}`} /> : null}
       {limit ? (
         <Typography.Text type={alert ? 'danger' : 'secondary'} style={{ fontSize: 12 }}>
           {limit}
@@ -121,6 +126,14 @@ export default function SessionQualityPage() {
   const bucketLabel = (bucket: (typeof JOIN_BUCKETS)[number]) =>
     t(`sessions.quality.bucket.${bucket}`);
 
+  // The totals include today when a row of today is there: they are provisional (UTC, settledDay.ts).
+  const today = todayUtc();
+  const provisional =
+    rows !== null &&
+    hasProvisionalDay(
+      rows.map((r) => r.statDate),
+      today,
+    );
   const totals = useMemo(() => (rows ? sumRows(rows) : null), [rows]);
   const rate = totals ? successRate(totals) : null;
   const slow = totals ? bucketShare(totals, 'joinGt10s') : null;
@@ -155,7 +168,14 @@ export default function SessionQualityPage() {
       key: 'statDate',
       title: t('sessions.common.date'),
       fixed: 'left',
-      render: (_: unknown, row) => row.statDate,
+      render: (_: unknown, row) => (
+        <>
+          {row.statDate}
+          {isProvisionalDay(row.statDate, today) ? (
+            <ProvisionalTag testId="provisional-row" style={{ marginInlineStart: 4 }} />
+          ) : null}
+        </>
+      ),
     },
     {
       key: 'connected',
@@ -244,6 +264,7 @@ export default function SessionQualityPage() {
         <>
           <Flex gap={12} wrap>
             <QualityCard
+              provisional={provisional}
               name="successRate"
               title={t('sessions.quality.card.successRate')}
               tip={t('sessions.quality.card.successRate.tip')}
@@ -254,6 +275,7 @@ export default function SessionQualityPage() {
               })}
             />
             <QualityCard
+              provisional={provisional}
               name="avgJoin"
               title={t('sessions.quality.card.avgJoin')}
               tip={t('sessions.quality.card.avgJoin.tip')}
@@ -261,6 +283,7 @@ export default function SessionQualityPage() {
               alert={false}
             />
             <QualityCard
+              provisional={provisional}
               name="le2"
               title={t('sessions.quality.card.le2')}
               tip={t('sessions.quality.card.le2.tip')}
@@ -268,6 +291,7 @@ export default function SessionQualityPage() {
               alert={false}
             />
             <QualityCard
+              provisional={provisional}
               name="gt10"
               title={t('sessions.quality.card.gt10')}
               tip={t('sessions.quality.card.gt10.tip')}
@@ -278,6 +302,7 @@ export default function SessionQualityPage() {
               })}
             />
             <QualityCard
+              provisional={provisional}
               name="limitReached"
               title={t('sessions.quality.card.limitReached')}
               tip={t('sessions.quality.card.limitReached.tip')}
@@ -285,6 +310,7 @@ export default function SessionQualityPage() {
               alert={false}
             />
             <QualityCard
+              provisional={provisional}
               name="notJoined"
               title={t('sessions.quality.card.notJoined')}
               tip={t('sessions.quality.card.notJoined.tip')}
@@ -295,13 +321,31 @@ export default function SessionQualityPage() {
           <Flex gap={24} wrap>
             <div style={{ flex: '1 1 420px', minWidth: 0 }}>
               <Typography.Text strong>{t('sessions.quality.chart.rate')}</Typography.Text>
-              <DayLineChart data={lineData} yTitle={t('sessions.quality.chart.rate.y')} percent />
+              <DayLineChart
+                data={lineData}
+                yTitle={t('sessions.quality.chart.rate.y')}
+                percent
+                today={today}
+              />
             </div>
             <div style={{ flex: '1 1 420px', minWidth: 0 }}>
               <Typography.Text strong>{t('sessions.quality.chart.buckets')}</Typography.Text>
-              <StackedDayChart data={columnData} yTitle={t('sessions.quality.chart.buckets.y')} />
+              <StackedDayChart
+                data={columnData}
+                yTitle={t('sessions.quality.chart.buckets.y')}
+                today={today}
+              />
             </div>
           </Flex>
+          {provisional ? (
+            <Typography.Text
+              type="secondary"
+              style={{ fontSize: 12 }}
+              data-testid="provisional-chart-note"
+            >
+              {t('stat.common.provisional.columnNote')}
+            </Typography.Text>
+          ) : null}
           <Table<SessionQualityRow>
             size="small"
             rowKey="statDate"

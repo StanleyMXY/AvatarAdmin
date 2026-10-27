@@ -109,8 +109,8 @@ const chartData = () =>
   }[];
 const seriesOf = () => [...new Set(chartData().map((d) => d.series))];
 
-const openDetail = async (user = userEvent.setup()) => {
-  await user.click(await screen.findByRole('tab', { name: 'Data detail' }));
+const openDetail = async (user = userEvent.setup(), name = 'Data detail') => {
+  await user.click(await screen.findByRole('tab', { name }));
 };
 const optionOf = (title: string) =>
   [...document.querySelectorAll('.ant-select-item-option')].find(
@@ -241,6 +241,83 @@ describe('the daily report: the trend chart', () => {
   });
 });
 
+const lineConfig = () =>
+  JSON.parse(screen.getByTestId('chart-line').getAttribute('data-config') ?? '{}') as {
+    annotations?: {
+      type?: string;
+      data?: { statDate: string; series: string; value: number | null }[];
+      shapeField?: string;
+    }[];
+  };
+const hollowMark = () => lineConfig().annotations?.[0];
+
+describe('the daily report: the value of today is provisional', () => {
+  it('draws a hollow point for today on each chosen metric, and for no other day', async () => {
+    backend();
+    renderPage(<DailyPage />);
+    await waitFor(() => expect(seriesOf()).toEqual(['DAU', 'New accounts']));
+    expect(hollowMark()?.type).toBe('point');
+    expect(hollowMark()?.shapeField).toBe('hollowCircle');
+    expect((hollowMark()?.data ?? []).map((d) => [d.series, d.statDate])).toEqual([
+      ['DAU', TODAY],
+      ['New accounts', TODAY],
+    ]);
+    // the line itself still reaches today
+    expect(chartData().filter((d) => d.statDate === TODAY)).toHaveLength(2);
+  });
+
+  it('explains the hollow point under the chart', async () => {
+    backend();
+    renderPage(<DailyPage />);
+    await waitFor(() => expect(seriesOf()).toEqual(['DAU', 'New accounts']));
+    expect(screen.getByTestId('provisional-chart-note')).toHaveTextContent(
+      'A hollow point is a provisional value',
+    );
+  });
+
+  it('draws today without a row as a hollow 0, as every other missing day is 0 (spec 4.4)', async () => {
+    backend({
+      rows: () => [full({ statDate: '2026-10-24' }), full({ statDate: '2026-10-25' })],
+    });
+    renderPage(<DailyPage />);
+    await waitFor(() => expect(seriesOf()).toEqual(['DAU', 'New accounts']));
+    expect((hollowMark()?.data ?? []).map((d) => [d.statDate, d.value])).toEqual([
+      [TODAY, 0],
+      [TODAY, 0],
+    ]);
+  });
+
+  it('marks the row of today in the detail table as provisional, and no other row', async () => {
+    backend();
+    renderPage(<DailyPage />);
+    await openDetail();
+    await waitFor(() => expect(bodyRows()).toHaveLength(7));
+    const tagged = [...bodyRows()].filter((row) =>
+      within(row as HTMLElement).queryByTestId('provisional-row'),
+    );
+    expect(tagged).toHaveLength(1);
+    const firstCell = tagged[0].querySelector('td')?.textContent ?? '';
+    expect(firstCell).toContain(TODAY);
+    expect(firstCell).toContain('Provisional');
+  });
+
+  it('writes the mark in Chinese when the language is Chinese', async () => {
+    backend();
+    renderPage(<DailyPage />, 'zh-CN');
+    await openDetail(userEvent.setup(), '数据明细');
+    await waitFor(() => expect(bodyRows()).toHaveLength(7));
+    expect(document.querySelector('[data-testid="provisional-row"]')).toHaveTextContent('临时值');
+  });
+
+  it('marks nothing when the backend sent no row for a provisional day', async () => {
+    backend({ rows: () => [full({ statDate: '2026-10-25' })] });
+    renderPage(<DailyPage />);
+    await openDetail();
+    await waitFor(() => expect(bodyRows()).toHaveLength(1));
+    expect(screen.queryByTestId('provisional-row')).not.toBeInTheDocument();
+  });
+});
+
 describe('the daily report: the detail table', () => {
   it('is one row per day with no paging, and the date column fixed on the left', async () => {
     backend();
@@ -295,6 +372,7 @@ describe('the daily report: the detail table', () => {
     expect(document.querySelector('.ant-table-summary')).toBeNull();
     expect(document.querySelector('.ant-statistic')).toBeNull();
     expect(document.querySelector('.ant-card')).toBeNull();
+    // the row of today carries the mark "Provisional" after its date
     const everyDate = [...bodyRows()].map((r) => r.querySelector('td')?.textContent);
     expect(everyDate).toEqual([
       '2026-10-20',
@@ -303,7 +381,7 @@ describe('the daily report: the detail table', () => {
       '2026-10-23',
       '2026-10-24',
       '2026-10-25',
-      '2026-10-26',
+      '2026-10-26Provisional',
     ]);
     expect(headerTexts().some((h) => /^(total|sum)$/i.test(h) || h.includes('合计'))).toBe(false);
   });

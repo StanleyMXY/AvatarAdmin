@@ -1,4 +1,5 @@
 import type { RetentionRow, StatDailyRow } from '../../services/stats/types';
+import { changeIsFinal } from '../../utils/settledDay';
 
 /** One day of a card's metric: `date` is a UTC calendar day `YYYY-MM-DD`, `value` is null when not known. */
 export type SeriesPoint = { date: string; value: number | null };
@@ -69,6 +70,24 @@ export function computeCardChange(
     current,
     vsYesterday: changeAgainst(current, byDay.get(yesterday) ?? null, kind),
     vs7DaysAgo: changeAgainst(current, byDay.get(weekAgo) ?? null, kind),
+  };
+}
+
+/**
+ * Which of the two comparisons of a card may be judged as a rise or a fall: each only when both of
+ * its days are complete (UTC, `utils/settledDay.ts`). A card of today has neither. `lagDays` is the
+ * number of days after the card's day on which its figure is still counted (1 for D1 retention).
+ */
+export function changeFinality(
+  day: string,
+  today: string,
+  lagDays = 0,
+): { yesterday: boolean; weekAgo: boolean } {
+  const yesterday = shiftDay(day, -1);
+  const weekAgo = shiftDay(day, -7);
+  return {
+    yesterday: yesterday !== null && changeIsFinal(day, yesterday, today, lagDays),
+    weekAgo: weekAgo !== null && changeIsFinal(day, weekAgo, today, lagDays),
   };
 }
 
