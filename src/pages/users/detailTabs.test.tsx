@@ -64,7 +64,10 @@ describe('the sessions tab', { timeout: 30000 }, () => {
         : jsonResponse(200, envelope('200', usersState.users[0])),
     );
     await open(USER.rich, 'sessions');
-    const row = (await waitFor(() => rowsOf('sessions-table')))[0];
+    // wait for the row of data itself: while the list is being read the table has only its empty-state row
+    const row = (await screen.findByText(enUS['users.sessions.ongoing'])).closest(
+      'tr',
+    ) as HTMLElement;
     expect(within(row).getByText(enUS['users.sessions.ongoing'])).toBeInTheDocument();
     expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(2);
   });

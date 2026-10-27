@@ -296,7 +296,7 @@ describe('GET /channels', () => {
   it('gives the three preset channels to any signed-in administrator', async () => {
     const { status, body } = await read('reviewer');
     expect(status).toBe(200);
-    expect(body.data.items.map((c: { channelCode: string }) => c.channelCode)).toEqual([
+    expect(body.data.items.map((c: { code: string }) => c.code)).toEqual([
       'play',
       'direct',
       'appstore',
