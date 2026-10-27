@@ -1,11 +1,17 @@
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MENUS } from '../../config/menus';
 import routes from '../../config/routes';
+import { parseConfigRows } from '../../scripts/configKeys';
+import { errorTable, reasonCodes } from '../../scripts/contractErrors';
+import { extractPermissionCodes, parseExclusions } from '../../scripts/permissionCodes';
 import type { AdminRoute } from '../access/canAccess';
 import { PERMISSION_CODES } from '../access/permissionCodes';
+import { indexPages } from '../components/layout/pageIndex';
+import configKeys from '../pages/config/configKeys.generated.json';
 import en from './en-US';
+import errorCodes from './errorCodes.generated.json';
 import zh from './zh-CN';
 
 // Every file that goes into the aggregate language object, by name.
@@ -191,4 +197,137 @@ describe('what the shell needs to be there', () => {
     expect(zh['pages.lang.zhCN']).toBe(en['pages.lang.zhCN']);
     expect(zh['pages.lang.enUS']).toBe(en['pages.lang.enUS']);
   });
+});
+
+// The full set, each part checked against its source of truth and not against a list written here:
+// the route table in config/routes, the permission codes the two shared documents name, the error
+// table of contract 1.4 (with the reason codes of its INVALID_REQUEST row) and the key table of
+// contract 17.5.
+const SNAPSHOTS = 'docs/shared-snapshots';
+const contractText = () =>
+  readFileSync(join(process.cwd(), SNAPSHOTS, 'backend-task-java-backend.md'), 'utf8');
+const specText = () =>
+  readFileSync(join(process.cwd(), SNAPSHOTS, 'admin-frontend-design.md'), 'utf8');
+const dictOf = (language: (typeof LANGUAGES)[number]) => (language === 'zh-CN' ? zh : en);
+
+describe('full coverage of the texts against the sources of truth', () => {
+  it.each(LANGUAGES)('%s: every page route has a menu.<chain> text', (language) => {
+    const pages = indexPages(routes);
+    expect(pages.length).toBeGreaterThan(70);
+    for (const page of pages)
+      expect(dictOf(language)[page.titleKey], `${page.path} -> ${page.titleKey}`).toBeTruthy();
+  });
+
+  it('gives every page route a name of its own (otherwise its tab would carry the title of its parent)', () => {
+    const unnamed: string[] = [];
+    const visit = (list: AdminRoute[]) => {
+      for (const route of list) {
+        if (route.routes) visit(route.routes);
+        else if (
+          route.path !== undefined &&
+          route.component !== undefined &&
+          route.layout !== false &&
+          route.path !== '*' &&
+          !route.name
+        )
+          unnamed.push(route.path);
+      }
+    };
+    visit(routes);
+    expect(unnamed).toEqual([]);
+  });
+
+  it.each(LANGUAGES)(
+    '%s: every permission code the two documents name has permission.<code>',
+    (language) => {
+      const exclusions = parseExclusions(
+        readFileSync(
+          join(process.cwd(), 'docs/superpowers/handoff/permission-code-exclusions.txt'),
+          'utf8',
+        ),
+      );
+      const { codes } = extractPermissionCodes(specText(), contractText(), exclusions);
+      expect(codes.length).toBeGreaterThan(70);
+      expect([...codes].sort()).toEqual([...PERMISSION_CODES].sort());
+      for (const code of codes)
+        expect(dictOf(language)[`permission.${code}`]?.trim(), code).toBeTruthy();
+    },
+  );
+
+  it.each(LANGUAGES)('%s: every error code of contract table 1.4 has error.<code>', (language) => {
+    const { codes, unread } = errorTable(contractText());
+    expect(unread).toEqual([]);
+    expect(codes.length).toBeGreaterThan(70);
+    expect(codes).toEqual(errorCodes);
+    for (const code of codes) expect(dictOf(language)[`error.${code}`]?.trim(), code).toBeTruthy();
+  });
+
+  it.each(LANGUAGES)(
+    '%s: every reason code of the contract has reason.<code>, and no other has one',
+    (language) => {
+      const dict = dictOf(language);
+      const reasons = reasonCodes(contractText());
+      expect(reasons.length).toBeGreaterThanOrEqual(14);
+      for (const code of reasons) expect(dict[`reason.${code}`]?.trim(), code).toBeTruthy();
+      const have = Object.keys(dict)
+        .filter((key) => key.startsWith('reason.'))
+        .map((key) => key.slice('reason.'.length));
+      expect(have.sort()).toEqual([...reasons].sort());
+    },
+  );
+
+  it.each(LANGUAGES)(
+    '%s: every configuration key of contract 17.5 has a name and a description',
+    (language) => {
+      const dict = dictOf(language);
+      const rows = parseConfigRows(contractText());
+      expect(rows.length).toBe(225);
+      expect(rows.map((r) => r.key)).toEqual(configKeys.map((k) => k.key));
+      for (const { key } of rows) {
+        expect(dict[`config.${key}.label`]?.trim(), `${key} label`).toBeTruthy();
+        expect(dict[`config.${key}.desc`]?.trim(), `${key} desc`).toBeTruthy();
+      }
+    },
+  );
+
+  it.each(LANGUAGES)(
+    '%s: every group of the configuration keys has a title, and no key text is left over',
+    (language) => {
+      const dict = dictOf(language);
+      const keys = parseConfigRows(contractText()).map((r) => r.key);
+      for (const group of new Set(keys.map((key) => key.split('.')[0])))
+        expect(dict[`config.group.${group}`]?.trim(), group).toBeTruthy();
+      const known = new Set(keys);
+      const leftover = Object.keys(dict)
+        .map((id) => /^config\.(.+)\.(label|desc|risk)$/.exec(id)?.[1])
+        .filter((key): key is string => key !== undefined && !known.has(key));
+      expect(leftover).toEqual([]);
+    },
+  );
+
+  it('has a risk text for each of the six risk keys in both languages', () => {
+    const risky = [
+      'chat.conversation_languages',
+      'chat.model_tiers_allowed',
+      'complaint.likeness_due_hours',
+      'guest.call_minutes_total',
+      'moderation.underage_reject_below_age',
+      'render.cloud_enabled',
+    ];
+    for (const key of risky) {
+      expect(zh[`config.${key}.risk`]?.trim(), key).toBeTruthy();
+      expect(en[`config.${key}.risk`]?.trim(), key).toBeTruthy();
+    }
+  });
+
+  it.each(LANGUAGES)(
+    '%s: no key or text holds a hidden format character (zero-width, direction marks, BOM)',
+    (language) => {
+      const dict = dictOf(language);
+      for (const [key, text] of Object.entries(dict)) {
+        expect(text, key).not.toMatch(/[\p{Cf}\u2028\u2029]/u);
+        expect(key, key).not.toMatch(/[\p{Cf}\s]/u);
+      }
+    },
+  );
 });

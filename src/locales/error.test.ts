@@ -1,27 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { reasonCodes } from '../../scripts/contractErrors';
 import enError from './en-US/error';
 import enReason from './en-US/reason';
 import codes from './errorCodes.generated.json';
 import zhError from './zh-CN/error';
 import zhReason from './zh-CN/reason';
 
-const REASON_CODES = [
-  'ACCOUNT_NOT_FOUND',
-  'ACCOUNT_NOT_ACTIVE',
-  'NOT_HTTPS',
-  'INVALID_HOST',
-  'INVALID_PORT',
-  'INVALID_PATH',
-  'TOO_LONG',
-  'INVALID_EMAIL',
-  'NOT_AN_INTEGER',
-  'OUT_OF_RANGE',
-  'NOT_BOOLEAN',
-  'INVALID_LANGUAGE_TAG',
-  'EMPTY_NOT_ALLOWED',
-  'INVALID_PATTERN',
-];
+// The reason codes the contract defines in its table 1.4 (not a list written here).
+const REASON_CODES = reasonCodes(
+  readFileSync('docs/shared-snapshots/backend-task-java-backend.md', 'utf8'),
+);
 
 const LOCAL_CODES = ['NETWORK_ERROR', 'INVALID_RESPONSE', 'UNKNOWN'];
 

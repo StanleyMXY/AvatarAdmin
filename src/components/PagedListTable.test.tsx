@@ -82,6 +82,22 @@ describe('PagedListTable', () => {
     await waitFor(() => expect(screen.queryByText(/Failed to load/)).toBeNull());
   });
 
+  it('shows the loading state while a page is being read, and not after the rows came', async () => {
+    let answer: (page: { items: Row[]; total: number }) => void = () => {};
+    const request = vi.fn(
+      () =>
+        new Promise<{ items: Row[]; total: number }>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    renderPage(<PagedListTable<Row> rowKey="id" columns={columns} request={request} />);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(document.querySelector('.ant-spin-spinning')).not.toBeNull());
+    answer({ items: [{ id: '1', name: 'Alice' }], total: 1 });
+    expect(await screen.findByText('Alice')).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector('.ant-spin-spinning')).toBeNull());
+  });
+
   it('shows an empty state for no rows', async () => {
     renderPage(
       <PagedListTable<Row>
