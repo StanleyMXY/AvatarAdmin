@@ -1,7 +1,7 @@
 import { theme as antdTheme, type ThemeConfig } from 'antd';
 import type { MappingAlgorithm } from 'antd/es/theme/interface';
 import { useSyncExternalStore } from 'react';
-import { pickOnPrimary } from './contrast';
+import { mixHex, pickOnPrimary, readableText } from './contrast';
 import { FONT_FAMILY, LAYOUT, PRIMARY, RADIUS } from './tokens';
 
 export type ThemeMode = 'dim' | 'deep' | 'light';
@@ -23,6 +23,14 @@ export type ModeTokens = {
   colorPrimaryActive: string;
   /** Text on a solid primary-coloured element: dark or white, whichever reads better. */
   colorTextOnPrimary: string;
+  /**
+   * Links and text in the primary colour (a selected menu entry or tab): the primary colour moved
+   * just far enough to reach 4.5:1 (WCAG AA) on the container, the page and the raised background.
+   * The raw primary colour stays for fills and borders. Hover and press move further from the background.
+   */
+  colorLink: string;
+  colorLinkHover: string;
+  colorLinkActive: string;
   fontFamily: string;
 };
 
@@ -35,6 +43,9 @@ const BASE: Record<
     | 'colorPrimaryHover'
     | 'colorPrimaryActive'
     | 'colorTextOnPrimary'
+    | 'colorLink'
+    | 'colorLinkHover'
+    | 'colorLinkActive'
     | 'fontFamily'
   >
 > = {
@@ -67,23 +78,61 @@ const BASE: Record<
   },
 };
 
-export function getModeTokens(mode: ThemeMode): ModeTokens {
+/** How far hover and press move the link colour away from the background. */
+const LINK_HOVER_SHIFT = 0.18;
+const LINK_ACTIVE_SHIFT = 0.32;
+
+function linkColors(base: (typeof BASE)[ThemeMode], primary: string) {
+  const backgrounds = [base.colorBgContainer, base.colorBgLayout, base.colorBgElevated];
+  const colorLink = readableText(primary, backgrounds);
+  const away = base.isDark ? '#FFFFFF' : '#000000';
+  return {
+    colorLink,
+    colorLinkHover: readableText(mixHex(colorLink, away, LINK_HOVER_SHIFT), backgrounds),
+    colorLinkActive: readableText(mixHex(colorLink, away, LINK_ACTIVE_SHIFT), backgrounds),
+  };
+}
+
+/** The tokens of a mode. `primary` is the build's primary colour set (the default is the build's own). */
+export function getModeTokens(
+  mode: ThemeMode,
+  primary: { base: string; hover: string; active: string } = PRIMARY,
+): ModeTokens {
   return {
     mode,
     ...BASE[mode],
-    colorPrimary: PRIMARY.base,
-    colorPrimaryHover: PRIMARY.hover,
-    colorPrimaryActive: PRIMARY.active,
-    colorTextOnPrimary: pickOnPrimary(PRIMARY.base),
+    colorPrimary: primary.base,
+    colorPrimaryHover: primary.hover,
+    colorPrimaryActive: primary.active,
+    colorTextOnPrimary: pickOnPrimary(primary.base),
+    ...linkColors(BASE[mode], primary.base),
     fontFamily: FONT_FAMILY,
   };
 }
 
-/** The dark algorithm moves the primary colour (#0ABAB5 becomes #0CA19D); this puts the seed back. */
-const keepPrimary: MappingAlgorithm = (seed, mapToken) => ({
-  ...(mapToken ?? antdTheme.defaultAlgorithm(seed)),
-  colorPrimary: seed.colorPrimary,
-});
+/**
+ * The dark algorithm moves the primary colour (#0ABAB5 becomes #0CA19D) and works out its own link
+ * and primary-text colours; this puts back the seed colours, among them the link colours of
+ * `getModeTokens`, which are the ones that reach 4.5:1.
+ */
+const KEPT_SEEDS = [
+  'colorPrimary',
+  'colorLink',
+  'colorLinkHover',
+  'colorLinkActive',
+  'colorPrimaryText',
+  'colorPrimaryTextHover',
+  'colorPrimaryTextActive',
+] as const;
+
+const keepPrimary: MappingAlgorithm = (seed, mapToken) => {
+  const kept = { ...(mapToken ?? antdTheme.defaultAlgorithm(seed)) };
+  for (const name of KEPT_SEEDS) {
+    const value = (seed as unknown as Record<string, unknown>)[name];
+    if (typeof value === 'string') (kept as Record<string, unknown>)[name] = value;
+  }
+  return kept;
+};
 
 /** The Ant Design theme of a mode. Changing it re-themes the page in place; nothing reloads. */
 export function toAntdTheme(tokens: ModeTokens): ThemeConfig {
@@ -93,6 +142,13 @@ export function toAntdTheme(tokens: ModeTokens): ThemeConfig {
       colorPrimary: tokens.colorPrimary,
       colorPrimaryHover: tokens.colorPrimaryHover,
       colorPrimaryActive: tokens.colorPrimaryActive,
+      // Text and links in the primary colour use the shades that reach 4.5:1 (see ModeTokens).
+      colorLink: tokens.colorLink,
+      colorLinkHover: tokens.colorLinkHover,
+      colorLinkActive: tokens.colorLinkActive,
+      colorPrimaryText: tokens.colorLink,
+      colorPrimaryTextHover: tokens.colorLinkHover,
+      colorPrimaryTextActive: tokens.colorLinkActive,
       colorBgContainer: tokens.colorBgContainer,
       colorBgLayout: tokens.colorBgLayout,
       colorBgElevated: tokens.colorBgElevated,
@@ -108,6 +164,20 @@ export function toAntdTheme(tokens: ModeTokens): ThemeConfig {
     components: {
       // Solid primary buttons carry dark text: white on the primary colour is only 2.4:1.
       Button: { primaryColor: tokens.colorTextOnPrimary },
+      Menu: {
+        itemSelectedColor: tokens.colorLink,
+        subMenuItemSelectedColor: tokens.colorLink,
+        horizontalItemSelectedColor: tokens.colorLink,
+      },
+      Pagination: {
+        itemActiveColor: tokens.colorLink,
+        itemActiveColorHover: tokens.colorLinkHover,
+      },
+      Tabs: {
+        itemSelectedColor: tokens.colorLink,
+        itemHoverColor: tokens.colorLinkHover,
+        itemActiveColor: tokens.colorLinkActive,
+      },
     },
   };
 }

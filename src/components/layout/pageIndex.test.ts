@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AdminRoute } from '../../access/canAccess';
-import { indexPages, matchPage } from './pageIndex';
+import { indexPages, matchPage, pageIdentifier, titleWithIdentifier } from './pageIndex';
 
 const routes: AdminRoute[] = [
   { path: '/user/login', layout: false, component: './login' },
@@ -85,5 +85,63 @@ describe('matchPage', () => {
 
   it('is not fooled by a doubled or a trailing slash', () => {
     expect(matchPage(pages, '//users///list/')?.path).toBe('/users/list');
+  });
+});
+
+describe('pageIdentifier', () => {
+  const pages = indexPages(routes);
+  const id = (path: string) => pageIdentifier(pages, path);
+
+  it('is the value of the parameter of a parameter route', () => {
+    expect(id('/users/42')).toBe('42');
+    expect(id('/users/42/')).toBe('42');
+  });
+
+  it('is nothing for a page with a fixed address, even when a parameter route could match it', () => {
+    expect(id('/users/list')).toBeUndefined();
+    expect(id('/users/abuse')).toBeUndefined();
+    expect(id('/standalone')).toBeUndefined();
+    expect(id('/nowhere/42')).toBeUndefined();
+  });
+
+  it('shows Thai, Arabic and emoji values as they are, decoded', () => {
+    expect(id(`/users/${encodeURIComponent('สมชาย')}`)).toBe('สมชาย');
+    expect(id(`/users/${encodeURIComponent('١٢٣')}`)).toBe('١٢٣');
+    expect(id(`/users/${encodeURIComponent('😀7')}`)).toBe('😀7');
+  });
+
+  it('keeps a value that cannot be decoded as it is', () => {
+    expect(id('/users/%E0%A4%A')).toBe('%E0%A4%A');
+  });
+
+  it('removes direction and control characters that could disguise the title', () => {
+    const bidi = String.fromCharCode(0x202e);
+    expect(id(`/users/${encodeURIComponent(`4${bidi}2`)}`)).toBe('42');
+    expect(
+      id(`/users/${encodeURIComponent(`4${String.fromCharCode(0)}${String.fromCharCode(10)}2`)}`),
+    ).toBe('42');
+  });
+
+  it('is nothing when nothing is left of the value', () => {
+    expect(id(`/users/${encodeURIComponent(String.fromCharCode(0x200f))}`)).toBeUndefined();
+  });
+
+  it('cuts a long value to 20 characters, counting code points, and marks the cut', () => {
+    const long = 'a'.repeat(5000);
+    expect(id(`/users/${long}`)).toBe(`${'a'.repeat(19)}…`);
+    const emoji = '😀'.repeat(30);
+    expect(id(`/users/${encodeURIComponent(emoji)}`)).toBe(`${'😀'.repeat(19)}…`);
+    expect(id(`/users/${'b'.repeat(20)}`)).toBe('b'.repeat(20));
+  });
+});
+
+describe('titleWithIdentifier', () => {
+  it('joins the title and the identifier with a middle dot', () => {
+    expect(titleWithIdentifier('User detail', '42')).toBe('User detail · 42');
+    expect(titleWithIdentifier('用户详情', '42')).toBe('用户详情 · 42');
+  });
+
+  it('leaves the title alone without an identifier', () => {
+    expect(titleWithIdentifier('User list', undefined)).toBe('User list');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contrastRatio, pickOnPrimary } from './contrast';
+import { contrastRatio, mixHex, pickOnPrimary, readableText } from './contrast';
 
 describe('contrastRatio', () => {
   it('gives 21 for black on white and 1 for a colour on itself', () => {
@@ -76,5 +76,62 @@ describe('pickOnPrimary', () => {
       const other = picked === '#06201F' ? '#FFFFFF' : '#06201F';
       expect(contrastRatio(picked, hex)).toBeGreaterThanOrEqual(contrastRatio(other, hex));
     }
+  });
+});
+
+describe('mixHex', () => {
+  it('gives the first colour at 0 and the second at 1, and the middle in between', () => {
+    expect(mixHex('#102030', '#FFFFFF', 0)).toBe('#102030');
+    expect(mixHex('#102030', '#FFFFFF', 1)).toBe('#FFFFFF');
+    expect(mixHex('#000000', '#FFFFFF', 0.5)).toBe('#808080');
+  });
+
+  it('writes upper case six-digit hex', () => {
+    expect(mixHex('#0abab5', '#000', 0.2)).toMatch(/^#[0-9A-F]{6}$/);
+  });
+});
+
+describe('readableText', () => {
+  const light = ['#FFFFFF', '#FAFAFA'];
+  const dark = ['#1C2D3E', '#15202B', '#223548'];
+
+  it('leaves a colour that already reads well on every background as it is', () => {
+    expect(readableText('#0ABAB5', dark)).toBe('#0ABAB5');
+    expect(readableText('#1F2933', light)).toBe('#1F2933');
+  });
+
+  it('darkens a colour on light backgrounds until it reaches 4.5:1 on all of them', () => {
+    const text = readableText('#0ABAB5', light);
+    expect(text).not.toBe('#0ABAB5');
+    for (const bg of light) expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps the colour as close to the original as the limit allows', () => {
+    const text = readableText('#0ABAB5', light);
+    const lighterStep = mixHex('#0ABAB5', '#000000', 0.01);
+    expect(Math.min(...light.map((bg) => contrastRatio(text, bg)))).toBeLessThan(4.6);
+    expect(lighterStep).not.toBe(text);
+  });
+
+  it('lightens a colour on dark backgrounds', () => {
+    const text = readableText('#089A96', dark);
+    for (const bg of dark) expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(text, dark[0])).toBeGreaterThan(contrastRatio('#089A96', dark[0]));
+  });
+
+  it('reaches the limit for any colour, even one that is the same as the background', () => {
+    for (const colour of ['#FFFFFF', '#000000', '#FFD700', '#00FFFF', '#7C3AED', '#FAFAFA']) {
+      for (const backgrounds of [light, dark]) {
+        const text = readableText(colour, backgrounds);
+        for (const bg of backgrounds) {
+          expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  it('takes the limit as a parameter', () => {
+    const text = readableText('#0ABAB5', light, 7);
+    for (const bg of light) expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(7);
   });
 });

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { envelope, jsonResponse, stubFetch, XLSX_TYPE } from '../../tests/httpStubs';
 import { renderPage } from '../../tests/renderPage';
@@ -179,5 +179,88 @@ describe('ExportButton', () => {
     renderPage(<ExportButton name="daily" params={{}} viewCode="STATS:VIEW" />, 'zh-CN');
     fireEvent.click(screen.getByRole('button', { name: /导\s*出/ }));
     expect(await screen.findByText('请求过于频繁，请稍后再试')).toBeInTheDocument();
+  });
+});
+
+/** A fetch that never answers and rejects like the browser when its signal is aborted. */
+function hangingFetch() {
+  const signals: AbortSignal[] = [];
+  const calls = stubFetch(
+    ({ init }) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init.signal as AbortSignal;
+        signals.push(signal);
+        signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      }),
+  );
+  return { calls, signals };
+}
+
+describe('ExportButton: cancel and time limit', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('offers no cancel button until the download starts', () => {
+    mount();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+  });
+
+  it('cancels the download: the request is aborted, nothing is saved, and it can be started again', async () => {
+    const { signals } = hangingFetch();
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(signals[0].aborted).toBe(true);
+    expect(await screen.findByText('Export cancelled')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Export/ })).not.toBeDisabled());
+    expect(saved).toEqual([]);
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Network error/)).toBeNull();
+  });
+
+  it('writes the cancel button and the note in Chinese too', async () => {
+    hangingFetch();
+    renderPage(<ExportButton name="daily" params={{}} viewCode="STATS:VIEW" />, 'zh-CN');
+    fireEvent.click(screen.getByRole('button', { name: /导\s*出/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /取\s*消/ }));
+    expect(await screen.findByText('已取消导出')).toBeInTheDocument();
+  });
+
+  it('stops the download when the page is left, and says nothing', async () => {
+    const { signals } = hangingFetch();
+    const { unmount } = mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await waitFor(() => expect(signals).toHaveLength(1));
+    unmount();
+    expect(signals[0].aborted).toBe(true);
+    expect(saved).toEqual([]);
+  });
+
+  it('shows "Request timed out. Please try again." after 5 minutes and saves nothing', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    hangingFetch();
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(299_999);
+    });
+    expect(screen.queryByText('Request timed out. Please try again.')).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.getByText('Request timed out. Please try again.')).toBeInTheDocument();
+    expect(saved).toEqual([]);
+  });
+
+  it('shows the gateway text when the gateway page comes back', async () => {
+    stubFetch(() => new Response('<html>Bad Gateway</html>', { status: 502 }));
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(
+      await screen.findByText('The service is temporarily unavailable. Please try again later.'),
+    ).toBeInTheDocument();
+    expect(saved).toEqual([]);
   });
 });

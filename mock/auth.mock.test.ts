@@ -371,8 +371,10 @@ describe('GET /meta', () => {
     const { body } = await meta(await signIn('finance'));
     expect(body.data).toEqual(META_DEFAULTS);
     // The twelve values typed in again from contract 17.5, so the table above cannot agree with itself by accident.
+    // The one difference: the fake backend lists seven languages (the contract's default is only
+    // `en`), so that every language tab and matrix can be looked at with Thai, Arabic and the others.
     expect(body.data).toMatchObject({
-      supportedLocales: ['en'],
+      supportedLocales: ['en', 'zh-Hans', 'th', 'ar', 'id', 'vi', 'es'],
       landIntervalMinutes: 15,
       allowedCurrencies: ['USD'],
       deletionAlertAfterFailures: 5,
@@ -390,7 +392,6 @@ describe('GET /meta', () => {
       renderAssetMaxBytes: 104857600,
     });
     expect(body.data).toMatchObject({
-      supportedLocales: ['en'],
       allowedCurrencies: ['USD'],
       declarationRequired: true,
       catalogImageMaxBytes: 2097152,
@@ -419,7 +420,27 @@ describe('GET /meta', () => {
     const token = await signIn('root');
     const first = await meta(token);
     first.body.data.supportedLocales.push('x');
-    expect((await meta(token)).body.data.supportedLocales).toEqual(['en']);
+    expect((await meta(token)).body.data.supportedLocales).toEqual([
+      'en',
+      'zh-Hans',
+      'th',
+      'ar',
+      'id',
+      'vi',
+      'es',
+    ]);
+  });
+
+  it('lists the seven languages of the product, English first, with no tag twice', async () => {
+    const { body } = await meta(await signIn('root'));
+    const locales: string[] = body.data.supportedLocales;
+    expect(locales[0]).toBe('en');
+    expect(new Set(locales).size).toBe(locales.length);
+    // Thai, Arabic, Indonesian, Vietnamese, Spanish, English and Chinese.
+    for (const tag of ['th', 'ar', 'id', 'vi', 'es', 'en', 'zh-Hans']) {
+      expect(locales).toContain(tag);
+    }
+    expect(locales).toHaveLength(7);
   });
 });
 

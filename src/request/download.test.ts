@@ -235,6 +235,184 @@ describe('downloadFile: failures are shown, never saved', () => {
   });
 });
 
+/** A fetch that answers with an xlsx header and a body that stays open until the signal is aborted. */
+function slowBody(firstChunk = new Uint8Array(3)) {
+  const signals: AbortSignal[] = [];
+  stubFetch(({ init }) => {
+    const signal = init.signal as AbortSignal;
+    signals.push(signal);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(firstChunk);
+        signal.addEventListener('abort', () =>
+          controller.error(new DOMException('aborted', 'AbortError')),
+        );
+      },
+    });
+    return new Response(stream, { status: 200, headers: { 'content-type': XLSX_TYPE } });
+  });
+  return signals;
+}
+
+describe('downloadFile: gateway page', () => {
+  it.each([502, 503, 504])(
+    'a %i page is GATEWAY_UNAVAILABLE and nothing is saved',
+    async (status) => {
+      stubFetch(() => textResponse(status, '<html>Bad Gateway</html>', 'text/html'));
+      const e = await caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx' }));
+      expect([e.code, e.httpStatus]).toEqual(['GATEWAY_UNAVAILABLE', status]);
+      expect(saved).toEqual([]);
+    },
+  );
+});
+
+describe('downloadFile: time limit and cancel', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('gives up after 5 minutes, also in the middle of the body, and saves nothing', async () => {
+    vi.useFakeTimers();
+    const signals = slowBody();
+    const pending = caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx' }));
+    await vi.advanceTimersByTimeAsync(299_999);
+    expect(signals[0].aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const e = await pending;
+    expect([e.code, e.httpStatus]).toEqual(['REQUEST_TIMEOUT', 0]);
+    expect(saved).toEqual([]);
+    expect(createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('gives up while waiting for the answer as well', async () => {
+    vi.useFakeTimers();
+    stubFetch(
+      ({ init }) =>
+        new Promise<Response>((_resolve, reject) => {
+          (init.signal as AbortSignal).addEventListener('abort', () =>
+            reject(new DOMException('aborted', 'AbortError')),
+          );
+        }),
+    );
+    const pending = caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx' }));
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect((await pending).code).toBe('REQUEST_TIMEOUT');
+  });
+
+  it('takes another limit from the caller', async () => {
+    vi.useFakeTimers();
+    slowBody();
+    const pending = caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx', timeoutMs: 2000 }));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect((await pending).code).toBe('REQUEST_TIMEOUT');
+  });
+
+  it('can be cancelled in the middle of the body: an AbortError and no file', async () => {
+    const controller = new AbortController();
+    slowBody();
+    const progress: number[] = [];
+    const outcome = downloadFile({
+      url: '/x',
+      fallbackName: 'a.xlsx',
+      signal: controller.signal,
+      onProgress: (n) => progress.push(n),
+    }).catch((e: unknown) => e);
+    await vi.waitFor(() => expect(progress).toEqual([3]));
+    controller.abort();
+    const e = (await outcome) as { name?: string; code?: string };
+    expect(e.name).toBe('AbortError');
+    expect(e.code).toBeUndefined();
+    expect(saved).toEqual([]);
+    expect(createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('can be cancelled while waiting for the answer', async () => {
+    const controller = new AbortController();
+    stubFetch(
+      ({ init }) =>
+        new Promise<Response>((_resolve, reject) => {
+          (init.signal as AbortSignal).addEventListener('abort', () =>
+            reject(new DOMException('aborted', 'AbortError')),
+          );
+        }),
+    );
+    const outcome = downloadFile({
+      url: '/x',
+      fallbackName: 'a.xlsx',
+      signal: controller.signal,
+    }).catch((e: unknown) => e);
+    controller.abort();
+    expect(((await outcome) as { name?: string }).name).toBe('AbortError');
+  });
+
+  it('a signal that is already aborted sends nothing and saves nothing', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const calls = stubFetch(() => xlsx([1]));
+    const e = (await downloadFile({
+      url: '/x',
+      fallbackName: 'a.xlsx',
+      signal: controller.signal,
+    }).catch((err: unknown) => err)) as { name?: string };
+    expect(e.name).toBe('AbortError');
+    expect(calls).toEqual([]);
+    expect(saved).toEqual([]);
+  });
+
+  it('a cancel that arrives just as the last byte does saves nothing', async () => {
+    const controller = new AbortController();
+    stubFetch(() => {
+      const body = new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(new Uint8Array(2));
+          c.close();
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'content-type': XLSX_TYPE } });
+    });
+    const outcome = downloadFile({
+      url: '/x',
+      fallbackName: 'a.xlsx',
+      signal: controller.signal,
+      onProgress: () => controller.abort(),
+    }).catch((e: unknown) => e);
+    expect(((await outcome) as { name?: string }).name).toBe('AbortError');
+    expect(saved).toEqual([]);
+  });
+
+  it('a finished download clears the clock', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    stubFetch(({ init }) => {
+      signal = init.signal as AbortSignal;
+      return xlsx([1, 2, 3]);
+    });
+    await downloadFile({ url: '/x', fallbackName: 'a.xlsx' });
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(signal?.aborted).toBe(false);
+    expect(saved).toHaveLength(1);
+  });
+
+  it('carries no token and no address in what it throws', async () => {
+    vi.useFakeTimers();
+    setToken('tok-secret-xyz');
+    slowBody();
+    const pending = caught(
+      downloadFile({
+        url: '/moderation/7/export',
+        params: { fileUrl: 'https://files.example.test/a.png?sig=zzz' },
+        fallbackName: 'a.xlsx',
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(300_000);
+    const e = await pending;
+    const text = `${String(e)} ${e.message} ${JSON.stringify(e)}`;
+    expect(text).not.toContain('tok-secret-xyz');
+    expect(text).not.toContain('files.example.test');
+    expect(text).not.toContain('sig=zzz');
+  });
+});
+
 describe('parseContentDisposition', () => {
   it('reads a quoted and an unquoted filename', () => {
     expect(parseContentDisposition('attachment; filename="a b.xlsx"')).toBe('a b.xlsx');

@@ -12,7 +12,13 @@ const REASON_CODES = reasonCodes(
   readFileSync('docs/shared-snapshots/backend-task-java-backend.md', 'utf8'),
 );
 
-const LOCAL_CODES = ['NETWORK_ERROR', 'INVALID_RESPONSE', 'UNKNOWN'];
+const LOCAL_CODES = [
+  'NETWORK_ERROR',
+  'REQUEST_TIMEOUT',
+  'GATEWAY_UNAVAILABLE',
+  'INVALID_RESPONSE',
+  'UNKNOWN',
+];
 
 const LANGUAGES = [
   ['zh-CN', zhError, zhReason],
@@ -63,6 +69,17 @@ describe.each(LANGUAGES)('%s error and reason texts', (_name, error, reason) => 
       [...codes, ...LOCAL_CODES].map((c) => `error.${c}`).sort(),
     );
     expect(Object.keys(reason).sort()).toEqual(REASON_CODES.map((c) => `reason.${c}`).sort());
+  });
+});
+
+describe('the two texts the request layer adds', () => {
+  it('say what the person asked for', () => {
+    expect(zhError['error.REQUEST_TIMEOUT']).toBe('请求超时，请重试');
+    expect(zhError['error.GATEWAY_UNAVAILABLE']).toBe('服务暂时不可用，请稍后重试');
+    expect(enError['error.REQUEST_TIMEOUT']).toBe('Request timed out. Please try again.');
+    expect(enError['error.GATEWAY_UNAVAILABLE']).toBe(
+      'The service is temporarily unavailable. Please try again later.',
+    );
   });
 });
 

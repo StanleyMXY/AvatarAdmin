@@ -48,6 +48,7 @@ export class FakeXHR {
   sent = false;
   aborted = false;
   status = 0;
+  timeout = 0;
   responseText = '';
   upload: { onprogress: ((e: unknown) => void) | null } = { onprogress: null };
   onload: (() => void) | null = null;

@@ -148,6 +148,32 @@ describe('uploadFile', () => {
     expect(e.httpStatus).toBe(0);
   });
 
+  it('sets a limit of 5 minutes on the request', () => {
+    void uploadFile({ url: '/uploads/apk', file: file() }).catch(() => {});
+    expect(xhrs[0].timeout).toBe(300_000);
+  });
+
+  it('takes another limit from the caller', () => {
+    void uploadFile({ url: '/uploads/apk', file: file(), timeoutMs: 10_000 }).catch(() => {});
+    expect(xhrs[0].timeout).toBe(10_000);
+  });
+
+  it('a timeout is REQUEST_TIMEOUT, not NETWORK_ERROR, and does not touch the session', async () => {
+    setToken('keep');
+    const pending = uploadFile({ url: '/uploads/apk', file: file() });
+    xhrs[0].ontimeout?.();
+    const e = await caught(pending);
+    expect([e.code, e.httpStatus]).toEqual(['REQUEST_TIMEOUT', 0]);
+    expect(onExpired).not.toHaveBeenCalled();
+    expect(getToken()).toBe('keep');
+  });
+
+  it('a 504 page from the gateway is GATEWAY_UNAVAILABLE', async () => {
+    const pending = uploadFile({ url: '/uploads/apk', file: file() });
+    xhrs[0].respond(504, '<html>Gateway Time-out</html>');
+    expect((await caught(pending)).code).toBe('GATEWAY_UNAVAILABLE');
+  });
+
   it('abort cancels the request and rejects with an AbortError', async () => {
     const controller = new AbortController();
     const pending = uploadFile({ url: '/uploads/apk', file: file(), signal: controller.signal });

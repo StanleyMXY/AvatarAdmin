@@ -24,7 +24,8 @@ function readDetails(data: unknown): ErrorDetail[] {
 
 /**
  * A failed request. `code` is the backend's error code, or `NETWORK_ERROR` (no answer),
- * `INVALID_RESPONSE` (an answer that is not the JSON envelope). `httpStatus` is 0 when there was
+ * `REQUEST_TIMEOUT` (no answer in time), `GATEWAY_UNAVAILABLE` (the gateway's own 502, 503 or 504
+ * page), `INVALID_RESPONSE` (any other answer that is not the JSON envelope). `httpStatus` is 0 when there was
  * no answer. `details` comes from `data.details` of an INVALID_REQUEST answer.
  */
 export class ApiError extends Error {
@@ -48,6 +49,16 @@ export function networkError(): ApiError {
     code: 'NETWORK_ERROR',
     httpStatus: 0,
     message: 'The request could not be sent or the answer did not arrive.',
+    data: null,
+  });
+}
+
+/** No answer within the time limit (30 seconds for a request, 5 minutes for a file transfer). */
+export function timeoutError(): ApiError {
+  return new ApiError({
+    code: 'REQUEST_TIMEOUT',
+    httpStatus: 0,
+    message: 'The request took too long.',
     data: null,
   });
 }

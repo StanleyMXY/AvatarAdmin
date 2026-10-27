@@ -18,6 +18,17 @@ export function parseEnvelope(text: string): Envelope | null {
   return { code, message: typeof message === 'string' ? message : '', data: data ?? null };
 }
 
+/** The statuses with which a gateway or proxy in front of the backend says it cannot reach it. */
+const GATEWAY_STATUSES: readonly number[] = [502, 503, 504];
+
+const gatewayUnavailable = (httpStatus: number) =>
+  new ApiError({
+    code: 'GATEWAY_UNAVAILABLE',
+    httpStatus,
+    message: `The service is temporarily unavailable (HTTP ${httpStatus}).`,
+    data: null,
+  });
+
 const invalidResponse = (httpStatus: number) =>
   new ApiError({
     code: 'INVALID_RESPONSE',
@@ -30,7 +41,8 @@ const invalidResponse = (httpStatus: number) =>
  * Turns an HTTP answer into the envelope's `data` or throws. Success needs an HTTP 2xx status
  * and code "200"; any other code is the backend's error and is thrown as it is, whatever the
  * status. An answer without an envelope is INVALID_RESPONSE, except a bare 429 (a limiter in
- * front of the backend), which is RATE_LIMITED.
+ * front of the backend), which is RATE_LIMITED, and a 502, 503 or 504 (the gateway's own page, the
+ * body is never shown), which is GATEWAY_UNAVAILABLE.
  */
 export function unwrapResponse<T = unknown>(httpStatus: number, text: string): T {
   const envelope = parseEnvelope(text);
@@ -38,6 +50,7 @@ export function unwrapResponse<T = unknown>(httpStatus: number, text: string): T
     if (httpStatus === 429) {
       return fail(new ApiError({ code: 'RATE_LIMITED', httpStatus, message: '', data: null }));
     }
+    if (GATEWAY_STATUSES.includes(httpStatus)) return fail(gatewayUnavailable(httpStatus));
     return fail(invalidResponse(httpStatus));
   }
   if (envelope.code === SUCCESS_CODE) {

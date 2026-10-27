@@ -5,6 +5,7 @@ import { canAccess } from './access/canAccess';
 import { buildVars } from './buildVars';
 import { AccountMenu } from './components/layout/AccountMenu';
 import { LangSwitch } from './components/layout/LangSwitch';
+import { pageTitleRender } from './components/layout/pageTitle';
 import { TabManager } from './components/layout/TabManager';
 import { ThemeSwitch } from './components/layout/ThemeSwitch';
 import { applyInitialLocale } from './locales/initLocale';
@@ -62,6 +63,7 @@ export const layout = ({ initialState }: { initialState?: InitialState }) => {
     headerHeight: LAYOUT.headerHeight,
     contentStyle: { padding: LAYOUT.contentPadding },
     menu: { locale: true },
+    pageTitleRender,
     actionsRender: () => [<LangSwitch key="lang" />, <ThemeSwitch key="theme" />],
     avatarProps: { render: () => <AccountMenu /> },
     unAccessible: (

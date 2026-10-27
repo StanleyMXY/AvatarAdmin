@@ -1,7 +1,10 @@
 // `GET /api/admin/meta`: twelve configuration values (the defaults of contract 17.5; a key without
-// a default would be null) and eight upload limits (backend reply 3).
+// a default would be null) and eight upload limits (backend reply 3). The one value that is not the
+// contract's default is `supportedLocales`: the fake backend lists the seven languages of the product
+// (the default is only `en`), so that the language tabs and the template matrix can be looked at with
+// Thai, Arabic, Indonesian, Vietnamese, Spanish, English and Chinese.
 export const META_DEFAULTS = {
-  supportedLocales: ['en'],
+  supportedLocales: ['en', 'zh-Hans', 'th', 'ar', 'id', 'vi', 'es'],
   landIntervalMinutes: 15,
   allowedCurrencies: ['USD'],
   deletionAlertAfterFailures: 5,

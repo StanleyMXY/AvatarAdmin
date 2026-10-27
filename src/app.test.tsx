@@ -72,6 +72,40 @@ describe('layout', () => {
     expect(screen.getByText('Page not found')).toBeInTheDocument();
   });
 
+  it('writes the identifier of a parameter page in the window title, and leaves the others alone', () => {
+    const { pageTitleRender } = config();
+    expect(
+      pageTitleRender({ pathname: '/users/42' }, 'User detail - Avatar Admin', {
+        pageName: 'User detail',
+      }),
+    ).toBe('User detail · 42 - Avatar Admin');
+    expect(
+      pageTitleRender({ pathname: '/moderation/9f2' }, '审核详情 - Avatar Admin', {
+        pageName: '审核详情',
+      }),
+    ).toBe('审核详情 · 9f2 - Avatar Admin');
+    expect(
+      pageTitleRender({ pathname: '/users/list' }, 'User list - Avatar Admin', {
+        pageName: 'User list',
+      }),
+    ).toBe('User list - Avatar Admin');
+    expect(
+      pageTitleRender({ pathname: '/users/deletions' }, 'Deletions - Avatar Admin', {
+        pageName: 'Deletions',
+      }),
+    ).toBe('Deletions - Avatar Admin');
+  });
+
+  it('leaves the title as the layout made it when the page name is not in it', () => {
+    const { pageTitleRender } = config();
+    expect(pageTitleRender({ pathname: '/users/42' }, 'Avatar Admin', {})).toBe('Avatar Admin');
+    // A path that is no page of the menu gets the product name as its page name: no identifier.
+    expect(
+      pageTitleRender({ pathname: '/users/42' }, 'Avatar Admin', { pageName: 'Avatar Admin' }),
+    ).toBe('Avatar Admin');
+    expect(pageTitleRender({}, 'Avatar Admin')).toBe('Avatar Admin');
+  });
+
   it('puts the language and theme switches in the header', () => {
     const actions = config(signedIn(true, [])).actionsRender();
     expect(actions).toHaveLength(2);

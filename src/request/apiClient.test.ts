@@ -293,11 +293,19 @@ describe('apiRequest: failures without a usable envelope', () => {
     expect(e.httpStatus).toBe(200);
   });
 
-  it('maps a gateway error page to INVALID_RESPONSE with the gateway status', async () => {
-    stubFetch(() => textResponse(502, '<html>Bad Gateway</html>'));
-    const e = await caught(apiRequest({ method: 'GET', url: '/x' }));
-    expect(e.code).toBe('INVALID_RESPONSE');
-    expect(e.httpStatus).toBe(502);
+  it.each([502, 503, 504])(
+    'maps a %i gateway error page to GATEWAY_UNAVAILABLE',
+    async (status) => {
+      stubFetch(() => textResponse(status, '<html>Bad Gateway</html>'));
+      const e = await caught(apiRequest({ method: 'GET', url: '/x' }));
+      expect(e.code).toBe('GATEWAY_UNAVAILABLE');
+      expect(e.httpStatus).toBe(status);
+    },
+  );
+
+  it('keeps INVALID_RESPONSE for an HTML page with another error status', async () => {
+    stubFetch(() => textResponse(500, '<html>Server Error</html>'));
+    expect((await caught(apiRequest({ method: 'GET', url: '/x' }))).code).toBe('INVALID_RESPONSE');
   });
 
   it('maps JSON that is not an envelope to INVALID_RESPONSE', async () => {
@@ -352,5 +360,172 @@ describe('apiRequest: nothing leaks', () => {
       calls[0].init.credentials === undefined || calls[0].init.credentials === 'same-origin',
     ).toBe(true);
     expect(JSON.stringify(calls[0].init.headers)).not.toMatch(/token=|x-api-key|x-token/i);
+  });
+});
+
+/** A fetch that never answers by itself and rejects like the browser when its signal is aborted. */
+function hangingFetch() {
+  const signals: AbortSignal[] = [];
+  const calls = stubFetch(
+    ({ init }) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init.signal as AbortSignal;
+        signals.push(signal);
+        signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      }),
+  );
+  return { calls, signals };
+}
+
+describe('apiRequest: time limit', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('gives up after 30 seconds with REQUEST_TIMEOUT, not before', async () => {
+    const { signals } = hangingFetch();
+    const pending = caught(apiRequest({ method: 'GET', url: '/slow' }));
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(signals[0].aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const e = await pending;
+    expect([e.code, e.httpStatus]).toEqual(['REQUEST_TIMEOUT', 0]);
+  });
+
+  it('also limits a write', async () => {
+    hangingFetch();
+    const pending = caught(apiRequest({ method: 'POST', url: '/slow', body: { a: 1 } }));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect((await pending).code).toBe('REQUEST_TIMEOUT');
+  });
+
+  it('counts the reading of the body too', async () => {
+    let signal: AbortSignal | undefined;
+    stubFetch(({ init }) => {
+      signal = init.signal as AbortSignal;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          signal?.addEventListener('abort', () =>
+            controller.error(new DOMException('aborted', 'AbortError')),
+          );
+        },
+      });
+      return Promise.resolve(new Response(stream, { status: 200 }));
+    });
+    const pending = caught(apiRequest({ method: 'GET', url: '/slow-body' }));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect((await pending).code).toBe('REQUEST_TIMEOUT');
+  });
+
+  it('takes a limit from the caller', async () => {
+    hangingFetch();
+    const pending = caught(apiRequest({ method: 'GET', url: '/slow', timeoutMs: 5000 }));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect((await pending).code).toBe('REQUEST_TIMEOUT');
+  });
+
+  it('a caller abort stays an AbortError, also when the time would have run out later', async () => {
+    const controller = new AbortController();
+    hangingFetch();
+    const pending = apiRequest({ method: 'GET', url: '/slow', signal: controller.signal });
+    const outcome = pending.catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(1000);
+    controller.abort();
+    const e = (await outcome) as { name?: string; code?: string };
+    expect(e.name).toBe('AbortError');
+    expect(e.code).toBeUndefined();
+  });
+
+  it('a signal that is already aborted sends nothing', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+    await expect(
+      apiRequest({ method: 'GET', url: '/x', signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(calls).toEqual([]);
+  });
+
+  it('an answer in time clears the clock, so nothing is aborted afterwards', async () => {
+    const seen: AbortSignal[] = [];
+    stubFetch(({ init }) => {
+      seen.push(init.signal as AbortSignal);
+      return jsonResponse(200, envelope('200', { ok: true }));
+    });
+    await apiRequest({ method: 'GET', url: '/fast' });
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(seen[0].aborted).toBe(false);
+  });
+
+  it('a failed request clears the clock as well', async () => {
+    stubFetch(() => Promise.reject(new TypeError('offline')));
+    await caught(apiRequest({ method: 'GET', url: '/x' }));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('a timed-out request does not tell the session layer anything', async () => {
+    setToken('keep');
+    hangingFetch();
+    const pending = caught(apiRequest({ method: 'GET', url: '/slow' }));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await pending;
+    expect(onExpired).not.toHaveBeenCalled();
+    expect(getToken()).toBe('keep');
+  });
+});
+
+describe('apiRequest: failures carry no token and no address', () => {
+  const TOKEN = 'tok-very-secret-123';
+  const FILE_URL = 'https://files.example.test/moderation/ภาพ-صورة.png?X-Signature=abc123';
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const everything = (e: unknown) =>
+    [String(e), (e as Error).message, JSON.stringify(e), JSON.stringify((e as ApiError).data)].join(
+      '\n',
+    );
+
+  it('does not put them in the error or the console, whichever way the request fails', async () => {
+    vi.useFakeTimers();
+    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) =>
+      vi.spyOn(console, m),
+    );
+    setToken(TOKEN);
+    const params = { fileUrl: FILE_URL };
+    const failures: ApiError[] = [];
+
+    stubFetch(() => textResponse(502, `<html>upstream ${FILE_URL}</html>`));
+    failures.push(await caught(apiRequest({ method: 'GET', url: '/moderation/7', params })));
+
+    stubFetch(() => textResponse(200, `<html>${FILE_URL}</html>`));
+    failures.push(await caught(apiRequest({ method: 'GET', url: '/moderation/7', params })));
+
+    stubFetch(() => Promise.reject(new TypeError(`Failed to fetch ${FILE_URL} ${TOKEN}`)));
+    failures.push(await caught(apiRequest({ method: 'GET', url: '/moderation/7', params })));
+
+    hangingFetch();
+    const timedOut = caught(apiRequest({ method: 'GET', url: '/moderation/7', params }));
+    await vi.advanceTimersByTimeAsync(30_000);
+    failures.push(await timedOut);
+
+    expect(failures.map((f) => f.code)).toEqual([
+      'GATEWAY_UNAVAILABLE',
+      'INVALID_RESPONSE',
+      'NETWORK_ERROR',
+      'REQUEST_TIMEOUT',
+    ]);
+    for (const failure of failures) {
+      const text = everything(failure);
+      expect(text).not.toContain(TOKEN);
+      expect(text).not.toContain('X-Signature');
+      expect(text).not.toContain('files.example.test');
+    }
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
 });

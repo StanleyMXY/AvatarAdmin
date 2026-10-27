@@ -63,6 +63,7 @@ const messages: Record<string, string> = {
   'pages.upload.reupload': 'Upload the file again',
   'pages.export.button': 'Export',
   'pages.export.received': 'Received {bytes}',
+  'pages.export.cancelled': 'Export cancelled',
   'pages.export.saved': 'Saved {name}',
   'pages.export.narrowRange':
     'If the range is large, narrow the date range or the filters (an export has a row limit).',
