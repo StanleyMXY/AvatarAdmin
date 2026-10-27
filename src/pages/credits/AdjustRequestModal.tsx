@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdjustKind, createAdjustRequest } from '../../services/credits';
 import { describeFailure } from '../../session/describe';
@@ -106,6 +107,7 @@ export function AdjustRequestModal({ open, accountId, onClose, onCreated }: Prop
         initialValues={{ accountId: accountId ?? '', kind: 'GRANT', delta: null, reason: '' }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="accountId"
           label={t('credits.common.accountId')}

@@ -16,6 +16,7 @@ import {
 } from 'antd';
 import { useState } from 'react';
 import { linkRule } from '../../components/LinkInput';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
 import {
@@ -423,6 +424,7 @@ export function CreativeModal({
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         {editing ? (
           <Form.Item label={t('ads.creatives.field.unit')}>
             <Typography.Text data-testid="creative-unit-fixed" style={{ overflowWrap: 'anywhere' }}>

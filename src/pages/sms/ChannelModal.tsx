@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select, Switch, Typography } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   createChannel,
@@ -183,6 +184,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         {editing ? (
           <Form.Item label={t('sms.channels.field.code')}>
             <Typography.Text strong style={{ overflowWrap: 'anywhere' }}>

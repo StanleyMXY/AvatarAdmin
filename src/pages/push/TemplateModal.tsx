@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal, Select, Switch } from 'antd';
 import { useState } from 'react';
 import type { LinkTargetValue } from '../../components/LinkTargetField';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   createTemplate,
@@ -136,6 +137,7 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="triggerReason"
           label={t('push.templates.reason')}

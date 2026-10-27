@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Form, Input, Modal, Select } from 'antd';
 import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { AVATAR_STYLES, type AvatarStyle, createDefaultAvatar } from '../../services/avatar';
 import { trimSpec } from '../../utils/trimSpec';
@@ -85,6 +86,7 @@ export function NewDefaultAvatarModal({ open, onClose, onSaved }: Props) {
         initialValues={{ name: '', style: undefined, authorized: false }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item label={t('avatar.defaults.source')} extra={t('avatar.defaults.sourceHint')}>
           <UploadBox>
             <UploadField<{ uploadId: string }>

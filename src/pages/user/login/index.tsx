@@ -1,6 +1,7 @@
 import { history, useIntl, useLocation } from '@umijs/max';
 import { Alert, Button, Form, Input } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../../hooks/useRevalidateOnLocaleChange';
 import { getToken } from '../../../request/session';
 import { hasToken, login } from '../../../services/auth';
 import { describeFailure, failureNotice, type Notice, noticeText } from '../../../session/describe';
@@ -80,6 +81,7 @@ export default function Login() {
   return (
     <AuthFrame titleId="auth.login.title">
       <Form form={form} layout="vertical" onFinish={submit} requiredMark={false}>
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="username"
           label={t('auth.login.username')}

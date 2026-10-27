@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Divider, Flex, Form, Input, Modal, Typography } from 'antd';
 import { useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type EmailTemplate, resetEmailTemplate, saveEmailTemplate } from '../../services/email';
 import { describeFailure } from '../../session/describe';
@@ -96,6 +97,7 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
         initialValues={{ subject: plainText(template.subject), body: plainText(template.body) }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item label={t('email.templates.field.code')}>
           <Typography.Text strong style={{ overflowWrap: 'anywhere' }}>
             {code}

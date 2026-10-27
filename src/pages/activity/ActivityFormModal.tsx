@@ -15,6 +15,7 @@ import {
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type ActivityBody,
@@ -220,6 +221,7 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
           initialValues={initial}
           onFinish={(values) => run(values)}
         >
+          <RevalidateOnLocaleChange />
           <Typography.Paragraph type="secondary">{t('activity.signin.note')}</Typography.Paragraph>
           {row?.status === 'ACTIVE' ? (
             <Alert

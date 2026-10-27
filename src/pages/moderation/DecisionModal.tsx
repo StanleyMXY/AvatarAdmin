@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Form, Input, Modal } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import type { ModerationDecision, ModerationRecord } from '../../services/moderation';
 import { describeFailure } from '../../session/describe';
@@ -78,6 +79,7 @@ export function DecisionModal({ record, decision, onSubmit, onClose }: Props) {
         requiredMark={false}
         onFinish={(values) => decision && run(decision, trimSpec(values.note ?? ''))}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="note"
           label={

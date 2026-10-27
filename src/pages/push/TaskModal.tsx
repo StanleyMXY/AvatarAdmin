@@ -3,6 +3,7 @@ import { Alert, App, DatePicker, Form, Modal, Radio } from 'antd';
 import type { Dayjs } from 'dayjs';
 import { useState } from 'react';
 import type { LinkTargetValue } from '../../components/LinkTargetField';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type Audience, createTask, type PushPlatform } from '../../services/push';
 import { AudienceFields } from './AudienceFields';
@@ -122,6 +123,7 @@ export function TaskModal({ open, locales, onClose, onSaved }: Props) {
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <AudienceFields form={form} locales={locales} />
         <ContentFields slot={picture} rejected={rejected} />
         <Form.Item name="sendMode" label={t('push.tasks.sendTime')}>

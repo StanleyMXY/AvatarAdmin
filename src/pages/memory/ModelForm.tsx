@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Flex, Form, Input, InputNumber, Modal } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
 import { MEMORY_NAME_PATTERN, registerEmbeddingModel } from '../../services/memory';
@@ -99,6 +100,7 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
           requiredMark={false}
           onFinish={(values) => send.run(values)}
         >
+          <RevalidateOnLocaleChange />
           <Form.Item
             name="modelName"
             label={t('memory.model.name')}

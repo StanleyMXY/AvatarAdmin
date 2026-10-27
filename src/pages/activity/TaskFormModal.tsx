@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select } from 'antd';
 import { useMemo, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   createTaskConfig,
@@ -157,6 +158,7 @@ export function TaskFormModal({ target, open, onClose, onSaved }: Props) {
           if (changed.taskType === 'daily_login') form.setFieldsValue({ targetValue: 1 });
         }}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="taskName"
           label={t('activity.task.form.name')}

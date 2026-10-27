@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Flex, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
 import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   AVATAR_STYLES,
@@ -170,6 +171,7 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="key"
           label={t('avatar.col.key')}

@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal, Typography } from 'antd';
 import { useCallback, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { getSmsMeta, type SmsChannel, sendTestSms } from '../../services/sms';
 import { describeFailure } from '../../session/describe';
@@ -88,6 +89,7 @@ export function TestSendModal({ channel, onClose }: Props) {
         requiredMark={false}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="mobile"
           label={t('sms.channels.testNumber')}

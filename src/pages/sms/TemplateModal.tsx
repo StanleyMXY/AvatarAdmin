@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal, Select, Switch, Typography } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { createTemplate, SMS_TYPES, type SmsTemplate, updateTemplate } from '../../services/sms';
 import { plainText } from '../../utils/plainText';
@@ -125,6 +126,7 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         {editing ? (
           <Form.Item label={t('sms.templates.field.code')}>
             <Typography.Text strong style={{ overflowWrap: 'anywhere' }}>

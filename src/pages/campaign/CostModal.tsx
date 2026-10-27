@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, DatePicker, Form, Input, Modal, Select, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type AttributionCampaign,
@@ -112,6 +113,7 @@ export function CostModal({ cost, campaigns, currency, onClose, onSaved }: Props
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         {editing ? (
           <>
             <Form.Item label={t('campaign.costs.f.campaign')}>

@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Spin, Typography } from 'antd';
 import { useMemo, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type AdminRole,
@@ -109,6 +110,7 @@ export function RoleModal({ role, onDone, onClose }: Props) {
         autoComplete="off"
         initialValues={{ name: role?.name ?? '', remark: role?.remark ?? '' }}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="name"
           label={t('system.roles.field.name')}

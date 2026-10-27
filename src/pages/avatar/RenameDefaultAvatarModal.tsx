@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type DefaultAvatar, renameDefaultAvatar } from '../../services/avatar';
 import { trimSpec } from '../../utils/trimSpec';
@@ -63,6 +64,7 @@ export function RenameDefaultAvatarModal({ avatar, onClose, onSaved }: Props) {
         initialValues={{ name: avatar?.name ?? '' }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="name"
           label={t('avatar.defaults.name')}

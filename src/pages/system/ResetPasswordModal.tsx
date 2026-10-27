@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import type { Me } from '../../services/auth';
 import { type AdminUser, resetAdminPassword } from '../../services/system';
@@ -75,6 +76,7 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
         autoComplete="off"
         initialValues={{ newPassword: '', confirm: '' }}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="newPassword"
           label={t('system.admins.resetField')}

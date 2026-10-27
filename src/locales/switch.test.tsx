@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
 import type { ReactElement } from 'react';
@@ -52,16 +52,28 @@ describe('validation texts after a language switch', () => {
     expect(screen.queryByText(enUS['pages.common.reasonRequired'])).toBeNull();
   });
 
-  // RECORDED DEFECT (task 32 report, "记录"): antd keeps the text of a message that a form has already
-  // shown, so it stays in the old language until the field is checked again. Remove `.fails` when it
-  // is fixed; vitest then reports this test as failing until the marker is gone.
-  it.fails('sign-in form: a message that is already on screen is written again in the new language', async () => {
+  // antd keeps the text of a message that a form has already shown; `RevalidateOnLocaleChange` checks
+  // the fields that show a message again when the language changes, keeping what was typed.
+  it('sign-in form: a message that is already on screen is written again in the new language', async () => {
     const user = userEvent.setup();
     const { rerender } = render(draw('en-US', <Login />));
     await user.click(screen.getByRole('button', { name: enUS['auth.login.submit'] }));
     expect(await screen.findByText(enUS['auth.login.usernameRequired'])).toBeInTheDocument();
     rerender(draw('zh-CN', <Login />));
     expect(await screen.findByText(zhCN['auth.login.usernameRequired'])).toBeInTheDocument();
-    expect(screen.queryByText(enUS['auth.login.usernameRequired'])).toBeNull();
+    await waitFor(() => expect(screen.queryByText(enUS['auth.login.usernameRequired'])).toBeNull());
+  });
+
+  it('reason dialog: a message that is already on screen is written again, and the typed text stays', async () => {
+    const user = userEvent.setup();
+    const dialog = <ReasonModalForm open title="x" onSubmit={async () => {}} onClose={() => {}} />;
+    const { rerender } = render(draw('en-US', dialog));
+    await user.type(screen.getByRole('textbox'), '   ');
+    await user.click(screen.getByRole('button', { name: enUS['pages.common.submit'] }));
+    expect(await screen.findByText(enUS['pages.common.reasonRequired'])).toBeInTheDocument();
+    rerender(draw('zh-CN', dialog));
+    expect(await screen.findByText(zhCN['pages.common.reasonRequired'])).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(enUS['pages.common.reasonRequired'])).toBeNull());
+    expect(screen.getByRole('textbox')).toHaveValue('   ');
   });
 });

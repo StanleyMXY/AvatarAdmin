@@ -1,6 +1,7 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Form, Input, Modal, Select } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
 import { type CosmeticItem, grantCosmetic, listCosmetics } from '../../services/avatar';
@@ -112,6 +113,7 @@ export function GrantCosmeticModal({
         initialValues={{ itemId: undefined, reason: '' }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         {forbidden ? (
           <Alert
             type="warning"

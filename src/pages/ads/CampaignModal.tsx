@@ -3,6 +3,7 @@ import { Alert, App, DatePicker, Form, Input, InputNumber, Modal, Typography } f
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdCampaign, createCampaign, updateCampaign } from '../../services/ads';
 import { plainText } from '../../utils/plainText';
@@ -114,6 +115,7 @@ export function CampaignModal({ open, campaign, onClose, onSaved }: Props) {
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="name"
           label={t('ads.campaigns.field.name')}

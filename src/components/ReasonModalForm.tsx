@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Form, Input, Modal } from 'antd';
 import { type ReactNode, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../hooks/useSingleFlight';
 import { describeFailure } from '../session/describe';
 import { countCodePoints } from '../utils/codePoints';
@@ -77,6 +78,7 @@ export function ReasonModalForm({
         onFinish={(values) => run(trimSpec(values.reason))}
         requiredMark={false}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="reason"
           label={reasonLabel ?? intl.formatMessage({ id: 'pages.common.reasonLabel' })}

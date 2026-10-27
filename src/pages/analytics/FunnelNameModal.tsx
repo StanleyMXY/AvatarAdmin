@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Form, Input, Modal, Typography } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { describeFailure } from '../../session/describe';
 import { useSubmitOnce } from '../../session/useSubmitOnce';
 import { countCodePoints } from '../../utils/codePoints';
@@ -60,6 +61,7 @@ export function FunnelNameModal({ title, initialName, onSubmit, onCancel }: Prop
         {t('analytics.funnel.dialog.hint')}
       </Typography.Paragraph>
       <Form form={form} layout="vertical" initialValues={{ name: initialName }} onFinish={submit}>
+        <RevalidateOnLocaleChange />
         <Form.Item
           label={t('analytics.funnel.dialog.name')}
           name="name"

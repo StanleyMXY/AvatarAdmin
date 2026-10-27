@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { RowActions } from '../../components/RowActions';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type AccountEntitlement,
@@ -129,6 +130,7 @@ function GrantDialog({
         initialValues={{ entitlementKey: null, durationDays: null, reason: '' }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="entitlementKey"
           label={t('subscriptions.account.entitlement')}

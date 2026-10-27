@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Select, Switch, Typography } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
 import type { Me } from '../../services/auth';
@@ -152,6 +153,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
           superAdmin: admin?.superAdmin ?? false,
         }}
       >
+        <RevalidateOnLocaleChange />
         {protection.own && !creating ? (
           <Alert
             type="info"

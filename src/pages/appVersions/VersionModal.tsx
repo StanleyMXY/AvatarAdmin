@@ -13,6 +13,7 @@ import {
   Typography,
 } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
 import {
@@ -298,6 +299,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         {editing ? (
           <Form.Item label={t('appVersions.field.channel')} extra={t('appVersions.channelFixed')}>
             <Typography.Text

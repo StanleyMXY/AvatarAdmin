@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select } from 'antd';
 import { useRef, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   createPermission,
@@ -168,6 +169,7 @@ export function PermissionNodeModal({ node, nodes, onDone, onClose }: Props) {
           }
         }}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="parent"
           label={t('system.permissions.field.parent')}

@@ -18,6 +18,7 @@ import {
   type LinkTargetValue,
   linkTargetRule,
 } from '../../components/LinkTargetField';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { sendNotifications } from '../../services/notifications';
 import { describeFailure } from '../../session/describe';
@@ -310,6 +311,7 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
         requiredMark={false}
         initialValues={{ recipients: '', link: { linkType: 'NONE', linkTarget: '' }, push: false }}
       >
+        <RevalidateOnLocaleChange />
         <Typography.Paragraph type="secondary">
           {t('notifications.send.scope')}{' '}
           {access.canAccess('PUSH:SEND') ? (
