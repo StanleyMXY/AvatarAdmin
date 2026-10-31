@@ -82,6 +82,8 @@ const messages: Record<string, string> = {
   'memory.account.currentModel': 'Current model: {name}',
   'memory.account.defaultModel': 'No assignment yet; the default model {name} is used',
   'memory.account.history': 'Assignment history',
+  'memory.account.truncated': 'Only the newest {shown} are shown, {total} in total.',
+  'memory.account.truncatedNoTotal': 'Only the newest {shown} are shown.',
   'memory.account.col.model': 'Model',
   'memory.account.col.assignedBy': 'Assigned by',
   'memory.account.col.assignedAt': 'Assigned at',

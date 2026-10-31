@@ -82,10 +82,23 @@ describe('the manual task page: the list', { timeout: 30000 }, () => {
     backend();
     renderPage(<TasksPage />);
     const missed = await rowOf(titleOf('5'));
-    expect(within(missed).getByText('Missed')).toBeInTheDocument();
+    expect(
+      within(missed).getByText('Missed: the push executor was down for too long, nothing was sent'),
+    ).toBeInTheDocument();
+    expect(within(missed).getByText('Cancelled')).toBeInTheDocument();
     // task 7 was made by an administrator who has been deleted: the name is null, the id stays
     const gone = await rowOf(titleOf('7'));
     expect(within(gone).getByText('9999')).toBeInTheDocument();
+  });
+
+  it('says in words what a missed task is, in Chinese too, and only on a task that carries the note', async () => {
+    backend();
+    renderPage(<TasksPage />, 'zh-CN');
+    const missed = await rowOf(titleOf('5'));
+    expect(within(missed).getByText('错过：执行器停机过久，未发送')).toBeInTheDocument();
+    const cancelled = await rowOf(titleOf('6'));
+    expect(within(cancelled).queryByText(/错过/)).toBeNull();
+    expect(within(await rowOf(titleOf('4'))).queryByText(/错过/)).toBeNull();
   });
 
   it('shows titles in every language and holds a title without spaces in a cell', async () => {

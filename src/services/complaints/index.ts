@@ -17,6 +17,18 @@ export const COMPLAINT_STATUSES: readonly ComplaintStatus[] = [
   'REJECTED',
 ];
 
+/**
+ * What the list can be filtered by: the five states, and OPEN, "not closed", which is RECEIVED and
+ * INVESTIGATING together. Case matters to the backend: `open` is refused.
+ */
+export type ComplaintStatusFilter = ComplaintStatus | 'OPEN';
+
+/** The choices of the filter, "not closed" first. */
+export const COMPLAINT_FILTER_STATUSES: readonly ComplaintStatusFilter[] = [
+  'OPEN',
+  ...COMPLAINT_STATUSES,
+];
+
 /** A complaint in one of these states cannot be changed any more (contract 11.6). */
 export const CLOSED_COMPLAINT_STATUSES: readonly ComplaintStatus[] = [
   'RESOLVED_REMOVED',
@@ -67,7 +79,7 @@ const enc = encodeURIComponent;
 export async function listComplaints(params: {
   page: number;
   pageSize: number;
-  status?: ComplaintStatus;
+  status?: ComplaintStatusFilter;
 }): Promise<Page<Complaint>> {
   const data = await apiRequest<unknown>({ method: 'GET', url: '/likeness-complaints', params });
   const list = Array.isArray(data) ? data : (data as { items?: unknown } | null)?.items;

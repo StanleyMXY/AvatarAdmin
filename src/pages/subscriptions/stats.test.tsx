@@ -236,7 +236,7 @@ describe('the subscription statistics', { timeout: 30000 }, () => {
   it('writes the list price with its currency, whatever the currency', async () => {
     answering([
       row({ productId: 'a', listPriceAmount: '1290.00', listPriceCurrency: 'THB' }),
-      row({ productId: 'b', listPriceAmount: 149000, listPriceCurrency: 'IDR' }),
+      row({ productId: 'b', listPriceAmount: '149000', listPriceCurrency: 'IDR' }),
       row({ productId: 'c', listPriceAmount: '9.99', listPriceCurrency: 'no-such-currency' }),
     ]);
     renderPage(<StatsPage />);
@@ -248,6 +248,76 @@ describe('the subscription statistics', { timeout: 30000 }, () => {
     expect(text).toMatch(/IDR\s?149,000/);
     expect(text).toMatch(/9\.99/);
     expect(text).toContain('no-such-currency');
+  });
+
+  it('writes a list price from its decimal string, never through a floating point number', async () => {
+    answering([
+      row({ productId: 'big', listPriceAmount: '9007199254740993.01', listPriceCurrency: 'USD' }),
+      row({ productId: 'fine', listPriceAmount: '24.999', listPriceCurrency: 'USD' }),
+      row({ productId: 'tail', listPriceAmount: '0.1234567', listPriceCurrency: 'EUR' }),
+    ]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(3),
+    );
+    const text = document.body.textContent as string;
+    expect(text).toContain('$9,007,199,254,740,993.01');
+    expect(text).not.toContain('9,007,199,254,740,994');
+    expect(text).toContain('$24.999');
+    expect(text).toContain('0.1234567');
+  });
+
+  it('writes the list price in the number format of the language of the interface', async () => {
+    answering([
+      row({ productId: 'g', store: 'GOOGLE', listPriceAmount: '1290.5', listPriceCurrency: 'THB' }),
+    ]);
+    renderPage(<StatsPage />, 'zh-CN');
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(1),
+    );
+    expect(document.body.textContent).toMatch(/THB\s?1,290\.50/);
+  });
+
+  it.each([
+    ['both missing', null, null],
+    ['no amount', null, 'USD'],
+    ['an empty amount', '', 'USD'],
+    ['an amount that is not a number', 'abc', 'USD'],
+    ['an amount in exponent form', '1e21', 'USD'],
+  ])('shows a dash for a price with %s, never NaN or null', async (_name, amount, currency) => {
+    answering([row({ listPriceAmount: amount as string | null, listPriceCurrency: currency })]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(1),
+    );
+    const cells = [...document.querySelectorAll('tbody tr.ant-table-row td')].map(
+      (c) => c.textContent,
+    );
+    expect(cells[9]).toBe('—');
+    expect(document.body.textContent).not.toMatch(/NaN|null|undefined/);
+  });
+
+  it('writes an amount with no currency as a plain number', async () => {
+    answering([row({ listPriceAmount: '12.50', listPriceCurrency: null })]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(1),
+    );
+    const cells = [...document.querySelectorAll('tbody tr.ant-table-row td')].map(
+      (c) => c.textContent,
+    );
+    expect(cells[9]).toBe('12.50');
+  });
+
+  it('has the list price column right after the refunds', async () => {
+    useMockBackend(subscriptionsMock);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row').length).toBeGreaterThan(0),
+    );
+    const heads = [...document.querySelectorAll('thead th')].map((c) => c.textContent);
+    expect(heads.at(-1)).toBe('List price');
+    expect(heads.at(-2)).toBe('Refunds');
   });
 
   it('pages the rows 20 to a page', async () => {

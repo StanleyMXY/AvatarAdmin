@@ -18,6 +18,8 @@ export type MockSession = {
   language: string;
   renderMode: 'DEVICE' | 'CLOUD' | 'NONE';
   deadlineAt: string;
+  /** The limit of the call as it was when the call was made (whole minutes); the deadline is that long after the start. */
+  maxDurationMinutes: number;
   startedAt: string;
   endReason: string | null;
   agentJoinedAt: string;
@@ -78,6 +80,8 @@ type Plan = {
   joinSeconds: number;
   seconds: number | null;
   reason: string | null;
+  /** Minutes the call was allowed to last when it was made (60 when left out). */
+  maxMinutes?: number;
   tier?: string;
   language?: string;
   zone?: string;
@@ -100,7 +104,8 @@ function build(plan: Plan, index: number, now: number): MockSession {
     modelTier: plan.tier ?? (index % 2 === 0 ? 'standard' : 'premium'),
     language: plan.language ?? TAGS[index % TAGS.length],
     renderMode: (['DEVICE', 'CLOUD', 'NONE'] as const)[index % 3],
-    deadlineAt: iso(started + 3600 * 1000),
+    deadlineAt: iso(started + (plan.maxMinutes ?? 60) * MINUTE),
+    maxDurationMinutes: plan.maxMinutes ?? 60,
     startedAt: iso(started),
     endReason: plan.reason,
     agentJoinedAt: iso(started),
@@ -194,6 +199,8 @@ function seed(now: number): MockSession[] {
       seconds: 600,
       reason: 'DEADLINE',
       language: 'en',
+      // made when the limit was 10 minutes: the deadline differs from the setting now
+      maxMinutes: 10,
     },
   ];
   const filler: Plan[] = Array.from({ length: 52 }, (_, i) => {
@@ -249,6 +256,7 @@ export function detailRow(s: MockSession) {
     timezone: s.timezone,
     renderMode: s.renderMode,
     deadlineAt: s.deadlineAt,
+    maxDurationMinutes: s.maxDurationMinutes,
     endReason: s.endReason,
     agentJoinedAt: s.agentJoinedAt,
     userJoinedAt: s.userJoinedAt,

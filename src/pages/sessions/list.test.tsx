@@ -2,7 +2,12 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { META_DEFAULTS } from '../../../mock/_core/meta';
-import { GUEST_DEVICE, resetSessionsStore, SESSION } from '../../../mock/_core/sessionsData';
+import {
+  GUEST_DEVICE,
+  resetSessionsStore,
+  SESSION,
+  sessionsState,
+} from '../../../mock/_core/sessionsData';
 import { resetStore } from '../../../mock/_core/store';
 import { adminOf } from '../../../mock/_core/testing';
 import * as sessionsMock from '../../../mock/sessions.mock';
@@ -435,6 +440,88 @@ describe('the session list: the details drawer', { timeout: 30000 }, () => {
       'href',
       `/users/${SESSION.registeredAccount}`,
     );
+  });
+
+  it('shows the longest length the call had when it was made, in whole minutes, with the reason it is shown (en-US)', async () => {
+    useMockBackend(sessionsMock);
+    const user = userEvent.setup();
+    renderPage(<SessionListPage />);
+    const odd = sessionsState.sessions.find((s) => s.maxDurationMinutes === 10);
+    await user.click(await idButton(odd?.id ?? 'ses-0008'));
+    const drawer = await screen.findByRole('dialog');
+    const label = await within(drawer).findByText('Max length when made');
+    const row = label.closest('tr') as HTMLElement;
+    expect(within(row).getByText('10 min')).toBeInTheDocument();
+    expect(
+      within(row).getByText(
+        /Recorded when the call was made; changing the setting later does not change it/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows it in zh-CN, with 0 as 0 and a dash for what the backend did not send', async () => {
+    const answers: Record<string, unknown> = {
+      zero: { maxDurationMinutes: 0 },
+      missing: {},
+      broken: { maxDurationMinutes: 'abc' },
+      fraction: { maxDurationMinutes: 1.5 },
+      negative: { maxDurationMinutes: -3 },
+    };
+    stubFetch(async ({ url }) => {
+      if (url.startsWith('/api/admin/sessions?'))
+        return jsonResponse(
+          200,
+          envelope('200', {
+            items: Object.keys(answers).map((id) => ({
+              id,
+              accountId: 'a',
+              deviceId: null,
+              requestedAt: '2026-10-01T00:00:00Z',
+            })),
+            total: 5,
+          }),
+        );
+      const id = url.split('/').pop() as string;
+      return jsonResponse(
+        200,
+        envelope('200', { id, accountId: 'a', deviceId: null, ...(answers[id] as object) }),
+      );
+    });
+    const user = userEvent.setup();
+    renderPage(<SessionListPage />, 'zh-CN');
+    const maxLengthOf = async (id: string) => {
+      await user.click(await idButton(id));
+      const drawer = await screen.findByRole('dialog');
+      const label = await within(drawer).findByText('发起时的最长时长');
+      const text = (label.closest('tr') as HTMLElement).querySelector('td')?.textContent ?? '';
+      await user.click(screen.getByRole('button', { name: /close|关闭/i }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      return text;
+    };
+    expect(await maxLengthOf('zero')).toContain('0 分钟');
+    for (const id of ['missing', 'broken', 'fraction', 'negative']) {
+      const text = await maxLengthOf(id);
+      expect(text, id).toContain('—');
+      expect(text, id).not.toMatch(/NaN|undefined|null/);
+    }
+  });
+
+  it('shows the end reason of a call the ban ended, in words, in both languages', async () => {
+    useMockBackend(sessionsMock);
+    const user = userEvent.setup();
+    const banned = sessionsState.sessions.find((s) => s.endReason === 'BANNED');
+    expect(banned).toBeTruthy();
+    const first = renderPage(<SessionListPage />);
+    await user.click(await idButton(banned?.id ?? ''));
+    expect(
+      await within(await screen.findByRole('dialog')).findByText('Account banned'),
+    ).toBeInTheDocument();
+    first.unmount();
+    renderPage(<SessionListPage />, 'zh-CN');
+    await user.click(await idButton(banned?.id ?? ''));
+    expect(
+      await within(await screen.findByRole('dialog')).findByText('账号被封禁'),
+    ).toBeInTheDocument();
   });
 
   it('shows a guest session as Guest with no link, and the device as 8 characters only', async () => {

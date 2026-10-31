@@ -6,6 +6,9 @@ import { store } from './_core/store';
 
 type Detail = { ref: string; reason: string };
 
+/** How many assignments the answer of an account lists, the newest first. */
+const MAX_ASSIGNMENTS = 200;
+
 const NAME_RULE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const nameParam = (params: Record<string, string>): string => params.name ?? '';
@@ -158,11 +161,16 @@ export default {
   'GET /api/admin/accounts/:id/memory': guard('MEMORY:VIEW', (req) => {
     const account = memoryStore.accounts.get(req.params.id ?? '');
     if (!account) throw new MockHttpError(404, 'RESOURCE_NOT_FOUND', 'There is no such account');
+    // The newest 200 assignments, newest first; `truncated` says there are more and `totalCount`
+    // how many there are in all (backend answer of 2026-10-31).
+    const newest = [...account.assignments].sort((a, b) => (a.assignedAt < b.assignedAt ? 1 : -1));
     return ok({
       tier: account.tier,
-      embeddingAssignments: [...account.assignments]
-        .sort((a, b) => (a.assignedAt < b.assignedAt ? 1 : -1))
+      embeddingAssignments: newest
+        .slice(0, MAX_ASSIGNMENTS)
         .map((a) => ({ ...a, assignedByUsername: usernameOf(a.assignedBy) })),
+      truncated: newest.length > MAX_ASSIGNMENTS,
+      totalCount: newest.length,
     });
   }),
 

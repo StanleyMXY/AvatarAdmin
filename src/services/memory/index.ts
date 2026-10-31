@@ -34,7 +34,12 @@ export type AccountMemory = {
     assignedAt: string | null;
     lastError: string | null;
   };
+  /** The newest 200 assignments at most, newest first. */
   embeddingAssignments: EmbeddingAssignment[];
+  /** True when the account has more assignments than are in the list. Left out by a backend before this field. */
+  truncated?: boolean;
+  /** All the assignments of the account, those left out of the list included. */
+  totalCount?: number;
 };
 
 const path = (name: string) => encodeURIComponent(name);

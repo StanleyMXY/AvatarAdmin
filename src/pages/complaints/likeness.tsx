@@ -9,9 +9,9 @@ import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
 import {
   CLOSED_COMPLAINT_STATUSES,
-  COMPLAINT_STATUSES,
+  COMPLAINT_FILTER_STATUSES,
   type Complaint,
-  type ComplaintStatus,
+  type ComplaintStatusFilter,
   listComplaints,
 } from '../../services/complaints';
 import { formatInstant } from '../../utils/format';
@@ -20,7 +20,7 @@ import { ConfigForm } from '../config/ConfigForm';
 import { adminLabel, ComplaintDrawer } from './ComplaintDrawer';
 import { statusOptions } from './statusOptions';
 
-type Filter = { status?: ComplaintStatus };
+type Filter = { status?: ComplaintStatusFilter };
 
 /** A complaint that is past its due time and not closed. */
 export const isOverdue = (row: Complaint): boolean =>
@@ -85,8 +85,12 @@ export default function LikenessComplaintsPage() {
       title: t('complaints.col.status'),
       dataIndex: 'status',
       valueType: 'select',
+      // "Not closed" comes first and is not the default: the list opens with no state asked for.
       valueEnum: Object.fromEntries(
-        COMPLAINT_STATUSES.map((status) => [status, { text: options[status].label }]),
+        COMPLAINT_FILTER_STATUSES.map((status) => [
+          status,
+          { text: status === 'OPEN' ? t('complaints.filter.OPEN') : options[status].label },
+        ]),
       ),
       onCell: mark,
       render: (_, row) => <StatusTag status={row.status} options={options} />,

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
+import enUS from '../../locales/en-US';
+import zhCN from '../../locales/zh-CN';
 import { resetSessionState, setToken } from '../../request/session';
-import { getSession, listSessions } from './index';
+import { END_REASONS, getSession, listSessions } from './index';
 
 beforeEach(() => {
   resetSessionState();
@@ -37,5 +39,23 @@ describe('the session functions', () => {
     const calls = stubFetch(async () => jsonResponse(200, envelope('200', { id: 'a/b' })));
     await getSession('a/b?x');
     expect(calls[0].url).toBe('/api/admin/sessions/a%2Fb%3Fx');
+  });
+});
+
+describe('the end reasons', () => {
+  it('include BANNED, which the worker writes when a ban ended the call', () => {
+    expect(END_REASONS).toContain('BANNED');
+  });
+
+  it.each([
+    ['sessions.endReason', 'Account banned', '账号被封禁'],
+    ['users.endReason', 'The account was banned', '账号被封禁'],
+  ])('are all written in words in both languages under %s', (prefix, bannedEn, bannedZh) => {
+    for (const reason of END_REASONS) {
+      expect(enUS[`${prefix}.${reason}`], `${prefix}.${reason} en`).toBeTruthy();
+      expect(zhCN[`${prefix}.${reason}`], `${prefix}.${reason} zh`).toBeTruthy();
+    }
+    expect(enUS[`${prefix}.BANNED`]).toBe(bannedEn);
+    expect(zhCN[`${prefix}.BANNED`]).toBe(bannedZh);
   });
 });

@@ -54,6 +54,10 @@ const messages: Record<string, string> = {
   'sessions.detail.language': 'Language',
   'sessions.detail.renderMode': 'Render mode',
   'sessions.detail.deadlineAt': 'Deadline',
+  'sessions.detail.maxDurationMinutes': 'Max length when made',
+  'sessions.detail.maxDurationMinutesNote':
+    'Recorded when the call was made; changing the setting later does not change it. It explains a deadline that differs from the setting now.',
+  'sessions.minutes': '{n} min',
   'sessions.detail.startedAt': 'Started at',
   'sessions.detail.agentJoinedAt': 'Agent joined at',
   'sessions.detail.userJoinedAt': 'User joined at',

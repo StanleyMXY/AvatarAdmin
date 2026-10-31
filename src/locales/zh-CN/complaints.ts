@@ -24,6 +24,8 @@ const messages: Record<string, string> = {
   'complaints.status.RESOLVED_REMOVED': '已删除形象',
   'complaints.status.RESOLVED_NOT_FOUND': '查无此形象',
   'complaints.status.REJECTED': '驳回',
+  // a choice of the filter only, not a state a complaint has: received and investigating together
+  'complaints.filter.OPEN': '未结案',
 
   'complaints.evidence.title': '证据文件',
   'complaints.evidence.none': '没有证据文件。',

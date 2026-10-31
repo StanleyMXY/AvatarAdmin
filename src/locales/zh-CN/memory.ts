@@ -76,6 +76,8 @@ const messages: Record<string, string> = {
   'memory.account.currentModel': '当前模型：{name}',
   'memory.account.defaultModel': '没有指派记录，使用默认模型 {name}',
   'memory.account.history': '指派历史',
+  'memory.account.truncated': '只显示最新 {shown} 条，共 {total} 条。',
+  'memory.account.truncatedNoTotal': '只显示最新 {shown} 条。',
   'memory.account.col.model': '模型',
   'memory.account.col.assignedBy': '指派人',
   'memory.account.col.assignedAt': '指派时间',

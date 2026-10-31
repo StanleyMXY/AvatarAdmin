@@ -16,6 +16,7 @@ import {
 } from './_core/http';
 import { META_DEFAULTS } from './_core/meta';
 import { paginateQuery } from './_core/paginate';
+import { sessionsState } from './_core/sessionsData';
 import { text } from './_core/statRange';
 import { store } from './_core/store';
 import {
@@ -184,6 +185,31 @@ function byOf(req: MockReq): 'DEVICE' | 'IP' {
 const keyOf = (user: MockUser, by: 'DEVICE' | 'IP'): string =>
   by === 'DEVICE' ? user.deviceKey : user.ipKey;
 
+/**
+ * A ban ends the calls the account has running with the end reason BANNED. The real backend does it
+ * at once or, when that fails, in the next scan of its worker (`session.deadline_scan_seconds`); the
+ * mock does it at once, in the calls of the account and in the call records.
+ */
+function endRunningCalls(accountId: string, at: string): void {
+  const endedAt = Date.parse(at);
+  for (const row of usersState.sessions.get(accountId) ?? []) {
+    if (row.endedAt !== null) continue;
+    row.endedAt = at;
+    row.endReason = 'BANNED';
+    row.durationSeconds = Math.max(
+      0,
+      Math.round((endedAt - Date.parse(row.startedAt ?? at)) / 1000),
+    );
+  }
+  for (const call of sessionsState.sessions) {
+    if (call.accountId !== accountId || call.endedAt !== null) continue;
+    call.endedAt = at;
+    call.userLeftAt = at;
+    call.endReason = 'BANNED';
+    call.durationSeconds = Math.max(0, Math.round((endedAt - Date.parse(call.startedAt)) / 1000));
+  }
+}
+
 export default {
   // ---- the list and the export (the export first: `:id` would take "export" for an id) ----
   'GET /api/admin/users/export': toUmiFile((req) => {
@@ -274,6 +300,7 @@ export default {
     user.status = 'BANNED';
     user.banReason = reason.value;
     user.bannedAt = new Date().toISOString();
+    endRunningCalls(user.id, user.bannedAt);
     return ok(null);
   }),
 

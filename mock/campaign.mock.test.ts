@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { campaignState, resetCampaignStore } from './_core/campaignData';
 import { resetConfigStore, saved } from './_core/configStore';
+import { monitorStore, raiseAlert, resetMonitorStore } from './_core/monitorData';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
 import campaign from './campaign.mock';
@@ -11,6 +12,7 @@ beforeEach(() => {
   resetStore();
   resetConfigStore();
   resetCampaignStore(NOW);
+  resetMonitorStore();
 });
 
 type H = Parameters<typeof call>[0];
@@ -267,6 +269,60 @@ describe('the campaigns', () => {
     expect(campaignState.campaigns.find((c) => c.id === id)?.facebookAccessToken).toBe(
       'another-secret',
     );
+  });
+
+  describe('the postback credential alert of a campaign', () => {
+    const open = (id: string) =>
+      monitorStore.alerts.filter(
+        (a) => a.type === 'POSTBACK_CREDENTIAL_FAILED' && a.refId === id && a.status === 'OPEN',
+      );
+    const withAlert = (detail: string) => {
+      const found = campaignState.campaigns.find((c) => c.facebookPixelId !== null);
+      const id = found?.id as string;
+      monitorStore.alerts = monitorStore.alerts.filter((a) => a.refId !== id);
+      raiseAlert({
+        type: 'POSTBACK_CREDENTIAL_FAILED',
+        refType: 'ATTRIBUTION_CAMPAIGN',
+        refId: id,
+        accountId: null,
+        detail,
+      });
+      return { id, found: found as (typeof campaignState.campaigns)[number] };
+    };
+    const body = (found: (typeof campaignState.campaigns)[number], over = {}) => {
+      const { code: _code, ...rest } = campaignBody({
+        facebookPixelId: found.facebookPixelId,
+        name: found.name,
+        ...over,
+      });
+      return rest;
+    };
+
+    it('is closed when the administrator fills in the token again', async () => {
+      const { id, found } = withAlert('token_unreadable');
+      expect(open(id)).toHaveLength(1);
+      await send(CAMPAIGN_UPDATE, body(found, { facebookAccessToken: 'a-new-secret' }), { id });
+      expect(open(id)).toHaveLength(0);
+    });
+
+    it('is closed when the pixel id is changed, and is kept when neither it nor the token is', async () => {
+      const { id, found } = withAlert('pixel_id_malformed');
+      await send(CAMPAIGN_UPDATE, body(found, { name: 'Only a new name' }), { id });
+      expect(open(id)).toHaveLength(1);
+      await send(CAMPAIGN_UPDATE, body(found, { facebookPixelId: 'FB-OK-9' }), { id });
+      expect(open(id)).toHaveLength(0);
+    });
+
+    it('is kept when the update is refused', async () => {
+      const { id, found } = withAlert('190');
+      const refused = await send(
+        CAMPAIGN_UPDATE,
+        body(found, { facebookAccessToken: '   ', name: '' }),
+        { id },
+      );
+      expect(refused.status).toBe(400);
+      expect(open(id)).toHaveLength(1);
+    });
   });
 
   it('refuses a different code on update, an unknown id, and switches the state', async () => {

@@ -73,9 +73,51 @@ describe('GET /likeness-complaints', () => {
   it('filters by status and refuses a status that does not exist', async () => {
     const { body } = await get(LIST, 'reviewer', { status: 'REJECTED' });
     expect(body.data.items.every((r: { status: string }) => r.status === 'REJECTED')).toBe(true);
-    const bad = await get(LIST, 'reviewer', { status: 'OPEN' });
+    const bad = await get(LIST, 'reviewer', { status: 'NOT_A_STATE' });
     expect(bad.status).toBe(400);
     expect(bad.body.data.details[0].ref).toBe('status');
+  });
+
+  it('gives the complaints that are not closed for OPEN: RECEIVED and INVESTIGATING, counted and sorted the same way', async () => {
+    const open = ['RECEIVED', 'INVESTIGATING'];
+    const { status, body } = await get(LIST, 'reviewer', { status: 'OPEN', pageSize: '200' });
+    expect(status).toBe(200);
+    const items = body.data.items as { status: string; dueAt: string }[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((r) => open.includes(r.status))).toBe(true);
+    expect(body.data.total).toBe(
+      avatarState.complaints.filter((c) => open.includes(c.status)).length,
+    );
+    expect(items.map((r) => r.dueAt)).toEqual([...items.map((r) => r.dueAt)].sort());
+    const some = new Set(items.map((r) => r.status));
+    expect(some).toEqual(new Set(open));
+    // the total of a page is the total of the filter, not of the page
+    const page = await get(LIST, 'reviewer', { status: 'OPEN', pageSize: '2' });
+    expect([page.body.data.items.length, page.body.data.total]).toEqual([2, items.length]);
+  });
+
+  it('takes no status, or an empty one, as no filter', async () => {
+    const all = await get(LIST, 'reviewer', { pageSize: '200' });
+    const empty = await get(LIST, 'reviewer', { status: '', pageSize: '200' });
+    expect(empty.status).toBe(200);
+    expect(empty.body.data.total).toBe(all.body.data.total);
+  });
+
+  it.each(['open', 'Open', 'OPEN,RECEIVED', ' OPEN', 'OPEN ', 'received', 'RECEIVED,REJECTED'])(
+    'refuses the status %j with OUT_OF_RANGE on status: it is case sensitive and takes one value',
+    async (status) => {
+      const bad = await get(LIST, 'reviewer', { status });
+      expect([bad.status, bad.body.code, bad.body.data.details]).toEqual([
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'status', reason: 'OUT_OF_RANGE' }],
+      ]);
+    },
+  );
+
+  it('answers the error of the paging before the error of the status', async () => {
+    const bad = await get(LIST, 'reviewer', { status: 'open', pageSize: '201' });
+    expect(bad.body.data.details).toEqual([{ ref: 'pageSize', reason: 'OUT_OF_RANGE' }]);
   });
 
   it('pages and refuses a page size over 200', async () => {

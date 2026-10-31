@@ -1,3 +1,4 @@
+import { ALERT_TYPES } from '../src/services/monitor/alertTypes';
 import { guard } from './_core/auth';
 import { invalidRequest, MockHttpError, ok } from './_core/http';
 import {
@@ -92,16 +93,23 @@ export default {
   }),
 
   'GET /api/admin/alerts': guard('MONITOR:VIEW', (req) => {
+    // Leave a parameter out for "all"; an empty one is a value, and so is anything but the exact
+    // spelling of one of the two states or of the eighteen types (contract 17.4 and the answers of the
+    // backend of 2026-10-31). The error of the paging comes before these.
+    const { page, pageSize } = pagingOf(req);
+    paginate([], page, pageSize);
     const status = req.query.status;
-    if (status !== undefined && status !== '' && status !== 'OPEN' && status !== 'RESOLVED') {
+    if (status !== undefined && status !== 'OPEN' && status !== 'RESOLVED') {
       throw invalidRequest('status is not valid', [{ ref: 'status', reason: 'OUT_OF_RANGE' }]);
     }
     const type = req.query.type;
+    if (type !== undefined && !(ALERT_TYPES as readonly unknown[]).includes(type)) {
+      throw invalidRequest('type is not valid', [{ ref: 'type', reason: 'OUT_OF_RANGE' }]);
+    }
     const rows = monitorStore.alerts
-      .filter((a) => !status || a.status === status)
-      .filter((a) => !type || a.type === type)
+      .filter((a) => status === undefined || a.status === status)
+      .filter((a) => type === undefined || a.type === type)
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    const { page, pageSize } = pagingOf(req);
     return ok(paginate(rows, page, pageSize));
   }),
 

@@ -222,6 +222,55 @@ describe('GET /accounts/:id/memory', () => {
     });
   });
 
+  it('says it is not cut and how many there are when the account has 200 or fewer assignments', async () => {
+    const { body } = await get(asViewer(), MEMORY_ACCOUNT_IDS.active);
+    expect(body.data.truncated).toBe(false);
+    expect(body.data.totalCount).toBe(body.data.embeddingAssignments.length);
+    expect(body.data.totalCount).toBe(1);
+  });
+
+  it('gives the newest 200 assignments, newest first, with truncated true and the total, when the account has more', async () => {
+    const { body } = await get(asViewer(), MEMORY_ACCOUNT_IDS.manyAssignments);
+    const items = body.data.embeddingAssignments as { assignedAt: string; modelName: string }[];
+    expect(items).toHaveLength(200);
+    expect(body.data.truncated).toBe(true);
+    expect(body.data.totalCount).toBe(
+      memoryStore.accounts.get(MEMORY_ACCOUNT_IDS.manyAssignments)?.assignments.length,
+    );
+    expect(body.data.totalCount).toBeGreaterThan(200);
+    const times = items.map((i) => Date.parse(i.assignedAt));
+    expect(times).toEqual([...times].sort((a, b) => b - a));
+    // the ones that are left out are the oldest
+    const all = (
+      memoryStore.accounts.get(MEMORY_ACCOUNT_IDS.manyAssignments)?.assignments ?? []
+    ).map((a) => Date.parse(a.assignedAt));
+    expect(Math.min(...times)).toBe([...all].sort((a, b) => b - a)[199]);
+  });
+
+  it('is exactly 200 and not cut at 200, and cut at 201', async () => {
+    const account = memoryStore.accounts.get(MEMORY_ACCOUNT_IDS.manyAssignments);
+    if (!account) throw new Error('no account');
+    account.assignments = account.assignments.slice(0, 200);
+    const exact = await get(asViewer(), MEMORY_ACCOUNT_IDS.manyAssignments);
+    expect([exact.body.data.truncated, exact.body.data.totalCount]).toEqual([false, 200]);
+    const more = (await get(asViewer(), MEMORY_ACCOUNT_IDS.active)).body.data
+      .embeddingAssignments[0];
+    account.assignments = [
+      ...account.assignments,
+      {
+        modelName: more.modelName,
+        assignedBy: more.assignedBy,
+        assignedAt: new Date(0).toISOString(),
+      },
+    ];
+    const over = await get(asViewer(), MEMORY_ACCOUNT_IDS.manyAssignments);
+    expect([
+      over.body.data.truncated,
+      over.body.data.totalCount,
+      over.body.data.embeddingAssignments.length,
+    ]).toEqual([true, 201, 200]);
+  });
+
   it('gives null as the name when the administrator no longer exists, and keeps the ID', async () => {
     const { body } = await get(asViewer(), MEMORY_ACCOUNT_IDS.failedSync);
     expect(body.data.embeddingAssignments[0].assignedBy).toBe('9999');

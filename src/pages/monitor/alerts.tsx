@@ -9,6 +9,7 @@ import { StatusTag } from '../../components/StatusTag';
 import {
   type AdminAlert,
   ALERT_TYPES,
+  alertDetailKey,
   alertTypeKey,
   isKnownAlertType,
   listAlerts,
@@ -32,6 +33,14 @@ export default function AlertsPage() {
     intl.formatMessage({ id }, values);
 
   const typeText = (type: string) => (isKnownAlertType(type) ? t(alertTypeKey(type)) : type);
+
+  // A fixed detail the backend writes for the type is shown in words with its code beside it;
+  // anything else (an error code, an exception class, an object) is shown as it comes.
+  const detailText = (row: AdminAlert): string | null => {
+    const raw = plainText(row.detail);
+    const key = alertDetailKey(row.type, raw);
+    return key ? t('monitor.alert.detailWithCode', { text: t(key), code: raw }) : raw || null;
+  };
 
   const close = async (alert: AdminAlert) => {
     try {
@@ -71,7 +80,10 @@ export default function AlertsPage() {
       search: false,
       render: (_, row) =>
         row.refType || row.refId ? (
-          <EllipsisPopoverText text={`${row.refType ?? DASH}: ${row.refId ?? DASH}`} width={260} />
+          <EllipsisPopoverText
+            text={`${plainText(row.refType) || DASH}: ${plainText(row.refId) || DASH}`}
+            width={260}
+          />
         ) : (
           DASH
         ),
@@ -80,7 +92,7 @@ export default function AlertsPage() {
       title: t('monitor.alert.col.detail'),
       dataIndex: 'detail',
       search: false,
-      render: (_, row) => <EllipsisPopoverText text={plainText(row.detail) || null} width={320} />,
+      render: (_, row) => <EllipsisPopoverText text={detailText(row)} width={320} />,
     },
     {
       title: t('monitor.alert.col.status'),

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { PermissionCode } from '../src/access/permissionCodes';
 import type { MockReq, MockRes } from './_core/http';
+import { resetSessionsStore, SESSION, sessionsState } from './_core/sessionsData';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
 import { maskEmail, maskPhone, resetUsersStore, USER, usersState } from './_core/usersData';
@@ -9,6 +10,7 @@ import users from './users.mock';
 beforeEach(() => {
   resetStore();
   resetUsersStore();
+  resetSessionsStore();
 });
 
 type H = Parameters<typeof call>[0];
@@ -347,6 +349,50 @@ describe('ban and unban (contract 17.4 state matrix)', () => {
       expect(body.code).toBe('INVALID_STATE');
       expect(body.data).toEqual({ status: before });
     }
+  });
+
+  it('ends the calls the account has running with the end reason BANNED, in the calls of the account', async () => {
+    const running = [...usersState.sessions.entries()].find(
+      ([id, rows]) =>
+        usersState.users.find((u) => u.id === id)?.status === 'ACTIVE' &&
+        rows.some((r) => r.endedAt === null) &&
+        rows.some((r) => r.endedAt !== null && r.endReason !== 'BANNED'),
+    );
+    expect(running).toBeTruthy();
+    const id = (running as [string, unknown])[0];
+    const before = (usersState.sessions.get(id) ?? []).map((r) => ({ ...r }));
+    const open = before.filter((r) => r.endedAt === null).map((r) => r.id);
+    expect((await ban(id, 'Spam')).status).toBe(200);
+    for (const row of usersState.sessions.get(id) ?? []) {
+      if (!open.includes(row.id)) continue;
+      expect(row.endReason).toBe('BANNED');
+      expect(Date.parse(row.endedAt ?? '')).not.toBeNaN();
+      expect(row.durationSeconds).toBeGreaterThanOrEqual(0);
+    }
+    // a call that had ended already keeps its own reason
+    const ended = before.find((r) => r.endedAt !== null && r.endReason !== 'BANNED');
+    expect(ended).toBeTruthy();
+    expect(usersState.sessions.get(id)?.find((r) => r.id === ended?.id)?.endReason).toBe(
+      ended?.endReason,
+    );
+  });
+
+  it('ends the running call of the call records page the same way', async () => {
+    const running = sessionsState.sessions.find((s) => s.id === SESSION.ongoing);
+    expect(running).toMatchObject({ accountId: USER.negative, endedAt: null, endReason: null });
+    expect((await ban(USER.negative, 'Spam')).status).toBe(200);
+    expect(running?.endReason).toBe('BANNED');
+    expect(Date.parse(running?.endedAt ?? '')).not.toBeNaN();
+    expect(running?.userLeftAt).toBe(running?.endedAt);
+    expect(running?.durationSeconds).toBeGreaterThanOrEqual(0);
+    // the call of a guest and the calls of another account are not touched
+    expect(sessionsState.sessions.find((s) => s.id === SESSION.guestOngoing)?.endReason).toBeNull();
+  });
+
+  it('does not touch the calls of the account when the ban is refused', async () => {
+    const before = JSON.stringify(usersState.sessions.get(USER.pendingDeletion));
+    expect((await ban(USER.pendingDeletion, 'x')).status).toBe(409);
+    expect(JSON.stringify(usersState.sessions.get(USER.pendingDeletion))).toBe(before);
   });
 
   it('unbans only a banned account and clears the reason and the time', async () => {

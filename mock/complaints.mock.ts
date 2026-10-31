@@ -87,14 +87,20 @@ function record(
 export default {
   // Sorted by the due time, the nearest first.
   'GET /api/admin/likeness-complaints': guard('COMPLAINT:VIEW', (req) => {
+    // The error of the paging comes before the one of the status. No status, or an empty one, is no
+    // filter; OPEN is "not closed" (RECEIVED and INVESTIGATING); anything else must be one of the
+    // five states in exactly that spelling: `open`, ` OPEN` and `OPEN,RECEIVED` are refused.
+    paginateQuery([], req);
     const status = text(req.query.status);
-    if (status !== '' && !STATUSES.includes(status)) {
+    if (status !== '' && status !== 'OPEN' && !STATUSES.includes(status)) {
       throw invalidRequest('status is not one of the states', [
         { ref: 'status', reason: 'OUT_OF_RANGE' },
       ]);
     }
     const rows = avatarState.complaints
-      .filter((c) => status === '' || c.status === status)
+      .filter((c) =>
+        status === '' ? true : status === 'OPEN' ? !CLOSED.includes(c.status) : c.status === status,
+      )
       .sort((a, b) => a.dueAt.localeCompare(b.dueAt));
     const page = paginateQuery(rows, req);
     return ok({ items: page.items.map(summary), total: page.total });

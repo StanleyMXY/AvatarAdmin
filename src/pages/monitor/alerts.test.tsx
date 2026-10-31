@@ -91,7 +91,7 @@ describe('the list', { timeout: 30000 }, () => {
   it.each([
     ['en-US', enUS],
     ['zh-CN', zhCN],
-  ] as const)('shows every one of the fourteen types in words in %s', async (locale, texts) => {
+  ] as const)('shows every one of the eighteen types in words in %s', async (locale, texts) => {
     fixed(
       ALERT_TYPES.map((type, i) => alertRow({ id: String(i), type, detail: `detail ${type}` })),
     );
@@ -149,6 +149,146 @@ describe('the list', { timeout: 30000 }, () => {
     stubFetch(async () => jsonResponse(500, envelope('INTERNAL_ERROR')));
     renderPage(<AlertsPage />);
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+});
+
+describe('the four types the backend added', { timeout: 30000 }, () => {
+  const rowByRef = async (refId: string) => {
+    const cell = await screen.findByText(new RegExp(`: ${refId}$`));
+    return cell.closest('tr') as HTMLTableRowElement;
+  };
+
+  it('links the account of a support forwarding alert to the user and writes the fixed detail in words with the code beside it', async () => {
+    fixed([
+      alertRow({
+        id: '31',
+        type: 'SUPPORT_FORWARD_FAILED',
+        accountId: '2003',
+        refType: 'SUPPORT_FEEDBACK',
+        refId: '8c1f0e52-7d3a-4f5b-9a10-0b6f1c2d3e4f',
+        detail: 'attempts_exhausted',
+      }),
+    ]);
+    renderPage(<AlertsPage />);
+    const row = await rowByRef('8c1f0e52-7d3a-4f5b-9a10-0b6f1c2d3e4f');
+    expect(within(row).getByText('Support feedback forwarding failed')).toBeInTheDocument();
+    expect(within(row).getByRole('link', { name: '2003' })).toHaveAttribute('href', '/users/2003');
+    expect(
+      within(row).getByText('SUPPORT_FEEDBACK: 8c1f0e52-7d3a-4f5b-9a10-0b6f1c2d3e4f'),
+    ).toBeInTheDocument();
+    expect(
+      within(row).getByText('All forwarding attempts were used up (attempts_exhausted)'),
+    ).toBeInTheDocument();
+  });
+
+  it('writes the fixed detail in Chinese too, and does not add the backend message', async () => {
+    fixed([
+      alertRow({
+        id: '32',
+        type: 'SUPPORT_FORWARD_FAILED',
+        refId: 'fb-1',
+        detail: 'attempts_exhausted',
+      }),
+    ]);
+    renderPage(<AlertsPage />, 'zh-CN');
+    const row = await rowByRef('fb-1');
+    expect(within(row).getByText('客服反馈转发失败')).toBeInTheDocument();
+    expect(within(row).getByText('转发次数已用尽（attempts_exhausted）')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['token_unreadable', 'The stored access token cannot be read (token_unreadable)'],
+    ['pixel_id_malformed', 'The stored pixel ID is malformed (pixel_id_malformed)'],
+  ])('writes the postback detail %s in words, with no account to link', async (detail, text) => {
+    fixed([
+      alertRow({
+        id: '33',
+        type: 'POSTBACK_CREDENTIAL_FAILED',
+        accountId: null,
+        refType: 'ATTRIBUTION_CAMPAIGN',
+        refId: 'camp-7',
+        detail,
+      }),
+    ]);
+    renderPage(<AlertsPage />);
+    const row = await rowByRef('camp-7');
+    expect(within(row).getByText('Campaign postback credential unusable')).toBeInTheDocument();
+    expect(within(row).getByText(text)).toBeInTheDocument();
+    expect(within(row).queryByRole('link')).toBeNull();
+  });
+
+  it('shows the error code of the ad platform, and an empty detail, as they are', async () => {
+    fixed([
+      alertRow({ id: '34', type: 'POSTBACK_CREDENTIAL_FAILED', refId: 'camp-8', detail: '190' }),
+      alertRow({ id: '35', type: 'POSTBACK_CREDENTIAL_FAILED', refId: 'camp-9', detail: null }),
+      alertRow({
+        id: '36',
+        type: 'POSTBACK_CREDENTIAL_FAILED',
+        refId: 'camp-10',
+        detail: 'attempts_exhausted',
+      }),
+    ]);
+    renderPage(<AlertsPage />);
+    expect(within(await rowByRef('camp-8')).getByText('190')).toBeInTheDocument();
+    expect(within(await rowByRef('camp-9')).getAllByText('—').length).toBeGreaterThan(0);
+    // a fixed value of another type is not translated here: it is shown as it comes
+    expect(within(await rowByRef('camp-10')).getByText('attempts_exhausted')).toBeInTheDocument();
+  });
+
+  it('shows what a subscription event alert carries as it comes, whatever it is, and invents no explanation', async () => {
+    fixed([
+      alertRow({
+        id: '37',
+        type: 'SUBSCRIPTION_EVENT_FAILED',
+        refType: 'ผู้ใช้ 😀',
+        refId: 'evt-1',
+        detail: { code: 'ก'.repeat(10) } as unknown as string,
+      }),
+    ]);
+    renderPage(<AlertsPage />);
+    const row = await rowByRef('evt-1');
+    expect(within(row).getByText('Subscription event processing failed')).toBeInTheDocument();
+    expect(within(row).getByText('ผู้ใช้ 😀: evt-1')).toBeInTheDocument();
+    expect(within(row).getByText(`{"code":"${'ก'.repeat(10)}"}`)).toBeInTheDocument();
+  });
+
+  it('shows the re-landing alert with the lander and the day as they come, and the class name of the exception', async () => {
+    fixed([
+      alertRow({
+        id: '38',
+        type: 'STAT_RELAND_FAILED',
+        accountId: null,
+        refType: 'STAT_RELAND_DAY',
+        refId: 'usage-cost:2026-10-10',
+        detail: 'java.lang.IllegalStateException',
+      }),
+    ]);
+    renderPage(<AlertsPage />);
+    const row = await rowByRef('usage-cost:2026-10-10');
+    expect(within(row).getByText('Statistics re-landing failed')).toBeInTheDocument();
+    expect(within(row).getByText('STAT_RELAND_DAY: usage-cost:2026-10-10')).toBeInTheDocument();
+    expect(within(row).getByText('java.lang.IllegalStateException')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Support feedback forwarding failed', 'SUPPORT_FORWARD_FAILED'],
+    ['Campaign postback credential unusable', 'POSTBACK_CREDENTIAL_FAILED'],
+    ['Subscription event processing failed', 'SUBSCRIPTION_EVENT_FAILED'],
+    ['Statistics re-landing failed', 'STAT_RELAND_FAILED'],
+  ])('offers %s in the type filter and sends %s', async (label, code) => {
+    const calls = useMockBackend(monitorMock);
+    const user = userEvent.setup();
+    renderPage(<AlertsPage />);
+    await rowOf(openOf('DELETION_FAILED'));
+    const box = screen.getByRole('combobox', { name: 'Type' });
+    await user.click(box);
+    await user.type(box, label.split(' ')[0]);
+    const options = await screen.findAllByText(label, {
+      selector: '.ant-select-item-option-content',
+    });
+    await user.click(options[options.length - 1]);
+    fireEvent.click(document.querySelector('form button.ant-btn-primary') as HTMLElement);
+    await waitFor(() => expect(calls.some((c) => c.url.includes(`type=${code}`))).toBe(true));
   });
 });
 

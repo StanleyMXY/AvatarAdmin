@@ -10,20 +10,34 @@ import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
 
-/** A list price with its currency; a missing price is a dash, a currency the browser does not know is written as it is. */
+const DECIMAL = /^-?\d+(\.\d+)?$/;
+
+/**
+ * A list price with its currency, written from its decimal string without ever turning it into a
+ * floating point number (the browser formats the digits as they are, so "9007199254740993.01" and
+ * "24.999" come out as they went in). A missing or malformed amount is a dash; an amount without a
+ * currency is a plain number; a currency the browser does not know is written as it is.
+ */
 export function formatListPrice(
-  amount: number | string | null,
+  amount: string | null,
   currency: string | null,
   locale: string,
 ): string {
-  if (amount === null || amount === '') return DASH;
-  const value = Number(amount);
-  if (!Number.isFinite(value)) return DASH;
-  if (!currency) return new Intl.NumberFormat(locale).format(value);
+  if (typeof amount !== 'string' || !DECIMAL.test(amount)) return DASH;
+  // A decimal string is a valid argument of `format` (ECMA-402 NumberFormat v3); the typings of this
+  // project's `lib` still say number, hence the cast.
+  const write = (options: Intl.NumberFormatOptions) =>
+    new Intl.NumberFormat(locale, { ...options, maximumFractionDigits: 20 }).format(
+      amount as unknown as number,
+    );
+  // No digit is rounded away and none is dropped: a plain number keeps as many decimals as it was sent with.
+  const plain = () =>
+    write({ minimumFractionDigits: Math.min(20, amount.split('.')[1]?.length ?? 0) });
+  if (!currency) return plain();
   try {
-    return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value);
+    return write({ style: 'currency', currency });
   } catch {
-    return `${currency} ${new Intl.NumberFormat(locale).format(value)}`;
+    return `${currency} ${plain()}`;
   }
 }
 

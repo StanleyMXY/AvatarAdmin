@@ -56,6 +56,96 @@ describe('what the tab shows', { timeout: 30000 }, () => {
     ).toBeInTheDocument();
   });
 
+  it('says that only the newest are shown, how many, and how many there are, when the history is cut', async () => {
+    useMockBackend(memoryMock);
+    renderPage(
+      <AccountMemoryTab accountId={MEMORY_ACCOUNT_IDS.manyAssignments} accountStatus="ACTIVE" />,
+    );
+    const total =
+      memoryStore.accounts.get(MEMORY_ACCOUNT_IDS.manyAssignments)?.assignments.length ?? 0;
+    expect(
+      await screen.findByText(`Only the newest 200 are shown, ${total} in total.`),
+    ).toBeInTheDocument();
+    expect(within(screen.getByTestId('assignment-history')).getAllByRole('row').length).toBe(201);
+  });
+
+  it('says it in Chinese', async () => {
+    useMockBackend(memoryMock);
+    renderPage(
+      <AccountMemoryTab accountId={MEMORY_ACCOUNT_IDS.manyAssignments} accountStatus="ACTIVE" />,
+      'zh-CN',
+    );
+    const total =
+      memoryStore.accounts.get(MEMORY_ACCOUNT_IDS.manyAssignments)?.assignments.length ?? 0;
+    expect(await screen.findByText(`只显示最新 200 条，共 ${total} 条。`)).toBeInTheDocument();
+  });
+
+  it('says nothing about it when the history is whole, and when the backend sent neither field', async () => {
+    useMockBackend(memoryMock);
+    const first = renderPage(
+      <AccountMemoryTab accountId={MEMORY_ACCOUNT_IDS.active} accountStatus="ACTIVE" />,
+    );
+    await screen.findByText('premium');
+    expect(screen.queryByText(/Only the newest/)).toBeNull();
+    first.unmount();
+    vi.unstubAllGlobals();
+    stubFetch(async ({ url }) =>
+      jsonResponse(
+        200,
+        envelope(
+          '200',
+          url.endsWith('/memory')
+            ? {
+                tier: {
+                  tierName: 'default',
+                  syncStatus: 'SYNCED',
+                  assignedAt: null,
+                  lastError: null,
+                },
+                embeddingAssignments: [],
+              }
+            : { items: [] },
+        ),
+      ),
+    );
+    renderPage(<AccountMemoryTab accountId="2001" accountStatus="ACTIVE" />);
+    await screen.findByText('default');
+    expect(screen.queryByText(/Only the newest/)).toBeNull();
+  });
+
+  it('still says the history is cut when the backend sends truncated but no total, without a made up number', async () => {
+    stubFetch(async ({ url }) =>
+      jsonResponse(
+        200,
+        envelope(
+          '200',
+          url.endsWith('/memory')
+            ? {
+                tier: {
+                  tierName: 'default',
+                  syncStatus: 'SYNCED',
+                  assignedAt: null,
+                  lastError: null,
+                },
+                embeddingAssignments: [
+                  {
+                    modelName: 'bge-m3',
+                    assignedBy: '1',
+                    assignedByUsername: 'root',
+                    assignedAt: '2026-10-01T00:00:00.000Z',
+                  },
+                ],
+                truncated: true,
+              }
+            : { items: [] },
+        ),
+      ),
+    );
+    renderPage(<AccountMemoryTab accountId="2001" accountStatus="ACTIVE" />);
+    expect(await screen.findByText('Only the newest 1 are shown.')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/NaN|undefined|null/);
+  });
+
   it('says that the tier cannot be assigned by hand', async () => {
     useMockBackend(memoryMock);
     renderPage(<AccountMemoryTab accountId={MEMORY_ACCOUNT_IDS.active} accountStatus="ACTIVE" />);
