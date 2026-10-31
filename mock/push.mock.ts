@@ -249,12 +249,18 @@ export default {
         a.locale.localeCompare(b.locale) ||
         Number(a.id) - Number(b.id),
     );
+    // The contract (a14) has no total; the default answer keeps it, a test can ask for the other shapes.
+    if (pushState.templateList === 'unpaged-without-total') {
+      return ok({ items: rows.map(templateRow), missingLocales: missingLocales() });
+    }
     const page = paginateQuery(rows, req);
-    return ok({
-      items: page.items.map(templateRow),
-      total: page.total,
-      missingLocales: missingLocales(),
-    });
+    return pushState.templateList === 'paged-without-total'
+      ? ok({ items: page.items.map(templateRow), missingLocales: missingLocales() })
+      : ok({
+          items: page.items.map(templateRow),
+          total: page.total,
+          missingLocales: missingLocales(),
+        });
   }),
 
   'POST /api/admin/push/templates': guard('PUSH:TEMPLATE', (req) => {

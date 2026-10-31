@@ -76,3 +76,48 @@ export function isLastOtpTemplate(target: TemplateCoverage, all: TemplateCoverag
   if (!isOtpOn(target)) return false;
   return !all.some((t) => t.id !== target.id && isOtpOn(t));
 }
+
+export type EnglishCoverage = {
+  id: string;
+  enabled: boolean;
+  smsType: string;
+  locale?: unknown;
+  country?: unknown;
+};
+
+/** An enabled OTP template in `en` (any case, no other tag such as en-GB) with no country: the one that every country falls back to (contract 23.4). */
+function servesEveryCountryInEnglish(t: {
+  enabled: boolean;
+  smsType: string;
+  locale?: unknown;
+  country?: unknown;
+}): boolean {
+  const locale = typeof t.locale === 'string' ? t.locale.trim().toLowerCase() : '';
+  const country = typeof t.country === 'string' ? t.country.trim() : '';
+  return isOtpOn(t) && locale === 'en' && country === '';
+}
+
+/**
+ * True when `target` is an enabled OTP template in English with no country and no other template is.
+ * The page only asks first; the backend refuses while phone sign-in is on or phone-number accounts exist.
+ */
+export function isLastEnglishFallbackTemplate(
+  target: EnglishCoverage,
+  all: EnglishCoverage[],
+): boolean {
+  if (!servesEveryCountryInEnglish(target)) return false;
+  return !all.some((t) => t.id !== target.id && servesEveryCountryInEnglish(t));
+}
+
+/**
+ * True when the edit leaves the template the way the rule needs it (OTP, `en`, no country, still
+ * enabled) or when it was not the last such template anyway.
+ */
+export function keepsEnglishFallback(
+  before: EnglishCoverage,
+  after: { smsType: string; locale: unknown; country: unknown },
+  all: EnglishCoverage[],
+): boolean {
+  if (!isLastEnglishFallbackTemplate(before, all)) return true;
+  return servesEveryCountryInEnglish({ enabled: true, ...after });
+}

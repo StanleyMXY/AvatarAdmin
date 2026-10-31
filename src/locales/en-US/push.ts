@@ -45,12 +45,15 @@ const messages: Record<string, string> = {
   // ---- templates ----
   'push.templates.note':
     'The words of the recall pushes: one template for each trigger reason and language. A trigger reason that has an enabled template must have an enabled one in the default language; the other languages are optional, and a language without an enabled template falls back to the default language. The backend makes the final check when you save.',
+  'push.templates.noteHowTo':
+    'How to work with it: the first template of a reason that you switch on must be in the default language; after that the other languages can be created, switched on, switched off, edited and deleted in any order. The default language template can be switched off or deleted only after the other languages of the reason are off (when it is the only enabled one, at any time). To switch a whole reason off, switch off the other languages first and the default language last. Before you change push.default_locale, enable the template of the new language for every reason that has an enabled template. Adding a language to app.supported_locales needs no change here: the language falls back to the default one.',
   'push.templates.matrix.title': 'Completeness by language',
   'push.templates.matrix.reason': 'Trigger reason',
   'push.templates.matrix.note':
     'The columns are the supported languages. A language without an enabled template falls back to the default language: that is information, not an error.',
   'push.templates.matrix.fallback': 'Uses default language',
   'push.templates.matrix.none': 'No template',
+  'push.templates.matrix.noneEnabled': 'No enabled template',
   'push.templates.matrix.on': 'On',
   'push.templates.matrix.off': 'Off',
   'push.templates.matrix.unknown':
@@ -74,7 +77,7 @@ const messages: Record<string, string> = {
   'push.templates.saved': 'Template saved',
   'push.templates.enabledOf': 'On: {reason}, {locale}',
   'push.templates.defaultLanguageRequired':
-    '{reason} needs an enabled template in the default language ({defaultLocale}): enable or keep it first, then change the other languages.',
+    '{reason} needs an enabled template in the default language ({defaultLocale}). Enable that one first. To switch it off, delete it or change it, first switch off the other languages of {reason}. If it is the only enabled template, keep it in {defaultLocale} and enabled, and create the other language as a new template.',
   'push.templates.exists':
     'A template for this reason and language exists already. Edit that one instead.',
   'push.templates.reason': 'Trigger reason',

@@ -27,7 +27,16 @@ export function TemplateMatrix({ rows, locales }: { rows: CoverageRow[]; locales
           {
             title: t('push.templates.matrix.reason'),
             dataIndex: 'reason',
-            render: (reason: string) => codeText(intl, 'push.reason', reason),
+            render: (reason: string, row: CoverageRow) => (
+              <>
+                {codeText(intl, 'push.reason', reason)}
+                {row.noneEnabled ? (
+                  <Tag data-testid={`row-none-${reason}`} style={{ marginInlineStart: 8 }}>
+                    {t('push.templates.matrix.noneEnabled')}
+                  </Tag>
+                ) : null}
+              </>
+            ),
           },
           ...locales.map((locale) => ({
             title: plainText(locale),

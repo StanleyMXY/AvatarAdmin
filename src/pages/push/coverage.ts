@@ -22,7 +22,16 @@ export type CoverageCell = {
    */
   fallback: boolean | null;
 };
-export type CoverageRow = { reason: string; cells: CoverageCell[] };
+export type CoverageRow = {
+  reason: string;
+  cells: CoverageCell[];
+  /**
+   * True when the backend lists every supported language for the reason: it has no enabled template
+   * at all. Then no language falls back to anything (the default language is the one that would
+   * have to cover the others), so no cell is marked as falling back.
+   */
+  noneEnabled: boolean;
+};
 
 /** A row for each recall reason, a cell for each supported language: the template there (or `null`), and whether the language falls back. */
 export function coverage(
@@ -32,12 +41,17 @@ export function coverage(
 ): CoverageRow[] {
   return RECALL_REASONS.map((reason) => {
     const listed = missingLocales?.[reason];
+    const noneEnabled =
+      Array.isArray(listed) &&
+      locales.length > 0 &&
+      locales.every((locale) => listed.includes(locale));
     return {
       reason,
+      noneEnabled,
       cells: locales.map((locale) => ({
         locale,
         template: templates.find((t) => t.triggerReason === reason && t.locale === locale) ?? null,
-        fallback: Array.isArray(listed) ? listed.includes(locale) : null,
+        fallback: Array.isArray(listed) ? !noneEnabled && listed.includes(locale) : null,
       })),
     };
   });

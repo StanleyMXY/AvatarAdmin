@@ -8,7 +8,7 @@ import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { countryCodeProblem } from './channelRules';
 import { failureToForm } from './formFailure';
-import { isLastOtpTemplate } from './lastOtp';
+import { isLastOtpTemplate, keepsEnglishFallback } from './lastOtp';
 import { isEnglishFallbackRefusal, templateFailureText } from './templateFailure';
 import {
   buildTemplateBody,
@@ -46,6 +46,8 @@ const asCoverage = (t: Partial<SmsTemplate>) => ({
   id: plainText(t.id),
   enabled: t.enabled === true,
   smsType: plainText(t.smsType),
+  locale: t.locale,
+  country: t.country,
 });
 
 /**
@@ -70,6 +72,18 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
       if (isLastOtpTemplate(asCoverage(template), others.map(asCoverage))) {
         if (!(await ask('change', 'template'))) return;
         guarded = true;
+      }
+    }
+    // The narrower rule: the last enabled English OTP template with no country must stay that way.
+    if (template && !guarded) {
+      const others = all ?? [template];
+      const after = {
+        smsType: values.smsType ?? '',
+        locale: values.locale,
+        country: values.country,
+      };
+      if (!keepsEnglishFallback(asCoverage(template), after, others.map(asCoverage))) {
+        if (!(await ask('change', 'englishTemplate'))) return;
       }
     }
     const input = values as TemplateFormValues;

@@ -49,18 +49,26 @@ export function readMissingLocales(value: unknown): MissingLocales | null {
 }
 
 /**
- * Every template, for the completeness matrix, and `missingLocales` of the answer. It reads page
- * after page until it has `total` rows, and stops at a page with no rows, so an answer whose total
- * is wrong cannot make it loop.
+ * Every template, for the matrix, and `missingLocales` of the answer. It reads page after page.
+ * With a numeric `total` it stops when it has that many rows. Without one (the answer of the
+ * backend has none: contract a14) it stops at a page shorter than the page size, and at a page
+ * that brings no row it has not seen yet, so a backend that does not page cannot make it loop. A
+ * page with no rows always stops it. Each row is kept once.
  */
 export async function listAllTemplates(): Promise<TemplateOverview> {
   const items: PushTemplate[] = [];
+  const seen = new Set<string>();
   let missingLocales: MissingLocales | null = null;
   for (let page = 1; ; page += 1) {
     const answer = await listTemplates({ page, pageSize: ALL_PAGE_SIZE });
     if (page === 1) missingLocales = readMissingLocales(answer.missingLocales);
-    items.push(...answer.items);
-    if (answer.items.length === 0 || items.length >= answer.total) {
+    const fresh = answer.items.filter((row) => !seen.has(String(row.id)));
+    for (const row of fresh) seen.add(String(row.id));
+    items.push(...fresh);
+    if (answer.items.length === 0) return { items, missingLocales };
+    if (typeof answer.total === 'number') {
+      if (items.length >= answer.total) return { items, missingLocales };
+    } else if (answer.items.length < ALL_PAGE_SIZE || fresh.length === 0) {
       return { items, missingLocales };
     }
   }

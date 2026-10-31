@@ -19,6 +19,10 @@ const messages: Record<string, string> = {
   'sms.guard.title.template': 'This is the last enabled OTP template',
   'sms.guard.intro.channel':
     'No other enabled OTP channel serves every country that this one serves. {action}',
+  'sms.guard.title.englishTemplate':
+    'This is the last enabled OTP template in English for every country',
+  'sms.guard.intro.englishTemplate':
+    'No other enabled OTP template in English (en) with no country exists. {action}',
   'sms.guard.intro.template': 'No other enabled OTP template exists. {action}',
   'sms.guard.action.disable': 'You are about to switch it off.',
   'sms.guard.action.delete': 'You are about to delete it.',

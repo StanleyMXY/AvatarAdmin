@@ -14,7 +14,7 @@ import {
   setTemplateEnabled,
 } from '../../services/sms';
 import { plainText } from '../../utils/plainText';
-import { isLastOtpTemplate } from './lastOtp';
+import { isLastEnglishFallbackTemplate, isLastOtpTemplate } from './lastOtp';
 import { PagedTable } from './PagedTable';
 import { StatusSwitch } from './StatusSwitch';
 import { TemplateModal } from './TemplateModal';
@@ -33,6 +33,8 @@ const asCoverage = (t: Partial<SmsTemplate>) => ({
   id: plainText(t.id),
   enabled: t.enabled === true,
   smsType: plainText(t.smsType),
+  locale: t.locale,
+  country: t.country,
 });
 
 /**
@@ -70,6 +72,14 @@ export default function TemplatesPage() {
     if (all === null) return true;
     return isLastOtpTemplate(asCoverage(row), all.map(asCoverage));
   };
+  /** The last enabled OTP template in English with no country (contract 23.4, e2): asked first as far as the list shows it; the backend has the last word. */
+  const isLastEnglish = (row: SmsTemplate): boolean => {
+    if (all === null) return isLastEnglishFallbackTemplate(asCoverage(row), []);
+    return isLastEnglishFallbackTemplate(asCoverage(row), all.map(asCoverage));
+  };
+  /** Which question a switch-off, delete or change of this row needs first, if any: the broader rule (the last OTP template at all) before the narrower one. */
+  const questionFor = (row: SmsTemplate): 'template' | 'englishTemplate' | null =>
+    isLast(row) ? 'template' : isLastEnglish(row) ? 'englishTemplate' : null;
 
   const remove = async (row: SmsTemplate, guarded: boolean) => {
     try {
@@ -83,12 +93,15 @@ export default function TemplatesPage() {
 
   const actionsOf = (row: SmsTemplate): RowAction[] => [
     { key: 'edit', label: t('sms.common.edit'), onClick: () => setEditing(row) },
-    isLast(row)
+    questionFor(row) !== null
       ? {
           key: 'delete',
           label: t('sms.common.delete'),
           onClick: async () => {
-            if (await ask('delete', 'template')) await remove(row, servesCodes(row));
+            const question = questionFor(row);
+            if (question !== null && (await ask('delete', question))) {
+              await remove(row, servesCodes(row));
+            }
           },
         }
       : {
@@ -156,7 +169,8 @@ export default function TemplatesPage() {
           checked={row.enabled === true}
           label={t('sms.templates.switchLabel', { code: plainText(row.templateCode) })}
           onToggle={async (next) => {
-            if (!next && isLast(row) && !(await ask('disable', 'template'))) return;
+            const question = questionFor(row);
+            if (!next && question !== null && !(await ask('disable', question))) return;
             await setTemplateEnabled(plainText(row.id), next);
           }}
           failureText={(error, next) => templateFailureText(intl, error, !next && servesCodes(row))}

@@ -18,6 +18,9 @@ const messages: Record<string, string> = {
   'sms.guard.title.channel': '这是最后一个启用的验证码通道',
   'sms.guard.title.template': '这是最后一个启用的验证码模板',
   'sms.guard.intro.channel': '没有别的启用的验证码通道覆盖它所服务的全部国家。{action}',
+  'sms.guard.title.englishTemplate': '这是最后一个启用的、英文、不限国家的验证码模板',
+  'sms.guard.intro.englishTemplate':
+    '没有别的启用的、语言为英文（en）、不限国家的验证码模板了。{action}',
   'sms.guard.intro.template': '没有别的启用的验证码模板了。{action}',
   'sms.guard.action.disable': '你正要停用它。',
   'sms.guard.action.delete': '你正要删除它。',

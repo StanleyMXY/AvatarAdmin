@@ -61,6 +61,28 @@ describe('coverage: a row for each recall reason, a cell for each supported lang
     expect(other[0].cells[0]).toEqual({ locale: 'en', template: null, fallback: false });
   });
 
+  it('says that a reason has no enabled template when the backend lists every supported language for it, and then marks no cell as falling back, the default language cell least of all', () => {
+    const rows = coverage(templates, ['en', 'th'], {
+      daily_recall: ['th'],
+      streak_at_risk: ['en', 'th'],
+    });
+    expect(rows.map((r) => r.noneEnabled)).toEqual([false, true]);
+    expect(rows[1].cells.map((c) => c.fallback)).toEqual([false, false]);
+    expect(rows[0].cells.map((c) => c.fallback)).toEqual([false, true]);
+  });
+
+  it('does not say it from a partial list, an empty list of languages, or no list', () => {
+    expect(
+      coverage(templates, ['en', 'th'], { daily_recall: ['en'], streak_at_risk: ['th'] }).map(
+        (r) => r.noneEnabled,
+      ),
+    ).toEqual([false, false]);
+    expect(
+      coverage(templates, [], { daily_recall: [], streak_at_risk: [] }).map((r) => r.noneEnabled),
+    ).toEqual([false, false]);
+    expect(coverage(templates, ['en'], null).map((r) => r.noneEnabled)).toEqual([false, false]);
+  });
+
   it('does not know when the backend sent no list, or none for the reason', () => {
     for (const none of [null, {}, { daily_recall: ['en'] }] as (Record<
       string,

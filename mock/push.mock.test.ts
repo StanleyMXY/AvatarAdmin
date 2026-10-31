@@ -370,6 +370,19 @@ describe('templates', () => {
       expect(th.data).toEqual({ defaultLocale: 'th', reason: 'daily_recall' });
     });
 
+    it('compares the default language as written, with case: an enabled EN template is not the default en', async () => {
+      const created = await send(TEMPLATE_CREATE, template({ locale: 'EN', enabled: true }));
+      expect(refusal(created).data).toEqual({ defaultLocale: 'en', reason: 'streak_at_risk' });
+      // Written as the default language it is accepted, and then EN may follow.
+      expect((await send(TEMPLATE_CREATE, template({ enabled: true }))).status).toBe(200);
+      expect((await send(TEMPLATE_CREATE, template({ locale: 'EN', enabled: true }))).status).toBe(
+        200,
+      );
+      // With the lower case one switched off, the EN one alone does not satisfy the rule.
+      const en = find('streak_at_risk', 'en');
+      refusal(await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: en.id }));
+    });
+
     it('does not use the upload of a refused write', async () => {
       const id = await upload();
       refusal(

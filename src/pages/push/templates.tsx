@@ -176,6 +176,9 @@ export default function TemplatesPage() {
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
         {t('push.templates.note')}
       </Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }} data-testid="push-howto">
+        {t('push.templates.noteHowTo')}
+      </Typography.Paragraph>
       {locales === null ? (
         <Alert type="info" showIcon title={t('push.templates.matrix.unknown')} />
       ) : allFailure ? (
@@ -198,7 +201,16 @@ export default function TemplatesPage() {
         rowKey="id"
         columns={columns}
         actionRef={ref}
-        request={({ page, pageSize }) => listTemplates({ page, pageSize })}
+        request={async ({ page, pageSize }) => {
+          const answer = await listTemplates({ page, pageSize });
+          if (typeof answer.total === 'number') return { items: answer.items, total: answer.total };
+          // No total in the answer (the backend's list has none): the table shows what was read, all of it.
+          const every = (await listAllTemplates()).items;
+          return {
+            items: every.slice((page - 1) * pageSize, page * pageSize),
+            total: every.length,
+          };
+        }}
         toolbar={
           canWrite
             ? [

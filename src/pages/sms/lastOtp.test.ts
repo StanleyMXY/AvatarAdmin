@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { type Coverage, isLastOtpChannel, isLastOtpTemplate, keepsCoverage } from './lastOtp';
+import {
+  type Coverage,
+  isLastEnglishFallbackTemplate,
+  isLastOtpChannel,
+  isLastOtpTemplate,
+  keepsCoverage,
+  keepsEnglishFallback,
+} from './lastOtp';
 
 const ch = (id: string, countries: string[] | null, over: Partial<Coverage> = {}): Coverage => ({
   id,
@@ -110,5 +117,67 @@ describe('the last enabled OTP template', () => {
     expect(
       isLastOtpTemplate(t('1', { smsType: 'MARKETING' }), [t('1', { smsType: 'MARKETING' })]),
     ).toBe(false);
+  });
+});
+
+describe('the last enabled English OTP template for every country', () => {
+  const t = (id: string, over = {}) => ({
+    id,
+    enabled: true,
+    smsType: 'OTP',
+    locale: 'en',
+    country: '',
+    ...over,
+  });
+  it('is the only enabled OTP template in en, whatever the case, with no country', () => {
+    expect(isLastEnglishFallbackTemplate(t('1'), [t('1'), t('2', { locale: 'th' })])).toBe(true);
+    expect(
+      isLastEnglishFallbackTemplate(t('1', { locale: 'EN' }), [t('1', { locale: 'EN' })]),
+    ).toBe(true);
+    expect(
+      isLastEnglishFallbackTemplate(t('1', { country: null }), [t('1', { country: null })]),
+    ).toBe(true);
+  });
+  it('is not the last when another template qualifies', () => {
+    expect(isLastEnglishFallbackTemplate(t('1'), [t('1'), t('2', { locale: 'EN' })])).toBe(false);
+  });
+  it('does not count en-GB, en-US, a template with a country, one that is off, or one that is not OTP', () => {
+    const others = [
+      t('2', { locale: 'en-GB' }),
+      t('3', { locale: 'en-US' }),
+      t('4', { country: 'TH' }),
+      t('5', { enabled: false }),
+      t('6', { smsType: 'MARKETING' }),
+    ];
+    expect(isLastEnglishFallbackTemplate(t('1'), [t('1'), ...others])).toBe(true);
+  });
+  it('is never the last for a template that does not qualify itself', () => {
+    for (const over of [
+      { locale: 'en-GB' },
+      { country: 'TH' },
+      { enabled: false },
+      { smsType: 'MARKETING' },
+    ]) {
+      expect(isLastEnglishFallbackTemplate(t('1', over), [t('1', over)])).toBe(false);
+    }
+  });
+  it('is kept by an edit that leaves it enabled, OTP, en and without a country', () => {
+    const all = [t('1')];
+    expect(keepsEnglishFallback(t('1'), { smsType: 'OTP', locale: ' EN ', country: '' }, all)).toBe(
+      true,
+    );
+    expect(keepsEnglishFallback(t('1'), { smsType: 'OTP', locale: 'th', country: '' }, all)).toBe(
+      false,
+    );
+    expect(keepsEnglishFallback(t('1'), { smsType: 'OTP', locale: 'en', country: 'th' }, all)).toBe(
+      false,
+    );
+    expect(
+      keepsEnglishFallback(t('1'), { smsType: 'MARKETING', locale: 'en', country: '' }, all),
+    ).toBe(false);
+    // not the last one: any edit keeps it
+    expect(
+      keepsEnglishFallback(t('1'), { smsType: 'OTP', locale: 'th', country: '' }, [t('1'), t('2')]),
+    ).toBe(true);
   });
 });

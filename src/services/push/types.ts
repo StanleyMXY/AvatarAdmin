@@ -49,7 +49,11 @@ export type PushTemplate = {
 export type MissingLocales = Record<string, string[]>;
 
 /** The answer of `GET /push/templates`; `missingLocales` is read with `readMissingLocales`, not trusted. */
-export type TemplatePage = Page<PushTemplate> & { missingLocales?: unknown };
+export type TemplatePage = Omit<Page<PushTemplate>, 'total'> & {
+  /** Not in the answer of the backend (contract a14); a number in the fake one. */
+  total?: unknown;
+  missingLocales?: unknown;
+};
 
 export type TemplateOverview = { items: PushTemplate[]; missingLocales: MissingLocales | null };
 

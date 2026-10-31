@@ -114,3 +114,46 @@
 ## 提交说明
 
 本区域的文件里，`mock/sms.mock.ts`、`mock/sms.mock.test.ts`、`src/locales/en-US/sms.ts`、`src/locales/zh-CN/sms.ts` 同时有 authsys（短信渠道凭据）的未提交改动。我只暂存了属于我的改动片段提交；它们的片段留在工作区，不属于这次提交。
+
+---
+
+# 追加：评审（`backend-d1-msg-review.md`，对提交 e6a2ad9）之后的修复
+
+立即修未修 0、记录项 1、未运行 0、阻塞 0
+
+以上第一部分不改。这一部分对应评审的两条立即修和五条记录项。
+
+## 评审立即修 1：响应没有 `total`
+
+- 落实了什么：
+  - `src/services/push/index.ts` 的 `listAllTemplates`：`total` 是数字时按它停；不是数字时，一页少于页大小就停，且一页里没有新 id 也停，每行只留一次；读到空页总是停。`src/services/push/types.ts`：`total` 改成可选。
+  - `src/pages/push/templates.tsx`：表格的请求在答案没有 `total` 时改用 `listAllTemplates()` 读到的全部，自己切页，总数是读到的条数。
+  - 假后端 `mock/_core/pushData.ts`、`mock/push.mock.ts`：可选模式 `pushState.templateList`（`with-total` 默认、`paged-without-total`、`unpaged-without-total`），只给测试用。
+- 测试：`src/services/push/push.test.ts` 新增 5 条（分页但无 total 时读到短页为止、第一页就短只请求一次、不分页的后端返回整张表时请求数 ≤ 2 且每行一次、整页都是见过的行就停、`total` 是文字当作没有）；`src/pages/push/templates.test.tsx` 新增 2 条（45 条模板：分页的后端表格显示“第 1-20 条/总共 45 条”并能翻页、请求数 ≤ 8；不分页的后端请求数 ≤ 6）。
+- 实现前的失败：服务测试因无限请求内存耗尽而崩溃（`FATAL ERROR: Ineffective mark-compacts near heap limit`）。
+- 变异：去掉“短页就停”（3 条变红）；`total` 不判数字（`total: '99'` 的那条变红）；表格改回只用答案里的数（页面 1 条变红，输出 `mut2-1.txt`）。
+
+## 评审立即修 2：整行“没有启用的模板”
+
+- 落实了什么：`src/pages/push/coverage.ts` 的 `CoverageRow.noneEnabled`：后端对该原因列出了全部（至少一个）支持的语言时为真，此时该行没有格子标成回退（默认语言那格是该原因唯一能兜底的，不标）。`src/pages/push/TemplateMatrix.tsx` 在原因名旁加中性标签（`push.templates.matrix.noneEnabled`：“没有启用的模板” / “No enabled template”，测试标识 `row-none-<原因>`）。
+- 测试：`src/pages/push/coverage.test.ts`（整行、部分列表、没有语言、没有列表）；`src/pages/push/templates.test.tsx`（示例数据里 `streak_at_risk` 整行标记，格子 `none`/`off` 且 `data-fallback="false"`；有一条启用的模板后标记消失、其他语言回退；`fr` 只在支持列表里时；中文显示“没有启用的模板”）。
+- 变异：去掉 `locales.length > 0`、去掉“整行没启用就不标回退”、去掉矩阵里的整行标签，都变红。
+
+## 记录项
+
+- (a) 被拒文字写出做法，顶部写运营怎么用（`src/locales/{en-US,zh-CN}/push.ts`）：`push.templates.defaultLanguageRequired` 现在写：先启用默认语言的模板；要停用、删除或改掉它，先停用同一原因下其他语言的模板；它是唯一启用的模板时，保持它为默认语言并启用，另建其他语言的新模板。三种情形仅凭 `data` 分不出，所以一条文字写两种做法。中文里 `{reason}` 补成两次，和英文占位符数量一致（parity 里这一条修好）。新增 `push.templates.noteHowTo` 和页面顶部的说明段落（`src/pages/push/templates.tsx`，测试标识 `push-howto`），按计划 729 行写：第一条要启用的必须是默认语言、其他语言任意顺序、默认语言那条最后停、改 `push.default_locale` 之前先启用新语言的模板、往 `app.supported_locales` 加语言不用先动召回模板。测试：`recallRule.test.ts`、`templates.test.tsx` 里英文和中文各一条。
+- (b) 短信页在拿掉“最后一个合格的英文验证码模板”之前提示（计划 846 行）：`src/pages/sms/lastOtp.ts` 新增 `isLastEnglishFallbackTemplate`、`keepsEnglishFallback`（启用、OTP、`en` 不分大小写、无国家；按页面读到的列表判断；没读到列表时按“是最后一个”问）。`src/pages/sms/templates.tsx`（停用开关、删除）和 `src/pages/sms/TemplateModal.tsx`（编辑后不再合格：改语言、加国家、改类型）先弹确认，更宽的“最后一个 OTP 模板”弹窗仍然先判。语言文字 `sms.guard.title.englishTemplate`、`sms.guard.intro.englishTemplate`（中英文）。后端仍是最终裁决，被拒后的按码文字照旧。原先我在报告里把“不预判”判成“不是缺陷”，评审指出计划相反；这里改为按计划做，该条原判作废。测试：`lastOtp.test.ts` 新增 5 条；`templates.test.tsx` 新增或改写 6 条（弹确认且取消不发请求、确认后后端拒绝、另有一个 `EN` 合格模板时不问、其余英文是 `en-GB` 或有国家时仍问、删除、给它加国家时问、只改名称并把语言写成 `EN` 时不问）。变异：`lastOtp` 去掉“无国家”条件（3 条变红）、去掉大小写折叠（3 条变红）；`templates.tsx` 去掉英文那一问（3 条变红）；`TemplateModal.tsx` 去掉编辑时的问（3 条变红）。
+- (c) 被拒判断的 `ref`、`reason` 两个条件的测试：新文件 `src/pages/sms/templateFailure.test.ts`（9 条）：对 `country`、`smsType` 的普通 `OUT_OF_RANGE`、`SmsTemplate` 配 `EMPTY_NOT_ALLOWED`、设置键作 `ref`、没有 details、`details` 不是列表、别的错误码都不会被显示成“必须保留英文模板”的句子。变异：只判 `reason`（4 条变红）、只判 `ref`（2 条变红）。
+- (d) 推送假后端“默认语言区分大小写”：`mock/push.mock.test.ts` 新增一条（默认语言 `en`，只有启用的 `EN` 模板的写入被拒；写成 `en` 后 `EN` 可以随后；`en` 停用而 `EN` 在时被拒）。变异：比较改成不分大小写，该条变红。
+- (e) 短信页测试的等待上限：`src/pages/sms/templates.test.tsx` 每条测试前把异步等待上限放到 6 秒，之后还原（`configure({ asyncUtilTimeout })`），和推送那一组一致。
+
+## 命令和结果
+
+- 区域整批：`npx vitest run src/pages/push src/pages/email src/pages/sms mock/push.mock.test.ts mock/sms.mock.test.ts mock/email.mock.test.ts src/services/push src/services/email src/services/sms tests/noHardcodedText.test.ts src/locales`：33 个文件，1009 条通过（含禁止写死文字扫描和语言文件 parity 里我的部分）。
+- `npx tsc --noEmit` 只看我的路径：无诊断；`npx biome check --write`：已通过。
+- 真实浏览器（草稿目录拷贝，端口 8461，用完按监听进程号停了服务）：短信把 `otp_en` 的开关关掉，先弹确认，标题“This is the last enabled OTP template in English for every country”，说明手机号登录当前关闭、后端也会因手机号账号拒绝；取消后开关仍开、没有请求；再次确认后后端拒绝，提示是按码的英文文字，没有后端原文。推送矩阵：`streak_at_risk` 整行有“No enabled template”标签，格子是 `none`/`off`，没有“Uses default language”；`daily_recall` 全是“On”；关掉英文 `daily_recall` 的开关，提示写出两种做法，切到中文后同样；页面顶部有使用说明；控制台只有两次预期的 400。邮件模板第六项照旧。
+- 变异输出：`/tmp/claude-0/-home-user-AvatarAdmin/430adf2a-3186-5642-af52-8b3912cf69c3/scratchpad/msg/mut3-a.txt`、`mut3-b.txt`、`mut2-1.txt`。
+
+## 记录项（这一轮新发现）
+
+1. 记录项：`src/locales/*/reason.ts` 有别的代理在改，`src/locales/parity.test.ts` 的 `reason.<code>` 两条在满载的整批里曾失败，不是我的路径；本区域的整批 1009 条运行里已通过。触发步骤：别的代理的未提交改动落在 `reason.ts` 时跑 parity。

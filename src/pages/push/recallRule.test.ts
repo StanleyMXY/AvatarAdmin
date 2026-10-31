@@ -49,14 +49,14 @@ describe('templateFailureText', () => {
   it('says what to do in English with the default language and the reason named, and never the message of the backend', () => {
     const text = templateFailureText(intlOf(enUS), refusal(data));
     expect(text).toBe(
-      'Streak at risk needs an enabled template in the default language (ไทย): enable or keep it first, then change the other languages.',
+      'Streak at risk needs an enabled template in the default language (ไทย). Enable that one first. To switch it off, delete it or change it, first switch off the other languages of Streak at risk. If it is the only enabled template, keep it in ไทย and enabled, and create the other language as a new template.',
     );
     expect(text).not.toContain('BACKEND SENTENCE');
   });
 
   it('says it in Chinese', () => {
     expect(templateFailureText(intlOf(zhCN), refusal(data))).toBe(
-      '触发原因“连续记录将断”需要默认语言 ไทย 的启用模板：先启用或保留它，再改其他语言。',
+      '触发原因“连续记录将断”需要默认语言 ไทย 的启用模板。先启用默认语言的模板；要停用、删除或改掉它，先停用“连续记录将断”下其他语言的模板；它是唯一启用的模板时，保持它为 ไทย 并启用，另建其他语言的新模板。',
     );
   });
 
