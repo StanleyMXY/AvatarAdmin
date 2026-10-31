@@ -97,7 +97,7 @@
 - 绿：`npx vitest run src/pages/config tests/noHardcodedText.test.ts src/locales mock/config.mock.test.ts scripts`：设置页 3 个文件 80 个用例全绿，禁止写死文字扫描、`mock/config.mock.test.ts`、`scripts` 全绿；`src/locales` 里 5 个失败**不是本次改动造成**：`parity.test.ts` 的 `push.templates.defaultLanguageRequired` 占位符和 `reason.*` 的契约原因码清单（多出 `NOT_CURRENCY_CODE`），分别来自工作区里别的区域尚未提交的 `push.ts`、`reason.ts` 修改；我的语言键（`config.refusal.unknownReason`）中英文都有，键对称。
 - biome 对我改的文件无问题；提交前钩子（lint-staged 和类型检查）通过。
 
-变异检查共 8 个（评审给的 2 个、同键两次、隐藏键一律放顶部、集合判断去掉、未知原因取 message、整体提示附 message、风险标记去掉、第三方名回写思路由扫描测试守），全部变红，改动都已还原（用 diff 核对）。
+变异检查共 8 个（评审给的 2 个、同键两次、隐藏键一律放顶部、集合判断去掉、未知原因取 message、整体提示附 message、风险标记去掉），全部变红；第三方产品名那条没有另做变异，它的红是修复前的真实失败（8 条文字命中），改动都已还原（用 diff 核对）。
 
 覆盖的语言：新增的拒绝文字测试覆盖英文和中文；暗号测试用的是 ASCII 暗号，不涉及泰语等；“只覆盖中文和英文”，界面本来就只有这两种。
 
