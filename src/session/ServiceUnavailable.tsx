@@ -1,15 +1,18 @@
 import { useIntl } from '@umijs/max';
-import { Button, Result } from 'antd';
+import { Button, Result, Space } from 'antd';
 
 /**
  * Fills the page when the account could not be read because the service could not be reached. The
- * person is still signed in (the token is kept); `onRetry` reads the account again.
+ * person is still signed in (the token is kept); `onRetry` reads the account again, and `onSignOut`
+ * lets them leave when the error lasts.
  */
 export function ServiceUnavailable({
   onRetry,
+  onSignOut,
   retrying,
 }: {
   onRetry: () => void;
+  onSignOut: () => void;
   retrying: boolean;
 }) {
   const intl = useIntl();
@@ -25,9 +28,12 @@ export function ServiceUnavailable({
       }}
       title={intl.formatMessage({ id: 'error.GATEWAY_UNAVAILABLE' })}
       extra={
-        <Button type="primary" loading={retrying} onClick={onRetry}>
-          {intl.formatMessage({ id: 'pages.common.retry' })}
-        </Button>
+        <Space>
+          <Button type="primary" loading={retrying} onClick={onRetry}>
+            {intl.formatMessage({ id: 'pages.common.retry' })}
+          </Button>
+          <Button onClick={onSignOut}>{intl.formatMessage({ id: 'pages.header.logout' })}</Button>
+        </Space>
       }
     />
   );

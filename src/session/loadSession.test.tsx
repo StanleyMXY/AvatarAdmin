@@ -123,13 +123,19 @@ describe('loadSession', () => {
     }
   });
 
-  it('is empty (not unavailable) when the backend itself answers with another error', async () => {
-    setToken('tok');
-    stubFetch(() => jsonResponse(500, envelope('INTERNAL_ERROR')));
-    expect(await loadSession()).toEqual({});
-    stubFetch(() => jsonResponse(403, envelope('ADMIN_FORBIDDEN')));
-    expect(await loadSession()).toEqual({});
-  });
+  it.each([
+    [500, 'INTERNAL_ERROR'],
+    [403, 'ADMIN_FORBIDDEN'],
+    [429, 'RATE_LIMITED'],
+  ])(
+    'says the service is unavailable, and keeps the token, when the backend itself answers %i: only a refused token signs the person out',
+    async (status, code) => {
+      setToken('tok');
+      stubFetch(() => jsonResponse(status, envelope(code)));
+      expect(await loadSession()).toEqual({ unavailable: true });
+      expect(getToken()).toBe('tok');
+    },
+  );
 
   it('is empty, not unavailable, when the token was refused: nothing to retry', async () => {
     setToken('old');

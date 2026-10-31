@@ -4,6 +4,7 @@ import { loadSession } from './loadSession';
 import { gateFor } from './returnUrl';
 import { ServiceUnavailable } from './ServiceUnavailable';
 import type { SessionState } from './state';
+import { useSession } from './useSession';
 
 /**
  * Shows its children only to someone who may be on this page: signed in, and not obliged to change
@@ -14,6 +15,7 @@ import type { SessionState } from './state';
 export function SessionGate({ children }: { children: ReactNode }) {
   const { initialState, setInitialState } = useModel('@@initialState');
   const { pathname, search } = useLocation();
+  const { signOut } = useSession();
   const state = initialState as SessionState | undefined;
   const unavailable = !state?.me && state?.unavailable === true;
   const target = unavailable ? null : gateFor({ pathname, search }, { me: state?.me });
@@ -35,6 +37,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
     }
   }, [setInitialState]);
 
-  if (unavailable) return <ServiceUnavailable onRetry={retry} retrying={retrying} />;
+  if (unavailable)
+    return <ServiceUnavailable onRetry={retry} onSignOut={signOut} retrying={retrying} />;
   return target ? null : children;
 }

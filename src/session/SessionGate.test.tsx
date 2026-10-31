@@ -67,6 +67,14 @@ describe('SessionGate', () => {
     );
   });
 
+  it('lets the person sign out from the unavailable notice, so a lasting error does not trap them', async () => {
+    setToken('tok');
+    setTestInitialState({ unavailable: true });
+    renderPage(page());
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(getToken()).toBeNull();
+  });
+
   it('keeps the token and the address, and shows the unavailable notice with a retry, when the account could not be read', () => {
     setToken('tok');
     setTestInitialState({ unavailable: true });
