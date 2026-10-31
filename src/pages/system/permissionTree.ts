@@ -1,5 +1,6 @@
 import { PERMISSION_CODES } from '../../access/permissionCodes';
 import type { PermissionNode } from '../../services/system';
+import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 
 // The rules of the permission tree, as pure functions: which node is built in, which can be chosen
@@ -216,4 +217,23 @@ export function parentCandidates(nodes: readonly PermissionNode[], code: string)
   const index = buildIndex(nodes);
   const blocked = new Set([code, ...descendantsOf(index, code)]);
   return index.codes.filter((c) => !blocked.has(c));
+}
+
+/**
+ * The codes of a role that the signed-in administrator does not hold, each once and written as
+ * plain text, in the order the role has them (what the backend sends is not trusted to be text).
+ * The backend refuses to save a role that has any of them, so the dialog says so beforehand.
+ * `held` is null for a super administrator, who holds everything, and when it is not known.
+ */
+export function codesNotHeld(
+  roleCodes: readonly unknown[],
+  held: ReadonlySet<string> | null,
+): string[] {
+  if (held === null) return [];
+  const seen = new Set<string>();
+  for (const raw of roleCodes) {
+    const code = plainText(raw);
+    if (code !== '' && !held.has(code)) seen.add(code);
+  }
+  return [...seen];
 }

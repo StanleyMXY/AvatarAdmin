@@ -120,6 +120,10 @@ const messages: Record<string, string> = {
   'system.roles.treeFailed': 'The permission tree could not be read: {message}',
   'system.roles.treeRetry': 'Read again',
   'system.roles.treeLoading': 'Reading the permission tree…',
+  'system.roles.notHeld':
+    'This role has permissions you do not hold: {codes}. You cannot save changes to it.',
+  'system.roles.notHeldMany':
+    'This role has permissions you do not hold: {codes} and others, {count} in total. You cannot save changes to it.',
   'system.roles.unknownCodes':
     'These codes of the role cannot be given to a role (custom nodes and codes the application does not know) and will be dropped when you save: {codes}',
 

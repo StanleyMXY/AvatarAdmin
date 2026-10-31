@@ -110,6 +110,9 @@ const messages: Record<string, string> = {
   'system.roles.treeFailed': '读取权限树失败：{message}',
   'system.roles.treeRetry': '重新读取',
   'system.roles.treeLoading': '正在读取权限树……',
+  'system.roles.notHeld': '这个角色含有你没有的权限：{codes}，你不能保存对它的修改。',
+  'system.roles.notHeldMany':
+    '这个角色含有你没有的权限：{codes} 等共 {count} 个，你不能保存对它的修改。',
   'system.roles.unknownCodes':
     '角色里的这些权限码不能分配给角色（自定义节点和应用不认识的码），保存时会被去掉：{codes}',
 

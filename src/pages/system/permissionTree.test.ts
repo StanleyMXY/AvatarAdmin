@@ -3,6 +3,7 @@ import { PERMISSION_CODES } from '../../access/permissionCodes';
 import type { PermissionNode } from '../../services/system';
 import {
   buildIndex,
+  codesNotHeld,
   isBuiltinNode,
   isSelectable,
   nodeName,
@@ -570,5 +571,37 @@ describe('the parent of a custom node', () => {
         );
       }
     }
+  });
+});
+
+describe('the codes of a role that the administrator does not hold', () => {
+  const held = new Set(['USER:VIEW', 'USER:BAN']);
+
+  it('lists the codes that are not held, once each, in the order of the role', () => {
+    expect(
+      codesNotHeld(['USER:VIEW', 'USER:EXPORT', 'COST:VIEW', 'USER:EXPORT', 'USER:BAN'], held),
+    ).toEqual(['USER:EXPORT', 'COST:VIEW']);
+  });
+
+  it('is empty when every code is held, when the role has none, and for a super administrator (no set)', () => {
+    expect(codesNotHeld(['USER:BAN', 'USER:VIEW'], held)).toEqual([]);
+    expect(codesNotHeld([], held)).toEqual([]);
+    expect(codesNotHeld(['COST:VIEW'], null)).toEqual([]);
+  });
+
+  it('counts everything against an empty set, also codes the tree does not know', () => {
+    expect(codesNotHeld(['USER:VIEW', 'OLD:THING'], new Set())).toEqual(['USER:VIEW', 'OLD:THING']);
+  });
+
+  it('writes a value that is not text out as plain text and leaves out what is nothing', () => {
+    expect(codesNotHeld([42, { a: 1 }, null, undefined, '', 'ผู้ใช้:ดู', 'USER:VIEW'], held)).toEqual([
+      '42',
+      '{"a":1}',
+      'ผู้ใช้:ดู',
+    ]);
+  });
+
+  it('compares the exact code: case and spaces count', () => {
+    expect(codesNotHeld(['user:view', ' USER:VIEW'], held)).toEqual(['user:view', ' USER:VIEW']);
   });
 });
