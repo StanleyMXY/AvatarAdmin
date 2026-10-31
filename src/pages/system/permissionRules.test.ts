@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PermissionNode } from '../../services/system';
-import { buildPermissionPatch, codeProblem } from './permissionRules';
+import { buildPermissionPatch, codeProblem, nextSortOrder } from './permissionRules';
 
 const node = (code: string, parent: string | null, builtin = false): PermissionNode => ({
   code,
@@ -84,5 +84,49 @@ describe('the code of a new node', () => {
     expect(codeProblem('x'.repeat(100), nodes)).toBeNull();
     expect(codeProblem('A', nodes)).toBe('taken');
     expect(codeProblem(' USER:VIEW ', nodes)).toBe('taken');
+  });
+});
+
+describe('the order offered for a new node', () => {
+  const at = (code: string, parent: string | null, sortOrder: unknown): PermissionNode => ({
+    ...node(code, parent),
+    sortOrder: sortOrder as number,
+  });
+
+  it('is one more than the last of the siblings under the same parent', () => {
+    const list = [
+      at('R1', null, 5),
+      at('R2', null, 9),
+      at('C1', 'R1', 40),
+      at('C2', 'R1', 2),
+      at('G1', 'C1', 100),
+    ];
+    expect(nextSortOrder(list, null)).toBe(10);
+    expect(nextSortOrder(list, 'R1')).toBe(41);
+    expect(nextSortOrder(list, 'C1')).toBe(101);
+  });
+
+  it('is 1 when there is no sibling, also for a parent that is not in the list or an empty tree', () => {
+    expect(nextSortOrder([], null)).toBe(1);
+    expect(nextSortOrder([at('R1', null, 5)], 'R1')).toBe(1);
+    expect(nextSortOrder([at('R1', null, 5)], 'GONE')).toBe(1);
+  });
+
+  it('counts a node whose parent is not in the list as a root, as the tree draws it', () => {
+    expect(nextSortOrder([at('LOST', 'GONE', 30), at('R1', null, 5)], null)).toBe(31);
+  });
+
+  it('works with negative orders and ignores an order that is not a number', () => {
+    expect(nextSortOrder([at('A', null, -7), at('B', null, -3)], null)).toBe(-2);
+    expect(nextSortOrder([at('A', null, 'x'), at('B', null, null), at('C', null, 4)], null)).toBe(
+      5,
+    );
+    expect(nextSortOrder([at('A', null, 'x')], null)).toBe(1);
+    expect(nextSortOrder([at('A', null, Number.NaN)], null)).toBe(1);
+  });
+
+  it('stays a safe integer', () => {
+    const top = Number.MAX_SAFE_INTEGER;
+    expect(Number.isSafeInteger(nextSortOrder([at('A', null, top)], null))).toBe(true);
   });
 });

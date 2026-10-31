@@ -15,6 +15,7 @@ import {
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
 import type { LinkTargetValue } from '../../components/LinkTargetField';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type Audience,
@@ -197,6 +198,7 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
         initialValues={initial}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item name="repeat" label={t('push.schedules.repeat')}>
           <Radio.Group options={REPEATS.map((r) => ({ value: r, label: t(`push.repeat.${r}`) }))} />
         </Form.Item>

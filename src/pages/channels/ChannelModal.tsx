@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import type { FormInstance } from 'antd';
 import { Alert, App, Descriptions, Form, Input, Modal, Select } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
 import { DISTRIBUTIONS, PLATFORMS, type Platform } from '../../services/appVersions';
@@ -133,6 +134,7 @@ export function ChannelModal({ channel, existing, onClose, onSaved }: Props) {
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         {channel ? (
           <Form.Item label={t('channels.field.code')} extra={t('channels.fixedHelp')}>
             <Descriptions

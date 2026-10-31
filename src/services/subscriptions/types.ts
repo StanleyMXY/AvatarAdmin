@@ -147,7 +147,12 @@ export type SubscriptionStatRow = {
   canceled: number;
   expired: number;
   refunded: number;
-  /** The list price, not what was paid; the amount is a decimal number or a decimal string. */
+  /**
+   * The list price, not what was paid. The amount is a decimal string such as "24.99" (trailing zeros
+   * cut for a Google row), or null when the day has none; a string is never turned into a floating point
+   * number. A row of the other store may carry a JSON number such as 9.99 (the backend has not said), which
+   * the page formats as the number it is.
+   */
   listPriceAmount: number | string | null;
   listPriceCurrency: string | null;
 };

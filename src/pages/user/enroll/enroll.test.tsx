@@ -1,10 +1,14 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { issueEnrollToken, resetStore } from '../../../../mock/_core/store';
+import { adminOf } from '../../../../mock/_core/testing';
+import auth from '../../../../mock/auth.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../../tests/httpStubs';
+import { useMockBackend } from '../../../../tests/mockBackend';
 import { renderPage } from '../../../../tests/renderPage';
 import { history, resetUmiStub, setTestInitialState } from '../../../../tests/stubs/umi-max';
-import { getToken, resetSessionState } from '../../../request/session';
+import { getToken, resetSessionState, setSessionHandlers } from '../../../request/session';
 import {
   clearPendingEnroll,
   getPendingEnroll,
@@ -109,6 +113,70 @@ describe('the authenticator setup page', () => {
     await user.click(screen.getByRole('button', { name: 'Finish setup' }));
     await waitFor(() => expect(history.replace).toHaveBeenCalledWith('/user/login'));
     expect(getPendingEnroll()).toBeUndefined();
+  });
+
+  // 401 ADMIN_INVALID_TOKEN of this call also comes when the pending secret cannot be decrypted. The
+  // enrollment token is void then, and the same code as the "session ended" answer of every other
+  // request, which must not be mistaken for it here.
+  it('goes back to sign-in with a notice and does not report an ended session when the enrollment token is void', async () => {
+    const expired = vi.fn();
+    setSessionHandlers({ onExpired: expired, onForbidden: vi.fn() });
+    const calls = stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
+    const user = userEvent.setup();
+    renderPage(<Enroll />);
+    await user.type(screen.getByLabelText('Verification code'), '000000');
+    await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+    await waitFor(() => expect(history.replace).toHaveBeenCalledWith('/user/login'));
+    expect(await screen.findByText('The setup has expired. Sign in again.')).toBeInTheDocument();
+    expect(expired).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+    expect(getPendingEnroll()).toBeUndefined();
+  });
+
+  it('keeps the page the person was going to when it goes back to sign-in', async () => {
+    setPendingEnroll({ enrollToken: 'e', otpauthUri: OTPAUTH, redirect: '/users/list?x=1' });
+    stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
+    const user = userEvent.setup();
+    renderPage(<Enroll />);
+    await user.type(screen.getByLabelText('Verification code'), '000000');
+    await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+    await waitFor(() =>
+      expect(history.replace).toHaveBeenCalledWith(
+        `/user/login?redirect=${encodeURIComponent('/users/list?x=1')}`,
+      ),
+    );
+  });
+
+  it('cannot use the void token again: a new visit of the page starts from sign-in and sends nothing', async () => {
+    const calls = stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
+    const user = userEvent.setup();
+    const first = renderPage(<Enroll />);
+    await user.type(screen.getByLabelText('Verification code'), '000000');
+    await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+    await waitFor(() => expect(history.replace).toHaveBeenCalledWith('/user/login'));
+    first.unmount();
+    history.replace.mockClear();
+    const { container } = renderPage(<Enroll />);
+    await waitFor(() => expect(history.replace).toHaveBeenCalledWith('/user/login'));
+    expect(container.querySelector('svg')).toBeNull();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('against the fake backend: a pending secret that cannot be decrypted voids the token and the person signs in again', async () => {
+    resetStore();
+    const admin = adminOf('fresh');
+    admin.enrollSecretUnreadable = true;
+    const enrollToken = issueEnrollToken(admin);
+    setPendingEnroll({ enrollToken, otpauthUri: OTPAUTH });
+    const calls = useMockBackend({ default: auth });
+    const user = userEvent.setup();
+    renderPage(<Enroll />);
+    await user.type(screen.getByLabelText('Verification code'), '000000');
+    await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+    await waitFor(() => expect(history.replace).toHaveBeenCalledWith('/user/login'));
+    expect(calls.map((c) => c.url)).toEqual(['/api/admin/auth/totp/enroll']);
+    expect(getToken()).toBeNull();
+    expect(admin.totpEnrolled).toBe(false);
   });
 
   it('shows the lock when there were too many wrong codes', async () => {

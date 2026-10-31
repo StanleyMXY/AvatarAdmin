@@ -24,6 +24,8 @@ const messages: Record<string, string> = {
   'complaints.status.RESOLVED_REMOVED': 'Avatars removed',
   'complaints.status.RESOLVED_NOT_FOUND': 'No such avatar found',
   'complaints.status.REJECTED': 'Rejected',
+  // a choice of the filter only, not a state a complaint has: received and investigating together
+  'complaints.filter.OPEN': 'Not closed',
 
   'complaints.evidence.title': 'Evidence',
   'complaints.evidence.none': 'No evidence files.',

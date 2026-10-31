@@ -6,6 +6,7 @@ import {
   moderationState,
   RECORD_ID,
   resetModerationStore,
+  simulateOtherRuleListEdit,
 } from './_core/moderationData';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
@@ -499,6 +500,28 @@ describe('GET and PUT /moderation/text-rules', () => {
     expect((await get(RULES, 'reviewer')).body.data.items).toEqual(before);
   });
 
+  it('refuses a substring or whole-word text that is empty once normalised (zero-width characters only), and takes the same text as a regular expression', async () => {
+    const zeroWidth = String.fromCharCode(0x200b, 0x200c, 0x200d, 0x2060, 0xfeff);
+    const before = (await get(RULES, 'reviewer')).body.data.items;
+    const { status, body } = await send(SAVE_RULES, 'reviewer', {
+      items: [
+        rule({ pattern: zeroWidth, matchMode: 'SUBSTRING' }),
+        rule({ pattern: ` ${zeroWidth} `, matchMode: 'WORD' }),
+        rule({ pattern: `a${zeroWidth}b`, matchMode: 'WORD' }),
+      ],
+    });
+    expect(status).toBe(400);
+    expect(body.data.details).toEqual([
+      { ref: '0', reason: 'EMPTY_NOT_ALLOWED' },
+      { ref: '1', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect((await get(RULES, 'reviewer')).body.data.items).toEqual(before);
+    const regex = await send(SAVE_RULES, 'reviewer', {
+      items: [rule({ pattern: zeroWidth, matchMode: 'REGEX' })],
+    });
+    expect(regex.status).toBe(200);
+  });
+
   it('counts the length of a pattern in code points after trimming', async () => {
     const ok = await send(SAVE_RULES, 'reviewer', { items: [rule({ pattern: '😀'.repeat(200) })] });
     expect(ok.status).toBe(200);
@@ -532,5 +555,22 @@ describe('GET and PUT /moderation/text-rules', () => {
       const { status } = await send(SAVE_RULES, 'reviewer', body);
       expect(status).toBe(400);
     }
+  });
+});
+
+describe('standing in for a second administrator who saves the rule list', () => {
+  it('changes the list the next GET gives, keeps the ids of the rules that stay, and does not touch the list the caller already holds', async () => {
+    const before = (await get(RULES, 'reviewer')).body.data.items as { id: string; note: string }[];
+    simulateOtherRuleListEdit((rules) => [
+      { ...rules[0], note: 'changed by someone else' },
+      ...rules.slice(2),
+      { id: 'other-new', pattern: 'ใหม่', matchMode: 'SUBSTRING', level: 'BLOCK', note: '' },
+    ]);
+    const after = (await get(RULES, 'reviewer')).body.data.items as { id: string; note: string }[];
+    expect(after[0].id).toBe(before[0].id);
+    expect(after[0].note).toBe('changed by someone else');
+    expect(after.map((r) => r.id)).not.toContain(before[1].id);
+    expect(after[after.length - 1].id).toBe('other-new');
+    expect(before[0].note).not.toBe('changed by someone else');
   });
 });

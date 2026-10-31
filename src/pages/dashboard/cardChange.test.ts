@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import type { RetentionRow, StatDailyRow } from '../../services/stats/types';
 import {
+  changeFinality,
   computeCardChange,
   dailySeries,
   latestCohortWithD1,
@@ -291,5 +292,24 @@ describe('dailySeries', () => {
     const rows = [daily('2026-10-26', { dau: -3, callSecondsTotal: Number.NaN })];
     expect(dailySeries(rows, 'dau')[0].value).toBeNull();
     expect(dailySeries(rows, 'callMinutes')[0].value).toBeNull();
+  });
+});
+
+describe('changeFinality: which comparisons of a card may be judged as a rise or a fall', () => {
+  it('is false for both when the day of the card is today: today is not over', () => {
+    expect(changeFinality(TODAY, TODAY)).toEqual({ yesterday: false, weekAgo: false });
+  });
+
+  it('is true for both when the card shows a complete day, because the earlier days are complete too', () => {
+    expect(changeFinality('2026-10-25', TODAY)).toEqual({ yesterday: true, weekAgo: true });
+  });
+
+  it('keeps the D1 of the cohort of yesterday provisional (its figure is counted today) and settles the cohort before', () => {
+    expect(changeFinality('2026-10-25', TODAY, 1)).toEqual({ yesterday: false, weekAgo: false });
+    expect(changeFinality('2026-10-24', TODAY, 1)).toEqual({ yesterday: true, weekAgo: true });
+  });
+
+  it('is false for a day that is not a calendar day', () => {
+    expect(changeFinality('not-a-day', TODAY)).toEqual({ yesterday: false, weekAgo: false });
   });
 });

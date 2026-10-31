@@ -19,6 +19,10 @@ const messages: Record<string, string> = {
   'sms.guard.title.template': 'This is the last enabled OTP template',
   'sms.guard.intro.channel':
     'No other enabled OTP channel serves every country that this one serves. {action}',
+  'sms.guard.title.englishTemplate':
+    'This is the last enabled OTP template in English for every country',
+  'sms.guard.intro.englishTemplate':
+    'No other enabled OTP template in English (en) with no country exists. {action}',
   'sms.guard.intro.template': 'No other enabled OTP template exists. {action}',
   'sms.guard.action.disable': 'You are about to switch it off.',
   'sms.guard.action.delete': 'You are about to delete it.',
@@ -40,7 +44,7 @@ const messages: Record<string, string> = {
   'sms.channels.note.selection':
     'For a country, the enabled OTP channel with the smallest priority number is used. When a send fails, it is not retried on another channel.',
   'sms.channels.note.credentials':
-    'Credentials are write-only: they are never shown again after saving. When you edit a channel, leave the box empty to keep the saved ones.',
+    'Credentials are write-only: they are never shown again after saving. When you edit a channel, add no entries to keep the saved ones.',
   'sms.channels.new': 'New channel',
   'sms.channels.readOnly':
     'You can only view channels. Changing them needs the permission to configure SMS channels.',
@@ -77,10 +81,17 @@ const messages: Record<string, string> = {
   'sms.channels.hostsHelp': 'This provider only allows these hosts: {hosts}',
   'sms.channels.credentialsNew': 'Optional now; they can be added later by editing the channel.',
   'sms.channels.credentialsSet':
-    'Credentials are set. Leave this box empty to keep them; type new ones to replace them.',
+    'Credentials are set. Add no entries to keep them; adding entries replaces all of them, so enter every name and value again.',
   'sms.channels.credentialsNotSet': 'No credentials are set yet.',
   'sms.channels.credentialsWriteOnly': 'Write-only: saved credentials are never shown.',
-  'sms.channels.credentialsPlaceholder': 'Leave empty to keep the saved credentials',
+  'sms.channels.credentialName': 'Credential name',
+  'sms.channels.credentialValue': 'Credential value',
+  'sms.channels.credentialAdd': 'Add a credential',
+  'sms.channels.credentialRemove': 'Remove this credential',
+  'sms.channels.credentialRemoveShort': 'Remove',
+  'sms.channels.credentialNameRequired': 'Enter a name for this value',
+  'sms.channels.credentialValueRequired': 'Enter a value for this name',
+  'sms.channels.credentialNameDuplicate': 'This name is used twice',
   'sms.channels.extConfigHelp':
     'A JSON object, for example the appId and the sender IDs by country. Leave empty for none.',
   'sms.channels.countriesHelp':
@@ -119,7 +130,9 @@ const messages: Record<string, string> = {
 
   // ---- templates ----
   'sms.templates.note.rule':
-    'How a template is chosen for a send: first the one for the country of the number and the language of the user (the Accept-Language request header), then one in the same language for any country, and last the English one. When no template can be used, the send fails.',
+    'How a template is chosen for a send: first the one for the country of the number and the language of the user (the Accept-Language request header), then one in the same language for any country, and last the English one. When no template can be used, the send fails. While phone sign-in is on or phone-number accounts exist, at least one enabled OTP template in English (en) with no country must remain; the backend refuses the change that would remove it.',
+  'sms.templates.englishRefused':
+    'Nothing was changed. While phone sign-in is on or phone-number accounts exist, an enabled OTP template in English (en) for every country (no country set) must remain. Enable or create another one first, then change this one.',
   'sms.templates.new': 'New template',
   'sms.templates.empty': 'No templates',
   'sms.templates.col.code': 'Code',

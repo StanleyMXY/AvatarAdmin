@@ -82,11 +82,53 @@ describe('the manual task page: the list', { timeout: 30000 }, () => {
     backend();
     renderPage(<TasksPage />);
     const missed = await rowOf(titleOf('5'));
-    expect(within(missed).getByText('Missed')).toBeInTheDocument();
+    expect(
+      within(missed).getByText('Missed: the push executor was down for too long, nothing was sent'),
+    ).toBeInTheDocument();
+    expect(within(missed).getByText('Cancelled')).toBeInTheDocument();
     // task 7 was made by an administrator who has been deleted: the name is null, the id stays
     const gone = await rowOf(titleOf('7'));
     expect(within(gone).getByText('9999')).toBeInTheDocument();
   });
+
+  it('says in words what a missed task is, in Chinese too, and only on a task that carries the note', async () => {
+    backend();
+    renderPage(<TasksPage />, 'zh-CN');
+    const missed = await rowOf(titleOf('5'));
+    expect(within(missed).getByText('错过：执行器停机过久，未发送')).toBeInTheDocument();
+    const cancelled = await rowOf(titleOf('6'));
+    expect(within(cancelled).queryByText(/错过/)).toBeNull();
+    expect(within(await rowOf(titleOf('4'))).queryByText(/错过/)).toBeNull();
+  });
+
+  it.each([
+    ['en-US', 'Missed: the push executor was down for too long, nothing was sent', undefined],
+    ['zh-CN', '错过：执行器停机过久，未发送', 'zh-CN' as const],
+  ])(
+    'says missed only for the note MISSED, not for any other note (%s)',
+    async (_name, words, locale) => {
+      backend();
+      // Cancelled tasks that carry some other note, or the same word in another shape: none of them was missed.
+      const others = {
+        '6': 'CANCELLED_BY_ADMIN',
+        '4': 'missed',
+        '3': ' MISSED',
+        '1': 'MISSED_LATER',
+      };
+      for (const [id, note] of Object.entries(others)) {
+        const task = pushState.tasks.find((t) => t.id === id);
+        if (task) task.note = note;
+      }
+      renderPage(<TasksPage />, locale);
+      const missed = await rowOf(titleOf('5'));
+      expect(within(missed).getByText(words)).toBeInTheDocument();
+      for (const id of Object.keys(others)) {
+        const row = await rowOf(titleOf(id));
+        expect(within(row).queryByText(words), `task ${id}`).toBeNull();
+      }
+      expect(screen.getAllByText(words)).toHaveLength(1);
+    },
+  );
 
   it('shows titles in every language and holds a title without spaces in a cell', async () => {
     backend();
@@ -311,6 +353,34 @@ describe('the manual task page: new task', { timeout: 60000 }, () => {
     expect(within(dialog).getByText('Enter the body')).toBeInTheDocument();
     expect(writesOf(calls)).toHaveLength(0);
   });
+
+  it.each([
+    [
+      'en-US',
+      undefined,
+      'New task',
+      'At a time',
+      'The time is UTC. If the push executor is down for longer than push.schedule_catchup_minutes minutes, the tasks it missed are cancelled and marked as missed.',
+    ],
+    [
+      'zh-CN',
+      'zh-CN' as const,
+      '新建任务',
+      '定时',
+      '时间按 UTC。执行器停机超过 push.schedule_catchup_minutes 分钟时，错过的任务会取消并标为错过。',
+    ],
+  ])(
+    'tells under the time picker when a task is cancelled as missed (%s)',
+    async (_name, locale, openName, atName, help) => {
+      backend();
+      const user = userEvent.setup();
+      renderPage(<TasksPage />, locale);
+      await user.click(await screen.findByRole('button', { name: openName }));
+      const dialog = await screen.findByRole('dialog');
+      await user.click(within(dialog).getByRole('radio', { name: atName }));
+      expect(within(dialog).getByText(help)).toBeInTheDocument();
+    },
+  );
 
   it('sends a time chosen on the picker as the UTC instant of the clock it shows, and says that it is UTC', async () => {
     const calls = backend();

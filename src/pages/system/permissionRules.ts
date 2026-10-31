@@ -1,7 +1,7 @@
 import type { PermissionNode, PermissionPatch } from '../../services/system';
 import { countCodePoints } from '../../utils/codePoints';
 import { trimSpec } from '../../utils/trimSpec';
-import { isBuiltinNode, wouldCreateCycle } from './permissionTree';
+import { buildIndex, isBuiltinNode, wouldCreateCycle } from './permissionTree';
 
 export type PatchResult =
   | { ok: true; patch: PermissionPatch }
@@ -52,4 +52,20 @@ export function codeProblem(
   if (NOT_ALLOWED_IN_CODE.test(code) || countCodePoints(code) > MAX_CODE_POINTS) return 'invalid';
   if (nodes.some((n) => n.code === code)) return 'taken';
   return null;
+}
+
+/**
+ * The order offered for a new node under `parent` (null: a root): one more than the last of the
+ * nodes under the same parent, so the node comes last among its siblings; 1 when there is none.
+ * The siblings are the nodes as the tree draws them (a node whose parent is not in the list is a
+ * root). An order that is not a number is ignored; the result stays a safe integer.
+ */
+export function nextSortOrder(nodes: readonly PermissionNode[], parent: string | null): number {
+  const index = buildIndex(nodes);
+  const siblings = parent === null ? index.roots : (index.childrenOf.get(parent) ?? []);
+  const orders = siblings
+    .map((code) => (index.byCode.get(code) as PermissionNode).sortOrder)
+    .filter((order): order is number => typeof order === 'number' && Number.isFinite(order));
+  if (orders.length === 0) return 1;
+  return Math.min(Math.floor(Math.max(...orders)) + 1, Number.MAX_SAFE_INTEGER);
 }

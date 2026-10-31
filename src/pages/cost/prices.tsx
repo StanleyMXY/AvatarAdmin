@@ -1,7 +1,8 @@
 import { useAccess, useIntl, useLocation } from '@umijs/max';
 import { Card, Flex, Tabs } from 'antd';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Can } from '../../components/Can';
+import { getAdminMeta } from '../../services/auth';
 import { useAdminMeta } from '../../session/useSession';
 import { ConfigForm } from '../config/ConfigForm';
 import { AlertsLine } from './AlertsLine';
@@ -25,6 +26,24 @@ export default function PricesPage() {
   const access = useAccess() as unknown as Access;
   const meta = useAdminMeta();
   const { search } = useLocation();
+
+  // The allowed currencies were read once, at sign-in. Another page may have changed
+  // `usage_price.allowed_currencies` since, so the page reads `GET /meta` again when it opens and
+  // before a price is confirmed (the session layer is left alone). A read that gives no list keeps
+  // the list that is held.
+  const [freshAllowed, setFreshAllowed] = useState<string[] | undefined>();
+  const allowedCurrencies = freshAllowed ?? meta.allowedCurrencies;
+  const latestRead = useRef(0);
+  const readAllowed = useCallback(async () => {
+    const mine = ++latestRead.current;
+    const read = await getAdminMeta();
+    if (mine === latestRead.current && Array.isArray(read.allowedCurrencies))
+      setFreshAllowed(read.allowedCurrencies);
+  }, []);
+  useEffect(() => {
+    void readAllowed();
+  }, [readAllowed]);
+
   const canPrice = access.canAccess('COST:PRICE');
   const canAlerts = canPrice && access.canAccess('MONITOR:VIEW');
 
@@ -41,7 +60,7 @@ export default function PricesPage() {
     {
       key: 'pending',
       label: t('cost.prices.tab.pending'),
-      children: <PendingTab allowedCurrencies={meta.allowedCurrencies} />,
+      children: <PendingTab allowedCurrencies={allowedCurrencies} readAllowed={readAllowed} />,
     },
     { key: 'current', label: t('cost.prices.tab.current'), children: <CurrentTab /> },
     ...(canPrice
@@ -50,10 +69,7 @@ export default function PricesPage() {
             key: 'manual',
             label: t('cost.prices.tab.manual'),
             children: (
-              <ManualTab
-                allowedCurrencies={meta.allowedCurrencies}
-                onSaved={() => setTab('current')}
-              />
+              <ManualTab allowedCurrencies={allowedCurrencies} onSaved={() => setTab('current')} />
             ),
           },
         ]

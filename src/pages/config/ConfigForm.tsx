@@ -1,11 +1,13 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Card, Flex, Spin, Typography } from 'antd';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PermissionCode } from '../../access/permissionCodes';
+import type { ApiError } from '../../request/errors';
 import { type ConfigItem, listConfig } from '../../services/config';
 import { describeFailure } from '../../session/describe';
 import { ConfigRow } from './ConfigRow';
 import { specOf } from './configSchema';
+import { refusalAlertText, refusalTexts } from './refusal';
 
 type Props = {
   /** Only these keys. */
@@ -27,6 +29,31 @@ const matches = (item: ConfigItem, { keys, prefixes, editPermission }: Props): b
   );
 };
 
+/** What the backend refused that no row can show; scrolled into view, since the form can be long. */
+function TopRefusals({ texts }: { texts: string[] }) {
+  const box = useRef<HTMLDivElement>(null);
+  const said = texts.join('\n');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll again when the words change
+  useEffect(() => {
+    box.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [said]);
+  return (
+    <div ref={box} data-testid="config-refusals">
+      <Alert
+        type="error"
+        showIcon
+        title={
+          <Flex vertical gap={4}>
+            {texts.map((text) => (
+              <span key={text}>{text}</span>
+            ))}
+          </Flex>
+        }
+      />
+    </div>
+  );
+}
+
 /**
  * The operating parameters, grouped by the part of the key before the first dot. The server sends
  * only the keys this administrator may edit, so every row can be edited; a key the schema does not
@@ -37,6 +64,10 @@ export function ConfigForm(props: Props) {
   const intl = useIntl();
   const [items, setItems] = useState<ConfigItem[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  // The last save or reset the backend refused: kept as the failure itself (not as translated
+  // words) so the words follow the language, and shared by the rows so that a rule between two
+  // keys is shown on both.
+  const [refusal, setRefusal] = useState<{ origin: string; error: ApiError } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -77,8 +108,12 @@ export function ConfigForm(props: Props) {
     groups.set(spec.group, [...(groups.get(spec.group) ?? []), item]);
   }
 
+  const shownKeys = new Set(shown.filter((item) => specOf(item.key)).map((item) => item.key));
+  const texts = refusal ? refusalTexts(intl, refusal.error, shownKeys, refusal.origin) : null;
+
   return (
     <Flex vertical gap={16}>
+      {texts && texts.top.length > 0 ? <TopRefusals texts={texts.top} /> : null}
       {unknown.length > 0 ? (
         <Alert
           type="warning"
@@ -118,17 +153,29 @@ export function ConfigForm(props: Props) {
               : group
           }
         >
-          {rows.map((item) => (
-            <ConfigRow
-              key={item.key}
-              spec={specOf(item.key) as NonNullable<ReturnType<typeof specOf>>}
-              item={item}
-              onChanged={() => {
-                void load();
-                props.onChanged?.();
-              }}
-            />
-          ))}
+          {rows.map((item) => {
+            const field = texts?.rows.get(item.key) ?? null;
+            return (
+              <ConfigRow
+                key={item.key}
+                spec={specOf(item.key) as NonNullable<ReturnType<typeof specOf>>}
+                item={item}
+                refusalField={field}
+                refusalAlert={
+                  refusal && refusal.origin === item.key && !field
+                    ? refusalAlertText(intl, refusal.error)
+                    : null
+                }
+                onAttempt={() => setRefusal(null)}
+                onRefused={(error) => setRefusal({ origin: item.key, error })}
+                onChanged={() => {
+                  setRefusal(null);
+                  void load();
+                  props.onChanged?.();
+                }}
+              />
+            );
+          })}
         </Card>
       ))}
     </Flex>

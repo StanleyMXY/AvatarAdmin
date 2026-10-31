@@ -7,6 +7,7 @@ import system from '../../../mock/system.mock';
 import systemPermissions from '../../../mock/system.permissions.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
+import { history, setTestInitialState } from '../../../tests/stubs/umi-max';
 import { AdminFormModal } from './AdminFormModal';
 import AdminsPage from './admins';
 import {
@@ -209,15 +210,13 @@ describe('the protections of the own account and of the last super administrator
     expect(items.some((item) => item.getAttribute('aria-disabled') !== 'true')).toBe(true);
   });
 
-  it('disables disable and delete on the last enabled super administrator, but not when there are two', async () => {
+  it('shows no action at all on the last enabled super administrator to an administrator who is not one: the whole row is closed to them', async () => {
     signIn('support', { codes: ['ADMIN:MANAGE'] });
-    const { user } = await load();
-    await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeDisabled());
-    await user.click(within(await rowOf('root')).getByRole('button', { name: 'More' }));
-    expect(await screen.findByRole('menuitem', { name: 'Delete' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
+    await load();
+    const root = within(await rowOf('root'));
+    expect(root.queryByRole('button', { name: 'Disable' })).not.toBeInTheDocument();
+    expect(root.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
+    expect(root.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
 
   it('disables disable and delete on the own row of a super administrator who is not the last one', async () => {
@@ -231,39 +230,41 @@ describe('the protections of the own account and of the last super administrator
     expect(items[items.length - 1]).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('reads all administrators again after a change: the one who is left becomes the last super administrator', async () => {
-    signIn('support', { codes: ['ADMIN:MANAGE'] });
+  it('reads all administrators again after a change: the row shows its new state', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
     adminOf('finance').superAdmin = true;
     const { user } = await load();
-    await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeEnabled());
+    await waitFor(async () => expect(await rowButton('finance', 'Disable')).toBeEnabled());
     await user.click(await rowButton('finance', 'Disable'));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
-    await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeDisabled());
+    await waitFor(async () => expect(await rowButton('finance', 'Enable')).toBeEnabled());
   });
 
-  it('allows both on a super administrator when another enabled one exists', async () => {
-    signIn('support', { codes: ['ADMIN:MANAGE'] });
+  it('allows both on another super administrator to a super administrator', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
     adminOf('finance').superAdmin = true;
     await load();
     await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeEnabled());
+    await waitFor(async () => expect(await rowButton('finance', 'Disable')).toBeEnabled());
   });
 
-  it('counts a disabled super administrator as no second one', async () => {
-    signIn('support', { codes: ['ADMIN:MANAGE'] });
-    adminOf('finance').superAdmin = true;
-    adminOf('finance').status = 'DISABLED';
-    await load();
-    await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeDisabled());
-  });
-
-  it('shows the backend refusal as the text of its code when the page did not know: 409 INVALID_STATE', async () => {
-    // The page sees two enabled super administrators; before the click the second one is disabled.
-    signIn('support', { codes: ['ADMIN:MANAGE'] });
+  it('keeps the last-super rule for a list that is out of date: a disable of the last one is refused by the backend and shown as the text of its code', async () => {
+    // The page sees two enabled super administrators; before the click the other one is disabled.
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
     adminOf('finance').superAdmin = true;
     const { user } = await load();
-    await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeEnabled());
-    adminOf('finance').status = 'DISABLED';
-    await user.click(await rowButton('root', 'Disable'));
+    await waitFor(async () => expect(await rowButton('finance', 'Disable')).toBeEnabled());
+    overrideFetch(({ url, method }) =>
+      method === 'POST' && url.pathname.endsWith('/status')
+        ? jsonAnswer(
+            409,
+            'INVALID_STATE',
+            { status: 'ACTIVE' },
+            'The last enabled super administrator',
+          )
+        : undefined,
+    );
+    await user.click(await rowButton('finance', 'Disable'));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
       await screen.findByText(/The current state of the item does not allow this action/),
@@ -275,7 +276,6 @@ describe('the protections of the own account and of the last super administrator
     ).toBeInTheDocument();
     // never the backend's own words
     expect(screen.queryByText(/The last enabled super administrator$/)).not.toBeInTheDocument();
-    expect(adminOf('root').status).toBe('ACTIVE');
   });
 
   it('shows 403 for the own account as the text of its code too, when the request does go out', async () => {
@@ -290,6 +290,230 @@ describe('the protections of the own account and of the last super administrator
     expect(await screen.findByText(/You do not have permission to do this/)).toBeInTheDocument();
     expect(screen.queryByText(/cannot disable themselves/)).not.toBeInTheDocument();
     expect(taken).toHaveLength(1);
+  });
+});
+
+describe('the row of a super administrator is closed to an administrator who is not one', () => {
+  const asNonSuper = () => signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: false });
+  const PRIVILEGED = ['Disable', 'Reset password', 'Reset two-factor', 'Delete'];
+  const EVERY = ['Edit', 'Enable', ...PRIVILEGED, 'More'];
+
+  it('draws no edit, reset password, reset two-factor, disable or delete on the row of a super administrator: the cell has no button', async () => {
+    asNonSuper();
+    await load();
+    const row = await rowOf('root');
+    for (const name of EVERY) {
+      expect(within(row).queryByRole('button', { name }), name).not.toBeInTheDocument();
+    }
+    const cell = row.querySelector('td:last-child') as HTMLElement;
+    expect(within(cell).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('draws no Edit and no Enable on the row of a disabled super administrator either', async () => {
+    asNonSuper();
+    adminOf('finance').superAdmin = true;
+    adminOf('finance').status = 'DISABLED';
+    await load();
+    const finance = within(await rowOf('finance'));
+    for (const name of EVERY) {
+      expect(finance.queryByRole('button', { name }), name).not.toBeInTheDocument();
+    }
+  });
+
+  it('leaves Edit and Enable on the row of a disabled super administrator to a super administrator', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+    adminOf('finance').superAdmin = true;
+    adminOf('finance').status = 'DISABLED';
+    await load();
+    const finance = within(await rowOf('finance'));
+    expect(finance.getByRole('button', { name: 'Edit' })).toBeEnabled();
+    expect(finance.getByRole('button', { name: 'Enable' })).toBeEnabled();
+  });
+
+  it('draws none of the four under More either', async () => {
+    asNonSuper();
+    adminOf('finance').superAdmin = true;
+    adminOf('finance').status = 'DISABLED';
+    const { user } = await load();
+    // nothing is left on the row of a super administrator: no menu either
+    const finance = within(await rowOf('finance'));
+    expect(finance.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
+    for (const name of EVERY) {
+      expect(finance.queryByRole('button', { name }), name).not.toBeInTheDocument();
+    }
+    // and the menu of an ordinary row still has them
+    await user.click(within(await rowOf('reviewer')).getByRole('button', { name: 'More' }));
+    for (const name of PRIVILEGED.slice(1)) {
+      expect((await screen.findAllByRole('menuitem', { name })).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('leaves all five actions on an ordinary row', async () => {
+    asNonSuper();
+    await load();
+    const reviewer = within(await rowOf('reviewer'));
+    expect(reviewer.getByRole('button', { name: 'Edit' })).toBeEnabled();
+    expect(reviewer.getByRole('button', { name: 'Disable' })).toBeEnabled();
+    expect(reviewer.getByRole('button', { name: 'More' })).toBeInTheDocument();
+  });
+
+  it('sends nothing to the account of a super administrator', async () => {
+    asNonSuper();
+    const { calls } = await load();
+    await rowOf('root');
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('leaves all of them to a super administrator, on the row of another super administrator', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+    const { user } = await load();
+    await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeEnabled());
+    await user.click(within(await rowOf('root')).getByRole('button', { name: 'More' }));
+    for (const name of ['Reset password', 'Reset two-factor', 'Delete']) {
+      const items = await screen.findAllByRole('menuitem', { name });
+      expect(items[items.length - 1]).not.toHaveAttribute('aria-disabled', 'true');
+    }
+  });
+
+  it('closes the row also when /me did not say whether the administrator is a super one', async () => {
+    asNonSuper();
+    setTestInitialState({
+      me: {
+        id: '1002',
+        username: 'support',
+        mustChangePassword: false,
+        permissions: ['ADMIN:MANAGE'],
+      },
+      meta: {},
+    });
+    await load();
+    const root = within(await rowOf('root'));
+    for (const name of EVERY) expect(root.queryByRole('button', { name })).not.toBeInTheDocument();
+  });
+});
+
+describe('the own account cannot reset its own password or second factor', () => {
+  it('disables reset password and reset two-factor on the own row, and leaves them on the others', async () => {
+    const { user } = await load();
+    await user.click(within(await rowOf('root')).getByRole('button', { name: 'More' }));
+    expect(await screen.findByRole('menuitem', { name: 'Reset password' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('menuitem', { name: 'Reset two-factor' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await user.keyboard('{Escape}');
+    await user.click(within(await rowOf('reviewer')).getByRole('button', { name: 'More' }));
+    const passwords = await screen.findAllByRole('menuitem', { name: 'Reset password' });
+    expect(passwords.some((item) => item.getAttribute('aria-disabled') !== 'true')).toBe(true);
+  });
+
+  it('opens no dialog and sends nothing when the disabled item is pressed', async () => {
+    const { user, calls } = await load();
+    await user.click(within(await rowOf('root')).getByRole('button', { name: 'More' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Reset password' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Reset two-factor' }));
+    await settled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('does the same for an administrator who is not a super one, whose own row is found by name', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: false });
+    const { user } = await load();
+    await user.click(within(await rowOf('support')).getByRole('button', { name: 'More' }));
+    expect(await screen.findByRole('menuitem', { name: 'Reset password' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('menuitem', { name: 'Reset two-factor' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+});
+
+describe('the reasons of the buttons that are off are written in the row', () => {
+  const REASONS = [
+    /You cannot disable or delete your own account\./,
+    /You cannot reset your own password here\. To change your own password, use Change password in the account menu\./,
+    /You cannot reset your own two-factor authentication\. Ask another administrator to do it\./,
+    /This is your own account: you cannot change your own roles or super administrator flag\./,
+  ];
+  const cellOf = async (row: string) =>
+    (await rowOf(row)).querySelector('td:last-child') as HTMLElement;
+
+  it('shows every reason of the own row as small text in the row, with nothing pressed or hovered', async () => {
+    await load();
+    const cell = within(await cellOf('root'));
+    for (const reason of REASONS) expect(cell.getByText(reason)).toBeVisible();
+    // not a hover tip: no tip is open or needed
+    expect(document.querySelector('.ant-tooltip')).toBeNull();
+  });
+
+  it('shows no reason on a row where nothing is off', async () => {
+    await load();
+    const cell = within(await cellOf('reviewer'));
+    for (const reason of REASONS) expect(cell.queryByText(reason)).not.toBeInTheDocument();
+    expect(cell.queryByText(/last enabled super administrator/)).not.toBeInTheDocument();
+  });
+
+  it('shows the reasons of the own row of an administrator who is not a super one, found by name', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: false });
+    await load();
+    const cell = within(await cellOf('support'));
+    for (const reason of REASONS) expect(cell.getByText(reason)).toBeInTheDocument();
+    // the reason of the last super administrator is for the last one only
+    expect(cell.queryByText(/last enabled super administrator/)).not.toBeInTheDocument();
+  });
+
+  it('says why the last enabled super administrator cannot be disabled or deleted, also on a row that is not the own one', async () => {
+    // the session says super administrator; the list has one enabled super administrator, root
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+    adminOf('support').superAdmin = false;
+    const { user } = await load();
+    const cell = within(await cellOf('root'));
+    expect(
+      await cell.findByText(/last enabled super administrator: it cannot be disabled or deleted/),
+    ).toBeVisible();
+    expect(cell.queryByText(REASONS[0])).not.toBeInTheDocument();
+    expect(await rowButton('root', 'Disable')).toBeDisabled();
+    await user.click(within(await rowOf('root')).getByRole('button', { name: 'More' }));
+    const items = await screen.findAllByRole('menuitem', { name: 'Delete' });
+    expect(items[items.length - 1]).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('gives the own row both reasons when it is also the last enabled super administrator', async () => {
+    await load();
+    const cell = within(await cellOf('root'));
+    expect(
+      await cell.findByText(/last enabled super administrator: it cannot be disabled or deleted/),
+    ).toBeInTheDocument();
+    expect(cell.getByText(REASONS[0])).toBeInTheDocument();
+  });
+
+  it('keeps the reasons when the menu is open and when it is closed again', async () => {
+    const { user } = await load();
+    await user.click(within(await rowOf('root')).getByRole('button', { name: 'More' }));
+    await screen.findByRole('menuitem', { name: 'Reset password' });
+    await user.keyboard('{Escape}');
+    const cell = within(await cellOf('root'));
+    for (const reason of REASONS) expect(cell.getByText(reason)).toBeInTheDocument();
+  });
+
+  it('gives the reasons in Chinese', async () => {
+    backend();
+    renderPage(<AdminsPage />, 'zh-CN');
+    await waitForRows();
+    const cell = within(await cellOf('root'));
+    expect(cell.getByText('不能停用或删除自己的账号。')).toBeInTheDocument();
+    expect(cell.getByText(/不能在这里重置自己的密码.*修改密码/)).toBeInTheDocument();
+    expect(cell.getByText(/不能重置自己的二次验证/)).toBeInTheDocument();
+    expect(cell.getByText(/这是你自己的账号/)).toBeInTheDocument();
+    expect(cell.getByText(/最后一个启用的超级管理员：不能停用或删除/)).toBeInTheDocument();
   });
 });
 
@@ -457,6 +681,52 @@ describe('reset password', () => {
     expect(screen.queryByText(/internal-detail/)).not.toBeInTheDocument();
     expect(writesOf(calls).filter((c) => c.url.endsWith('reset-password'))).toHaveLength(0);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('says which rules can refuse it after the text of the code when the backend answers 403, never its words, and keeps the dialog and the page', async () => {
+    const { user } = await load();
+    const writes = overrideFetch(({ url, method }) =>
+      method === 'POST' && url.pathname.endsWith('/reset-password')
+        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', null, 'LEAK-ñandú-ผู้ใช้-words')
+        : undefined,
+    );
+    const box = await open(user);
+    await user.type(box.getByLabelText('New password'), PASSWORD);
+    await user.type(box.getByLabelText('Repeat the password'), PASSWORD);
+    await user.click(box.getByRole('button', { name: /Reset password$/ }));
+    expect(
+      await box.findByText(
+        /You do not have permission to do this\. Administrators can only grant permissions they hold\. You cannot change a role you hold, and you can only change roles and administrators whose permissions you all hold\. Nothing was changed\./,
+      ),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('LEAK-');
+    expect(writes).toHaveLength(1);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(history.replace).not.toHaveBeenCalled();
+    expect(history.push).not.toHaveBeenCalled();
+  });
+
+  it('puts a full stop between the text of the code and the sentence of the rules in Chinese', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<AdminsPage />, 'zh-CN');
+    await waitForRows();
+    overrideFetch(({ url, method }) =>
+      method === 'POST' && url.pathname.endsWith('/reset-password')
+        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', null, 'LEAK-words')
+        : undefined,
+    );
+    await user.click(within(await rowOf('reviewer')).getByRole('button', { name: '更多' }));
+    const items = await screen.findAllByRole('menuitem', { name: '重置密码' });
+    await user.click(items[items.length - 1]);
+    const box = within(await dialog());
+    await user.type(box.getByLabelText('新密码'), PASSWORD);
+    await user.type(box.getByLabelText('再输入一次密码'), PASSWORD);
+    await user.click(box.getByRole('button', { name: /重置密码$/ }));
+    expect(
+      await box.findByText(/^你没有执行此操作的权限。管理员只能授出自己持有的权限；/),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('LEAK-');
   });
 
   it('sends one request for two presses', async () => {
@@ -763,10 +1033,43 @@ describe('editing an administrator', () => {
     });
   });
 
-  it('on the own row of a super administrator who is not the last one: the roles and the flag are still disabled', async () => {
+  it('on the own row of a super administrator who is not the last one: Edit is disabled, and the dialog would still lock the roles and the flag', async () => {
     signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
     const { user } = await load();
-    const box = await edit(user, 'support');
+    await waitFor(async () => expect(await rowButton('root', 'Disable')).toBeEnabled());
+    expect(await rowButton('support', 'Edit')).toBeDisabled();
+    await user.click(await rowButton('support', 'Edit'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // the dialog itself, told it is the own row
+    const me = {
+      id: '1002',
+      username: 'support',
+      superAdmin: true,
+      mustChangePassword: false,
+      permissions: [],
+      passwordMinLength: 12,
+    };
+    const own = [...store.admins.values()].find((a) => a.username === 'support');
+    renderPage(
+      <AdminFormModal
+        admin={{
+          id: String(own?.id),
+          username: 'support',
+          superAdmin: true,
+          status: 'ACTIVE',
+          mustChangePassword: false,
+          totpEnrolledAt: null,
+          lastLoginAt: null,
+          createdAt: '2026-08-01T00:00:00Z',
+          roles: [],
+        }}
+        me={me}
+        protection={{ own: true, lastSuper: false }}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    const box = within(await dialog());
     expect(rolesBox(box)).toBeDisabled();
     expect(box.getByRole('switch', { name: 'Super administrator' })).toBeDisabled();
     expect(box.getByRole('button', { name: /Save$/ })).toBeDisabled();
@@ -779,9 +1082,51 @@ describe('editing an administrator', () => {
     expect(box.getByRole('button', { name: /Save$/ })).toBeDisabled();
   });
 
-  it('on the own row: the roles and the flag are disabled, Save is off, and no request goes out', async () => {
+  it('on the own row: Edit is disabled with the reason, and no dialog opens and no request goes out', async () => {
     const { user, calls } = await load();
-    const box = await edit(user, 'root');
+    const edit = await rowButton('root', 'Edit');
+    expect(edit).toBeDisabled();
+    await user.click(edit);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // the reason is written in the row, not shown on hover
+    expect(
+      within(await rowOf('root')).getByText(
+        /This is your own account: you cannot change your own roles or super administrator flag/,
+      ),
+    ).toBeVisible();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('the dialog of the own row locks the roles and the flag and says why, when it is opened for it anyway', async () => {
+    backend();
+    const root = [...store.admins.values()].find((a) => a.username === 'root');
+    renderPage(
+      <AdminFormModal
+        admin={{
+          id: String(root?.id),
+          username: 'root',
+          superAdmin: true,
+          status: 'ACTIVE',
+          mustChangePassword: false,
+          totpEnrolledAt: null,
+          lastLoginAt: null,
+          createdAt: '2026-08-01T00:00:00Z',
+          roles: [],
+        }}
+        me={{
+          id: root?.id,
+          username: 'root',
+          superAdmin: true,
+          mustChangePassword: false,
+          permissions: [],
+          passwordMinLength: 12,
+        }}
+        protection={{ own: true, lastSuper: false }}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    const box = within(await dialog());
     expect(rolesBox(box)).toBeDisabled();
     expect(box.getByRole('switch', { name: 'Super administrator' })).toBeDisabled();
     expect(box.getByRole('button', { name: /Save$/ })).toBeDisabled();
@@ -789,18 +1134,24 @@ describe('editing an administrator', () => {
       box.getByText(/you cannot change your own roles or super administrator flag/),
     ).toBeInTheDocument();
     expect(box.getByLabelText('User name')).toBeDisabled();
-    await user.click(box.getByRole('button', { name: 'Cancel' }));
-    expect(writesOf(calls)).toHaveLength(0);
   });
 
-  it('never sends the own roles or flag, even when the row of the own account is found by name only', async () => {
-    // /me without an id: the own row is found by the user name
-    signIn('support', { codes: ['ADMIN:MANAGE', 'ROLE:MANAGE'] });
-    const { user, calls } = await load();
-    const box = await edit(user, 'support');
-    expect(rolesBox(box)).toBeDisabled();
-    expect(box.getByRole('button', { name: /Save$/ })).toBeDisabled();
-    await user.click(box.getByRole('button', { name: 'Cancel' }));
+  it('finds the own row by the user name when /me has no id: Edit is disabled there too', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE', 'ROLE:MANAGE'], superAdmin: false });
+    // /me without an id
+    setTestInitialState({
+      me: {
+        username: 'support',
+        superAdmin: false,
+        mustChangePassword: false,
+        permissions: ['ADMIN:MANAGE', 'ROLE:MANAGE'],
+        passwordMinLength: 12,
+      },
+      meta: {},
+    });
+    const { calls } = await load();
+    expect(await rowButton('support', 'Edit')).toBeDisabled();
+    expect(await rowButton('reviewer', 'Edit')).toBeEnabled();
     expect(writesOf(calls)).toHaveLength(0);
   });
 
@@ -981,5 +1332,46 @@ describe('in Chinese', () => {
     expect(
       within(await rowOf('support')).getByRole('button', { name: '编辑' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('an administrator who is not a super administrator acts only on administrators within what they hold', () => {
+  const HELD = ['ADMIN:MANAGE', 'USER:VIEW', 'STATS:VIEW'];
+  const SENTENCE =
+    /administrators can only grant permissions they hold; and can only act on administrators whose permissions they all hold\./;
+
+  it('shows the sentence of the rules after the text of the code when the backend refuses a row, never its words, and does not leave the page', async () => {
+    signIn('support', { codes: HELD });
+    const { user } = await load();
+    // "finance" holds codes that "support" does not
+    await user.click(await rowButton('finance', 'Disable'));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(await screen.findByText(/You do not have permission to do this\./)).toBeInTheDocument();
+    expect(screen.getByText(SENTENCE, { exact: false })).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Administrators can only act on administrators whose permissions they hold',
+      ),
+    ).not.toBeInTheDocument();
+    expect(adminOf('finance').status).toBe('ACTIVE');
+    expect(history.replace).not.toHaveBeenCalled();
+  });
+
+  it('shows the same sentence in the edit dialog when the roles chosen go beyond what is held', async () => {
+    signIn('support', { codes: HELD });
+    const { user } = await load();
+    // "newhire" holds USER:VIEW and STATS:VIEW only: the row is within reach, the role "财务审核" is not
+    await user.click(await rowButton('newhire', 'Edit'));
+    const box = within(await dialog());
+    await waitFor(() => expect(rolesBox(box)).toBeEnabled());
+    await chooseRole(user, rolesBox(box), '财务审核');
+    await user.click(box.getByRole('button', { name: /Save$/ }));
+    expect(await box.findByText(/You do not have permission to do this\./)).toBeInTheDocument();
+    expect(box.getByText(/Nothing was changed\./, { exact: false })).toBeInTheDocument();
+    expect(
+      box.getByText(/Administrators can only grant permissions they hold\./),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(history.replace).not.toHaveBeenCalled();
   });
 });

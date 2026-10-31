@@ -9,7 +9,7 @@ import { describeFailure } from '../../session/describe';
 import { plainText } from '../../utils/plainText';
 import { PagedTable } from './PagedTable';
 import { RoleModal } from './RoleModal';
-import { instantText } from './texts';
+import { instantText, withScopeHint } from './texts';
 
 /**
  * 角色 (`ROLE:MANAGE`): the roles with the permissions they give. A role is made and changed in a
@@ -35,7 +35,7 @@ export default function RolesPage() {
       await deleteRole(plainText(row.id));
       message.success(t('system.common.deleted'));
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      message.error(withScopeHint(intl, error, describeFailure(intl, error).text));
     }
     refresh();
   };

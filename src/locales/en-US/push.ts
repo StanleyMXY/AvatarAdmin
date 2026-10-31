@@ -44,12 +44,16 @@ const messages: Record<string, string> = {
 
   // ---- templates ----
   'push.templates.note':
-    'The words of the recall pushes: one template for each trigger reason and language. A recall reason may be switched on only when it has a template in every supported language; the backend makes the final check when you save.',
+    'The words of the recall pushes: one template for each trigger reason and language. A trigger reason that has an enabled template must have an enabled one in the default language; the other languages are optional, and a language without an enabled template falls back to the default language. The backend makes the final check when you save.',
+  'push.templates.noteHowTo':
+    'How to work with it: the first template of a reason that you switch on must be in the default language; after that the other languages can be created, switched on, switched off, edited and deleted in any order. The default language template can be switched off or deleted only after the other languages of the reason are off (when it is the only enabled one, at any time). To switch a whole reason off, switch off the other languages first and the default language last. Before you change push.default_locale, enable the template of the new language for every reason that has an enabled template. Adding a language to app.supported_locales needs no change here: the language falls back to the default one.',
   'push.templates.matrix.title': 'Completeness by language',
   'push.templates.matrix.reason': 'Trigger reason',
   'push.templates.matrix.note':
-    'The columns are the supported languages. A red cell has no template.',
-  'push.templates.matrix.missing': 'Missing',
+    'The columns are the supported languages. A language without an enabled template falls back to the default language: that is information, not an error.',
+  'push.templates.matrix.fallback': 'Uses default language',
+  'push.templates.matrix.none': 'No template',
+  'push.templates.matrix.noneEnabled': 'No enabled template',
   'push.templates.matrix.on': 'On',
   'push.templates.matrix.off': 'Off',
   'push.templates.matrix.unknown':
@@ -72,8 +76,8 @@ const messages: Record<string, string> = {
   'push.templates.deleted': 'Template deleted',
   'push.templates.saved': 'Template saved',
   'push.templates.enabledOf': 'On: {reason}, {locale}',
-  'push.templates.missingWarning':
-    '{reason} has no template in: {locales}. The backend will refuse to switch it on until every supported language has one.',
+  'push.templates.defaultLanguageRequired':
+    '{reason} needs an enabled template in the default language ({defaultLocale}). Enable that one first. To switch it off, delete it or change it, first switch off the other languages of {reason}. If it is the only enabled template, keep it in {defaultLocale} and enabled, and create the other language as a new template.',
   'push.templates.exists':
     'A template for this reason and language exists already. Edit that one instead.',
   'push.templates.reason': 'Trigger reason',
@@ -101,7 +105,7 @@ const messages: Record<string, string> = {
   'push.tasks.cancelConfirm': 'Cancel this task? It will not be sent.',
   'push.tasks.cancelled': 'Task cancelled',
   'push.tasks.created': 'Task created',
-  'push.tasks.missed': 'Missed',
+  'push.tasks.missed': 'Missed: the push executor was down for too long, nothing was sent',
   'push.status.PENDING': 'Waiting',
   'push.status.RUNNING': 'Sending',
   'push.status.DONE': 'Done',
@@ -113,7 +117,7 @@ const messages: Record<string, string> = {
   'push.tasks.sendAtRequired': 'Pick the time',
   'push.tasks.sendAtPast': 'Pick a time that has not passed',
   'push.tasks.sendAtHelp':
-    'The time is UTC. A task whose time is long past when it is reached is cancelled as missed.',
+    'The time is UTC. If the push executor is down for longer than push.schedule_catchup_minutes minutes, the tasks it missed are cancelled and marked as missed.',
 
   // ---- periodic pushes ----
   'push.schedules.note':

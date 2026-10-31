@@ -42,11 +42,16 @@ const messages: Record<string, string> = {
 
   // ---- 模板 ----
   'push.templates.note':
-    '召回推送的文字：每个触发原因、每种语言一条模板。一个召回触发原因要在每种支持的语言上都有模板才允许启用；保存时的最终校验在后端。',
+    '召回推送的文字：每个触发原因、每种语言一条模板。一个触发原因只要有启用的模板，就必须有默认语言的启用模板；其他语言可选，没有启用模板的语言会回退到默认语言。保存时的最终校验在后端。',
+  'push.templates.noteHowTo':
+    '怎么用：一个原因的第一条要启用的模板必须是默认语言的；之后其他语言可以按任意顺序创建、启用、停用、修改、删除。默认语言那条只有在同一原因下别的语言都已停用后才能停用或删除（它是唯一启用的模板时随时可以）。要整体关掉一个原因，先停其他语言，最后停默认语言。修改 push.default_locale 之前，先为每个有启用模板的原因启用新语言的模板。往 app.supported_locales 加语言不需要先动这里：缺的语言会回退到默认语言。',
   'push.templates.matrix.title': '各语言的完整性',
   'push.templates.matrix.reason': '触发原因',
-  'push.templates.matrix.note': '列是支持的语言，红色的格子表示缺模板。',
-  'push.templates.matrix.missing': '缺失',
+  'push.templates.matrix.note':
+    '列是支持的语言。没有启用模板的语言会回退到默认语言：这是提示信息，不是错误。',
+  'push.templates.matrix.fallback': '回退到默认语言',
+  'push.templates.matrix.none': '没有模板',
+  'push.templates.matrix.noneEnabled': '没有启用的模板',
   'push.templates.matrix.on': '已启用',
   'push.templates.matrix.off': '未启用',
   'push.templates.matrix.unknown':
@@ -69,8 +74,8 @@ const messages: Record<string, string> = {
   'push.templates.deleted': '模板已删除',
   'push.templates.saved': '模板已保存',
   'push.templates.enabledOf': '启用：{reason}，{locale}',
-  'push.templates.missingWarning':
-    '{reason} 在这些语言上没有模板：{locales}。每种支持的语言都有模板之前，后端会拒绝启用。',
+  'push.templates.defaultLanguageRequired':
+    '触发原因“{reason}”需要默认语言 {defaultLocale} 的启用模板。先启用默认语言的模板；要停用、删除或改掉它，先停用“{reason}”下其他语言的模板；它是唯一启用的模板时，保持它为 {defaultLocale} 并启用，另建其他语言的新模板。',
   'push.templates.exists': '这个触发原因和语言已经有模板了，请改那一条。',
   'push.templates.reason': '触发原因',
   'push.templates.locale': '语言',
@@ -96,7 +101,7 @@ const messages: Record<string, string> = {
   'push.tasks.cancelConfirm': '取消这个任务吗？取消后不会发送。',
   'push.tasks.cancelled': '任务已取消',
   'push.tasks.created': '任务已创建',
-  'push.tasks.missed': '已错过',
+  'push.tasks.missed': '错过：执行器停机过久，未发送',
   'push.status.PENDING': '等待中',
   'push.status.RUNNING': '发送中',
   'push.status.DONE': '已完成',
@@ -107,7 +112,8 @@ const messages: Record<string, string> = {
   'push.tasks.sendAtLabel': '时间（UTC）',
   'push.tasks.sendAtRequired': '请选择时间',
   'push.tasks.sendAtPast': '请选一个还没到的时间',
-  'push.tasks.sendAtHelp': '时间按 UTC。到点时已经过去很久的任务会被当作错过而取消。',
+  'push.tasks.sendAtHelp':
+    '时间按 UTC。执行器停机超过 push.schedule_catchup_minutes 分钟时，错过的任务会取消并标为错过。',
 
   // ---- 周期推送 ----
   'push.schedules.note':

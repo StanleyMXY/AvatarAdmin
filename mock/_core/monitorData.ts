@@ -1,5 +1,5 @@
-// State of the monitoring mock: the background alerts (one of each of the fourteen types of
-// contract 17.4, some of them already resolved), the switch that makes the pipeline report nothing,
+// State of the monitoring mock: the background alerts (one of each of the eighteen types: the
+// fourteen of contract 17.4 and the four the backend added, some of them already resolved), the switch that makes the pipeline report nothing,
 // and the list of driving packages whose failure count was reset by closing an alert. Kept on
 // `globalThis` like the rest of the mock state; `resetMonitorStore` puts the sample data back.
 import { daysAgoIso, makeUuid, sampleAny } from './fixtures';
@@ -39,6 +39,8 @@ type Seed = {
   refType: string;
   ref: () => string;
   withAccount: boolean;
+  /** The account of the alert when it must be a given one (the owner of the feedback, say). */
+  account?: string;
   detail: string;
 };
 
@@ -143,6 +145,38 @@ const SEEDS: Seed[] = [
     withAccount: true,
     detail: 'Preparing the driving package failed 5 times',
   },
+  // The feedback 5003 of the support mock is a FAILED one, sent by the account 2003.
+  {
+    type: 'SUPPORT_FORWARD_FAILED',
+    refType: 'SUPPORT_FEEDBACK',
+    ref: () => '5003',
+    withAccount: true,
+    account: '2003',
+    detail: 'attempts_exhausted',
+  },
+  // The campaign 1 of the campaign mock; the two other detail values are added below.
+  {
+    type: 'POSTBACK_CREDENTIAL_FAILED',
+    refType: 'ATTRIBUTION_CAMPAIGN',
+    ref: () => '1',
+    withAccount: false,
+    detail: 'token_unreadable',
+  },
+  // What the backend says about this type is only its name; refType and detail are made up here.
+  {
+    type: 'SUBSCRIPTION_EVENT_FAILED',
+    refType: 'SUBSCRIPTION_EVENT',
+    ref: makeUuid,
+    withAccount: true,
+    detail: 'IllegalStateException',
+  },
+  {
+    type: 'STAT_RELAND_FAILED',
+    refType: 'STAT_RELAND_DAY',
+    ref: () => `usage-cost:${day(8)}`,
+    withAccount: false,
+    detail: 'java.lang.IllegalStateException',
+  },
 ];
 
 export function resetMonitorStore(): void {
@@ -156,7 +190,7 @@ export function resetMonitorStore(): void {
     rows.push({
       id: String(100 + n),
       type: seed.type,
-      accountId: seed.withAccount ? String(2000 + n) : null,
+      accountId: seed.withAccount ? (seed.account ?? String(2000 + n)) : null,
       refType: seed.refType,
       refId: seed.ref(),
       detail: detail ?? seed.detail,
@@ -173,7 +207,66 @@ export function resetMonitorStore(): void {
   for (const seed of SEEDS.slice(0, 6)) add(seed, 'RESOLVED', 100 + n * 3);
   add(SEEDS[0], 'OPEN', 1, `${sampleAny(0)} ${sampleAny(1)} ${'x'.repeat(300)}`);
   add(SEEDS[8], 'RESOLVED', 90, sampleAny(2));
+  // the other two kinds of detail a postback credential alert has: the pixel id and the error code of the ad platform
+  const postback = SEEDS.find((seed) => seed.type === 'POSTBACK_CREDENTIAL_FAILED') as Seed;
+  add({ ...postback, ref: () => '4' }, 'OPEN', 3, 'pixel_id_malformed');
+  add({ ...postback, ref: () => '6' }, 'OPEN', 4, '190');
+  // a second forwarding alert, of another FAILED feedback of the support mock (5005, sent by the account 2005)
+  const forward = SEEDS.find((seed) => seed.type === 'SUPPORT_FORWARD_FAILED') as Seed;
+  add({ ...forward, ref: () => '5005', account: '2005' }, 'OPEN', 6);
   monitorStore.alerts = rows;
+}
+
+export type AlertDraft = {
+  type: string;
+  refType: string;
+  refId: string;
+  accountId: string | null;
+  detail: string | null;
+};
+
+/**
+ * What the backend does when a job fails: an object has one OPEN alert at a time. If one is open it
+ * stays the one row, and only a postback credential alert takes the newer reason as its detail (a
+ * later failure with another reason replaces the first); if none is open a new row is opened, so a
+ * failure after a retry or a hand-closed alert shows as a new alert. Used by the tests and by the
+ * other mock endpoints that cause an alert.
+ */
+export function raiseAlert(draft: AlertDraft): AlertRow {
+  const open = monitorStore.alerts.find(
+    (a) =>
+      a.status === 'OPEN' &&
+      a.type === draft.type &&
+      a.refType === draft.refType &&
+      a.refId === draft.refId,
+  );
+  if (open) {
+    if (draft.type === 'POSTBACK_CREDENTIAL_FAILED') open.detail = draft.detail;
+    return open;
+  }
+  const next = monitorStore.alerts.reduce((max, a) => Math.max(max, Number(a.id) || 0), 100) + 1;
+  const row: AlertRow = {
+    id: String(next),
+    ...draft,
+    status: 'OPEN',
+    createdAt: new Date().toISOString(),
+    resolvedAt: null,
+  };
+  monitorStore.alerts.push(row);
+  return row;
+}
+
+/** The backend closes every open alert of an object by itself when the cause is gone; the number closed. */
+export function resolveAlertsOf(refType: string, refId: string): number {
+  let closed = 0;
+  for (const alert of monitorStore.alerts) {
+    if (alert.status === 'OPEN' && alert.refType === refType && alert.refId === refId) {
+      alert.status = 'RESOLVED';
+      alert.resolvedAt = new Date().toISOString();
+      closed += 1;
+    }
+  }
+  return closed;
 }
 
 resetMonitorStore();

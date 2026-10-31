@@ -18,7 +18,9 @@ import {
   type LinkTargetValue,
   linkTargetRule,
 } from '../../components/LinkTargetField';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { isOutcomeUnknown } from '../../request/errors';
 import { sendNotifications } from '../../services/notifications';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
@@ -210,7 +212,7 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
       setFailure({
         text,
         notSent: failed.code === 'INVALID_REQUEST' && failed.httpStatus === 400,
-        maybeSent: failed.httpStatus === 0 || failed.code === 'INVALID_RESPONSE',
+        maybeSent: isOutcomeUnknown(failed),
         lines,
         accountLines,
       });
@@ -310,6 +312,7 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
         requiredMark={false}
         initialValues={{ recipients: '', link: { linkType: 'NONE', linkTarget: '' }, push: false }}
       >
+        <RevalidateOnLocaleChange />
         <Typography.Paragraph type="secondary">
           {t('notifications.send.scope')}{' '}
           {access.canAccess('PUSH:SEND') ? (

@@ -59,12 +59,19 @@ export default function TasksPage() {
       dataIndex: 'status',
       search: false,
       render: (_, row) => (
-        <Flex gap={4} wrap>
+        <Flex gap={4} wrap style={{ maxWidth: 220 }}>
           <StatusTag
             status={typeof row.status === 'string' ? row.status : null}
             options={statusOptions}
           />
-          {row.note === 'MISSED' ? <Tag color="warning">{t('push.tasks.missed')}</Tag> : null}
+          {row.note === 'MISSED' ? (
+            <Tag
+              color="warning"
+              style={{ whiteSpace: 'normal', marginInlineEnd: 0, maxWidth: '100%' }}
+            >
+              {t('push.tasks.missed')}
+            </Tag>
+          ) : null}
         </Flex>
       ),
     },

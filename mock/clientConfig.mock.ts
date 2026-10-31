@@ -8,7 +8,9 @@ import { validateServerLink } from '../src/utils/linkRule';
 import { guard } from './_core/auth';
 import {
   clientConfigState,
+  instantAfter,
   keyOf,
+  latestUpdatedAt,
   type MockKey,
   type MockRow,
   REGISTRY,
@@ -27,6 +29,21 @@ const find = (key: string | undefined): MockKey => {
   if (!def) throw new MockHttpError(404, 'RESOURCE_NOT_FOUND', 'There is no such key');
   return def;
 };
+
+/**
+ * Contract request 4.4, for a save and for a reset: the time of the key the caller read (null: it
+ * had no row) must still be the time of the key, or another administrator changed it in between
+ * and nothing is changed. A request without the field is not checked.
+ */
+function checkExpectedVersion(def: MockKey, body: Record<string, unknown>): void {
+  if (!('expectedUpdatedAt' in body)) return;
+  const current = latestUpdatedAt(def.key);
+  if (body.expectedUpdatedAt !== current) {
+    throw new MockHttpError(409, 'INVALID_STATE', 'The key was changed by someone else', {
+      updatedAt: current,
+    });
+  }
+}
 
 /** The reason a value is not acceptable for the key, or null. */
 function refusal(def: MockKey, value: unknown): string | null {
@@ -104,7 +121,9 @@ export default {
         'This key comes from the system configuration',
       );
     }
-    const values = bodyOf(req).values;
+    const body = bodyOf(req);
+    checkExpectedVersion(def, body);
+    const values = body.values;
     if (typeof values !== 'object' || values === null || Array.isArray(values)) {
       throw invalidRequest('values must be an object', [
         { ref: 'values', reason: 'EMPTY_NOT_ALLOWED' },
@@ -126,7 +145,7 @@ export default {
       if (reason !== null) details.push({ ref: locale === '' ? 'default' : locale, reason });
     }
     if (details.length > 0) throw invalidRequest('invalid request', details);
-    const now = new Date().toISOString();
+    const now = instantAfter(latestUpdatedAt(def.key));
     clientConfigState.rows.set(
       def.key,
       new Map(
@@ -148,6 +167,7 @@ export default {
         'This key comes from the system configuration',
       );
     }
+    checkExpectedVersion(def, bodyOf(req));
     clientConfigState.rows.delete(def.key);
     return ok(view(def));
   }),

@@ -63,9 +63,14 @@ const messages: Record<string, string> = {
   'pages.upload.reupload': 'Upload the file again',
   'pages.export.button': 'Export',
   'pages.export.received': 'Received {bytes}',
+  'pages.export.cancelled': 'Export cancelled',
   'pages.export.saved': 'Saved {name}',
   'pages.export.narrowRange':
     'If the range is large, narrow the date range or the filters (an export has a row limit).',
+  'pages.export.range.from':
+    'Start date: the value is outside the allowed range. The start date must be a valid day and not after the end date.',
+  'pages.export.range.to':
+    'End date: the value is outside the allowed range. The end date must be a valid day, and the range must not be longer than statistics allow (stats.max_range_days).',
   'pages.masked.needsPermission': 'Needs the {name} permission to see the full value',
   'pages.json.invalid': 'Not valid JSON',
 };

@@ -1,11 +1,13 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import type { Me } from '../../services/auth';
 import { type AdminUser, resetAdminPassword } from '../../services/system';
 import { checkNewPassword } from './adminRules';
 import { failureToForm } from './formFailure';
+import { withScopeHint } from './texts';
 
 type Values = { newPassword: string; confirm: string };
 
@@ -46,7 +48,8 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
       onDone();
       onClose();
     } catch (error) {
-      setFailure(failureToForm(intl, form, error, ['newPassword']).text);
+      const placed = failureToForm(intl, form, error, ['newPassword']);
+      setFailure(placed.text === null ? null : withScopeHint(intl, error, placed.text));
     }
   });
 
@@ -75,6 +78,7 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
         autoComplete="off"
         initialValues={{ newPassword: '', confirm: '' }}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="newPassword"
           label={t('system.admins.resetField')}

@@ -54,6 +54,15 @@ const messages: Record<string, string> = {
   'monitor.alert.type.LIKENESS_COMPLAINT_OVERDUE': '照片里的人投诉超时',
   'monitor.alert.type.GENERATION_CONFIG_MISSING': '形象生成门槛未配置',
   'monitor.alert.type.LOOK_PACKAGE_PREPARE_FAILED': '外观驱动资源包准备失败',
+  'monitor.alert.type.SUPPORT_FORWARD_FAILED': '客服反馈转发失败',
+  'monitor.alert.type.POSTBACK_CREDENTIAL_FAILED': '投放回传凭证不可用',
+  'monitor.alert.type.SUBSCRIPTION_EVENT_FAILED': '订阅事件处理失败',
+  'monitor.alert.type.STAT_RELAND_FAILED': '统计重新落库失败',
+  // the fixed values of the detail column; the code stays beside the text so it can be searched for
+  'monitor.alert.detailWithCode': '{text}（{code}）',
+  'monitor.alert.detail.attempts_exhausted': '转发次数已用尽',
+  'monitor.alert.detail.token_unreadable': '存着的访问令牌无法解开',
+  'monitor.alert.detail.pixel_id_malformed': '存着的像素 ID 格式不对',
 };
 
 export default messages;

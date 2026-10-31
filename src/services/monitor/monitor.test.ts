@@ -6,6 +6,7 @@ import zhCN from '../../locales/zh-CN';
 import { resetSessionState, setToken } from '../../request/session';
 import {
   ALERT_TYPES,
+  alertDetailKey,
   alertTypeKey,
   getPipeline,
   isKnownAlertType,
@@ -31,11 +32,20 @@ const contractAlertTypes = (): string[] => {
 };
 
 describe('the alert type table', () => {
-  it('is the fourteen types of the contract, not the thirteen of the spec', () => {
+  it('is the fourteen types of the contract plus the four the backend added, not the thirteen of the spec', () => {
     const fromContract = contractAlertTypes();
     expect(fromContract).toHaveLength(14);
-    expect([...ALERT_TYPES].sort()).toEqual([...fromContract].sort());
+    expect(ALERT_TYPES).toHaveLength(18);
+    expect(new Set(ALERT_TYPES).size).toBe(18);
+    for (const type of fromContract) expect(ALERT_TYPES, type).toContain(type);
     expect(ALERT_TYPES).toContain('LOOK_PACKAGE_PREPARE_FAILED');
+    const added = ALERT_TYPES.filter((type) => !fromContract.includes(type)).sort();
+    expect(added).toEqual([
+      'POSTBACK_CREDENTIAL_FAILED',
+      'STAT_RELAND_FAILED',
+      'SUBSCRIPTION_EVENT_FAILED',
+      'SUPPORT_FORWARD_FAILED',
+    ]);
   });
 
   it('has a text in both languages for every type', () => {
@@ -47,8 +57,41 @@ describe('the alert type table', () => {
 
   it('knows its own types and nothing else', () => {
     expect(isKnownAlertType('DELETION_FAILED')).toBe(true);
+    expect(isKnownAlertType('STAT_RELAND_FAILED')).toBe(true);
     expect(isKnownAlertType('SOMETHING_NEW')).toBe(false);
     expect(isKnownAlertType('constructor')).toBe(false);
+  });
+});
+
+describe('the fixed details of an alert', () => {
+  it('knows the three the backend writes, each only for its own type', () => {
+    expect(alertDetailKey('SUPPORT_FORWARD_FAILED', 'attempts_exhausted')).toBe(
+      'monitor.alert.detail.attempts_exhausted',
+    );
+    expect(alertDetailKey('POSTBACK_CREDENTIAL_FAILED', 'token_unreadable')).toBe(
+      'monitor.alert.detail.token_unreadable',
+    );
+    expect(alertDetailKey('POSTBACK_CREDENTIAL_FAILED', 'pixel_id_malformed')).toBe(
+      'monitor.alert.detail.pixel_id_malformed',
+    );
+    expect(alertDetailKey('POSTBACK_CREDENTIAL_FAILED', 'attempts_exhausted')).toBeNull();
+    expect(alertDetailKey('SUPPORT_FORWARD_FAILED', 'token_unreadable')).toBeNull();
+    expect(alertDetailKey('DELETION_FAILED', 'attempts_exhausted')).toBeNull();
+  });
+
+  it('knows nothing for an error code of the ad platform, an empty detail or a name of the prototype', () => {
+    for (const detail of ['190', '', 'constructor', '__proto__'])
+      expect(alertDetailKey('POSTBACK_CREDENTIAL_FAILED', detail), detail).toBeNull();
+    expect(alertDetailKey('constructor', 'x')).toBeNull();
+  });
+
+  it("has a text in both languages for each, and the code beside it is the page's own format", () => {
+    for (const code of ['attempts_exhausted', 'token_unreadable', 'pixel_id_malformed']) {
+      expect(zhCN[`monitor.alert.detail.${code}`], code).toBeTruthy();
+      expect(enUS[`monitor.alert.detail.${code}`], code).toBeTruthy();
+    }
+    expect(zhCN['monitor.alert.detailWithCode']).toContain('{code}');
+    expect(enUS['monitor.alert.detailWithCode']).toContain('{code}');
   });
 });
 

@@ -2,6 +2,7 @@ import { history, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Typography } from 'antd';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../../hooks/useRevalidateOnLocaleChange';
 import { enrollTotp } from '../../../services/auth';
 import { describeFailure, failureNotice, type Notice, noticeText } from '../../../session/describe';
 import { clearPendingEnroll, getPendingEnroll } from '../../../session/pendingEnroll';
@@ -86,6 +87,7 @@ export default function Enroll() {
           requiredMark={false}
           style={{ width: '100%' }}
         >
+          <RevalidateOnLocaleChange />
           <Form.Item
             name="totp"
             label={t('auth.enroll.totp')}

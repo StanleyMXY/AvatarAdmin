@@ -6,6 +6,7 @@ import type {
   AttributionClick,
   AttributionCost,
   AttributionRecord,
+  BatchCostsResult,
   CampaignCreate,
   CampaignFields,
   ClicksQuery,
@@ -95,10 +96,30 @@ export const deleteCost = (id: string): Promise<unknown> =>
 
 /**
  * All or nothing. A (campaign, day) that has a cost already is overwritten (contract 10.5); a bad
- * row refuses the whole batch with the reason of each row in `data.details`.
+ * row refuses the whole batch with the reason of each row in `data.details`. The contract does not
+ * describe the answer; the tentative one is `{ imported, overwritten }`: the rows written, and how
+ * many of them overwrote a cost that was there (the rest were added). Anything else is null.
  */
-export const batchCosts = (rows: CostRow[]): Promise<unknown> =>
-  apiRequest({ method: 'POST', url: '/attribution/costs/batch', body: rows });
+export const batchCosts = async (rows: CostRow[]): Promise<BatchCostsResult | null> => {
+  const data = await apiRequest<unknown>({
+    method: 'POST',
+    url: '/attribution/costs/batch',
+    body: rows,
+  });
+  if (typeof data !== 'object' || data === null) return null;
+  const { imported, overwritten } = data as Record<string, unknown>;
+  if (
+    typeof imported !== 'number' ||
+    typeof overwritten !== 'number' ||
+    !Number.isInteger(imported) ||
+    !Number.isInteger(overwritten) ||
+    overwritten < 0 ||
+    overwritten > imported
+  ) {
+    return null;
+  }
+  return { imported, overwritten };
+};
 
 // ---- reports (ATTRIBUTION:VIEW) ----
 

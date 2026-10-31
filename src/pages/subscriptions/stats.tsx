@@ -10,30 +10,60 @@ import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
 
-/** A list price with its currency; a missing price is a dash, a currency the browser does not know is written as it is. */
+const DECIMAL = /^-?\d+(\.\d+)?$/;
+
+/**
+ * A list price with its currency. A decimal string is written as it is, without ever turning it into a
+ * floating point number (the browser formats the digits as they are, so "9007199254740993.01" and
+ * "24.999" come out as they went in). A finite JSON number is formatted as the number it is. Anything else
+ * (null, NaN, a malformed string, an object) is a dash; an amount without a currency is a plain number;
+ * a currency the browser does not know is written as it is.
+ */
 export function formatListPrice(
   amount: number | string | null,
   currency: string | null,
   locale: string,
 ): string {
-  if (amount === null || amount === '') return DASH;
-  const value = Number(amount);
-  if (!Number.isFinite(value)) return DASH;
-  if (!currency) return new Intl.NumberFormat(locale).format(value);
+  let decimals: number;
+  if (typeof amount === 'string' && DECIMAL.test(amount)) {
+    decimals = amount.split('.')[1]?.length ?? 0;
+  } else if (typeof amount === 'number' && Number.isFinite(amount)) {
+    decimals = 0;
+  } else {
+    return DASH;
+  }
+  // A decimal string is a valid argument of `format` (ECMA-402 NumberFormat v3); the typings of this
+  // project's `lib` still say number, hence the cast.
+  const write = (options: Intl.NumberFormatOptions) =>
+    new Intl.NumberFormat(locale, { ...options, maximumFractionDigits: 20 }).format(
+      amount as number,
+    );
+  // No digit is rounded away and none is dropped: a plain number keeps as many decimals as it was sent with.
+  const plain = () => write({ minimumFractionDigits: Math.min(20, decimals) });
+  if (!currency) return plain();
   try {
-    return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value);
+    return write({ style: 'currency', currency });
   } catch {
-    return `${currency} ${new Intl.NumberFormat(locale).format(value)}`;
+    return `${currency} ${plain()}`;
   }
 }
 
-/** The active subscriptions of the last day in the rows (a snapshot of one day, never added across days); null if any is missing. */
-export function activeOnLastDay(rows: readonly SubscriptionStatRow[]): number | null {
-  if (rows.length === 0) return null;
-  const last = rows.map((r) => r.statDate).sort()[rows.length - 1];
-  const ofLast = rows.filter((r) => r.statDate === last);
-  if (ofLast.some((r) => r.active === null)) return null;
-  return ofLast.reduce((sum, r) => sum + (r.active ?? 0), 0);
+/**
+ * The active subscriptions of the last day in the rows that has a complete snapshot (every row of the day has one),
+ * with that day. A snapshot is of one day and is never added across days; a day with no or a partial snapshot
+ * (today is still being counted) is skipped. Null if no day qualifies.
+ */
+export function activeOnLastSnapshotDay(
+  rows: readonly SubscriptionStatRow[],
+): { day: string; value: number } | null {
+  const days = [...new Set(rows.map((r) => r.statDate))].sort().reverse();
+  for (const day of days) {
+    const ofDay = rows.filter((r) => r.statDate === day);
+    if (ofDay.every((r) => r.active !== null)) {
+      return { day, value: ofDay.reduce((sum, r) => sum + (r.active ?? 0), 0) };
+    }
+  }
+  return null;
 }
 
 const SUMS = ['new', 'renewed', 'canceled', 'expired', 'refunded'] as const;
@@ -70,8 +100,9 @@ export default function SubscriptionStatsPage() {
     return Object.fromEntries(SUMS.map((name) => [name, rows.reduce((n, r) => n + r[name], 0)]));
   }, [rows]);
 
+  const snapshot = useMemo(() => (rows ? activeOnLastSnapshotDay(rows) : null), [rows]);
   const cards: { name: string; value: number | null }[] = [
-    { name: 'active', value: rows ? activeOnLastDay(rows) : null },
+    { name: 'active', value: snapshot ? snapshot.value : null },
     ...SUMS.map((name) => ({ name, value: totals ? totals[name] : null })),
   ];
 
@@ -116,7 +147,9 @@ export default function SubscriptionStatsPage() {
                 />
                 {name === 'active' ? (
                   <Typography.Text type="secondary">
-                    {t('subscriptions.stats.activeHint')}
+                    {snapshot
+                      ? t('subscriptions.stats.activeAsOf', { date: snapshot.day })
+                      : t('subscriptions.stats.activeNone')}
                   </Typography.Text>
                 ) : null}
               </Card>

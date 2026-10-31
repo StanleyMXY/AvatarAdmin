@@ -3,10 +3,12 @@ import {
   buildQuery,
   type RequestParams,
   resolveUrl,
+  throwIfAborted,
   transportFailure,
   unwrapAndReport,
 } from './apiClient';
-import { ApiError } from './errors';
+import { ApiError, abortError } from './errors';
+import { startDeadline, TRANSFER_TIMEOUT_MS, timeoutError } from './timeout';
 
 export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -81,54 +83,66 @@ async function readBody(
  * Downloads an xlsx export with the admin token in the Authorization header. The status and the
  * content type are checked before anything is saved: only a 2xx answer typed as xlsx becomes a
  * file; a JSON error from the backend (rate limit, too many rows, no permission, expired token)
- * is thrown as an ApiError and nothing is saved.
+ * is thrown as an ApiError and nothing is saved. The whole download, body included, has 5 minutes
+ * (REQUEST_TIMEOUT); `signal` cancels it (an AbortError) and nothing is saved either.
  */
 export async function downloadFile(o: {
   url: string;
   params?: RequestParams;
   fallbackName: string;
   onProgress?: (bytes: number) => void;
+  signal?: AbortSignal;
+  /** Milliseconds for the whole download; 5 minutes when not given. */
+  timeoutMs?: number;
 }): Promise<{ filename: string; bytes: number }> {
   const url = `${resolveUrl(o.url)}${buildQuery(o.params)}`;
   const { headers, sentToken } = buildHeaders(false);
   headers.Accept = `${XLSX_TYPE}, application/json;q=0.9`;
 
-  let response: Response;
+  const deadline = startDeadline(o.timeoutMs ?? TRANSFER_TIMEOUT_MS, o.signal);
   try {
-    response = await fetch(url, { method: 'GET', headers });
-  } catch (cause) {
-    throw transportFailure(cause);
-  }
-
-  const contentType = (response.headers.get('content-type') ?? '')
-    .split(';')[0]
-    .trim()
-    .toLowerCase();
-  if (!(response.ok && contentType === XLSX_TYPE)) {
-    let text: string;
+    let response: Response;
     try {
-      text = await response.text();
+      throwIfAborted(deadline);
+      response = await fetch(url, { method: 'GET', headers, signal: deadline.signal });
     } catch (cause) {
-      throw transportFailure(cause);
+      throw transportFailure(cause, deadline);
     }
-    unwrapAndReport(response.status, text, sentToken);
-    // The backend answered with a success envelope where a file was expected.
-    throw new ApiError({
-      code: 'INVALID_RESPONSE',
-      httpStatus: response.status,
-      message: 'A file was expected but the answer is not a file.',
-      data: null,
-    });
-  }
 
-  let body: { chunks: Uint8Array[]; bytes: number };
-  try {
-    body = await readBody(response, o.onProgress);
-  } catch (cause) {
-    throw transportFailure(cause);
+    const contentType = (response.headers.get('content-type') ?? '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    if (!(response.ok && contentType === XLSX_TYPE)) {
+      let text: string;
+      try {
+        text = await response.text();
+      } catch (cause) {
+        throw transportFailure(cause, deadline);
+      }
+      unwrapAndReport(response.status, text, sentToken);
+      // The backend answered with a success envelope where a file was expected.
+      throw new ApiError({
+        code: 'INVALID_RESPONSE',
+        httpStatus: response.status,
+        message: 'A file was expected but the answer is not a file.',
+        data: null,
+      });
+    }
+
+    let body: { chunks: Uint8Array[]; bytes: number };
+    try {
+      body = await readBody(response, o.onProgress);
+    } catch (cause) {
+      throw transportFailure(cause, deadline);
+    }
+    // A cancel that came with the last byte still means "no file".
+    if (deadline.signal.aborted) throw deadline.timedOut() ? timeoutError() : abortError();
+    const filename =
+      parseContentDisposition(response.headers.get('content-disposition')) ?? o.fallbackName;
+    saveBlob(new Blob(body.chunks as BlobPart[], { type: XLSX_TYPE }), filename);
+    return { filename, bytes: body.bytes };
+  } finally {
+    deadline.dispose();
   }
-  const filename =
-    parseContentDisposition(response.headers.get('content-disposition')) ?? o.fallbackName;
-  saveBlob(new Blob(body.chunks as BlobPart[], { type: XLSX_TYPE }), filename);
-  return { filename, bytes: body.bytes };
 }

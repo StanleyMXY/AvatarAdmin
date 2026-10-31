@@ -439,6 +439,82 @@ describe('the call quality page: the charts', () => {
   });
 });
 
+describe('the call quality page: the figures of today are provisional', () => {
+  const CARDS = ['successRate', 'avgJoin', 'le2', 'gt10', 'limitReached', 'notJoined'];
+  const tagOf = (name: string) => screen.queryByTestId(`quality-provisional-${name}`);
+
+  it('marks every card whose total includes a row of today as provisional', async () => {
+    await ready(); // TWO_DAYS: 10-25 and 10-26
+    for (const name of CARDS) expect(tagOf(name), name).toHaveTextContent('Provisional');
+  });
+
+  it('marks no card when every row is of a day that is over', async () => {
+    await ready(() => [qrow('2026-10-24'), qrow('2026-10-25')]);
+    for (const name of CARDS) expect(tagOf(name), name).not.toBeInTheDocument();
+    expect(screen.queryByTestId('provisional-chart-note')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('provisional-row')).not.toBeInTheDocument();
+  });
+
+  it('marks the row of today in the table and no other row', async () => {
+    await ready();
+    await waitFor(() => expect(bodyRows()).toHaveLength(2));
+    const rows = [...bodyRows()];
+    expect(within(rows[0] as HTMLElement).queryByTestId('provisional-row')).toBeNull();
+    expect(within(rows[1] as HTMLElement).getByTestId('provisional-row')).toHaveTextContent(
+      'Provisional',
+    );
+    expect(cellsOf(rows[1])[0]).toContain('2026-10-26');
+  });
+
+  it('draws a hollow point over the marker of today on the line chart, and over no other day', async () => {
+    await ready();
+    const config = chartConfig('chart-line') as {
+      annotations?: { type?: string; shapeField?: string; data?: { statDate: string }[] }[];
+      point?: { shapeField?: string };
+    };
+    expect(config.point?.shapeField).toBe('circle');
+    expect(config.annotations).toHaveLength(1);
+    expect(config.annotations?.[0]).toMatchObject({ type: 'point', shapeField: 'hollowCircle' });
+    expect(config.annotations?.[0].data?.map((d) => d.statDate)).toEqual(['2026-10-26']);
+  });
+
+  it('draws no hollow point on the line chart when the day of today has no success rate', async () => {
+    await ready(() => [qrow('2026-10-25'), qrow('2026-10-26', { connected: 0, joinLe2s: 0 })]);
+    const config = chartConfig('chart-line') as { annotations?: unknown[] };
+    expect(config.annotations).toBeUndefined();
+  });
+
+  it('flags the columns of today on the stacked chart, and no other column', async () => {
+    await ready();
+    const data = columnData() as { statDate: string; provisional?: boolean }[];
+    expect(data.filter((d) => d.provisional).map((d) => d.statDate)).toEqual(
+      Array(4).fill('2026-10-26'),
+    );
+    expect(data.filter((d) => !d.provisional)).toHaveLength(24);
+  });
+
+  it('gives the stacked chart the dashed border style, which is what draws the flagged columns', async () => {
+    await ready();
+    const config = chartConfig('chart-column') as { style?: { stroke?: string } };
+    expect(config.style?.stroke).toBeTruthy();
+  });
+
+  it('explains the hollow point and the dashed column under the charts', async () => {
+    await ready();
+    expect(screen.getByTestId('provisional-chart-note')).toHaveTextContent(
+      'A hollow point (a column with a dashed border) is a provisional value',
+    );
+  });
+
+  it('writes the mark in Chinese when the language is Chinese', async () => {
+    backend({ rows: TWO_DAYS });
+    renderPage(<QualityPage />, 'zh-CN');
+    await screen.findByTestId('quality-card-successRate');
+    expect(tagOf('successRate')).toHaveTextContent('临时值');
+    expect(screen.getByTestId('provisional-chart-note')).toHaveTextContent('空心点');
+  });
+});
+
 describe('the call quality page: the detail table', () => {
   it('is one row per day with no paging, the date column fixed on the left', async () => {
     await ready();
@@ -502,7 +578,7 @@ describe('the call quality page: the detail table', () => {
       '2',
     ]);
     expect(cellsOf(bodyRows()[1])).toEqual([
-      '2026-10-26',
+      '2026-10-26Provisional', // the row of today carries the mark after its date
       '0',
       '0',
       '—',

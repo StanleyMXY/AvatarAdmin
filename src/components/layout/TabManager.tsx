@@ -2,7 +2,9 @@ import { history, useIntl, useLocation } from '@umijs/max';
 import { Dropdown, Tabs } from 'antd';
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import type { AdminRoute } from '../../access/canAccess';
-import { indexPages, matchPage } from './pageIndex';
+import { markServiceReachable } from '../../request/serviceStatus';
+import { indexPages, matchPage, pageIdentifier, titleWithIdentifier } from './pageIndex';
+import { ServiceNotice } from './ServiceNotice';
 
 export const TABS_STORAGE_KEY = 'avatar-admin.tabs';
 
@@ -80,12 +82,18 @@ export function TabManager({ routes, can, locale, children }: Props) {
 
   useEffect(() => save(tabs), [tabs]);
 
+  // The notice about an unavailable service belongs to the page that was open when it came up.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the address changes
+  useEffect(() => markServiceReachable(), [pathname]);
+
   const active = tabs.includes(pathname) ? pathname : undefined;
   const open = (path: string) => history.push(path);
 
   const titleOf = (path: string) => {
     const key = matchPage(pages, path)?.titleKey;
-    return key && intl.messages[key] ? intl.formatMessage({ id: key }) : path;
+    return key && intl.messages[key]
+      ? titleWithIdentifier(intl.formatMessage({ id: key }), pageIdentifier(pages, path))
+      : path;
   };
 
   const closeTabs = (keep: (path: string, index: number) => boolean, goTo: string) => {
@@ -165,6 +173,12 @@ export function TabManager({ routes, can, locale, children }: Props) {
         onChange={open}
         onEdit={(key, action) => {
           if (action === 'remove' && typeof key === 'string') close(key);
+        }}
+      />
+      <ServiceNotice
+        onRetry={() => {
+          markServiceReachable();
+          refresh(active ?? pathname);
         }}
       />
       <Fragment key={`${active ?? pathname}#${refreshKeys[active ?? pathname] ?? 0}`}>

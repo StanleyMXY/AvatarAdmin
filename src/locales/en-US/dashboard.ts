@@ -78,7 +78,6 @@ const messages: Record<string, string> = {
 
   // Overview /dashboard (spec 5.1).
   'menu.dashboard.overview': 'Overview',
-  'dashboard.temp': 'Provisional',
   'dashboard.explain.landInterval':
     "Today's figures are provisional and are refreshed every {minutes} minutes.",
   'dashboard.explain.provisional': "Today's figures are provisional.",

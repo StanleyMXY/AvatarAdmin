@@ -85,6 +85,8 @@ const messages: Record<string, string> = {
   'error.UNSUPPORTED_MEDIA_TYPE': 'The request media type is not supported.',
   'error.DEPENDENCY_UNAVAILABLE': 'A required service or setting is unavailable right now.',
   'error.NETWORK_ERROR': 'Network error. Check your connection and try again.',
+  'error.REQUEST_TIMEOUT': 'Request timed out. Please try again.',
+  'error.GATEWAY_UNAVAILABLE': 'The service is temporarily unavailable. Please try again later.',
   'error.INVALID_RESPONSE': 'The server returned a response that could not be read.',
   'error.UNKNOWN': 'Something went wrong.',
 };

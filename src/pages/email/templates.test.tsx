@@ -76,7 +76,7 @@ function answerWith(change: (items: Record<string, unknown>[]) => Record<string,
 }
 
 describe('the list of e-mail templates', () => {
-  it('shows the five templates in the order of the backend with subject, whether it was changed, who changed it and when', async () => {
+  it('shows the six templates in the order of the backend with subject, whether it was changed, who changed it and when', async () => {
     await load();
     expect(
       [...document.querySelectorAll('.ant-table-thead th')].map((th) => th.textContent),
@@ -84,6 +84,7 @@ describe('the list of e-mail templates', () => {
     expect(rows().map(codeOf)).toEqual([
       'DELETION_CONFIRM',
       'LIKENESS_COMPLAINT_RECEIVED',
+      'LOGIN_METHOD_ADDED',
       'PASSWORD_CHANGED',
       'PASSWORD_RESET',
       'REGISTER_CODE',
@@ -95,6 +96,23 @@ describe('the list of e-mail templates', () => {
     expect(register[4]).toBe('—');
     expect(cellsOf(await rowOf('REGISTER_CODE'))[0]).toContain(
       'Verification code for registration',
+    );
+  });
+
+  it('describes the sixth template, the notice that a sign-in method was added, in the words of the language', async () => {
+    await load();
+    expect(cellsOf(await rowOf('LOGIN_METHOD_ADDED'))[0]).toContain(
+      'Notice that a sign-in method was added',
+    );
+    expect(cellsOf(await rowOf('LOGIN_METHOD_ADDED'))[0]).toContain('Google');
+  });
+
+  it('describes the sixth template in Chinese when the interface is Chinese', async () => {
+    backend();
+    renderPage(<EmailTemplatesPage />, 'zh-CN');
+    await waitFor(() => expect(rows().length).toBe(6));
+    expect(cellsOf(await rowOf('LOGIN_METHOD_ADDED'))[0]).toContain(
+      '登录方式已添加通知（账号新增一种登录方式后发到账号邮箱：Google 自动绑定，或用户登录后自己添加 Google 登录）',
     );
   });
 
@@ -124,7 +142,7 @@ describe('the list of e-mail templates', () => {
     ]);
     const user = userEvent.setup();
     renderPage(<EmailTemplatesPage />);
-    await waitFor(() => expect(rows().length).toBe(6));
+    await waitFor(() => expect(rows().length).toBe(7));
     const form = await openEdit(user, 'FUTURE_NOTICE');
     expect(form.getByRole('textbox', { name: 'Subject' })).toHaveValue('Hello ไทย العربية 😀');
     expect(form.getByText('{x}', { selector: '[data-kind="required"] *' })).toBeInTheDocument();
@@ -209,7 +227,7 @@ describe('the list of e-mail templates', () => {
     expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
     fail = false;
     await user.click(screen.getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(rows().length).toBe(5));
+    await waitFor(() => expect(rows().length).toBe(6));
   });
 
   it('shows the texts in Chinese when the interface is Chinese', async () => {
@@ -252,6 +270,26 @@ describe('the editor', () => {
     expect(panel.textContent).toMatch(/\{confirmLink\}.*link to confirm the deletion/s);
   });
 
+  it('takes the placeholders and the required ones of the sixth template from the backend and says what {method} stands for', async () => {
+    const { user } = await load();
+    const form = await openEdit(user, 'LOGIN_METHOD_ADDED');
+    const dialog = screen.getByRole('dialog');
+    const available = dialog.querySelector('[data-kind="placeholders"]') as HTMLElement;
+    expect([...available.querySelectorAll('code')].map((c) => c.textContent)).toEqual([
+      '{method}',
+      '{time}',
+      '{appName}',
+    ]);
+    const required = dialog.querySelector('[data-kind="required"]') as HTMLElement;
+    expect([...required.querySelectorAll('code')].map((c) => c.textContent)).toEqual([
+      '{method}',
+      '{time}',
+    ]);
+    expect(available.textContent).toMatch(/\{method\}.*sign-in method/s);
+    setText(form.getByRole('textbox', { name: 'Body' }), 'Added {method}');
+    expect(await form.findByText(/The body is missing \{time\}/)).toBeInTheDocument();
+  });
+
   it('says nothing about a placeholder it does not know, and still lists it with its braces', async () => {
     backend();
     answerWith((items) =>
@@ -261,7 +299,7 @@ describe('the editor', () => {
     );
     const user = userEvent.setup();
     renderPage(<EmailTemplatesPage />);
-    await waitFor(() => expect(rows().length).toBe(5));
+    await waitFor(() => expect(rows().length).toBe(6));
     await openEdit(user, 'REGISTER_CODE');
     const panel = screen
       .getByRole('dialog')
@@ -298,7 +336,7 @@ describe('the editor', () => {
     );
     const user = userEvent.setup();
     renderPage(<EmailTemplatesPage />);
-    await waitFor(() => expect(rows().length).toBe(5));
+    await waitFor(() => expect(rows().length).toBe(6));
     const form = await openEdit(user, 'REGISTER_CODE');
     expect(form.queryByText(/The body is missing/)).toBeNull();
     setText(form.getByRole('textbox', { name: 'Body' }), 'has {foo} and {bar}');

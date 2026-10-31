@@ -18,6 +18,9 @@ const messages: Record<string, string> = {
   'sms.guard.title.channel': '这是最后一个启用的验证码通道',
   'sms.guard.title.template': '这是最后一个启用的验证码模板',
   'sms.guard.intro.channel': '没有别的启用的验证码通道覆盖它所服务的全部国家。{action}',
+  'sms.guard.title.englishTemplate': '这是最后一个启用的、英文、不限国家的验证码模板',
+  'sms.guard.intro.englishTemplate':
+    '没有别的启用的、语言为英文（en）、不限国家的验证码模板了。{action}',
   'sms.guard.intro.template': '没有别的启用的验证码模板了。{action}',
   'sms.guard.action.disable': '你正要停用它。',
   'sms.guard.action.delete': '你正要删除它。',
@@ -36,7 +39,7 @@ const messages: Record<string, string> = {
   'sms.channels.note.selection':
     '同一个国家里，取启用的验证码通道中优先级数值最小的一个。发送失败时不会改用别的通道重试。',
   'sms.channels.note.credentials':
-    '凭据只写不读：保存后不会再显示。编辑通道时，凭据框留空表示不修改已保存的凭据。',
+    '凭据只写不读：保存后不会再显示。编辑通道时，不添加条目表示不修改已保存的凭据。',
   'sms.channels.new': '新建通道',
   'sms.channels.readOnly': '你只能查看通道。修改通道需要“配置短信渠道”的权限。',
   'sms.channels.empty': '没有通道',
@@ -70,10 +73,18 @@ const messages: Record<string, string> = {
   'sms.channels.providerPlaceholder': '选择供应商',
   'sms.channels.hostsHelp': '这个供应商只允许这些主机：{hosts}',
   'sms.channels.credentialsNew': '现在可以不填，以后编辑通道时再补。',
-  'sms.channels.credentialsSet': '已设置凭据。留空表示保留；输入新的凭据会替换它。',
+  'sms.channels.credentialsSet':
+    '已设置凭据。不添加条目表示保留；添加条目会替换全部已保存的凭据，所以要把每个名称和值重新填一遍。',
   'sms.channels.credentialsNotSet': '还没有设置凭据。',
   'sms.channels.credentialsWriteOnly': '只写不读：已保存的凭据永远不会显示。',
-  'sms.channels.credentialsPlaceholder': '留空表示不修改已保存的凭据',
+  'sms.channels.credentialName': '凭据名称',
+  'sms.channels.credentialValue': '凭据值',
+  'sms.channels.credentialAdd': '添加一项凭据',
+  'sms.channels.credentialRemove': '删除这项凭据',
+  'sms.channels.credentialRemoveShort': '删除',
+  'sms.channels.credentialNameRequired': '请输入这个值的名称',
+  'sms.channels.credentialValueRequired': '请输入这个名称的值',
+  'sms.channels.credentialNameDuplicate': '这个名称重复了',
   'sms.channels.extConfigHelp': '一个 JSON 对象，例如 appId 和按国家的发送方 ID。没有就留空。',
   'sms.channels.countriesHelp': '两位字母的国家码，例如 TH，每填一个按回车。留空表示全部国家。',
   'sms.channels.typePlaceholder': '选择类型',
@@ -108,7 +119,9 @@ const messages: Record<string, string> = {
 
   // ---- templates ----
   'sms.templates.note.rule':
-    '发送时怎样选模板：先找号码所在国家、用户语言（请求头 Accept-Language）都匹配的，其次找同语言、不限国家的，最后回退到英文模板。没有任何可用的模板时，发送会失败。',
+    '发送时怎样选模板：先找号码所在国家、用户语言（请求头 Accept-Language）都匹配的，其次找同语言、不限国家的，最后回退到英文模板。没有任何可用的模板时，发送会失败。手机号登录开启，或存在手机号账号时，必须保留至少一个启用的、语言为英文（en）、不限国家的验证码模板；会让它消失的改动会被后端拒绝。',
+  'sms.templates.englishRefused':
+    '什么都没有改变。手机号登录开启，或存在手机号账号时，必须保留至少一个启用的、语言为英文（en）、不限国家的验证码模板。先启用或新建另一个，再改这一个。',
   'sms.templates.new': '新建模板',
   'sms.templates.empty': '没有模板',
   'sms.templates.col.code': '编码',

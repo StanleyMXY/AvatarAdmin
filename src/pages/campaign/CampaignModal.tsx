@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Divider, Form, Input, Modal, Spin, Tag, Typography } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type AttributionCampaign,
@@ -203,6 +204,7 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Divider titlePlacement="start">{t('campaign.campaigns.section.basic')}</Divider>
         {editing ? (
           <Form.Item

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { clientConfigState, resetClientConfigStore } from './_core/clientConfigData';
+import {
+  clientConfigState,
+  resetClientConfigStore,
+  simulateOtherAdminEdit,
+} from './_core/clientConfigData';
 import { resetConfigStore } from './_core/configStore';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
@@ -199,5 +203,102 @@ describe('resetting a key', () => {
     await reset('privacyPolicyUrl');
     resetClientConfigStore();
     expect(clientConfigState.rows.get('privacyPolicyUrl')?.size).toBeGreaterThan(0);
+  });
+});
+
+describe('saving with the version that was read (expectedUpdatedAt)', () => {
+  const saveWith = (key: string, values: unknown, expectedUpdatedAt: unknown) =>
+    call(h(SAVE), {
+      headers: { authorization: token('root') },
+      params: { key },
+      body: { values, expectedUpdatedAt },
+    });
+
+  it('saves when the time is the one the key has now, and stores the new values', async () => {
+    const read = (await itemOf('privacyPolicyUrl')).updatedAt;
+    const answer = await saveWith('privacyPolicyUrl', { '': 'https://example.com/same' }, read);
+    expect(answer.status).toBe(200);
+    expect((await itemOf('privacyPolicyUrl')).values).toEqual({ '': 'https://example.com/same' });
+  });
+
+  it('refuses with 409 INVALID_STATE and the current time when another administrator saved in between, and changes nothing', async () => {
+    const read = (await itemOf('privacyPolicyUrl')).updatedAt;
+    simulateOtherAdminEdit('privacyPolicyUrl', {
+      '': 'https://example.com/theirs',
+      th: 'https://example.com/th/theirs',
+    });
+    const theirs = await itemOf('privacyPolicyUrl');
+    const answer = await saveWith('privacyPolicyUrl', { '': 'https://example.com/mine' }, read);
+    expect(answer.status).toBe(409);
+    expect(answer.body.code).toBe('INVALID_STATE');
+    expect(answer.body.data).toEqual({ updatedAt: theirs.updatedAt });
+    expect((await itemOf('privacyPolicyUrl')).values).toEqual(theirs.values);
+  });
+
+  it('treats null as "there was no row": fine for a key with none, a 409 once someone configured it', async () => {
+    expect((await itemOf('supportUrl')).updatedAt).toBeNull();
+    const read = null;
+    simulateOtherAdminEdit('supportUrl', { '': 'https://example.com/support' });
+    const answer = await saveWith('supportUrl', { '': 'https://example.com/mine' }, read);
+    expect(answer.status).toBe(409);
+    clientConfigState.rows.delete('supportUrl');
+    expect((await saveWith('supportUrl', { '': 'https://example.com/mine' }, null)).status).toBe(
+      200,
+    );
+  });
+
+  it('refuses a time when the key has no row, and without the field saves as before', async () => {
+    const answer = await saveWith(
+      'supportUrl',
+      { '': 'https://example.com/mine' },
+      '2026-01-01T00:00:00.000Z',
+    );
+    expect(answer.status).toBe(409);
+    expect((await save('supportUrl', { '': 'https://example.com/mine' })).status).toBe(200);
+  });
+
+  it('gives a later time on every simulated edit, even within one millisecond', () => {
+    const first = simulateOtherAdminEdit('privacyPolicyUrl', { '': 'https://example.com/a' });
+    const second = simulateOtherAdminEdit('privacyPolicyUrl', { '': 'https://example.com/b' });
+    expect(second > first).toBe(true);
+  });
+});
+
+describe('resetting with the version that was read (expectedUpdatedAt)', () => {
+  const resetWith = (key: string, expectedUpdatedAt: unknown) =>
+    call(h(RESET), {
+      headers: { authorization: token('root') },
+      params: { key },
+      body: { expectedUpdatedAt },
+    });
+
+  it('resets when the time is the one the key has now', async () => {
+    const read = (await itemOf('privacyPolicyUrl')).updatedAt;
+    expect((await resetWith('privacyPolicyUrl', read)).status).toBe(200);
+    expect((await itemOf('privacyPolicyUrl')).configured).toBe(false);
+  });
+
+  it('refuses with 409 INVALID_STATE and the current time when another administrator saved in between, and deletes nothing', async () => {
+    const read = (await itemOf('privacyPolicyUrl')).updatedAt;
+    simulateOtherAdminEdit('privacyPolicyUrl', {
+      '': 'https://example.com/theirs',
+      th: 'https://example.com/th/theirs',
+    });
+    const theirs = await itemOf('privacyPolicyUrl');
+    const answer = await resetWith('privacyPolicyUrl', read);
+    expect(answer.status).toBe(409);
+    expect(answer.body.code).toBe('INVALID_STATE');
+    expect(answer.body.data).toEqual({ updatedAt: theirs.updatedAt });
+    expect((await itemOf('privacyPolicyUrl')).values).toEqual(theirs.values);
+  });
+
+  it('treats null as "there was no row": a 409 once someone configured the key', async () => {
+    simulateOtherAdminEdit('supportUrl', { '': 'https://example.com/support' });
+    expect((await resetWith('supportUrl', null)).status).toBe(409);
+    expect((await itemOf('supportUrl')).configured).toBe(true);
+  });
+
+  it('without the field resets as before', async () => {
+    expect((await reset('privacyPolicyUrl')).status).toBe(200);
   });
 });

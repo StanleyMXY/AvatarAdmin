@@ -5,6 +5,7 @@ import system from '../../../mock/system.mock';
 import systemPermissions from '../../../mock/system.permissions.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
+import { history } from '../../../tests/stubs/umi-max';
 import { PERMISSION_CODES } from '../../access/permissionCodes';
 import RolesPage from './roles';
 import {
@@ -198,25 +199,44 @@ describe('making a role', () => {
     );
   });
 
-  it('takes the parent out of the value when one descendant is unchecked', async () => {
+  it('keeps the parent in the value when one descendant is unchecked: a page with only a part of its functions', async () => {
     const { user, calls } = await load();
     const box = await openNew(user);
     await user.type(box.getByLabelText('Name'), 'Partial');
     await user.click(checkbox(box, 'USER:VIEW'));
     await user.click(checkbox(box, 'USER:BAN'));
     const parent = checkbox(box, 'USER:VIEW');
-    expect(parent).not.toBeChecked();
-    expect(parent.closest('.ant-checkbox')?.className).toContain('ant-checkbox-indeterminate');
+    expect(parent).toBeChecked();
+    expect(parent.closest('.ant-checkbox')?.className).not.toContain('ant-checkbox-indeterminate');
+    expect(checkbox(box, 'USER:BAN')).not.toBeChecked();
     await user.click(save(box));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
       'USER:EMAIL_VIEW',
       'USER:EXPORT',
       'USER:PHONE_VIEW',
+      'USER:VIEW',
     ]);
   });
 
-  it('can give a role a custom node, and the node is part of the list that is saved', async () => {
+  it('checks the page together with a function that is checked alone, and saves both', async () => {
+    const { user, calls } = await load();
+    const box = await openNew(user);
+    await user.type(box.getByLabelText('Name'), 'Soporte ฝ่ายสนับสนุน');
+    await user.click(checkbox(box, 'USER:BAN'));
+    expect(checkbox(box, 'USER:BAN')).toBeChecked();
+    expect(checkbox(box, 'USER:VIEW')).toBeChecked();
+    expect(checkbox(box, 'USER:EXPORT')).not.toBeChecked();
+    expect(box.getByText('2 codes chosen')).toBeInTheDocument();
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+  });
+
+  it('cannot give a role a custom node: the box is off and the node is not in the list that is saved', async () => {
     const { user, calls } = await load();
     systemState.nodes.set('CUSTOM:GROUP', {
       code: 'CUSTOM:GROUP',
@@ -230,12 +250,39 @@ describe('making a role', () => {
     });
     const box = await openNew(user);
     await user.type(box.getByLabelText('Name'), 'With custom');
-    await user.click(checkbox(box, 'CUSTOM:GROUP'));
+    expect(checkbox(box, 'CUSTOM:GROUP')).toBeDisabled();
+    fireEvent.click(checkbox(box, 'CUSTOM:GROUP'));
+    expect(checkbox(box, 'CUSTOM:GROUP')).not.toBeChecked();
+    expect(box.getByText('0 codes chosen')).toBeInTheDocument();
+    await user.click(checkbox(box, 'AUDIT:VIEW'));
     await user.click(save(box));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
-      'CUSTOM:GROUP',
+      'AUDIT:VIEW',
     ]);
+  });
+
+  it('does not check a custom node below a parent that is checked', async () => {
+    const { user, calls } = await load();
+    systemState.nodes.set('CUSTOM:UNDER_USER', {
+      code: 'CUSTOM:UNDER_USER',
+      parent: 'USER:VIEW',
+      type: 'FUNCTION',
+      sortOrder: 900,
+      nameZh: '自定义功能',
+      nameEn: 'Custom function',
+      builtin: false,
+      createdByUsername: 'root',
+    });
+    const box = await openNew(user);
+    await user.type(box.getByLabelText('Name'), 'Below');
+    await user.click(checkbox(box, 'USER:VIEW'));
+    expect(checkbox(box, 'CUSTOM:UNDER_USER')).not.toBeChecked();
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(
+      (writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes,
+    ).not.toContain('CUSTOM:UNDER_USER');
   });
 
   it('asks for a name, and does not send anything without one', async () => {
@@ -337,6 +384,22 @@ describe('editing a role', () => {
     expect(box.getByText('1 code chosen')).toBeInTheDocument();
   });
 
+  it('keeps the page code of a role with the page and one function when that function is unchecked', async () => {
+    // "Soporte al cliente" holds USER:VIEW and USER:BAN among others
+    const { user, calls } = await load();
+    const box = await openEdit(user, 'Soporte al cliente');
+    expect(checkbox(box, 'USER:VIEW')).toBeChecked();
+    expect(checkbox(box, 'USER:BAN')).toBeChecked();
+    await user.click(checkbox(box, 'USER:BAN'));
+    expect(checkbox(box, 'USER:VIEW')).toBeChecked();
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    const sent = (writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes;
+    expect(sent).toContain('USER:VIEW');
+    expect(sent).not.toContain('USER:BAN');
+    expect(sent).not.toContain('USER:EXPORT');
+  });
+
   it('replaces the whole set of codes: the body holds every code that is checked', async () => {
     const { user, calls } = await load();
     const box = await openEdit(user, 'Pengguna baru');
@@ -363,13 +426,42 @@ describe('editing a role', () => {
     const { user, calls } = await load();
     const box = await openEdit(user, 'Old codes');
     expect(
-      box.getByText(/not in the permission tree and will be dropped when you save: GONE:CODE/),
+      box.getByText(/cannot be given to a role .*will be dropped when you save: GONE:CODE/),
     ).toBeInTheDocument();
     await user.click(checkbox(box, 'AUDIT:VIEW'));
     await user.click(save(box));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
       'AUDIT:VIEW',
+      'STATS:VIEW',
+    ]);
+  });
+
+  it('names a custom node the role holds, and drops it when saving: custom nodes cannot be given to a role', async () => {
+    systemState.nodes.set('CUSTOM:GROUP', {
+      code: 'CUSTOM:GROUP',
+      parent: null,
+      type: 'MENU',
+      sortOrder: 900,
+      nameZh: '自定义分组',
+      nameEn: 'Custom group',
+      builtin: false,
+      createdByUsername: 'root',
+    });
+    systemState.roles.set('63', {
+      id: '63',
+      name: 'Had custom',
+      remark: null,
+      createdAt: '2026-10-05T00:00:00Z',
+      permissionCodes: ['CUSTOM:GROUP', 'STATS:VIEW'],
+    });
+    const { user, calls } = await load();
+    const box = await openEdit(user, 'Had custom');
+    expect(box.getByText(/will be dropped when you save: CUSTOM:GROUP/)).toBeInTheDocument();
+    expect(checkbox(box, 'CUSTOM:GROUP')).not.toBeChecked();
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
       'STATS:VIEW',
     ]);
   });
@@ -446,5 +538,322 @@ describe('deleting a role', () => {
     await settled();
     expect(held.started()).toBe(1);
     held.release();
+  });
+});
+
+describe('an administrator who is not a super administrator hands out only what they hold', () => {
+  const HELD = ['ROLE:MANAGE', 'USER:VIEW', 'USER:BAN', 'STATS:VIEW', 'AUDIT:VIEW'];
+  const SCOPE_SENTENCE =
+    /Administrators can only grant permissions they hold\. You cannot change a role you hold, and you can only change roles and administrators whose permissions you all hold\. Nothing was changed\./;
+  beforeEach(() => {
+    signIn('support', { codes: HELD });
+  });
+
+  it('shows the sentence of the rule for a 403 on save, never the words of the backend, and keeps the dialog and the page', async () => {
+    // a role within what is held: the page lets it be saved, and the backend still has the last word
+    systemState.roles.set('72', {
+      id: '72',
+      name: 'Within reach',
+      remark: null,
+      createdAt: '2026-10-08T00:00:00Z',
+      permissionCodes: ['USER:VIEW', 'USER:BAN'],
+    });
+    const { user, calls } = await load();
+    overrideFetch(({ url, method }) =>
+      method === 'PUT' && url.pathname === '/api/admin/roles/72'
+        ? jsonAnswer(
+            403,
+            'ADMIN_FORBIDDEN',
+            null,
+            'Administrators can only change roles whose permissions they hold',
+          )
+        : undefined,
+    );
+    const box = await openEdit(user, 'Within reach');
+    await user.click(save(box));
+    expect(await box.findByText(/You do not have permission to do this\./)).toBeInTheDocument();
+    expect(box.getByText(SCOPE_SENTENCE)).toBeInTheDocument();
+    expect(
+      screen.queryByText('Administrators can only change roles whose permissions they hold'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+    expect(history.replace).not.toHaveBeenCalled();
+    expect(history.push).not.toHaveBeenCalled();
+  });
+
+  it('shows the same sentence when a role cannot be deleted for the same reason, and keeps the row', async () => {
+    const { user } = await load();
+    // role 3 holds moderation codes that the signed-in administrator does not hold
+    await user.click(within(await rowOf('ผู้ตรวจสอบเนื้อหา')).getByRole('button', { name: 'Delete' }));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(await screen.findByText(SCOPE_SENTENCE, { exact: false })).toBeInTheDocument();
+    expect(tableRows().some((cells) => cells[0] === 'ผู้ตรวจสอบเนื้อหา')).toBe(true);
+    expect(history.replace).not.toHaveBeenCalled();
+  });
+
+  it('switches off the boxes of the permissions the signed-in administrator does not hold, and leaves the held ones on', async () => {
+    const { user } = await load();
+    const box = await openNew(user);
+    for (const code of ['USER:VIEW', 'USER:BAN', 'STATS:VIEW']) {
+      expect(checkbox(box, code), code).toBeEnabled();
+    }
+    for (const code of ['COST:VIEW', 'USER:EXPORT', 'MODERATION:REVIEW']) {
+      expect(checkbox(box, code), code).toBeDisabled();
+    }
+  });
+
+  it('checks only the held nodes below a parent, and sends nothing the administrator does not hold', async () => {
+    const { user, calls } = await load();
+    const box = await openNew(user);
+    await user.type(box.getByLabelText('Name'), 'Within my reach');
+    await user.click(checkbox(box, 'USER:VIEW'));
+    expect(checkbox(box, 'USER:BAN')).toBeChecked();
+    expect(checkbox(box, 'USER:EXPORT')).not.toBeChecked();
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+  });
+
+  it('keeps a code the role has but the administrator does not hold: checked, off, and not removed by unchecking its parent', async () => {
+    systemState.roles.set('70', {
+      id: '70',
+      name: 'Mixed',
+      remark: null,
+      createdAt: '2026-10-06T00:00:00Z',
+      permissionCodes: ['USER:BAN', 'USER:EXPORT', 'USER:VIEW'],
+    });
+    const { user } = await load();
+    const box = await openEdit(user, 'Mixed');
+    // the role holds USER:EXPORT; the administrator does not
+    expect(checkbox(box, 'USER:EXPORT')).toBeChecked();
+    expect(checkbox(box, 'USER:EXPORT')).toBeDisabled();
+    await user.click(checkbox(box, 'USER:VIEW'));
+    expect(checkbox(box, 'USER:EXPORT')).toBeChecked();
+    expect(checkbox(box, 'USER:BAN')).not.toBeChecked();
+  });
+
+  describe('a role with a permission that the administrator does not hold', () => {
+    const NOTE_START = 'This role has permissions you do not hold: ';
+    const STOP = 'You cannot save changes to it.';
+    const noteOf = (box: ReturnType<typeof within>) =>
+      box.queryByText((text: string) => text.startsWith(NOTE_START));
+
+    it('says so when the dialog opens, lists the codes, and does not let the role be saved', async () => {
+      systemState.roles.set('70', {
+        id: '70',
+        name: 'Mixed',
+        remark: null,
+        createdAt: '2026-10-06T00:00:00Z',
+        permissionCodes: ['USER:BAN', 'USER:EXPORT', 'USER:VIEW', 'COST:VIEW'],
+      });
+      const { user, calls } = await load();
+      const box = await openEdit(user, 'Mixed');
+      const note = noteOf(box);
+      expect(note).not.toBeNull();
+      expect(note?.textContent).toBe(`${NOTE_START}COST:VIEW, USER:EXPORT. ${STOP}`);
+      expect(save(box)).toBeDisabled();
+      await user.type(box.getByLabelText('Name'), ' 2');
+      await user.click(save(box));
+      // nor does Enter in a box of the form save it
+      await user.type(box.getByLabelText('Name'), '{Enter}');
+      await settled();
+      expect(writesOf(calls)).toHaveLength(0);
+      // the tree is still there to look at
+      expect(checkbox(box, 'USER:EXPORT')).toBeChecked();
+    });
+
+    it('lists at most 20 codes and then the number of all of them', async () => {
+      const codes = PERMISSION_CODES.filter((code) => !HELD.includes(code)).sort();
+      expect(codes.length).toBeGreaterThan(25);
+      systemState.roles.set('71', {
+        id: '71',
+        name: 'Everything',
+        remark: null,
+        createdAt: '2026-10-07T00:00:00Z',
+        permissionCodes: [...HELD, ...codes],
+      });
+      const { user } = await load();
+      const box = await openEdit(user, 'Everything');
+      expect(noteOf(box)?.textContent).toBe(
+        `${NOTE_START}${codes.slice(0, 20).join(', ')} and others, ${codes.length} in total. ${STOP}`,
+      );
+      expect(save(box)).toBeDisabled();
+    });
+
+    it('lists exactly 20 codes without the number', async () => {
+      const codes = PERMISSION_CODES.filter((code) => !HELD.includes(code))
+        .sort()
+        .slice(0, 20);
+      systemState.roles.set('71', {
+        id: '71',
+        name: 'Twenty',
+        remark: null,
+        createdAt: '2026-10-07T00:00:00Z',
+        permissionCodes: codes,
+      });
+      const { user } = await load();
+      const box = await openEdit(user, 'Twenty');
+      expect(noteOf(box)?.textContent).toBe(`${NOTE_START}${codes.join(', ')}. ${STOP}`);
+    });
+
+    it('shows every code as plain text, whatever it is: markup stays text, other languages and values that are not text show up written out, none is counted twice', async () => {
+      systemState.roles.set('73', {
+        id: '73',
+        name: 'Odd codes',
+        remark: null,
+        createdAt: '2026-10-09T00:00:00Z',
+        permissionCodes: [
+          '<img src=x onerror=alert(1)>',
+          'ผู้ใช้:ดู',
+          'كود:قراءة',
+          42,
+          { a: 1 },
+          null,
+          'ผู้ใช้:ดู',
+          'USER:VIEW',
+        ] as unknown as string[],
+      });
+      const { user } = await load();
+      const box = await openEdit(user, 'Odd codes');
+      const shown = (noteOf(box)?.textContent ?? '').slice(NOTE_START.length, -(STOP.length + 2));
+      expect(shown.split(', ').sort()).toEqual(
+        ['42', '<img src=x onerror=alert(1)>', '{"a":1}', 'ผู้ใช้:ดู', 'كود:قراءة'].sort(),
+      );
+      expect(noteOf(box)?.textContent?.endsWith(`. ${STOP}`)).toBe(true);
+      expect(document.querySelector('.ant-modal img')).toBeNull();
+      expect(save(box)).toBeDisabled();
+    });
+
+    it('also counts a code that the tree does not know: the backend checks every code the role has', async () => {
+      systemState.roles.set('74', {
+        id: '74',
+        name: 'Old code',
+        remark: null,
+        createdAt: '2026-10-09T00:00:00Z',
+        permissionCodes: ['USER:VIEW', 'OLD:THING'],
+      });
+      const { user } = await load();
+      const box = await openEdit(user, 'Old code');
+      expect(noteOf(box)?.textContent).toBe(`${NOTE_START}OLD:THING. ${STOP}`);
+      expect(save(box)).toBeDisabled();
+    });
+
+    it('says nothing and saves as before when the role has only codes that are held', async () => {
+      systemState.roles.set('72', {
+        id: '72',
+        name: 'Within reach',
+        remark: null,
+        createdAt: '2026-10-08T00:00:00Z',
+        permissionCodes: ['USER:VIEW', 'USER:BAN'],
+      });
+      const { user, calls } = await load();
+      const box = await openEdit(user, 'Within reach');
+      expect(noteOf(box)).toBeNull();
+      expect(save(box)).toBeEnabled();
+      await user.click(checkbox(box, 'USER:BAN'));
+      await user.click(save(box));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect(writesOf(calls)[0]).toMatchObject({ method: 'PUT', url: '/api/admin/roles/72' });
+    });
+
+    it('says nothing for a role with no codes, and for a new role', async () => {
+      systemState.roles.set('75', {
+        id: '75',
+        name: 'Empty',
+        remark: null,
+        createdAt: '2026-10-09T00:00:00Z',
+        permissionCodes: [],
+      });
+      const { user } = await load();
+      let box = await openEdit(user, 'Empty');
+      expect(noteOf(box)).toBeNull();
+      expect(save(box)).toBeEnabled();
+      await user.click(box.getByRole('button', { name: 'Cancel' }));
+      await dialogsClosed();
+      box = await openNew(user);
+      expect(noteOf(box)).toBeNull();
+      expect(save(box)).toBeEnabled();
+    });
+
+    it('does not limit a super administrator, whatever the role has', async () => {
+      signIn('root');
+      systemState.roles.set('70', {
+        id: '70',
+        name: 'Mixed',
+        remark: null,
+        createdAt: '2026-10-06T00:00:00Z',
+        permissionCodes: ['USER:BAN', 'USER:EXPORT', 'USER:VIEW', 'OLD:THING'],
+      });
+      const { user } = await load();
+      const box = await openEdit(user, 'Mixed');
+      expect(noteOf(box)).toBeNull();
+      expect(save(box)).toBeEnabled();
+    });
+
+    it('does not limit a super administrator whose account lists no permission codes', async () => {
+      signIn('root', { codes: [] });
+      const { user } = await load();
+      const box = await openEdit(user, 'Soporte al cliente');
+      expect(noteOf(box)).toBeNull();
+      expect(save(box)).toBeEnabled();
+    });
+
+    it('limits an administrator who holds nothing: any role with a code cannot be saved', async () => {
+      signIn('support', { codes: ['ROLE:MANAGE'] });
+      const { user } = await load();
+      const box = await openEdit(user, 'Soporte al cliente');
+      expect(noteOf(box)).not.toBeNull();
+      expect(save(box)).toBeDisabled();
+    });
+
+    it('is written in Chinese when the interface is Chinese', async () => {
+      systemState.roles.set('70', {
+        id: '70',
+        name: 'Mixed',
+        remark: null,
+        createdAt: '2026-10-06T00:00:00Z',
+        permissionCodes: ['USER:BAN', 'USER:EXPORT', 'USER:VIEW'],
+      });
+      const codes = PERMISSION_CODES.filter((code) => !HELD.includes(code)).sort();
+      systemState.roles.set('71', {
+        id: '71',
+        name: 'Everything',
+        remark: null,
+        createdAt: '2026-10-07T00:00:00Z',
+        permissionCodes: [...HELD, ...codes],
+      });
+      backend();
+      const user = userEvent.setup();
+      renderPage(<RolesPage />, 'zh-CN');
+      await waitForRows();
+      await user.click(within(await rowOf('Mixed')).getByRole('button', { name: '编辑' }));
+      let box = within(await dialog());
+      await waitFor(() => expect(box.getAllByRole('checkbox').length).toBeGreaterThan(0));
+      expect(box.getByText(/^这个角色含有你没有的权限：/).textContent).toBe(
+        '这个角色含有你没有的权限：USER:EXPORT，你不能保存对它的修改。',
+      );
+      expect(box.getByRole('button', { name: /保\s*存$/ })).toBeDisabled();
+      await user.click(box.getByRole('button', { name: /取\s*消$/ }));
+      await dialogsClosed();
+      await user.click(within(await rowOf('Everything')).getByRole('button', { name: '编辑' }));
+      const dialogs = await screen.findAllByRole('dialog');
+      box = within(dialogs[dialogs.length - 1]);
+      expect(box.getByText(/^这个角色含有你没有的权限：/).textContent).toBe(
+        `这个角色含有你没有的权限：${codes.slice(0, 20).join(', ')} 等共 ${codes.length} 个，你不能保存对它的修改。`,
+      );
+    });
+  });
+
+  it('does not switch anything off for a super administrator', async () => {
+    signIn('root');
+    const { user } = await load();
+    const box = await openNew(user);
+    for (const code of ['COST:VIEW', 'USER:EXPORT', 'MODERATION:REVIEW']) {
+      expect(checkbox(box, code), code).toBeEnabled();
+    }
   });
 });

@@ -5,6 +5,7 @@ import { canAccess } from './access/canAccess';
 import { buildVars } from './buildVars';
 import { AccountMenu } from './components/layout/AccountMenu';
 import { LangSwitch } from './components/layout/LangSwitch';
+import { pageTitleRender } from './components/layout/pageTitle';
 import { TabManager } from './components/layout/TabManager';
 import { ThemeSwitch } from './components/layout/ThemeSwitch';
 import { applyInitialLocale } from './locales/initLocale';
@@ -56,12 +57,16 @@ export const layout = ({ initialState }: { initialState?: InitialState }) => {
     title: buildVars.productName,
     logo: buildVars.logoUrl,
     layout: 'mix' as const,
+    // The account could not be read because the service is unreachable: nothing of the shell (menu,
+    // header) belongs to a person we cannot name yet, so the notice fills the whole page.
+    pure: !me && initialState?.unavailable === true,
     fixedHeader: true,
     fixSiderbar: true,
     siderWidth: LAYOUT.siderWidth,
     headerHeight: LAYOUT.headerHeight,
     contentStyle: { padding: LAYOUT.contentPadding },
     menu: { locale: true },
+    pageTitleRender,
     actionsRender: () => [<LangSwitch key="lang" />, <ThemeSwitch key="theme" />],
     avatarProps: { render: () => <AccountMenu /> },
     unAccessible: (

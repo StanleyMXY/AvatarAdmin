@@ -1,7 +1,13 @@
 import { apiRequest } from '../../request/apiClient';
 import type { Page } from '../../request/errors';
 
-export { ALERT_TYPES, type AlertType, alertTypeKey, isKnownAlertType } from './alertTypes';
+export {
+  ALERT_TYPES,
+  type AlertType,
+  alertDetailKey,
+  alertTypeKey,
+  isKnownAlertType,
+} from './alertTypes';
 
 export type AlertStatus = 'OPEN' | 'RESOLVED';
 

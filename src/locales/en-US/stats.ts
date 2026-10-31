@@ -24,6 +24,14 @@ const messages: Record<string, string> = {
   'stat.common.dayN': 'Day {n}',
   'stat.common.backfilled': 'Back-filled value',
   'stat.common.noPrevious': 'No comparison data',
+  'stat.common.provisional': 'Provisional',
+  'stat.common.provisional.tip': 'This day (UTC) is not over yet, so the number will still change.',
+  'stat.common.provisional.changeTip':
+    'One of the two days is not over yet (UTC), so this change is shown in grey and is not judged as a rise or a fall.',
+  'stat.common.provisional.chartNote':
+    'A hollow point is a provisional value: that day (UTC) is not over yet, so the number will still change.',
+  'stat.common.provisional.columnNote':
+    'A hollow point (a column with a dashed border) is a provisional value: that day (UTC) is not over yet, so the number will still change.',
 };
 
 export default messages;

@@ -14,6 +14,20 @@ export function isLastEnabledSuper(row: AdminUser, all: readonly AdminUser[] | n
   return enabled.length === 1 && enabled[0].id === row.id;
 }
 
+/**
+ * Is the account of this row closed to the signed-in administrator? The account of a super
+ * administrator is closed to anyone who is not one: the page offers no reset of the password or of the
+ * second factor, no disabling and no deleting on it (whoever may reset a super administrator's
+ * password can sign in as them). When it is not known that the signed-in administrator is a super
+ * one, the row stays closed. The backend decides in the end.
+ */
+export function isClosedTo(
+  row: Pick<AdminUser, 'superAdmin'>,
+  me: { superAdmin?: unknown } | undefined,
+): boolean {
+  return row.superAdmin === true && me?.superAdmin !== true;
+}
+
 export type RowProtection = { own: boolean; lastSuper: boolean };
 
 /** What the rules of the account protect on a row, for the signed-in administrator `me`. */

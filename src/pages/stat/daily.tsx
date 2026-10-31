@@ -1,6 +1,6 @@
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
-import { Alert, Button, Flex, Select, Spin, Table, Tabs, Tag, Tooltip } from 'antd';
+import { Alert, Button, Flex, Select, Spin, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
@@ -10,13 +10,15 @@ import {
   PlatformChannelFilter,
   type PlatformChannelValue,
 } from '../../components/stat/PlatformChannelFilter';
+import { ProvisionalTag } from '../../components/stat/ProvisionalTag';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
 import { getDaily } from '../../services/stats/reports';
 import type { StatDailyRow } from '../../services/stats/types';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { hasProvisionalDay, isProvisionalDay } from '../../utils/settledDay';
+import { daysBetween, lastNDaysUtc, todayUtc } from '../../utils/utcDay';
 import {
   buildDailyColumns,
   type ColumnDef,
@@ -72,6 +74,7 @@ export default function DailyReportPage() {
     void load();
   }, [load]);
 
+  const today = todayUtc();
   const columns = useMemo(() => buildDailyColumns(applied.platform), [applied.platform]);
   const viewRows = useMemo<DailyViewRow[]>(() => (rows ?? []).map(toViewRow), [rows]);
   const title = (def: ColumnDef) =>
@@ -98,6 +101,9 @@ export default function DailyReportPage() {
     render: (_: unknown, row: DailyViewRow) => (
       <>
         {formatDailyCell(def, row, intl.locale)}
+        {def.kind === 'date' && isProvisionalDay(row.statDate, today) ? (
+          <ProvisionalTag testId="provisional-row" style={{ marginInlineStart: 4 }} />
+        ) : null}
         {isBackfilledCell(def, row) ? (
           <Tag style={{ marginInlineStart: 4 }} title={t('stat.common.backfilled')}>
             {t('stat.daily.backfilled')}
@@ -207,7 +213,18 @@ export default function DailyReportPage() {
                     series={series}
                     from={applied.range.from}
                     to={applied.range.to}
+                    today={today}
                   />
+                  {series.length > 0 &&
+                  hasProvisionalDay(daysBetween(applied.range.from, applied.range.to), today) ? (
+                    <Typography.Text
+                      type="secondary"
+                      style={{ fontSize: 12 }}
+                      data-testid="provisional-chart-note"
+                    >
+                      {t('stat.common.provisional.chartNote')}
+                    </Typography.Text>
+                  ) : null}
                 </Flex>
               ),
             },

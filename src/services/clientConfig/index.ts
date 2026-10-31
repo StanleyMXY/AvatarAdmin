@@ -13,6 +13,14 @@ export async function listClientConfig(): Promise<ClientConfigItem[]> {
 }
 
 /**
+ * One key as the backend has it now. There is no read of a single key: this is `GET /client-config`
+ * and the key picked from the answer; undefined when the answer does not have it.
+ */
+export async function readClientConfigKey(key: string): Promise<ClientConfigItem | undefined> {
+  return (await listClientConfig()).find((item) => item?.key === key);
+}
+
+/**
  * `PUT /client-config/{key}` (CLIENTCONFIG:MANAGE): replaces the values of all languages of the
  * key at once; one language that does not pass refuses the lot (400 INVALID_REQUEST, `details`
  * name the language). A read-only key is refused with 400.

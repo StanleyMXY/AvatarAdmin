@@ -1,5 +1,6 @@
 import { guard } from './_core/auth';
 import { MockHttpError, ok } from './_core/http';
+import { resolveAlertsOf } from './_core/monitorData';
 import { paginateQuery } from './_core/paginate';
 import { supportStore } from './_core/supportData';
 
@@ -18,6 +19,8 @@ export default {
   'GET /api/admin/support/feedback/:id': guard('SUPPORT:VIEW', (req) => ok(find(req.params.id))),
 
   // Contract 12: only a FAILED feedback can be forwarded again; it goes back to PENDING, failures cleared.
+  // In the same step the backend closes the open forwarding alert of that feedback; a retry that
+  // changes nothing (404, 409) leaves the alert open.
   'POST /api/admin/support/feedback/:id/retry': guard('SUPPORT:MANAGE', (req) => {
     const row = find(req.params.id);
     if (row.forwardStatus !== 'FAILED') {
@@ -28,6 +31,7 @@ export default {
     row.forwardStatus = 'PENDING';
     row.attempts = 0;
     row.nextAttemptAt = null;
+    resolveAlertsOf('SUPPORT_FEEDBACK', row.id);
     return ok(null);
   }),
 };

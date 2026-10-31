@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { PermissionCode } from '../src/access/permissionCodes';
+import { resetConfigStore, saved } from './_core/configStore';
 import { BATCH, costState, MODEL, resetCostStore } from './_core/costData';
 import type { MockReq, MockRes } from './_core/http';
 import { issueToken, resetStore } from './_core/store';
@@ -9,6 +10,7 @@ import cost from './cost.mock';
 beforeEach(() => {
   resetStore();
   resetCostStore();
+  resetConfigStore();
 });
 
 type H = (req: MockReq, res: MockRes) => unknown;
@@ -536,5 +538,65 @@ describe('the sample data', () => {
     await write(RETIRE, { batchId: BATCH.activeLlm }, { note: 'x' });
     resetCostStore();
     expect(costState.batches.find((b) => b.batchId === BATCH.activeLlm)?.status).toBe('ACTIVE');
+  });
+});
+
+describe('the final currency of a confirmed batch must be in usage_price.allowed_currencies', () => {
+  const ALLOWED = 'usage_price.allowed_currencies';
+  const allow = (...codes: string[]) =>
+    saved.set(ALLOWED, { value: codes, updatedAt: '', updatedBy: '', updatedByUsername: '' });
+  const statusOf = (id: string) => costState.batches.find((b) => b.batchId === id)?.status;
+  const pending = (id: string) => costState.batches.find((b) => b.batchId === id);
+
+  it('refuses a batch whose own currency is not allowed when the body gives none, and the batch stays PENDING_REVIEW', async () => {
+    (pending(BATCH.pendingImage) as { currency: string }).currency = 'EUR';
+    const answer = await write(CONFIRM, { batchId: BATCH.pendingImage }, {});
+    expect(answer.status).toBe(400);
+    expect(answer.body.code).toBe('INVALID_REQUEST');
+    expect(answer.body.message).toBe('currency must be one of usage_price.allowed_currencies');
+    expect(answer.body.data.details).toEqual([{ ref: 'currency', reason: 'OUT_OF_RANGE' }]);
+    expect(statusOf(BATCH.pendingImage)).toBe('PENDING_REVIEW');
+  });
+
+  it('takes a currency of the body that is allowed, even where the batch has another one', async () => {
+    (pending(BATCH.pendingImage) as { currency: string }).currency = 'EUR';
+    const answer = await write(CONFIRM, { batchId: BATCH.pendingImage }, { currency: 'USD' });
+    expect(answer.status).toBe(200);
+    expect(pending(BATCH.pendingImage)).toMatchObject({ status: 'ACTIVE', currency: 'USD' });
+  });
+
+  it('reads the list from the setting: a currency added to it is accepted, a currency taken out is refused', async () => {
+    allow('USD', 'EUR');
+    expect((await write(CONFIRM, { batchId: BATCH.pendingLlm }, { currency: 'EUR' })).status).toBe(
+      200,
+    );
+    allow('EUR');
+    const refused = await write(CONFIRM, { batchId: BATCH.pendingImage }, {});
+    expect(refused.status).toBe(400);
+    expect(refused.body.data.details).toEqual([{ ref: 'currency', reason: 'OUT_OF_RANGE' }]);
+    expect(statusOf(BATCH.pendingImage)).toBe('PENDING_REVIEW');
+  });
+
+  it('checks in the order: the batch (404), the date, the currency, the bands of an LLM price, then the state (409)', async () => {
+    const bad = { effectiveFrom: '2026-02-30', currency: 'EUR' };
+    expect((await write(CONFIRM, { batchId: 'nope' }, bad)).status).toBe(404);
+    const date = await write(CONFIRM, { batchId: BATCH.pendingGap }, bad);
+    expect(date.body.data.details).toEqual([{ ref: 'effectiveFrom', reason: 'OUT_OF_RANGE' }]);
+    const currency = await write(CONFIRM, { batchId: BATCH.pendingGap }, { currency: 'EUR' });
+    expect(currency.body.data.details).toEqual([{ ref: 'currency', reason: 'OUT_OF_RANGE' }]);
+    const bands = await write(CONFIRM, { batchId: BATCH.pendingGap }, {});
+    expect(bands.body.data.details[0].ref).toBe('bands');
+    // a batch that is not pending answers the currency first, and 409 only for a good body
+    const activeBad = await write(CONFIRM, { batchId: BATCH.activeLlm }, { currency: 'EUR' });
+    expect(activeBad.status).toBe(400);
+    const activeGood = await write(CONFIRM, { batchId: BATCH.activeLlm }, { currency: 'USD' });
+    expect(activeGood.status).toBe(409);
+    expect(activeGood.body.data).toEqual({ status: 'ACTIVE' });
+  });
+
+  it('keeps the batch exactly as it was when the currency is refused', async () => {
+    const before = JSON.stringify(pending(BATCH.pendingLlm));
+    await write(CONFIRM, { batchId: BATCH.pendingLlm }, { currency: 'THB' });
+    expect(JSON.stringify(pending(BATCH.pendingLlm))).toBe(before);
   });
 });

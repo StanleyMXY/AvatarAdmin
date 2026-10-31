@@ -1,5 +1,5 @@
 import { useAccess, useIntl } from '@umijs/max';
-import { App, Button, Flex, Typography } from 'antd';
+import { Alert, App, Button, Flex, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
@@ -135,6 +135,12 @@ export function CostsTab({ campaigns, settings }: Props) {
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
         {t('campaign.costs.note')}
       </Typography.Paragraph>
+      <Alert
+        type="info"
+        showIcon
+        data-testid="campaign-costs-currency-lock"
+        title={t('campaign.costs.currencyLock')}
+      />
       <Flex gap={12} wrap align="center" justify="space-between">
         <Flex gap={12} wrap align="center">
           <CampaignSelect

@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, InputNumber, Modal, Typography } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdPlacement, type PlacementPatch, updatePlacement } from '../../services/ads';
 import { DASH } from '../../utils/ratio';
@@ -112,6 +113,7 @@ export function PlacementModal({ open, placement, onClose, onSaved }: Props) {
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="frequencyCap"
           label={t('ads.placements.field.frequencyCap')}

@@ -86,6 +86,7 @@ export function TrendSection({ daily, retention }: Props) {
         }),
       theme,
       singleDay: range.from === range.to,
+      today,
     });
   };
   const chart = buildChart();

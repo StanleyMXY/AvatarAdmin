@@ -69,7 +69,7 @@ describe('the channels', () => {
       smsType: 'OTP' as const,
       priority: 10,
       enabled: false,
-      credentials: 'typed-secret',
+      credentials: { apiKey: 'typed-secret', ผู้ใช้: 'ñandú' },
     };
     await createChannel(input);
     expect([calls[0].init.method, new URL(calls[0].url, 'http://x').pathname]).toEqual([

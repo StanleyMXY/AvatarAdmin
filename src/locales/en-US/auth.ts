@@ -6,6 +6,8 @@ const messages: Record<string, string> = {
   'auth.login.usernameRequired': 'Enter your user name',
   'auth.login.passwordRequired': 'Enter your password',
   'auth.login.totpRequired': 'Enter the verification code',
+  'auth.login.totpInvalid':
+    'The verification code is wrong, already used or expired, or your authenticator cannot be checked. If it keeps failing, ask a super administrator to reset your two-factor authentication.',
   'auth.login.totpHint': 'Enter the code shown in your authenticator',
   'auth.login.submit': 'Sign in',
   'auth.login.locked':

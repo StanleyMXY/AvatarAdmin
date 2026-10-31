@@ -14,7 +14,7 @@ import {
 } from '../../services/memory';
 import { describeFailure } from '../../session/describe';
 import { formatInstant } from '../../utils/format';
-import { DASH } from '../../utils/ratio';
+import { DASH, formatCount } from '../../utils/ratio';
 
 type Props = {
   accountId: string;
@@ -187,6 +187,22 @@ export default function AccountMemoryTab({ accountId, accountStatus }: Props) {
         <Typography.Title level={5} style={{ margin: 0 }}>
           {t('memory.account.history')}
         </Typography.Title>
+        {memory.truncated === true ? (
+          <Alert
+            type="info"
+            showIcon
+            title={
+              typeof memory.totalCount === 'number' && Number.isFinite(memory.totalCount)
+                ? t('memory.account.truncated', {
+                    shown: formatCount(history.length, intl.locale),
+                    total: formatCount(memory.totalCount, intl.locale),
+                  })
+                : t('memory.account.truncatedNoTotal', {
+                    shown: formatCount(history.length, intl.locale),
+                  })
+            }
+          />
+        ) : null}
         <div data-testid="assignment-history">
           <Table<EmbeddingAssignment>
             rowKey={(row) => `${row.modelName}|${row.assignedAt}`}

@@ -82,6 +82,18 @@ export const isDirty = (rows: RuleRow[], saved: RuleRow[]): boolean =>
   JSON.stringify(toInputs(rows)) !== JSON.stringify(toInputs(saved));
 
 /**
+ * Whether two readings of the list are the same list: the same rules, with the same ids and
+ * contents, in the same order. The backend sends no time for the list, so the content is the version.
+ */
+export const sameRules = (a: RuleRow[], b: RuleRow[]): boolean => {
+  const content = (rows: RuleRow[]) =>
+    JSON.stringify(
+      rows.map((row) => [row.id ?? null, row.pattern, row.matchMode, row.level, row.note]),
+    );
+  return content(a) === content(b);
+};
+
+/**
  * Sorts the details of a refused save: a number is the index of an element of the list that was
  * sent (contract 11.2), `items` is the list as a whole (too many rules). Anything else is returned
  * as `other`.

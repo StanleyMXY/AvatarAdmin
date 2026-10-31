@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AdminUser } from '../../services/system';
-import { checkNewPassword, isLastEnabledSuper, rowProtection } from './adminRules';
+import { checkNewPassword, isClosedTo, isLastEnabledSuper, rowProtection } from './adminRules';
 
 const admin = (id: string, over: Partial<AdminUser> = {}): AdminUser => ({
   id,
@@ -47,6 +47,33 @@ describe('what is protected on a row', () => {
     expect(rowProtection(all[1], { id: '2' }, all)).toEqual({ own: true, lastSuper: false });
     expect(rowProtection(all[1], { id: '9' }, all)).toEqual({ own: false, lastSuper: false });
     expect(rowProtection(all[1], undefined, all)).toEqual({ own: true, lastSuper: false });
+  });
+});
+
+describe('the row of a super administrator is closed to anyone who is not one', () => {
+  const root = admin('1', { superAdmin: true });
+  const plain = admin('2');
+
+  it('is closed when the row is a super administrator and the signed-in administrator is not', () => {
+    expect(isClosedTo(root, { superAdmin: false })).toBe(true);
+  });
+
+  it('is open to a super administrator, and the row of an ordinary administrator is open to everyone', () => {
+    expect(isClosedTo(root, { superAdmin: true })).toBe(false);
+    expect(isClosedTo(plain, { superAdmin: false })).toBe(false);
+    expect(isClosedTo(plain, { superAdmin: true })).toBe(false);
+  });
+
+  it('stays closed when it is not known that the signed-in administrator is a super one', () => {
+    expect(isClosedTo(root, undefined)).toBe(true);
+    expect(isClosedTo(root, {})).toBe(true);
+    expect(isClosedTo(root, { superAdmin: 'true' })).toBe(true);
+    expect(isClosedTo(root, { superAdmin: 1 })).toBe(true);
+    expect(isClosedTo(root, { superAdmin: null })).toBe(true);
+  });
+
+  it('is open on a row that does not say it is a super administrator', () => {
+    expect(isClosedTo({ superAdmin: undefined as never }, { superAdmin: false })).toBe(false);
   });
 });
 

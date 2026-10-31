@@ -96,19 +96,32 @@ function refuseLastChannel(before: MockChannel, after: MockChannel | null) {
   }
 }
 
+/** The template every country falls back to for codes: enabled, OTP, language en (any case), no country. */
+const isEnglishFallback = (t: Pick<MockTemplate, 'enabled' | 'smsType' | 'locale' | 'country'>) =>
+  t.enabled && t.smsType === 'OTP' && t.locale.toLowerCase() === 'en' && !t.country;
+
 function refuseLastTemplate(before: MockTemplate, after: MockTemplate | null) {
+  if (!phoneSignInMatters()) return;
+  const others = [...smsState.templates.values()].filter((t) => t.id !== before.id);
+  // The rule of the last enabled OTP template comes first, with its own message.
   const wasOtp = before.enabled && before.smsType === 'OTP';
   const stillOtp = after?.enabled === true && after.smsType === 'OTP';
-  if (!wasOtp || stillOtp) return;
-  const others = [...smsState.templates.values()].filter(
-    (t) => t.id !== before.id && t.enabled && t.smsType === 'OTP',
-  );
-  if (others.length === 0 && phoneSignInMatters()) {
+  if (wasOtp && !stillOtp && !others.some((t) => t.enabled && t.smsType === 'OTP')) {
     throw new MockHttpError(
       400,
       'INVALID_REQUEST',
       'The last enabled OTP template cannot be removed while phone sign-in is on or phone-number accounts exist',
     );
+  }
+  // Then the one that must stay: only the removal of the last qualifying template is judged, so a
+  // state that already lacks one does not stop an unrelated edit.
+  if (isEnglishFallback(before) && !(after && isEnglishFallback(after))) {
+    if (!others.some(isEnglishFallback)) {
+      throw invalidRequest(
+        'The last enabled OTP template in language en for every country (no country set) cannot be removed or changed while phone login is on or phone accounts exist',
+        [{ ref: 'SmsTemplate', reason: 'OUT_OF_RANGE' }],
+      );
+    }
   }
 }
 
@@ -163,7 +176,30 @@ function channelDetails(body: Record<string, unknown>, creating: boolean): Detai
   if (ext !== undefined && ext !== null && (typeof ext !== 'object' || Array.isArray(ext))) {
     details.push({ ref: 'extConfig', reason: 'OUT_OF_RANGE' });
   }
+  details.push(...credentialsDetail(body));
   return details;
+}
+
+/**
+ * `credentials` is a map of names to text values. A null value or a name that is empty or only
+ * blanks, and anything that is not such a map (null, text, a list), is 400 EMPTY_NOT_ALLOWED on
+ * `credentials`. An absent key or an empty map leaves the stored credentials as they are.
+ */
+function credentialsDetail(body: Record<string, unknown>): Detail[] {
+  if (!('credentials' in body)) return [];
+  const value = body.credentials;
+  const refused: Detail[] = [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return refused;
+  const whole = Object.entries(value).every(
+    ([name, text]) => trimSpec(name) !== '' && typeof text === 'string',
+  );
+  return whole ? [] : refused;
+}
+
+/** The map the body carries, or null when it carries none (absent, or empty). */
+function credentialsOf(body: Record<string, unknown>): Record<string, string> | null {
+  const value = body.credentials as Record<string, string> | undefined;
+  return value && Object.keys(value).length > 0 ? { ...value } : null;
 }
 
 const countriesOf = (value: unknown): string[] =>
@@ -314,7 +350,7 @@ export default {
       name: trimSpec(textOf(body.name)),
       providerCode: textOf(body.providerCode),
       apiUrl: trimSpec(textOf(body.apiUrl)),
-      credentials: trimSpec(textOf(body.credentials)) === '' ? null : textOf(body.credentials),
+      credentials: credentialsOf(body),
       extConfig: (body.extConfig as Record<string, unknown> | null | undefined) ?? null,
       countries: countriesOf(body.countries),
       smsType: body.smsType as MockChannel['smsType'],
@@ -344,9 +380,9 @@ export default {
       updatedAt: nowIso(),
     };
     refuseLastChannel(channel, next);
-    // A blank or missing credentials field leaves the stored ones alone.
-    if (isText(body.credentials) && trimSpec(body.credentials) !== '')
-      next.credentials = body.credentials;
+    // A missing field or an empty map leaves the stored ones alone; a map with entries replaces them all.
+    const sent = credentialsOf(body);
+    if (sent) next.credentials = sent;
     smsState.channels.set(channel.id, next);
     return ok(channelView(next));
   }),

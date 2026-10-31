@@ -290,7 +290,8 @@ describe('the list after a save', () => {
         const method = (init.method ?? 'GET').toUpperCase();
         if (method === 'GET' && String(input).endsWith('/client-config')) {
           readCount += 1;
-          if (readCount === 2) {
+          // Reads: 1 the page, 2 the check before the first save, 3 the list after that save.
+          if (readCount === 3) {
             // The read after the first save: answered with the state at that moment, but late.
             const answer = await mocked(input, init);
             const body = await answer.text();

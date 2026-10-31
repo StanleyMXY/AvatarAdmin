@@ -810,6 +810,34 @@ describe('GET /subscriptions/stats', () => {
     ).toBe(true);
   });
 
+  it('gives the list price of a Google row as a decimal string with no trailing zeros, or null with its currency; an Apple row is as before', async () => {
+    const { body } = await get('GET /api/admin/subscriptions/stats', root(), {
+      from: '2026-10-01',
+      to: '2026-10-07',
+    });
+    const items = body.data.items as {
+      store: string;
+      listPriceAmount: string | null;
+      listPriceCurrency: string | null;
+    }[];
+    const google = items.filter((r) => r.store === 'GOOGLE');
+    expect(google.length).toBeGreaterThan(0);
+    for (const r of google) {
+      expect(r.listPriceAmount === null, 'both or neither').toBe(r.listPriceCurrency === null);
+      if (r.listPriceAmount !== null) {
+        expect(typeof r.listPriceAmount).toBe('string');
+        expect(r.listPriceAmount).toMatch(/^\d+(\.\d*[1-9])?$/);
+        expect(r.listPriceCurrency).toMatch(/^[A-Z]{3}$/);
+      }
+    }
+    expect(google.some((r) => r.listPriceAmount === null)).toBe(true);
+    expect(google.some((r) => r.listPriceAmount !== null)).toBe(true);
+    const apple = items.filter((r) => r.store === 'APPLE');
+    expect(apple.map((r) => r.listPriceAmount)).toEqual(
+      expect.arrayContaining(['9.99', '1290.00']),
+    );
+  });
+
   it('refuses a range that is not days, reversed, or longer than the limit, naming the parameter', async () => {
     const bad = await get('GET /api/admin/subscriptions/stats', root(), {
       from: '2026-10-07',

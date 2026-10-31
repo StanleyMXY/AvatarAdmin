@@ -79,6 +79,8 @@ const messages: Record<string, string> = {
   'error.UNSUPPORTED_MEDIA_TYPE': '不支持该请求体的媒体类型',
   'error.DEPENDENCY_UNAVAILABLE': '依赖或配置此刻不可用',
   'error.NETWORK_ERROR': '网络连接失败，请检查网络后重试',
+  'error.REQUEST_TIMEOUT': '请求超时，请重试',
+  'error.GATEWAY_UNAVAILABLE': '服务暂时不可用，请稍后重试',
   'error.INVALID_RESPONSE': '服务器返回了无法识别的内容',
   'error.UNKNOWN': '出现未知错误',
 };

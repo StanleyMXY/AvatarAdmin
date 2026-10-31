@@ -56,6 +56,15 @@ const messages: Record<string, string> = {
   'monitor.alert.type.LIKENESS_COMPLAINT_OVERDUE': 'Likeness complaint overdue',
   'monitor.alert.type.GENERATION_CONFIG_MISSING': 'Avatar generation thresholds not configured',
   'monitor.alert.type.LOOK_PACKAGE_PREPARE_FAILED': 'Look driving package failed to prepare',
+  'monitor.alert.type.SUPPORT_FORWARD_FAILED': 'Support feedback forwarding failed',
+  'monitor.alert.type.POSTBACK_CREDENTIAL_FAILED': 'Campaign postback credential unusable',
+  'monitor.alert.type.SUBSCRIPTION_EVENT_FAILED': 'Subscription event processing failed',
+  'monitor.alert.type.STAT_RELAND_FAILED': 'Statistics re-landing failed',
+  // the fixed values of the detail column; the code stays beside the text so it can be searched for
+  'monitor.alert.detailWithCode': '{text} ({code})',
+  'monitor.alert.detail.attempts_exhausted': 'All forwarding attempts were used up',
+  'monitor.alert.detail.token_unreadable': 'The stored access token cannot be read',
+  'monitor.alert.detail.pixel_id_malformed': 'The stored pixel ID is malformed',
 };
 
 export default messages;

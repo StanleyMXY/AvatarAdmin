@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal, Select, Switch } from 'antd';
 import { useState } from 'react';
 import type { LinkTargetValue } from '../../components/LinkTargetField';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   createTemplate,
@@ -13,8 +14,8 @@ import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { contentFields } from './bodies';
 import { ContentFields } from './ContentFields';
-import { missingFor } from './coverage';
 import { failureToForm } from './formFailure';
+import { templateFailureText } from './recallRule';
 import { codeText } from './texts';
 import { useUploadSlot } from './uploadSlot';
 
@@ -31,7 +32,7 @@ type Props = {
   open: boolean;
   /** The template being edited; none means a new template. */
   template: PushTemplate | null;
-  /** Every template there is, for the check of the pair and the warning about missing languages. */
+  /** Every template there is, for the check of the pair. */
   templates: PushTemplate[];
   /** The supported languages, or `null` when they are not known. */
   locales: string[] | null;
@@ -45,7 +46,8 @@ const ALIASES = { linkType: 'link', linkTarget: 'link' };
 /**
  * New or edit template. The reason and the language are the key of a template: chosen once and then
  * fixed. A pair that has a template cannot be made again from here (the form says to edit that one).
- * Switching on while a supported language lacks a template is warned about; the backend decides.
+ * Whether a reason may be on is the backend's rule (an enabled template in the default language): the
+ * request goes out and the words of its refusal are shown.
  */
 export function TemplateModal({ open, template, templates, locales, onClose, onSaved }: Props) {
   const intl = useIntl();
@@ -57,12 +59,6 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
   const [rejected, setRejected] = useState(false);
   const picture = useUploadSlot();
   const editing = template !== null;
-
-  const reason =
-    Form.useWatch('triggerReason', form) ?? template?.triggerReason ?? RECALL_REASONS[0];
-  const locale = Form.useWatch('locale', form) ?? template?.locale ?? '';
-  const enabled = Form.useWatch('enabled', form) ?? template?.enabled ?? false;
-  const missing = missingFor(templates, locales, reason, editing ? undefined : trimSpec(locale));
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
     setFailure(null);
@@ -87,7 +83,7 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
         picture.reset();
         setRejected(true);
       }
-      setFailure(result.text);
+      setFailure(templateFailureText(intl, error));
       return;
     }
     message.success(t('push.templates.saved'));
@@ -136,6 +132,7 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="triggerReason"
           label={t('push.templates.reason')}
@@ -188,17 +185,6 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
         <Form.Item name="enabled" label={t('push.templates.enabled')} valuePropName="checked">
           <Switch />
         </Form.Item>
-        {enabled && missing.length > 0 ? (
-          <Alert
-            type="warning"
-            showIcon
-            style={{ marginBottom: 12 }}
-            title={t('push.templates.missingWarning', {
-              reason: codeText(intl, 'push.reason', reason),
-              locales: missing.join(', '),
-            })}
-          />
-        ) : null}
         {failure ? <Alert type="error" showIcon title={failure} /> : null}
       </Form>
     </Modal>

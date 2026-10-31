@@ -17,6 +17,7 @@ import {
 } from './_core/campaignData';
 import { currentValue } from './_core/configStore';
 import { invalidRequest, MockHttpError, ok } from './_core/http';
+import { resolveAlertsOf } from './_core/monitorData';
 import { paginateQuery } from './_core/paginate';
 import { between, unit } from './_core/statData';
 import { daysIn, oneOf, rangeOf, text, validDay } from './_core/statRange';
@@ -304,8 +305,15 @@ export default {
     }
     const { fields, token } = campaignFields(body, details);
     if (details.length > 0) throw fail(details);
+    // The backend closes the open postback credential alert of the campaign when the token is filled
+    // in again or a pixel id is changed (a guess for the second: docs/contract-requests/2026-10-31-admin-frontend-alerts-new-types.md).
+    const pixelChanged =
+      fields.facebookPixelId !== found.facebookPixelId ||
+      fields.googlePixelId !== found.googlePixelId ||
+      fields.tiktokPixelId !== found.tiktokPixelId;
     Object.assign(found, fields, { updatedAt: new Date().toISOString() });
     if (token !== undefined) found.facebookAccessToken = token;
+    if (token !== undefined || pixelChanged) resolveAlertsOf('ATTRIBUTION_CAMPAIGN', found.id);
     return ok(campaignRow(found));
   }),
 

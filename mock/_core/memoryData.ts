@@ -47,6 +47,8 @@ export const MEMORY_ACCOUNT_IDS = {
   pendingDeletion: '2003',
   deleting: '2004',
   banned: '2005',
+  /** More than 200 assignments: the answer keeps the newest 200 and says it is cut. */
+  manyAssignments: '2006',
 } as const;
 
 /** The hosts the registration of a model accepts when `memory.tei_allowed_hosts` is not set. */
@@ -122,6 +124,17 @@ export function resetMemoryStore(): void {
   );
   account(MEMORY_ACCOUNT_IDS.pendingDeletion, 'PENDING_DELETION', synced('default'));
   account(MEMORY_ACCOUNT_IDS.deleting, 'DELETING', synced('default'));
+  // 230 assignments, one a day backwards from yesterday, switching between two models
+  account(
+    MEMORY_ACCOUNT_IDS.manyAssignments,
+    'ACTIVE',
+    synced('premium'),
+    Array.from({ length: 230 }, (_, i) => ({
+      modelName: i % 2 === 0 ? 'bge-m3' : 'e5-base',
+      assignedBy: rootId,
+      assignedAt: daysAgoIso(1 + i),
+    })),
+  );
   account(MEMORY_ACCOUNT_IDS.banned, 'BANNED', {
     tierName: null,
     syncStatus: 'PENDING',

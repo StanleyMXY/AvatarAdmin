@@ -1,6 +1,7 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { configure, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { saved } from '../../../mock/_core/configStore';
 import { pushState } from '../../../mock/_core/pushData';
 import pushMock from '../../../mock/push.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
@@ -80,9 +81,14 @@ const fillNew = async (user: ReturnType<typeof userEvent.setup>, dialog: HTMLEle
   fireEvent.change(within(dialog).getByLabelText('Body'), { target: { value: 'نص الرسالة' } });
 };
 
-describe('the template page: the completeness matrix', { timeout: 30000 }, () => {
-  it('has a row for each recall reason and a column for each supported language, red where a template is missing', async () => {
+describe('the template page: the matrix of languages', { timeout: 30000 }, () => {
+  it('has a row for each recall reason and a column for each supported language, and marks the languages that fall back to the default language as information, not as an error', async () => {
     backend();
+    // Daily recall: Arabic is off and Thai is gone, so both fall back; English, the default, is on.
+    const daily = (locale: string) =>
+      pushState.templates.find((t) => t.triggerReason === 'daily_recall' && t.locale === locale);
+    (daily('ar') as { enabled: boolean }).enabled = false;
+    pushState.templates = pushState.templates.filter((t) => t !== daily('th'));
     renderPage(<TemplatesPage />);
     const matrix = await screen.findByTestId('coverage-matrix');
     for (const locale of ['en', 'th', 'ar']) {
@@ -90,36 +96,112 @@ describe('the template page: the completeness matrix', { timeout: 30000 }, () =>
     }
     expect(within(matrix).getByText('Daily recall')).toBeInTheDocument();
     expect(within(matrix).getByText('Streak at risk')).toBeInTheDocument();
-    // The sample data: daily recall has all three; streak at risk lacks English and Arabic.
     for (const [reason, locale, state] of [
       ['daily_recall', 'en', 'on'],
-      ['daily_recall', 'th', 'on'],
-      ['daily_recall', 'ar', 'on'],
-      ['streak_at_risk', 'th', 'off'],
-      ['streak_at_risk', 'en', 'missing'],
-      ['streak_at_risk', 'ar', 'missing'],
+      ['daily_recall', 'th', 'fallback'],
+      ['daily_recall', 'ar', 'off'],
     ] as const) {
       expect((await cell(reason, locale)).getAttribute('data-state'), `${reason} ${locale}`).toBe(
         state,
       );
     }
-    const missing = await cell('streak_at_risk', 'en');
-    expect(within(missing).getByText('Missing').closest('.ant-tag')?.className).toMatch(/error/);
+    const fallback = await cell('daily_recall', 'th');
+    const tag = within(fallback).getByText('Uses default language').closest('.ant-tag');
+    expect(tag?.className).not.toMatch(/error|warning/);
+    expect(tag?.className).toMatch(/processing|blue/);
+    // A template that is off is off, and the backend lists its language as one that falls back too.
+    expect((await cell('daily_recall', 'ar')).getAttribute('data-fallback')).toBe('true');
     expect(
-      within(await cell('daily_recall', 'en'))
-        .getByText('On')
-        .closest('.ant-tag')?.className,
-    ).not.toMatch(/error/);
+      within(await cell('daily_recall', 'ar')).getByText('Uses default language'),
+    ).toBeTruthy();
+    expect((await cell('daily_recall', 'en')).getAttribute('data-fallback')).toBe('false');
+    expect(within(matrix).queryByText('Missing')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('row-none-daily_recall')).not.toBeInTheDocument();
     // Not for the reasons that have no template of their own.
     expect(within(matrix).queryByText('Sent by an administrator')).not.toBeInTheDocument();
   });
 
-  it('shows a language that is supported but has no template at all as a red column', async () => {
+  it('marks a reason with no enabled template as such on the whole row, and writes "falls back" in none of its cells, the default language cell least of all', async () => {
+    backend();
+    renderPage(<TemplatesPage />);
+    // The sample data: streak at risk has only templates that are off, so the backend lists every language for it.
+    expect(await screen.findByTestId('row-none-streak_at_risk')).toHaveTextContent(
+      'No enabled template',
+    );
+    expect(screen.queryByTestId('row-none-daily_recall')).not.toBeInTheDocument();
+    for (const [locale, state] of [
+      ['en', 'none'],
+      ['th', 'off'],
+      ['ar', 'none'],
+    ] as const) {
+      const one = await cell('streak_at_risk', locale);
+      expect(one.getAttribute('data-state'), locale).toBe(state);
+      expect(one.getAttribute('data-fallback'), locale).toBe('false');
+    }
+    expect(
+      within(await cell('streak_at_risk', 'en')).queryByText('Uses default language'),
+    ).toBeNull();
+  });
+
+  it('takes the row mark away as soon as the reason has one enabled template, and then the other languages fall back', async () => {
+    backend();
+    const th = pushState.templates.find(
+      (t) => t.triggerReason === 'streak_at_risk' && t.locale === 'th',
+    );
+    (th as { enabled: boolean }).enabled = true;
+    renderPage(<TemplatesPage />);
+    expect((await cell('streak_at_risk', 'th')).getAttribute('data-state')).toBe('on');
+    expect(screen.queryByTestId('row-none-streak_at_risk')).not.toBeInTheDocument();
+    expect((await cell('streak_at_risk', 'en')).getAttribute('data-state')).toBe('fallback');
+    expect((await cell('streak_at_risk', 'ar')).getAttribute('data-state')).toBe('fallback');
+  });
+
+  it('says in the note that a language without an enabled template falls back to the default one, and that the default language is the only one required', async () => {
+    backend();
+    renderPage(<TemplatesPage />);
+    expect(await screen.findByText(/falls back to the default language/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/only when it has a template in every supported language/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('writes how to work with the rule at the top: the first template in the default language, the other languages in any order, the default language last, push.default_locale only after the new language is enabled', async () => {
+    backend();
+    renderPage(<TemplatesPage />);
+    const howTo = await screen.findByTestId('push-howto');
+    for (const part of [
+      'the first template of a reason that you switch on must be in the default language',
+      'in any order',
+      'switch off the other languages first and the default language last',
+      'Before you change push.default_locale, enable the template of the new language',
+      'Adding a language to app.supported_locales needs no change here',
+    ]) {
+      expect(howTo.textContent, part).toContain(part);
+    }
+  });
+
+  it('shows a language that is supported but has no template at all as falling back, the way the backend lists it', async () => {
     signIn('root', { meta: { ...META, supportedLocales: ['en', 'fr'] } });
     backend();
     renderPage(<TemplatesPage />);
-    expect((await cell('daily_recall', 'fr')).getAttribute('data-state')).toBe('missing');
-    expect((await cell('streak_at_risk', 'fr')).getAttribute('data-state')).toBe('missing');
+    expect((await cell('daily_recall', 'fr')).getAttribute('data-state')).toBe('fallback');
+    // Streak at risk has no enabled template in any supported language: the row says so instead.
+    expect((await cell('streak_at_risk', 'fr')).getAttribute('data-state')).toBe('none');
+    expect(await screen.findByTestId('row-none-streak_at_risk')).toBeInTheDocument();
+  });
+
+  it('does not decide for itself: a cell without a template that the backend does not list as falling back is neutral, and so is every cell when the backend sent no list', async () => {
+    stubFetch(() =>
+      jsonResponse(
+        200,
+        envelope('200', { items: [], total: 0, missingLocales: { daily_recall: [] } }),
+      ),
+    );
+    renderPage(<TemplatesPage />);
+    expect((await cell('daily_recall', 'en')).getAttribute('data-state')).toBe('none');
+    expect((await cell('streak_at_risk', 'en')).getAttribute('data-state')).toBe('none');
+    expect(screen.queryByText('Uses default language')).not.toBeInTheDocument();
+    expect(screen.getAllByText('No template').length).toBeGreaterThan(0);
   });
 
   it.each([
@@ -147,7 +229,7 @@ describe('the template page: the completeness matrix', { timeout: 30000 }, () =>
     backend();
     const user = userEvent.setup();
     renderPage(<TemplatesPage />);
-    expect((await cell('streak_at_risk', 'ar')).getAttribute('data-state')).toBe('missing');
+    expect((await cell('streak_at_risk', 'ar')).getAttribute('data-state')).toBe('none');
     const dialog = await openNew(user);
     await fillNew(user, dialog);
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
@@ -243,6 +325,43 @@ describe('the template page: the list', { timeout: 30000 }, () => {
     expect(
       calls.some((c) => c.url.startsWith('/api/admin/push/templates?page=1&pageSize=200')),
     ).toBe(true);
+  });
+});
+
+describe('the template page: an answer without total', { timeout: 60000 }, () => {
+  const grow = (count: number) => {
+    const base = pushState.templates.find((t) => t.triggerReason === 'streak_at_risk');
+    if (!base) throw new Error('no sample');
+    for (let n = 0; n < count; n += 1) {
+      pushState.templates.push({ ...base, id: `x${n}`, locale: `x${String(n).padStart(2, '0')}` });
+    }
+  };
+
+  it('pages the table by what was read, and reads no more than it needs, when the backend pages but sends no total', async () => {
+    pushState.templateList = 'paged-without-total';
+    grow(34);
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<TemplatesPage />);
+    await rowOf('Hello, how are you today?');
+    expect(await screen.findByText(/1-20\D+45/)).toBeInTheDocument();
+    await user.click(screen.getByTitle('2'));
+    await waitFor(() => expect(screen.getAllByText(/21-40\D+45/).length).toBeGreaterThan(0));
+    const reads = calls.filter((c) => c.url.startsWith('/api/admin/push/templates?'));
+    expect(reads.length).toBeLessThanOrEqual(8);
+    expect(await cell('streak_at_risk', 'th')).toBeInTheDocument();
+  });
+
+  it('does not loop and shows every template when the backend does not page at all', async () => {
+    pushState.templateList = 'unpaged-without-total';
+    grow(34);
+    const calls = backend();
+    renderPage(<TemplatesPage />);
+    await rowOf('Hello, how are you today?');
+    expect(await screen.findByText(/1-20\D+45/)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 300));
+    const reads = calls.filter((c) => c.url.startsWith('/api/admin/push/templates?'));
+    expect(reads.length).toBeLessThanOrEqual(6);
   });
 });
 
@@ -571,63 +690,62 @@ describe('the template page: the link', { timeout: 60000 }, () => {
   });
 });
 
-describe('the template page: switching on', { timeout: 60000 }, () => {
-  it('warns in the dialog, naming the languages, when the reason lacks a template, and still lets the backend decide', async () => {
+describe('the template page: the rule of the default language', { timeout: 60000 }, () => {
+  const RULE_EN =
+    /Streak at risk needs an enabled template in the default language \(en\)\. Enable that one first\. To switch it off, delete it or change it, first switch off the other languages of Streak at risk\. If it is the only enabled template, keep it in en and enabled, and create the other language as a new template\./;
+  const streakTh = () =>
+    pushState.templates.find((t) => t.locale === 'th' && t.triggerReason === 'streak_at_risk');
+
+  // A refusal comes back through the page and the toast; under a full parallel run one second is not enough to see it.
+  beforeEach(() => configure({ asyncUtilTimeout: 6000 }));
+  afterEach(() => configure({ asyncUtilTimeout: 1000 }));
+
+  it('does not warn beforehand in the dialog: it sends the request, and the backend decides, in the words of the code with the default language and the reason of its answer', async () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<TemplatesPage />);
     const row = await rowOf('ขอบคุณสำหรับความช่วยเหลือของคุณ');
     await user.click(within(row).getByRole('button', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).queryByText(/will refuse to switch it on/)).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole('switch', { name: 'Switch on' }));
-    expect(
-      await within(dialog).findByText(
-        /Streak at risk has no template in: en, ar\. The backend will refuse to switch it on/,
-      ),
-    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/will refuse|has no template in/)).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(writesOf(calls)[0]).toMatchObject({ method: 'PUT', body: { enabled: true } });
-    // The backend refused: the dialog stays open and says so.
-    expect(
-      await within(dialog).findByText(
-        'Some input is not valid. Please check the fields and try again.',
-      ),
-    ).toBeInTheDocument();
-    expect(
-      pushState.templates.find((t) => t.locale === 'th' && t.triggerReason === 'streak_at_risk')
-        ?.enabled,
-    ).toBe(false);
+    // The backend refused: the dialog stays open and says what to do, without the backend's own sentence.
+    expect(await within(dialog).findByText(RULE_EN)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('enable or restore it first');
+    expect(document.body.textContent).not.toContain('Some input is not valid');
+    expect(streakTh()?.enabled).toBe(false);
   });
 
-  it('does not warn when every supported language has a template, and the backend accepts', async () => {
-    signIn('root', { meta: { ...META, supportedLocales: ['th', 'id'] } });
+  it('lets the default language be switched on first and any other language after it, in the dialog', async () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<TemplatesPage />);
-    const row = await rowOf('ขอบคุณสำหรับความช่วยเหลือของคุณ');
-    await user.click(within(row).getByRole('button', { name: 'Edit' }));
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await openNew(user);
+    await chooseOption(user, 'Trigger reason', 'Streak at risk', dialog);
+    await chooseOption(user, 'Language', 'en', dialog);
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Keep it up' } });
+    fireEvent.change(within(dialog).getByLabelText('Body'), { target: { value: 'Come back' } });
     await user.click(within(dialog).getByRole('switch', { name: 'Switch on' }));
-    expect(within(dialog).queryByText(/will refuse to switch it on/)).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     await dialogsClosed();
-    expect(
-      pushState.templates.find((t) => t.locale === 'th' && t.triggerReason === 'streak_at_risk')
-        ?.enabled,
-    ).toBe(true);
+    expect((await cell('streak_at_risk', 'en')).getAttribute('data-state')).toBe('on');
+    // Thai may be switched on now.
+    fireEvent.click(within(await rowOf('ขอบคุณสำหรับความช่วยเหลือของคุณ')).getByRole('switch'));
+    await waitFor(() => expect(streakTh()?.enabled).toBe(true));
+    await waitFor(async () =>
+      expect((await cell('streak_at_risk', 'th')).getAttribute('data-state')).toBe('on'),
+    );
   });
 
-  it('the switch in the list sends one PUT with the words as they are, warns first when a language is missing, and shows what the backend holds', async () => {
+  it('the switch in the list sends one PUT with the words as they are, says why in the words of the code when the backend refuses, and shows what the backend holds', async () => {
     const calls = backend();
     renderPage(<TemplatesPage />);
     const row = await rowOf('ขอบคุณสำหรับความช่วยเหลือของคุณ');
     fireEvent.click(within(row).getByRole('switch'));
-    expect(
-      await screen.findByText(/Streak at risk has no template in: en, ar/),
-    ).toBeInTheDocument();
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(writesOf(calls)[0]).toMatchObject({
       method: 'PUT',
@@ -639,6 +757,7 @@ describe('the template page: switching on', { timeout: 60000 }, () => {
       },
     });
     expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('imageUploadId');
+    expect(await screen.findByText(RULE_EN)).toBeInTheDocument();
     // refused: the switch is back off
     await waitFor(async () =>
       expect(
@@ -647,6 +766,103 @@ describe('the template page: switching on', { timeout: 60000 }, () => {
           .getAttribute('aria-checked'),
       ).toBe('false'),
     );
+  });
+
+  it('refuses in the list to switch off or delete the default language template while another language is on, and keeps the row on', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<TemplatesPage />);
+    const row = await rowOf('Hello, how are you today?');
+    fireEvent.click(within(row).getByRole('switch'));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(
+      await screen.findByText(
+        /Daily recall needs an enabled template in the default language \(en\)/,
+      ),
+    ).toBeInTheDocument();
+    await user.click(
+      within(await rowOf('Hello, how are you today?')).getByRole('button', { name: 'Delete' }),
+    );
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
+    expect(writesOf(calls)[1].method).toBe('DELETE');
+    // one message for the switch and one for the delete
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(
+          /Daily recall needs an enabled template in the default language \(en\)/,
+        ),
+      ).toHaveLength(2),
+    );
+    expect(
+      pushState.templates.some((t) => t.locale === 'en' && t.triggerReason === 'daily_recall'),
+    ).toBe(true);
+    expect(
+      (await rowOf('Hello, how are you today?')).querySelector('[role="switch"]'),
+    ).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('shows the same text in Chinese with the default language and the reason of the answer', async () => {
+    backend();
+    renderPage(<TemplatesPage />, 'zh-CN');
+    fireEvent.click(within(await rowOf('Hello, how are you today?')).getByRole('switch'));
+    expect(
+      await screen.findByText(
+        '触发原因“每日召回”需要默认语言 en 的启用模板。先启用默认语言的模板；要停用、删除或改掉它，先停用“每日召回”下其他语言的模板；它是唯一启用的模板时，保持它为 en 并启用，另建其他语言的新模板。',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('names the default language the backend names, whatever it is', async () => {
+    saved.set('push.default_locale', {
+      value: 'th',
+      updatedAt: '2026-10-26T10:00:00Z',
+      updatedBy: '1',
+      updatedByUsername: 'root',
+    });
+    const calls = backend();
+    renderPage(<TemplatesPage />);
+    // Thai is the default language now: its template of daily recall cannot go while the others are on.
+    fireEvent.click(within(await rowOf('สวัสดีครับ วันนี้อากาศดีมาก')).getByRole('switch'));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(
+      await screen.findByText(
+        /Daily recall needs an enabled template in the default language \(th\)/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('says the words of the code for a refusal that has no default language to name, and never the message of the backend', async () => {
+    stubFetch((call) =>
+      call.url.includes('/push/templates') && call.init.method === 'PUT'
+        ? jsonResponse(400, envelope('INVALID_REQUEST', { some: 'thing' }, 'SECRET BACKEND WORDS'))
+        : jsonResponse(
+            200,
+            envelope('200', {
+              items: [
+                {
+                  id: '1',
+                  triggerReason: 'daily_recall',
+                  locale: 'en',
+                  title: 'Plain title',
+                  body: 'plain body',
+                  linkType: 'NONE',
+                  linkTarget: null,
+                  imageUrl: null,
+                  enabled: true,
+                },
+              ],
+              total: 1,
+              missingLocales: { daily_recall: [], streak_at_risk: ['en'] },
+            }),
+          ),
+    );
+    renderPage(<TemplatesPage />);
+    fireEvent.click(within(await rowOf('Plain title')).getByRole('switch'));
+    expect(
+      await screen.findByText(/Some input is not valid\. Please check the fields and try again\./),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
 
   it('turns a template off with one PUT', async () => {
@@ -700,7 +916,7 @@ describe('the template page: edit and delete', { timeout: 60000 }, () => {
     expect(await screen.findByText('Tiêu đề mới')).toBeInTheDocument();
   });
 
-  it('asks in the row before it deletes, then deletes and reads the list and the matrix again', async () => {
+  it('asks in the row before it deletes a template of another language, then deletes and reads the list and the matrix again', async () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<TemplatesPage />);
@@ -713,7 +929,7 @@ describe('the template page: edit and delete', { timeout: 60000 }, () => {
     expect(writesOf(calls)[0].method).toBe('DELETE');
     await waitFor(() => expect(screen.queryByText('مرحبا بك في التطبيق')).not.toBeInTheDocument());
     await waitFor(async () =>
-      expect((await cell('daily_recall', 'ar')).getAttribute('data-state')).toBe('missing'),
+      expect((await cell('daily_recall', 'ar')).getAttribute('data-state')).toBe('fallback'),
     );
   });
 
@@ -753,6 +969,21 @@ describe('the template page: Chinese texts', { timeout: 30000 }, () => {
     renderPage(<TemplatesPage />, 'zh-CN');
     expect(await screen.findByText('各语言的完整性')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /新建模板/ })).toBeInTheDocument();
-    expect((await cell('streak_at_risk', 'en')).textContent).toBe('缺失');
+    expect(await screen.findByTestId('row-none-streak_at_risk')).toHaveTextContent(
+      '没有启用的模板',
+    );
+    expect((await cell('streak_at_risk', 'en')).textContent).toBe('没有模板');
+  });
+
+  it('writes in Chinese how to work with the rule, and marks a language that falls back', async () => {
+    backend();
+    pushState.templates = pushState.templates.filter(
+      (t) => !(t.triggerReason === 'daily_recall' && t.locale === 'ar'),
+    );
+    renderPage(<TemplatesPage />, 'zh-CN');
+    expect((await cell('daily_recall', 'ar')).textContent).toBe('回退到默认语言');
+    const howTo = await screen.findByTestId('push-howto');
+    expect(howTo.textContent).toContain('先停其他语言，最后停默认语言');
+    expect(howTo.textContent).toContain('push.default_locale');
   });
 });

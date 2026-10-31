@@ -87,7 +87,7 @@ describe('the templates', () => {
         envelope('200', { items: all.slice((page - 1) * 200, page * 200), total: 450 }),
       );
     });
-    const rows = await listAllTemplates();
+    const { items: rows } = await listAllTemplates();
     expect(rows).toHaveLength(450);
     expect(calls.map((c) => c.url)).toEqual([
       '/api/admin/push/templates?page=1&pageSize=200',
@@ -98,9 +98,105 @@ describe('the templates', () => {
 
   it('stops reading pages when a page comes back empty, so a wrong total cannot loop for ever', async () => {
     const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: [], total: 999 })));
-    expect(await listAllTemplates()).toEqual([]);
+    expect(await listAllTemplates()).toEqual({ items: [], missingLocales: null });
     expect(calls).toHaveLength(1);
   });
+
+  describe('an answer without total (the list of the backend has none: contract a14)', () => {
+    const rowsOf = (n: number) => Array.from({ length: n }, (_, i) => ({ id: String(i) }));
+    const pageOf = (call: { url: string }) => {
+      const query = new URL(call.url, 'http://x').searchParams;
+      return { page: Number(query.get('page')), size: Number(query.get('pageSize')) };
+    };
+
+    it('reads pages until one is shorter than the page size, and does not ask for one more', async () => {
+      const all = rowsOf(450);
+      const calls = stubFetch((call) => {
+        const { page, size } = pageOf(call);
+        return jsonResponse(
+          200,
+          envelope('200', { items: all.slice((page - 1) * size, page * size) }),
+        );
+      });
+      const { items } = await listAllTemplates();
+      expect(items).toHaveLength(450);
+      expect(calls).toHaveLength(3);
+    });
+
+    it('stops after one request when the first page is short', async () => {
+      const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: rowsOf(3) })));
+      expect((await listAllTemplates()).items).toHaveLength(3);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('stops when a backend that does not page answers the whole list for every page, and keeps each row once', async () => {
+      const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: rowsOf(250) })));
+      const { items } = await listAllTemplates();
+      expect(items).toHaveLength(250);
+      expect(calls.length).toBeLessThanOrEqual(2);
+    });
+
+    it('stops at a page that brings no row it has not seen, however long the pages are', async () => {
+      const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: rowsOf(200) })));
+      expect((await listAllTemplates()).items).toHaveLength(200);
+      expect(calls.length).toBeLessThanOrEqual(2);
+    });
+
+    it('takes a total that is not a number as no total', async () => {
+      let asked = 0;
+      stubFetch(() => {
+        asked += 1;
+        // The same two rows for the first pages, then nothing: a total taken at its word would read all of them.
+        return jsonResponse(
+          200,
+          envelope('200', asked <= 3 ? { items: rowsOf(2), total: '99' } : { items: [] }),
+        );
+      });
+      expect((await listAllTemplates()).items).toHaveLength(2);
+      expect(asked).toBe(1);
+    });
+  });
+
+  it('keeps missingLocales of the answer next to the rows: the languages without an enabled template, for each recall reason', async () => {
+    const missing = { daily_recall: ['th', 'ar'], streak_at_risk: ['en', 'th', 'ar'] };
+    stubFetch(() =>
+      jsonResponse(
+        200,
+        envelope('200', { items: [{ id: '1' }], total: 1, missingLocales: missing }),
+      ),
+    );
+    expect(await listAllTemplates()).toEqual({ items: [{ id: '1' }], missingLocales: missing });
+    expect((await listTemplates({ page: 1, pageSize: 20 })).missingLocales).toEqual(missing);
+  });
+
+  it.each([
+    ['is missing', undefined],
+    ['is null', null],
+    ['is a list', ['th']],
+    ['is text', 'th'],
+  ])(
+    'takes missingLocales as unknown when it %s, and keeps only the reasons whose value is a list of texts',
+    async (_name, value) => {
+      stubFetch(() =>
+        jsonResponse(200, envelope('200', { items: [], total: 0, missingLocales: value })),
+      );
+      expect((await listAllTemplates()).missingLocales).toBeNull();
+      stubFetch(() =>
+        jsonResponse(
+          200,
+          envelope('200', {
+            items: [],
+            total: 0,
+            missingLocales: { daily_recall: ['th', 7, 'ar'], streak_at_risk: 'en', other: [] },
+          }),
+        ),
+      );
+      expect((await listAllTemplates()).missingLocales).toEqual({
+        daily_recall: ['th', 'ar'],
+        other: [],
+      });
+    },
+  );
 });
 
 describe('the manual tasks', () => {

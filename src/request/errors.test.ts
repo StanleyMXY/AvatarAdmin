@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError, describeError, type Page } from './errors';
+import {
+  ApiError,
+  describeError,
+  isOutcomeUnknown,
+  isServiceUnreachable,
+  networkError,
+  type Page,
+  timeoutError,
+} from './errors';
 
 const dict: Record<string, string> = {
   'error.INVALID_REQUEST': 'Some input is not valid',
@@ -132,5 +140,39 @@ describe('Page', () => {
   it('is a list with a total', () => {
     const page: Page<{ id: string }> = { items: [{ id: 'a' }], total: 1 };
     expect(page.total).toBe(1);
+  });
+});
+
+const answered = (code: string, httpStatus: number) =>
+  new ApiError({ code, httpStatus, message: '', data: null });
+
+describe('isOutcomeUnknown', () => {
+  it('is true when no answer of the backend came back: network, time limit, gateway page, unreadable answer', () => {
+    expect(isOutcomeUnknown(networkError())).toBe(true);
+    expect(isOutcomeUnknown(timeoutError())).toBe(true);
+    for (const status of [502, 503, 504]) {
+      expect(isOutcomeUnknown(answered('GATEWAY_UNAVAILABLE', status))).toBe(true);
+    }
+    expect(isOutcomeUnknown(answered('INVALID_RESPONSE', 200))).toBe(true);
+  });
+
+  it('is false when the backend itself said what happened', () => {
+    expect(isOutcomeUnknown(answered('INVALID_REQUEST', 400))).toBe(false);
+    expect(isOutcomeUnknown(answered('ADMIN_FORBIDDEN', 403))).toBe(false);
+    expect(isOutcomeUnknown(answered('RATE_LIMITED', 429))).toBe(false);
+    expect(isOutcomeUnknown(answered('INTERNAL_ERROR', 500))).toBe(false);
+  });
+});
+
+describe('isServiceUnreachable', () => {
+  it('is true for network, time limit and the gateway page, and only for those', () => {
+    expect(isServiceUnreachable(networkError())).toBe(true);
+    expect(isServiceUnreachable(timeoutError())).toBe(true);
+    expect(isServiceUnreachable(answered('GATEWAY_UNAVAILABLE', 504))).toBe(true);
+    expect(isServiceUnreachable(answered('ADMIN_INVALID_TOKEN', 401))).toBe(false);
+    expect(isServiceUnreachable(answered('INTERNAL_ERROR', 500))).toBe(false);
+    expect(isServiceUnreachable(answered('INVALID_RESPONSE', 200))).toBe(false);
+    expect(isServiceUnreachable(new Error('x'))).toBe(false);
+    expect(isServiceUnreachable(undefined)).toBe(false);
   });
 });

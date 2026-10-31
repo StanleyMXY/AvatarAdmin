@@ -1,4 +1,7 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { App } from 'antd';
+import type { ReactElement } from 'react';
+import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetConfigStore } from '../../../mock/_core/configStore';
 import { resetStore } from '../../../mock/_core/store';
@@ -7,6 +10,8 @@ import * as configMock from '../../../mock/config.mock';
 import { signInAs, useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { resetUmiStub } from '../../../tests/stubs/umi-max';
+import enUS from '../../locales/en-US';
+import zhCN from '../../locales/zh-CN';
 import CompanionshipPage from './index';
 
 beforeEach(() => {
@@ -115,5 +120,100 @@ describe('the companionship page', () => {
     );
     expect(puts(calls)).toHaveLength(0);
     expect(document.body.textContent).not.toContain('NaN');
+  });
+
+  // antd gives a number box 90px unless told otherwise; the fixed prefix text (BONDING, CLOSE) fills
+  // that, and the box where the number goes is left 0 and 16px wide. Seen in all three themes.
+  it('gives the two stage boxes room for the prefix text and the number, not the 90px default', async () => {
+    useMockBackend(configMock);
+    renderPage(<CompanionshipPage />);
+    await bonding();
+    for (const box of [bonding(), close()]) {
+      const wrapper = (await box).closest<HTMLElement>('.ant-input-number');
+      expect(Number.parseInt(wrapper?.style.width ?? '', 10)).toBeGreaterThanOrEqual(180);
+    }
+  });
+
+  describe('when the language is switched', () => {
+    // Umi keeps the page mounted and only gives the provider new messages; it is drawn again the same way.
+    const draw = (locale: 'en-US' | 'zh-CN', ui: ReactElement) => (
+      <IntlProvider locale={locale} messages={locale === 'en-US' ? enUS : zhCN} onError={() => {}}>
+        <App>{ui}</App>
+      </IntlProvider>
+    );
+    const reads = (calls: ReturnType<typeof useMockBackend>) =>
+      calls.filter((c) => c.method === 'GET' && c.url.startsWith('/api/admin/config'));
+
+    it('does not read the values again, and keeps what was typed but not saved', async () => {
+      const calls = useMockBackend(configMock);
+      const { rerender } = render(draw('en-US', <CompanionshipPage />));
+      fireEvent.change(await bonding(), { target: { value: '99' } });
+      fireEvent.change(burst(), { target: { value: '45' } });
+      const before = reads(calls).length;
+      rerender(draw('zh-CN', <CompanionshipPage />));
+      await screen.findByRole('button', {
+        name: new RegExp(zhCN['companionship.save'].split('').join('\\s?')),
+      });
+      expect(reads(calls)).toHaveLength(before);
+      expect(screen.getByRole('spinbutton', { name: zhCN['companionship.bonding'] })).toHaveValue(
+        '99',
+      );
+      expect(screen.getByRole('spinbutton', { name: zhCN['companionship.burst'] })).toHaveValue(
+        '45',
+      );
+    });
+
+    it('writes a refusal of the typed values again in the new language', async () => {
+      const calls = useMockBackend(configMock);
+      const { rerender } = render(draw('en-US', <CompanionshipPage />));
+      fireEvent.change(await bonding(), { target: { value: '150' } });
+      fireEvent.click(save());
+      expect(await screen.findByText(enUS['reason.OUT_OF_RANGE'])).toBeInTheDocument();
+      rerender(draw('zh-CN', <CompanionshipPage />));
+      expect(await screen.findByText(zhCN['reason.OUT_OF_RANGE'])).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText(enUS['reason.OUT_OF_RANGE'])).toBeNull());
+      expect(puts(calls)).toHaveLength(0);
+    });
+
+    it('writes a failed save again in the new language, and keeps what was typed', async () => {
+      useMockBackend(configMock);
+      const { rerender } = render(draw('en-US', <CompanionshipPage />));
+      fireEvent.change(await bonding(), { target: { value: '80' } });
+      const original = globalThis.fetch;
+      vi.stubGlobal('fetch', async (input: string, init: RequestInit) => {
+        if ((init.method ?? 'GET') === 'PUT') {
+          return new Response(
+            JSON.stringify({ code: 'INTERNAL_ERROR', message: 'x', data: null }),
+            { status: 500 },
+          );
+        }
+        return original(input, init);
+      });
+      fireEvent.click(save());
+      expect(await screen.findByText(enUS['error.INTERNAL_ERROR'])).toBeInTheDocument();
+      rerender(draw('zh-CN', <CompanionshipPage />));
+      expect(await screen.findByText(zhCN['error.INTERNAL_ERROR'])).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText(enUS['error.INTERNAL_ERROR'])).toBeNull());
+      expect(screen.getByRole('spinbutton', { name: zhCN['companionship.bonding'] })).toHaveValue(
+        '80',
+      );
+    });
+
+    it('writes the failure to load again in the new language, without reading again', async () => {
+      const calls: string[] = [];
+      vi.stubGlobal('fetch', async (input: string) => {
+        calls.push(String(input));
+        return new Response(JSON.stringify({ code: 'INTERNAL_ERROR', message: 'x', data: null }), {
+          status: 500,
+        });
+      });
+      const { rerender } = render(draw('en-US', <CompanionshipPage />));
+      expect(await screen.findByText(new RegExp(enUS['error.INTERNAL_ERROR']))).toBeInTheDocument();
+      const before = calls.length;
+      rerender(draw('zh-CN', <CompanionshipPage />));
+      expect(await screen.findByText(new RegExp(zhCN['error.INTERNAL_ERROR']))).toBeInTheDocument();
+      expect(screen.queryByText(new RegExp(enUS['error.INTERNAL_ERROR']))).toBeNull();
+      expect(calls).toHaveLength(before);
+    });
   });
 });

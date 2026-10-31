@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ALERT_TYPES } from '../src/services/monitor/alertTypes';
-import { monitorStore, resetMonitorStore } from './_core/monitorData';
+import { monitorStore, raiseAlert, resetMonitorStore, resolveAlertsOf } from './_core/monitorData';
 import { issueToken, resetStore } from './_core/store';
+import { supportStore } from './_core/supportData';
 import { adminOf, bearer, call } from './_core/testing';
 import monitor from './monitor.mock';
 
@@ -96,7 +97,7 @@ describe('GET /alerts', () => {
   const list = (user: string, query: Record<string, string> = {}) =>
     get('GET /api/admin/alerts', user, query);
 
-  it('has an alert of every one of the fourteen types, newest first', async () => {
+  it('has an alert of every one of the eighteen types, newest first', async () => {
     const { body } = await list(viewer(), { pageSize: '100' });
     const types = new Set((body.data.items as { type: string }[]).map((a) => a.type));
     for (const type of ALERT_TYPES) expect(types.has(type), type).toBe(true);
@@ -147,8 +148,105 @@ describe('GET /alerts', () => {
     expect((await list(viewer(), { pageSize: '201' })).body.data.details[0].ref).toBe('pageSize');
   });
 
+  it('refuses a status or a type the backend does not know, and an empty one, which is a value', async () => {
+    for (const status of ['open', 'OPEN,RESOLVED', ' OPEN', '']) {
+      const refused = await list(viewer(), { status });
+      expect([status, refused.status, refused.body.data.details]).toEqual([
+        status,
+        400,
+        [{ ref: 'status', reason: 'OUT_OF_RANGE' }],
+      ]);
+    }
+    for (const type of ['NOT_A_TYPE', 'deletion_failed', '']) {
+      const refused = await list(viewer(), { type });
+      expect([type, refused.status, refused.body.data.details]).toEqual([
+        type,
+        400,
+        [{ ref: 'type', reason: 'OUT_OF_RANGE' }],
+      ]);
+    }
+    for (const type of ALERT_TYPES) expect((await list(viewer(), { type })).status, type).toBe(200);
+  });
+
+  it('checks the paging before the status', async () => {
+    const refused = await list(viewer(), { status: 'nope', pageSize: '201' });
+    expect(refused.body.data.details).toEqual([{ ref: 'pageSize', reason: 'OUT_OF_RANGE' }]);
+  });
+
+  it('has a forwarding alert for a feedback that failed, with the account of that feedback', async () => {
+    const alert = monitorStore.alerts.find((a) => a.type === 'SUPPORT_FORWARD_FAILED');
+    const feedback = supportStore.rows.find((r) => r.id === alert?.refId);
+    expect(alert).toMatchObject({ refType: 'SUPPORT_FEEDBACK', detail: 'attempts_exhausted' });
+    expect(feedback?.forwardStatus).toBe('FAILED');
+    expect(alert?.accountId).toBe(feedback?.accountId);
+  });
+
+  it('has the details the backend names for the other new types', async () => {
+    const of = (type: string) => monitorStore.alerts.filter((a) => a.type === type);
+    expect(
+      of('POSTBACK_CREDENTIAL_FAILED')
+        .map((a) => a.detail)
+        .sort(),
+    ).toEqual(expect.arrayContaining(['pixel_id_malformed', 'token_unreadable']));
+    expect(
+      of('POSTBACK_CREDENTIAL_FAILED').every(
+        (a) => a.refType === 'ATTRIBUTION_CAMPAIGN' && a.accountId === null,
+      ),
+    ).toBe(true);
+    expect(of('STAT_RELAND_FAILED')[0]).toMatchObject({
+      refType: 'STAT_RELAND_DAY',
+      refId: expect.stringMatching(/^[a-z-]+:\d{4}-\d{2}-\d{2}$/),
+      accountId: null,
+      detail: expect.stringMatching(/^[A-Za-z]+(\.[A-Za-z]+)*$/),
+    });
+    expect(of('SUBSCRIPTION_EVENT_FAILED').length).toBeGreaterThan(0);
+  });
+
   it('needs MONITOR:VIEW', async () => {
     expect((await list('support')).status).toBe(403);
+  });
+});
+
+describe('opening and closing alerts from the backend side', () => {
+  const key = {
+    type: 'POSTBACK_CREDENTIAL_FAILED',
+    refType: 'ATTRIBUTION_CAMPAIGN',
+    refId: 'c-77',
+  };
+  const openOf = (refId: string) =>
+    monitorStore.alerts.filter((a) => a.refId === refId && a.status === 'OPEN');
+
+  it('keeps one open alert for an object, and a later postback failure replaces its detail', () => {
+    raiseAlert({ ...key, accountId: null, detail: '190' });
+    raiseAlert({ ...key, accountId: null, detail: 'token_unreadable' });
+    raiseAlert({ ...key, accountId: null, detail: 'pixel_id_malformed' });
+    expect(openOf('c-77').map((a) => a.detail)).toEqual(['pixel_id_malformed']);
+  });
+
+  it('does not replace the detail of the other types, and opens a new alert after the old one was resolved', () => {
+    const other = {
+      type: 'SUPPORT_FORWARD_FAILED',
+      refType: 'SUPPORT_FEEDBACK',
+      refId: 'f-1',
+      accountId: '2001',
+    };
+    raiseAlert({ ...other, detail: 'attempts_exhausted' });
+    raiseAlert({ ...other, detail: 'something else' });
+    expect(openOf('f-1').map((a) => a.detail)).toEqual(['attempts_exhausted']);
+    resolveAlertsOf('SUPPORT_FEEDBACK', 'f-1');
+    expect(openOf('f-1')).toHaveLength(0);
+    raiseAlert({ ...other, detail: 'attempts_exhausted' });
+    expect(openOf('f-1')).toHaveLength(1);
+    expect(monitorStore.alerts.filter((a) => a.refId === 'f-1')).toHaveLength(2);
+  });
+
+  it('resolves only the open alerts of the object it is given, and records the time', () => {
+    const before = monitorStore.alerts.filter((a) => a.status === 'OPEN').length;
+    raiseAlert({ ...key, accountId: null, detail: '190' });
+    expect(resolveAlertsOf('ATTRIBUTION_CAMPAIGN', 'c-77')).toBe(1);
+    expect(resolveAlertsOf('ATTRIBUTION_CAMPAIGN', 'c-77')).toBe(0);
+    expect(monitorStore.alerts.filter((a) => a.status === 'OPEN')).toHaveLength(before);
+    expect(monitorStore.alerts.find((a) => a.refId === 'c-77')?.resolvedAt).not.toBeNull();
   });
 });
 

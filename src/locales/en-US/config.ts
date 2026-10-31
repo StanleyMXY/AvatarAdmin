@@ -316,7 +316,7 @@ const messages: Record<string, string> = {
     'How many days attribution and claim records without an account are kept, in days. At least 1.',
   'config.attribution.cost_currency.label': 'Ad cost currency',
   'config.attribution.cost_currency.desc':
-    'Currency of ad spend as a three-letter ISO 4217 code. The whole system uses one currency, so cost per acquisition can be calculated directly.',
+    'Currency of ad spend as a three-letter ISO 4217 code. The whole system uses one currency, so cost per acquisition can be calculated directly. It cannot be changed while any cost row exists: delete the costs one by one first, then change it.',
   'config.attribution.cost_batch_max.label': 'Cost entry batch size',
   'config.attribution.cost_batch_max.desc': 'Maximum number of rows in one bulk entry of ad costs.',
   'config.attribution.click_expired_keep_days.label': 'Expired click keep days',
@@ -369,10 +369,10 @@ const messages: Record<string, string> = {
     'The value used for the app name placeholder in email templates. After trimming spaces it must be 1 to 100 characters, or the save is rejected. The product name is not final, so a working name is used for now.',
   'config.app.supported_locales.label': 'Supported languages',
   'config.app.supported_locales.desc':
-    'Languages supported by the interface and notifications (push, in-app notifications, client config), as a list of language codes. Before adding a language, the client needs its translation and every recall trigger needs a template in it, or validation fails when a recall template is enabled.',
+    'Languages supported by the interface and notifications (push, in-app notifications, client config), as a list of language codes. A language can be added only after its notification template file ships with the app version (the check ignores case and compares the whole tag), so ship the file first and add the language afterwards. Recall templates are not needed first: a recall trigger without a template in a language falls back to the push default language.',
   'config.push.default_locale.label': 'Push default language',
   'config.push.default_locale.desc':
-    'Language used as the fallback when no template exists for the normalised language.',
+    'Language used as the fallback when no template exists for the normalised language. To change it, first enable a template in the new language for every recall reason that has an enabled template (on the push templates page), then change the default language.',
   'config.push.schedule_scan_seconds.label': 'Scheduled push scan interval',
   'config.push.schedule_scan_seconds.desc':
     'How often scheduled push jobs are looked up and created, in seconds.',
@@ -538,10 +538,10 @@ const messages: Record<string, string> = {
     'The hour of the day (UTC, 0 to 23) at which prices are synced.',
   'config.usage_price.default_currency.label': 'Default synced price currency',
   'config.usage_price.default_currency.desc':
-    'Currency of the price rows created by sync, because the price source does not provide a currency.',
+    'Currency of the price rows created by sync, because the price source does not provide a currency. It must be one of the allowed price currencies: to change it, add the new currency to the allowed list first.',
   'config.usage_price.allowed_currencies.label': 'Allowed price currencies',
   'config.usage_price.allowed_currencies.desc':
-    'Currencies allowed for price rows, as a list of currency codes. Only USD is stored and nothing is converted. A currency that is not in the list is rejected when prices are entered or confirmed.',
+    'Currencies allowed for price rows, as a list of currency codes. Only USD is stored and nothing is converted. A currency that is not in the list is rejected when prices are entered or confirmed. The default currency must stay in the list: to take it out, change the default currency first.',
   'config.usage_price.max_bands.label': 'Maximum price bands',
   'config.usage_price.max_bands.desc': 'Maximum number of bands in one price batch.',
   'config.usage_price.source_url.label': 'Price source URL',
@@ -740,6 +740,117 @@ const messages: Record<string, string> = {
   'config.notification.max_per_account.label': 'Notifications per account limit',
   'config.notification.max_per_account.desc':
     'Maximum number of in-app notifications kept for one account.',
+  'config.chat.moderation_global_concurrency.label': 'Moderation calls in flight per instance',
+  'config.chat.moderation_global_concurrency.desc':
+    "Most calls to the content moderation service in flight at once on one app or worker instance, all callers together. The time spent waiting for a free place counts against the call's own deadline (the moderation call timeout and, for chat batches, the chat moderation deadline); a call that runs out of time is treated as a moderation service timeout, so the content goes to review. The limit inside one batch (chat moderation concurrency) is separate. The limit is per instance, not shared by the cluster; a change applies from the next wait.",
+  'config.export.parallelism.label': 'Export tasks assembled at once',
+  'config.export.parallelism.desc':
+    'Most data export tasks assembled at the same time. Each task can hold two database connections. It is read when each export round starts, so a change applies from the next round.',
+  'config.ratelimit.apk_download_per_ip_per_min.label': 'APK downloads per IP per minute',
+  'config.ratelimit.apk_download_per_ip_per_min.desc':
+    "Number of APK download requests per IP address per minute. GET, HEAD and requests with a Range header each count once. Requests above it are answered 429; the app's self-update waits as the response says.",
+  'config.ratelimit.push_image_per_ip_per_min.label': 'Push image requests per IP per minute',
+  'config.ratelimit.push_image_per_ip_per_min.desc':
+    'Number of requests for push notification images per IP address per minute.',
+  'config.ratelimit.ad_media_per_ip_per_min.label': 'Ad media requests per IP per minute',
+  'config.ratelimit.ad_media_per_ip_per_min.desc':
+    'Number of requests for ad media and its thumbnails per IP address per minute. Media and thumbnail share one counter.',
+  'config.analytics.funnel_max_concurrency.label': 'Funnel calculations at once',
+  'config.analytics.funnel_max_concurrency.desc':
+    'Most funnel calculations one admin instance runs at the same time. Each reads up to 200,000 events, about 100 MB. Above it a funnel request is answered 429 and the page asks you to try again later. It is counted per instance, not for the cluster, and read on every funnel request.',
+  'config.integrity.app_attest_max_keys_per_device.label': 'Device attestation keys per device',
+  'config.integrity.app_attest_max_keys_per_device.desc':
+    'Most iOS device attestation keys one device identifier may attest within 30 days. One more is refused with 403 DEVICE_INTEGRITY_FAILED. The platform creates a new key on reinstall, restore from backup and a change of phone; a repeat of a request whose answer was lost does not count.',
+  'config.ratelimit.app_attest_challenge_per_ip_per_hour.label':
+    'Device attestation challenges per IP per hour',
+  'config.ratelimit.app_attest_challenge_per_ip_per_hour.desc':
+    'Number of device attestation challenge requests per IP address per hour. The default is three times the guest limit per IP, because creating one iOS guest takes one attestation challenge and one assertion challenge.',
+  'config.ratelimit.app_attest_key_per_ip_per_hour.label':
+    'Device attestation key registrations per IP per hour',
+  'config.ratelimit.app_attest_key_per_ip_per_hour.desc':
+    'Number of device attestation key registrations per IP address per hour. The default is the same as the guest limit per IP per hour.',
+  'config.integrity.app_attest_unsupported_allowed.label':
+    'Allow iOS devices without device attestation',
+  'config.integrity.app_attest_unsupported_allowed.desc':
+    'On (default): an iOS device that cannot use device attestation may create guest credentials and new accounts as an unattested iOS device. A device identifier that has already attested a key, and one whose guest record is Android, may not; the usual limits per IP and per device still apply. Off: such devices get 403 DEVICE_INTEGRITY_FAILED and cannot create guest credentials or new accounts. Android is not affected. Read on every check, so a change applies from the next request.',
+  'config.events.store_client_ip.label': 'Store client IP on events',
+  'config.events.store_client_ip.desc':
+    'On (default): every analytics event stores the client IP. Off: new events store no IP (the IP column of the event list is empty for them); the country is still derived from the IP, so country statistics do not change. IPs already stored stay until the event expires (event retention). Read on every write, so a change applies from the next batch.',
+  'config.ads.store_client_ip.label': 'Store client IP on ad impressions',
+  'config.ads.store_client_ip.desc':
+    'On (default): every ad impression record stores the client IP. Off: new impression records store no IP (neither does the impression metadata kept for preloading); country, platform, channel and the rest are unchanged. IPs already stored stay until the record expires (ad log retention). Read on every write, so a change applies from the next record.',
+  'config.attribution.store_click_ip.label': 'Store client IP on attribution clicks',
+  'config.attribution.store_click_ip.desc':
+    'On (default): every click of the built-in attribution stores the client IP. Off: new clicks store no IP (the IP column of the click details is empty for them). Fingerprint matching, which needs the IP, then no longer applies to these clicks, so an install can only be attributed by its click id. Stored IPs stay until the click is purged (click retention plus the days kept after expiry). This key is edited with the attribution permission. Read on every click, so a change applies from the next click.',
+  'config.chat.message_retention_days.label': 'Chat message retention',
+  'config.chat.message_retention_days.desc':
+    "How many days chat messages and the records of ended calls are kept. 0 (default) keeps them until the account is deleted. Above 0 it must be at least 32 and more than the statistics look-back days; a daily clean-up (03:30 UTC) then deletes older messages and call records, except open or unsettled sessions, messages waiting for manual review, pending text turns and rows inside the current subscription period of the account. After that the user's chat history and data export no longer hold these messages, the session list gets shorter and a deleted message under review shows no content; landed statistics and the memory service are not affected. Read on every run.",
+  'config.voice.source_sample_retention_days.label': 'Voice sample retention',
+  'config.voice.source_sample_retention_days.desc':
+    'How many days the original voice sample file (and its transcript on the task) is kept, counted from when the voice was created. 0 (default) keeps it as long as the voice lives. Above 0 a daily clean-up deletes it and the voice stays usable. After that data exports no longer hold the original recording, a voice lost in the synthesis service cannot be rebuilt from the sample, and a reported voice under review has no sample to listen to (a voice with a record waiting for review is not deleted). Read on every run.',
+  'config.guest.device_retention_days.label': 'Guest device record retention',
+  'config.guest.device_retention_days.desc':
+    'How many days a guest device record is kept after it was last seen. 0 (default) never deletes it. Above 0 it must be at least 91 plus the statistics look-back days; a daily clean-up deletes expired records (a device that still has an unfinished guest session is kept). Landed statistics do not change. Read on every run.',
+  'config.guest.device_retention_days.risk':
+    'The guest allowance is recorded on the device record. Once the record is deleted, the device is treated as a new device the next time it appears and receives a new allowance, so a period that is too short lets guests get the allowance again.',
+  'config.support.feedback_retention_days.label': 'Support feedback retention',
+  'config.support.feedback_retention_days.desc':
+    "How many days support feedback (with the user's own text) is kept, counted from when it was submitted. 0 (default) keeps it until the account is deleted. Above 0 a daily clean-up deletes it, whatever its forwarding state (waiting, forwarded, failed); feedback not forwarded yet is never forwarded once deleted, and copies already sent to a third-party support tool are in that system and cannot be deleted here. The support list shows what is left. Read on every run.",
+  'config.moderation.record_retention_days.label': 'Moderation record retention',
+  'config.moderation.record_retention_days.desc':
+    'How many days moderation records are kept, counted from when they were created. 0 (default) never deletes them. Above 0 a daily clean-up deletes them, except records waiting for review (PENDING_REVIEW). After that the moderation statistics show smaller numbers for the days deleted, because they are computed from the records, and deleted records cannot be opened. This key is edited with the moderation permission. Read on every run.',
+  'config.push.task_poll_seconds.label': 'Push task poll interval',
+  'config.push.task_poll_seconds.desc':
+    'How often the push worker looks for push tasks that are due, in seconds.',
+  'config.memory.call_timeout_seconds.label': 'Memory service call timeout',
+  'config.memory.call_timeout_seconds.desc':
+    'How long a call to the memory service may take before it is given up, in seconds.',
+  'config.attribution.postback_enabled.label': 'Conversion postback',
+  'config.attribution.postback_enabled.desc':
+    'Switch for sending the conversions of ad campaigns back to the ad platform (postback). Off by default.',
+  'config.attribution.facebook_graph_version.label': 'Ad platform API version',
+  'config.attribution.facebook_graph_version.desc':
+    'Version of the ad platform interface used for the postback, written as a v, two digits, a dot and one digit, for example v26.0.',
+  'config.ratelimit.events_per_ip_per_minute.label': 'Event uploads per IP per minute',
+  'config.ratelimit.events_per_ip_per_minute.desc':
+    'Number of event upload requests per IP address per minute. Requests above it are rate limited.',
+  'config.chat.moderation_concurrency.label': 'Moderation calls inside one chat batch',
+  'config.chat.moderation_concurrency.desc':
+    'How many calls to the moderation service one batch of chat messages makes at the same time. The limit for all calls of one instance (moderation calls in flight per instance) is separate.',
+  'config.chat.moderation_deadline_ms.label': 'Chat moderation deadline',
+  'config.chat.moderation_deadline_ms.desc':
+    'How long a batch of chat messages waits for moderation, in milliseconds (100 to 2500). When the time runs out, the content goes to review.',
+  'config.push.schedule_catchup_minutes.hint':
+    'Rule: catch-up minutes × 60 must be at least 600 + poll seconds; with the default values the catch-up must be at least 11.',
+  'config.push.task_poll_seconds.hint':
+    'Rule: catch-up minutes × 60 must be at least 600 + poll seconds; with the default values the catch-up must be at least 11.',
+  'config.app.supported_locales.reject.OUT_OF_RANGE':
+    'Not saved. Every language needs a notification template file that ships with the app version. Ship the file first, then add the language.',
+  'config.refusal.missingLanguages': 'Languages without a template file: {languages}',
+  'config.refusal.unknownReason':
+    'Not saved. The service refused this change for a reason this page has no words for yet. Check the rules in the description of the setting.',
+  'config.usage_price.default_currency.reject.OUT_OF_RANGE':
+    'The allowed currencies must contain the default currency. To change the default, add the new currency to the allowed list first; to take the current default out of the list, change the default first.',
+  'config.usage_price.allowed_currencies.reject.OUT_OF_RANGE':
+    'The allowed currencies must contain the default currency. To change the default, add the new currency to the allowed list first; to take the current default out of the list, change the default first.',
+  'config.push.schedule_catchup_minutes.reject.OUT_OF_RANGE':
+    'Not saved. The value must be 1 to 10080, and catch-up minutes × 60 must be at least 600 + the push task poll seconds (at least 11 with the default poll).',
+  'config.push.task_poll_seconds.reject.OUT_OF_RANGE':
+    'Not saved. The value must be at least 1, and catch-up minutes × 60 must stay at least 600 + these poll seconds.',
+  'config.chat.message_retention_days.reject.OUT_OF_RANGE':
+    'Not saved. Use 0 (keep until the account is deleted), or at least 32 days and more than the statistics look-back days (stats.land_window_days).',
+  'config.guest.device_retention_days.reject.OUT_OF_RANGE':
+    'Not saved. Use 0 (never delete), or at least 91 days plus the statistics look-back days (stats.land_window_days).',
+  'config.events.ttl_days.reject.OUT_OF_RANGE':
+    'Not saved. Event retention must be at least 30 days plus the statistics look-back days (stats.land_window_days).',
+  'config.stats.land_window_days.reject.OUT_OF_RANGE':
+    'Not saved. The look-back must be at least 1 and must stay below what depends on it: event retention (at least 30 plus the look-back), chat message retention (more than the look-back) and guest device retention (at least 91 plus the look-back).',
+  'config.refusal.SmsTemplate.EMPTY_NOT_ALLOWED':
+    'Phone sign-in cannot be turned on yet. There must be at least one enabled OTP SMS template in language en (not en-GB or en-US) with no country set. Add or enable one under SMS templates, then try again.',
+  'config.push.default_locale.reject.OUT_OF_RANGE':
+    'The default language cannot be changed to {lang}: these recall reasons have enabled templates but none in {lang}: {reasons}. Enable a {lang} template for each of them first.',
+  'config.push.default_locale.reject.OUT_OF_RANGE.general':
+    'The default language cannot be changed to this language yet: every recall reason with an enabled template needs an enabled template in it. Enable those templates on the push templates page first, then change the default language.',
 };
 
 export default messages;

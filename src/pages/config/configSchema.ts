@@ -1,5 +1,6 @@
 import type { PermissionCode } from '../../access/permissionCodes';
 import { validateServerLink } from '../../utils/linkRule';
+import { EXTRA_ENTRIES } from './extraConfigKeys';
 
 // One entry per operating parameter of contract 17.5 (`AppConfig`). The schema holds no default
 // value: the default of a key is whatever `GET /config` reports as `defaultValue`. Labels and
@@ -16,6 +17,10 @@ export type ConfigKeySpec = {
   group: string;
   min?: number;
   max?: number;
+  /** For a whole number that may also be 0: the smallest other value (0 means "off", for example no retention limit). */
+  zeroOrMin?: number;
+  /** For a string: the shape it must have. */
+  pattern?: RegExp;
   /** A risk the row must spell out (`config.<key>.risk`). */
   risk?: boolean;
   /** The page that has the dedicated editor of this key; the row is read-only with a link there. */
@@ -65,6 +70,7 @@ const VALIDATORS: Record<string, (value: unknown) => string | null> = {
       : 'INVALID_LANGUAGE_TAG',
 };
 
+/** The entries of the keys in contract 17.5, in the order of its table (the generated file lists the same keys). */
 const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
   {
     key: 'auth.access_ttl_minutes',
@@ -616,6 +622,9 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     kind: 'string',
     editPermission: 'ATTRIBUTION:MANAGE',
     group: 'attribution',
+    // An ISO 4217 code: three uppercase letters. The backend's answer to anything else is not
+    // written down, so the page does not send it (and its `OUT_OF_RANGE` stays the cost-row lock).
+    pattern: /^[A-Z]{3}$/,
   },
   {
     key: 'attribution.cost_batch_max',
@@ -688,6 +697,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'PUSH:CONFIG',
     group: 'recall',
     min: 1,
+    max: 1440,
   },
   {
     key: 'recall.local_send_hour',
@@ -703,6 +713,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'PUSH:CONFIG',
     group: 'recall',
     min: 1,
+    max: 1440,
   },
   {
     key: 'recall.min_gap_hours',
@@ -748,6 +759,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'PUSH:CONFIG',
     group: 'push',
     min: 1,
+    max: 10080,
   },
   { key: 'invite.reward_enabled', kind: 'bool', editPermission: 'INVITE:CONFIG', group: 'invite' },
   {
@@ -1528,9 +1540,12 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
   },
 ];
 
-export const CONFIG_SCHEMA: ConfigKeySpec[] = ENTRIES.map((entry) =>
+export const CONFIG_SCHEMA: ConfigKeySpec[] = [...ENTRIES, ...EXTRA_ENTRIES].map((entry) =>
   VALIDATORS[entry.key] ? { ...entry, validate: VALIDATORS[entry.key] } : entry,
 ) as ConfigKeySpec[];
+
+/** The keys of the backend that contract 17.5 does not list yet (see extraConfigKeys.ts). */
+export const EXTRA_CONFIG_KEYS: string[] = EXTRA_ENTRIES.map((entry) => entry.key);
 
 const BY_KEY = new Map(CONFIG_SCHEMA.map((spec) => [spec.key, spec]));
 
@@ -1561,6 +1576,8 @@ export function validateValue(spec: ConfigKeySpec, value: unknown): string | nul
       if (typeof value !== 'number' || !Number.isInteger(value)) return 'NOT_AN_INTEGER';
       if (spec.min !== undefined && value < spec.min) return 'OUT_OF_RANGE';
       if (spec.max !== undefined && value > spec.max) return 'OUT_OF_RANGE';
+      if (spec.zeroOrMin !== undefined && value !== 0 && value < spec.zeroOrMin)
+        return 'OUT_OF_RANGE';
       return null;
     }
     case 'number': {
@@ -1574,7 +1591,8 @@ export function validateValue(spec: ConfigKeySpec, value: unknown): string | nul
       return check.ok ? null : check.reasonKey;
     }
     case 'string':
-      return typeof value === 'string' ? null : 'EMPTY_NOT_ALLOWED';
+      if (typeof value !== 'string') return 'EMPTY_NOT_ALLOWED';
+      return spec.pattern && !spec.pattern.test(value) ? 'OUT_OF_RANGE' : null;
     case 'json':
       return spec.validate ? spec.validate(value) : null;
   }

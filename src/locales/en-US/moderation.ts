@@ -137,11 +137,15 @@ const messages: Record<string, string> = {
   'moderation.rules.intro':
     'Text moderation runs this list first and then calls the moderation service. The text under review is normalised before matching: letter case is ignored and zero-width characters are removed. A regular expression has a running-time budget; one that runs over it counts as matching at the level "send to review". Content that matches a rule at "block" is not sent to the moderation service. The list has at most moderation.text_rules_max rules.',
   'moderation.rules.help.SUBSTRING':
-    'Substring: matches when the text contains this string. Fits Chinese, Thai and other scripts without spaces.',
+    'Substring: matches when the text contains this string. Fits Chinese, Thai and other scripts without spaces. After normalising, look-alike letters of another script are folded and compared as the same character.',
   'moderation.rules.help.WORD':
-    'Whole word: matches only when the characters before and after are not letters or digits. Fits Latin and other scripts with spaces.',
+    'Whole word: matches only when the characters before and after are not letters or digits. Fits Latin and other scripts with spaces. After normalising, look-alike letters of another script are folded and compared as the same character.',
   'moderation.rules.help.REGEX':
-    'Regular expression: the backend checks on save whether it compiles (it uses Java syntax).',
+    'Regular expression: the backend checks on save whether it compiles (it uses Java syntax). Look-alike letters are not folded; the normalised text is matched as it is.',
+  'moderation.rules.foldingNote':
+    'Look-alike folding: after normalising, Substring and Whole word rules also fold look-alike letters of another script into one character (for example Cyrillic а, с, о, Greek ο, and the Turkish dotless ı folded to i). So the rule \u201cсука\u201d written in Cyrillic matches both \u201cсука\u201d and \u201cСУКА\u201d, and a word written with look-alike letters in place of Latin ones matches the rule written in Latin. ASCII letters and letters inside one script are not folded. Regular expression rules are not folded. Known side effects: the all-capitals Russian word КОТ matches the rule kot, and the Turkish rule sik matches \u201csık sık\u201d. On save, a Substring or Whole word text that is empty after normalising and folding (for example only zero-width characters) is refused.',
+  'moderation.rules.patternFoldsEmpty':
+    'The match text is empty once it is normalised and folded (for example it holds only zero-width characters). Write actual text.',
   'moderation.rules.index': 'No.',
   'moderation.rules.pattern': 'Match text',
   'moderation.rules.matchMode': 'Match mode',
@@ -159,6 +163,10 @@ const messages: Record<string, string> = {
     'Take this rule out of the list? It is not deleted until you press Save.',
   'moderation.rules.save': 'Save the list',
   'moderation.rules.discard': 'Discard changes',
+  'moderation.rules.conflict': 'Modified by someone else',
+  'moderation.rules.conflictDetail':
+    'The rule list was saved by someone else after you opened it, so your changes were not saved. Reload shows the list they saved; what you changed here is then dropped.',
+  'moderation.rules.conflictReload': 'Reload',
   'moderation.rules.saved': 'The list is saved',
   'moderation.rules.empty': 'The list is empty, so there is no rule layer.',
   'moderation.rules.unsaved': 'There are unsaved changes',

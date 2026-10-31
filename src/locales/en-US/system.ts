@@ -17,12 +17,17 @@ const messages: Record<string, string> = {
   'system.common.saved': 'Saved',
   'system.common.deleted': 'Deleted',
   'system.common.readFailed': 'Could not read: {message}',
+  'system.sentences': '{first} {second}',
+  'system.scopeHint':
+    'Administrators can only grant permissions they hold. You cannot change a role you hold, and you can only change roles and administrators whose permissions you all hold. Nothing was changed.',
 
   // ---- administrators ----
   'system.admins.note':
     'You cannot change your own roles, super administrator flag or status, and you cannot delete your own account. The last enabled super administrator cannot be disabled or deleted, and its flag cannot be cleared. Only a super administrator sets or clears the super administrator flag.',
   'system.admins.refusedHint':
     'The backend refuses this for your own account and for the last enabled super administrator. Nothing was changed.',
+  'system.admins.forbiddenHint':
+    'The backend refused this and nothing was changed. Possible reasons: it is your own account; administrators can only grant permissions they hold; and can only act on administrators whose permissions they all hold.',
   'system.admins.new': 'New administrator',
   'system.admins.you': 'You',
   'system.admins.col.username': 'User name',
@@ -76,6 +81,13 @@ const messages: Record<string, string> = {
   'system.admins.superNeedsSuper': 'Only a super administrator can change this.',
   'system.admins.superLast':
     'This is the last enabled super administrator: the flag cannot be cleared.',
+  'system.admins.ownResetPasswordReason':
+    'You cannot reset your own password here. To change your own password, use Change password in the account menu.',
+  'system.admins.ownResetTotpReason':
+    'You cannot reset your own two-factor authentication. Ask another administrator to do it.',
+  'system.admins.ownDisableReason': 'You cannot disable or delete your own account.',
+  'system.admins.lastSuperReason':
+    'This is the last enabled super administrator: it cannot be disabled or deleted.',
   'system.admins.ownNote':
     'This is your own account: you cannot change your own roles or super administrator flag.',
   'system.admins.createDone':
@@ -89,7 +101,7 @@ const messages: Record<string, string> = {
 
   // ---- roles ----
   'system.roles.note':
-    'The permissions of a role are replaced as a whole when you save. Checking a node checks everything below it; a node with only some of its descendants checked is half checked and is not in the role. Custom nodes can be given to a role and have no effect on any endpoint.',
+    'The permissions of a role are replaced as a whole when you save. Checking a node checks everything below it and the pages it is on. Unchecking a function keeps the page it belongs to, so a role can hold a page with only some of its functions; unchecking the page takes the page and everything below it. Custom nodes cannot be given to a role.',
   'system.roles.new': 'New role',
   'system.roles.col.name': 'Name',
   'system.roles.col.remark': 'Remark',
@@ -108,12 +120,16 @@ const messages: Record<string, string> = {
   'system.roles.treeFailed': 'The permission tree could not be read: {message}',
   'system.roles.treeRetry': 'Read again',
   'system.roles.treeLoading': 'Reading the permission tree…',
+  'system.roles.notHeld':
+    'This role has permissions you do not hold: {codes}. You cannot save changes to it.',
+  'system.roles.notHeldMany':
+    'This role has permissions you do not hold: {codes} and others, {count} in total. You cannot save changes to it.',
   'system.roles.unknownCodes':
-    'These codes of the role are not in the permission tree and will be dropped when you save: {codes}',
+    'These codes of the role cannot be given to a role (custom nodes and codes the application does not know) and will be dropped when you save: {codes}',
 
   // ---- permission tree ----
   'system.permissions.note':
-    'Custom nodes can be given to roles, to group permissions or to keep a place for pages that come later. They have no effect on the existing endpoints: the endpoints and pages check only the built-in permission codes of the system.',
+    'Custom nodes group permissions or keep a place for pages that come later. They cannot be given to roles and have no effect on the existing endpoints: the endpoints and pages check only the built-in permission codes of the system.',
   'system.permissions.new': 'New node',
   'system.permissions.col.name': 'Name',
   'system.permissions.col.code': 'Permission code',

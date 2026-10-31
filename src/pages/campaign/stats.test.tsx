@@ -388,6 +388,70 @@ describe('the campaign results page: what goes wrong', () => {
     expect(screen.queryByText(/Failed to load:/)).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['from', 'from is after to', /Start date: .*outside the allowed range.*not after the end date/],
+    [
+      'to',
+      'The range exceeds stats.max_range_days',
+      /End date: .*outside the allowed range.*stats\.max_range_days/,
+    ],
+  ])(
+    'puts a range refused on `%s` (OUT_OF_RANGE) next to the dates, in the words of the code and the field, not the words of the backend',
+    async (ref, raw, expected) => {
+      signIn('root');
+      mockModules();
+      overrideFetch(({ url }) =>
+        url.pathname === '/api/admin/attribution/performance'
+          ? jsonAnswer(400, 'INVALID_REQUEST', { details: [{ ref, reason: 'OUT_OF_RANGE' }] }, raw)
+          : undefined,
+      );
+      renderPage(<StatsPage />);
+      const line = await screen.findByTestId('campaign-stats-range-error');
+      expect(line.textContent).toMatch(expected);
+      expect(document.body.textContent).not.toContain(raw);
+      // the bar with the retry stays: nothing was read
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    },
+  );
+
+  it('says it in Chinese, and takes the line away once the range is read', async () => {
+    signIn('root');
+    mockModules();
+    let failing = true;
+    overrideFetch(({ url }) =>
+      failing && url.pathname === '/api/admin/attribution/performance'
+        ? jsonAnswer(
+            400,
+            'INVALID_REQUEST',
+            { details: [{ ref: 'from', reason: 'OUT_OF_RANGE' }] },
+            'from is after to',
+          )
+        : undefined,
+    );
+    renderPage(<StatsPage />, 'zh-CN');
+    const line = await screen.findByTestId('campaign-stats-range-error');
+    expect(line.textContent).toMatch(/起始日期：.*超出允许的范围.*不能晚于结束日期/);
+    failing = false;
+    fireEvent.click(screen.getByRole('button', { name: /重\s?试/ }));
+    await ready();
+    expect(screen.queryByTestId('campaign-stats-range-error')).toBeNull();
+  });
+
+  it('shows no range line for a refusal that is not about the dates', async () => {
+    signIn('root');
+    mockModules();
+    overrideFetch(({ url }) =>
+      url.pathname === '/api/admin/attribution/performance'
+        ? jsonAnswer(400, 'INVALID_REQUEST', {
+            details: [{ ref: 'groupBy', reason: 'OUT_OF_RANGE' }],
+          })
+        : undefined,
+    );
+    renderPage(<StatsPage />);
+    await screen.findByText(/Failed to load:/);
+    expect(screen.queryByTestId('campaign-stats-range-error')).toBeNull();
+  });
+
   it('disables the campaign filter and says which permission is missing when the list is refused (403), and still shows the figures, with the id for the code', async () => {
     signIn('support', { codes: ['ATTRIBUTION:VIEW'] });
     mockModules();

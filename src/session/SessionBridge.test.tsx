@@ -145,6 +145,34 @@ describe('a refusal (403 ADMIN_FORBIDDEN)', () => {
     expect(calls.filter((c) => c.url.endsWith('/me'))).toHaveLength(1);
   });
 
+  // Permission changes take effect on the backend at the next request (every instance, within
+  // `admin.permission_cache_seconds` when the cache store is down). The page needs nothing more for that:
+  // it reads the permissions once on entering the application and once after each refusal, and never polls.
+  it('treats the refusals of the grant rules (403 with a message and no data) like any other: one new read, no sign-in page', async () => {
+    setToken('tok');
+    const calls = stubFetch((call) =>
+      call.url.endsWith('/me')
+        ? jsonResponse(200, meAnswer(['USER:VIEW']))
+        : jsonResponse(
+            403,
+            envelope(
+              'ADMIN_FORBIDDEN',
+              null,
+              'Administrators can only grant permissions they hold',
+            ),
+          ),
+    );
+    mount();
+    await act(async () => {
+      await apiRequest({ method: 'POST', url: '/roles', body: {} }).catch(() => {});
+    });
+    await waitFor(() => expect(screen.getByTestId('perms').textContent).toBe('USER:VIEW'));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls.filter((c) => c.url.endsWith('/me'))).toHaveLength(1);
+    expect(history.replace).not.toHaveBeenCalled();
+    expect(getToken()).toBe('tok');
+  });
+
   it('keeps the permissions it has when they cannot be read again', async () => {
     setToken('tok');
     stubFetch((call) =>

@@ -6,7 +6,7 @@ import { describeFailure } from '../../session/describe';
 import type { Translator } from './texts';
 
 export type GuardAction = 'disable' | 'delete' | 'change';
-export type GuardSubject = 'channel' | 'template';
+export type GuardSubject = 'channel' | 'template' | 'englishTemplate';
 
 const PHONE_SIGN_IN_KEY = 'auth.phone_login_enabled';
 

@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Spin, Typography } from 'antd';
 import { useMemo, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type AdminRole,
@@ -10,13 +11,18 @@ import {
   updateRole,
 } from '../../services/system';
 import { describeFailure } from '../../session/describe';
+import { useSession } from '../../session/useSession';
 import { trimSpec } from '../../utils/trimSpec';
 import { failureToForm } from './formFailure';
 import { PermissionTreeSelect } from './PermissionTreeSelect';
-import { buildIndex, isSelectable } from './permissionTree';
+import { buildIndex, codesNotHeld, isSelectable } from './permissionTree';
+import { withScopeHint } from './texts';
 import { useRead } from './useRead';
 
 type Values = { name: string; remark: string };
+
+/** How many codes the note about codes that are not held names before it gives the number. */
+const NOTE_CODES = 20;
 
 type Props = {
   /** The role to change, or null to make a new one. */
@@ -30,7 +36,9 @@ type Props = {
  * boxes. Saving replaces the whole set of codes of the role. The tree is read when the dialog opens
  * (the read asks for ROLE:MANAGE or PERMISSION:MANAGE) and Save stays off until it is there: without
  * the tree the codes of the role cannot be sent without wiping or inventing some. Codes of the role
- * that are not nodes of the tree are named and left out of what is saved. Mounted only while open.
+ * that are not nodes of the tree are named and left out of what is saved. A role that has a code the
+ * signed-in administrator does not hold (who is not a super administrator) cannot be saved: the
+ * backend refuses it, so the dialog says so when it opens and keeps Save off. Mounted only while open.
  */
 export function RoleModal({ role, onDone, onClose }: Props) {
   const intl = useIntl();
@@ -42,6 +50,18 @@ export function RoleModal({ role, onDone, onClose }: Props) {
   const tree = useRead(listPermissions);
   const nodes: PermissionNode[] | null = tree.state.status === 'ok' ? tree.state.data : null;
   const [picked, setPicked] = useState<string[] | null>(null);
+  // What the signed-in administrator holds. Only a help for the boxes: `GET /me` is not known to list
+  // exactly the codes the backend counts as held, so the backend stays the last word (a 403).
+  const { me } = useSession();
+  const grantable = useMemo(() => (me && !me.superAdmin ? new Set(me.permissions) : null), [me]);
+
+  // Every code of the role counts, also those that are not nodes of the tree: the backend checks the
+  // codes the role has now against what the administrator holds.
+  const notHeld = useMemo(
+    () => (role === null ? [] : codesNotHeld(role.permissionCodes, grantable)),
+    [role, grantable],
+  );
+  const locked = notHeld.length > 0;
 
   // What the role holds, limited to the nodes a role may have; the rest is named below.
   const held = useMemo(() => {
@@ -82,7 +102,11 @@ export function RoleModal({ role, onDone, onClose }: Props) {
       onClose();
     } catch (error) {
       const placed = failureToForm(intl, form, error, ['name', 'remark']);
-      setFailure(placed.text === null ? null : { text: placed.text, unplaced: placed.unplaced });
+      setFailure(
+        placed.text === null
+          ? null
+          : { text: withScopeHint(intl, error, placed.text), unplaced: placed.unplaced },
+      );
     }
   });
 
@@ -97,18 +121,34 @@ export function RoleModal({ role, onDone, onClose }: Props) {
       }
       okText={t('system.common.save')}
       cancelText={t('system.common.cancel')}
-      okButtonProps={{ disabled: nodes === null || pending, loading: pending }}
+      okButtonProps={{ disabled: nodes === null || locked || pending, loading: pending }}
       cancelButtonProps={{ disabled: pending }}
       mask={{ closable: false }}
       onOk={() => void run().catch(() => {})}
       onCancel={onClose}
     >
+      {locked ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={
+            notHeld.length > NOTE_CODES
+              ? t('system.roles.notHeldMany', {
+                  codes: notHeld.slice(0, NOTE_CODES).join(', '),
+                  count: notHeld.length,
+                })
+              : t('system.roles.notHeld', { codes: notHeld.join(', ') })
+          }
+        />
+      ) : null}
       <Form<Values>
         form={form}
         layout="vertical"
         autoComplete="off"
         initialValues={{ name: role?.name ?? '', remark: role?.remark ?? '' }}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="name"
           label={t('system.roles.field.name')}
@@ -163,7 +203,12 @@ export function RoleModal({ role, onDone, onClose }: Props) {
               title={t('system.roles.unknownCodes', { codes: held.dropped.join(', ') })}
             />
           ) : null}
-          <PermissionTreeSelect nodes={nodes} value={value} onChange={setPicked} />
+          <PermissionTreeSelect
+            nodes={nodes}
+            value={value}
+            onChange={setPicked}
+            grantable={grantable}
+          />
         </>
       ) : null}
       {failure ? (

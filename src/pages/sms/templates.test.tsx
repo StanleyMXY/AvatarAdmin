@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { configure, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saved } from '../../../mock/_core/configStore';
@@ -26,8 +26,11 @@ const backend = () => useMockBackend({ default: smsMock }, { default: configMock
 
 beforeEach(() => {
   signIn('root');
+  // Under a full parallel run one second is not enough for what a click sets going (a read of the settings, a request, a list read again).
+  configure({ asyncUtilTimeout: 6000 });
 });
 afterEach(() => {
+  configure({ asyncUtilTimeout: 1000 });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -417,11 +420,80 @@ describe('the switch of a template', () => {
 
   it('switches off a template without a question when another enabled OTP template exists', async () => {
     const { calls, user } = await load();
+    await rowOf('otp_th');
+    await user.click(switchOf('otp_th'));
+    await waitFor(() => expect(switchOf('otp_th')).not.toBeChecked());
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(writesOf(calls)).toHaveLength(1);
+  });
+
+  it('asks first when it is the last enabled English OTP template for every country, sends nothing when declined, and leaves the decision to the backend when confirmed', async () => {
+    const { calls, user } = await load();
+    await rowOf('otp_en');
+    await user.click(switchOf('otp_en'));
+    const ask = await screen.findByRole('dialog');
+    expect(
+      within(ask).getAllByText('This is the last enabled OTP template in English for every country')
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(ask).getByText(/Phone sign-in is off \(auth\.phone_login_enabled\)/),
+    ).toBeInTheDocument();
+    await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+    expect(switchOf('otp_en')).toBeChecked();
+    await user.click(switchOf('otp_en'));
+    await user.click(
+      (await screen.findAllByRole('button', { name: 'Continue' })).at(-1) as HTMLElement,
+    );
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(
+      await screen.findByText(/an enabled OTP template in English \(en\) for every country/),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('The last enabled OTP template in language en');
+    await waitFor(() => expect(switchOf('otp_en')).toBeChecked());
+    expect(template('otp_en').enabled).toBe(true);
+  });
+
+  it('does not ask when another template (EN, any case) is the English one for every country', async () => {
+    smsState.templates.set('90', {
+      ...template('otp_en'),
+      id: '90',
+      templateCode: 'otp_EN',
+      locale: 'EN',
+    });
+    const { calls, user } = await load();
     await rowOf('otp_en');
     await user.click(switchOf('otp_en'));
     await waitFor(() => expect(switchOf('otp_en')).not.toBeChecked());
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(writesOf(calls)).toHaveLength(1);
+  });
+
+  it('asks again for the English one when the other English templates have a country or another tag', async () => {
+    smsState.templates.set('90', {
+      ...template('otp_en'),
+      id: '90',
+      templateCode: 'otp_gb',
+      locale: 'en-GB',
+    });
+    smsState.templates.set('91', {
+      ...template('otp_en'),
+      id: '91',
+      templateCode: 'otp_enth',
+      country: 'TH',
+    });
+    const { user } = await load();
+    await rowOf('otp_en');
+    await user.click(switchOf('otp_en'));
+    expect(
+      (
+        await screen.findAllByText(
+          'This is the last enabled OTP template in English for every country',
+        )
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it('asks first when it is the last enabled OTP template, names both conditions, and sends nothing when declined', async () => {
@@ -503,6 +575,44 @@ describe('deleting a template', () => {
     expect((await rowOf('otp_en')).textContent).toContain('otp_en');
   });
 
+  it('asks first for the English template for every country, and says in the words of the code why it stays when the backend refuses', async () => {
+    const { calls, user } = await load();
+    await user.click(within(await rowOf('otp_en')).getByRole('button', { name: 'Delete' }));
+    const ask = await screen.findByRole('dialog');
+    expect(
+      within(ask).getAllByText('This is the last enabled OTP template in English for every country')
+        .length,
+    ).toBeGreaterThan(0);
+    await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+    await user.click(within(await rowOf('otp_en')).getByRole('button', { name: 'Delete' }));
+    await user.click(
+      (await screen.findAllByRole('button', { name: 'Continue' })).at(-1) as HTMLElement,
+    );
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(
+      await screen.findByText(/an enabled OTP template in English \(en\) for every country/),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('The value is outside the allowed range');
+    expect(template('otp_en').enabled).toBe(true);
+    expect((await rowOf('otp_en')).textContent).toContain('otp_en');
+  });
+
+  it('deletes the English template for every country when another one (EN, any case) remains', async () => {
+    smsState.templates.set('90', {
+      ...template('otp_en'),
+      id: '90',
+      templateCode: 'otp_EN',
+      locale: 'EN',
+    });
+    const { calls, user } = await load();
+    await user.click(within(await rowOf('otp_en')).getByRole('button', { name: 'Delete' }));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    await waitFor(() => expect(rows().some((tr) => cellsOf(tr)[0] === 'otp_en')).toBe(false));
+  });
+
   it('does not ask for a template that is off, even when it is OTP', async () => {
     only('otp_en');
     const { calls, user } = await load();
@@ -510,6 +620,85 @@ describe('deleting a template', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+  });
+});
+
+describe('the English template for every country in the form (e2)', () => {
+  const refuseTexts = /an enabled OTP template in English \(en\) for every country/;
+
+  it('shows the words of the code at the top of the dialog when the language is moved away, keeps the dialog open and the other fields filled, and sends one request', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'otp_en');
+    const locale = form.getByRole('textbox', { name: 'Language' });
+    setText(locale, 'th');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await user.click(
+      (await screen.findAllByRole('button', { name: 'Continue' })).at(-1) as HTMLElement,
+    );
+    const bar = await screen.findByText(refuseTexts);
+    expect(bar.closest('.ant-alert')).not.toBeNull();
+    expect(writesOf(calls)).toHaveLength(1);
+    expect(locale).toHaveValue('th');
+    expect(document.body.textContent).not.toContain('The value is outside the allowed range');
+    expect(document.body.textContent).not.toContain('The last enabled OTP template in language en');
+    expect(template('otp_en').locale).toBe('en');
+  });
+
+  it('shows the same in Chinese when the interface is Chinese', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<TemplatesPage />, 'zh-CN');
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    await user.click(within(await rowOf('otp_en')).getByRole('button', { name: '编辑' }));
+    const form = within(await dialog());
+    setText(form.getByRole('textbox', { name: '语言' }), 'ar');
+    await user.click(form.getByRole('button', { name: /提\s*交/ }));
+    await user.click(
+      (await screen.findAllByRole('button', { name: /继\s*续/ })).at(-1) as HTMLElement,
+    );
+    await waitFor(() =>
+      expect(document.querySelector('.ant-modal .ant-alert-error')?.textContent).toMatch(
+        /语言为英文（en）、不限国家的验证码模板/,
+      ),
+    );
+  });
+
+  it('asks first when the edit gives the English template a country, and sends nothing when declined', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'otp_en');
+    setText(form.getByRole('textbox', { name: 'Country' }), 'TH');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    const ask = await screen.findAllByText(
+      'This is the last enabled OTP template in English for every country',
+    );
+    expect(ask.length).toBeGreaterThan(0);
+    await user.click(
+      within(document.querySelector('.ant-modal-confirm') as HTMLElement).getByRole('button', {
+        name: 'Cancel',
+      }),
+    );
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('does not ask for an edit of the English template that keeps it as the rule needs it', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'otp_en');
+    setText(form.getByRole('textbox', { name: 'Name' }), 'English renamed');
+    setText(form.getByRole('textbox', { name: 'Language' }), 'EN');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    await waitFor(() => expect(template('otp_en').name).toBe('English renamed'));
+    expect(document.querySelector('.ant-modal-confirm')).toBeNull();
+  });
+
+  it('lets a country be added to a template that is not the English one for every country', async () => {
+    const { user } = await load();
+    const form = await openEdit(user, 'otp_ar');
+    setText(form.getByRole('textbox', { name: 'Country' }), 'SA');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await dialogsClosed();
+    expect(template('otp_ar').country).toBe('SA');
   });
 });
 

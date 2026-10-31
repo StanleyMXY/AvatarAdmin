@@ -139,6 +139,8 @@ function statRows(records: MockRecord[], from: string, to: string): Cell[] {
   );
 }
 
+const ZERO_WIDTH_CHARS = /[\u200b-\u200d\u2060\ufeff]/g;
+
 type RuleInput = {
   id?: unknown;
   pattern?: unknown;
@@ -152,7 +154,11 @@ function ruleProblems(input: RuleInput, index: number): Detail[] {
   const ref = String(index);
   const details: Detail[] = [];
   const pattern = typeof input.pattern === 'string' ? trimSpec(input.pattern) : '';
-  if (pattern === '') details.push({ ref, reason: 'EMPTY_NOT_ALLOWED' });
+  // A substring or whole-word text is normalised (zero-width characters removed) and folded before
+  // it is kept; one that is empty then is as empty as a blank one. A regular expression is not.
+  const kept =
+    input.matchMode === 'REGEX' ? pattern : trimSpec(pattern.replace(ZERO_WIDTH_CHARS, ''));
+  if (kept === '') details.push({ ref, reason: 'EMPTY_NOT_ALLOWED' });
   else if (countCodePoints(pattern) > PATTERN_MAX) details.push({ ref, reason: 'TOO_LONG' });
   if (typeof input.matchMode !== 'string' || !MATCH_MODES.includes(input.matchMode)) {
     details.push({ ref, reason: 'OUT_OF_RANGE' });

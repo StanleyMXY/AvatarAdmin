@@ -9,23 +9,27 @@ import {
   deleteTemplate,
   listAllTemplates,
   listTemplates,
+  type MissingLocales,
   type PushTemplate,
   updateTemplate,
 } from '../../services/push';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
 import { plainText } from '../../utils/plainText';
-import { coverage, missingFor, supportedLocalesOf } from './coverage';
+import { coverage, supportedLocalesOf } from './coverage';
 import { EnabledSwitch } from './EnabledSwitch';
 import { PushImage } from './PushImage';
+import { templateFailureText } from './recallRule';
 import { TemplateMatrix } from './TemplateMatrix';
 import { TemplateModal } from './TemplateModal';
 import { codeText, describeLink } from './texts';
 
 /**
  * 模板 (`PUSH:TEMPLATE`): the words of the recall pushes, one template for each trigger reason and
- * language. The matrix on top shows which reasons lack a language; a reason may be switched on only
- * when none is missing, which the backend checks when it saves.
+ * language. The matrix on top shows which languages fall back to the default language (what the
+ * backend lists in `missingLocales`). The rule that a reason with an enabled template needs an
+ * enabled one in the default language is the backend's: the page sends the request and shows the
+ * words of its refusal.
  */
 export default function TemplatesPage() {
   const intl = useIntl();
@@ -38,6 +42,7 @@ export default function TemplatesPage() {
   const ref = useRef<ActionType | undefined>(undefined);
   const [editing, setEditing] = useState<PushTemplate | null | 'new'>(null);
   const [all, setAll] = useState<PushTemplate[] | null>(null);
+  const [missing, setMissing] = useState<MissingLocales | null>(null);
   const [allFailure, setAllFailure] = useState<string | null>(null);
   const counter = useRef(0);
 
@@ -46,7 +51,8 @@ export default function TemplatesPage() {
     try {
       const rows = await listAllTemplates();
       if (mine !== counter.current) return;
-      setAll(rows);
+      setAll(rows.items);
+      setMissing(rows.missingLocales);
       setAllFailure(null);
     } catch (error) {
       if (mine === counter.current) setAllFailure(describeFailure(intl, error).text);
@@ -62,7 +68,10 @@ export default function TemplatesPage() {
     void loadAll();
   };
 
-  const rows = useMemo(() => (all && locales ? coverage(all, locales) : null), [all, locales]);
+  const rows = useMemo(
+    () => (all && locales ? coverage(all, locales, missing) : null),
+    [all, locales, missing],
+  );
 
   const columns: ProColumns<PushTemplate>[] = [
     {
@@ -90,17 +99,6 @@ export default function TemplatesPage() {
             locale: plainText(row.locale),
           })}
           onToggle={async (next) => {
-            const lacking =
-              next && all ? missingFor(all, locales, plainText(row.triggerReason)) : [];
-            // A hint only: the request goes out and the backend decides.
-            if (lacking.length > 0) {
-              message.warning(
-                t('push.templates.missingWarning', {
-                  reason: codeText(intl, 'push.reason', row.triggerReason),
-                  locales: lacking.join(', '),
-                }),
-              );
-            }
             await updateTemplate(row.id, {
               title: plainText(row.title),
               body: plainText(row.body),
@@ -109,6 +107,7 @@ export default function TemplatesPage() {
               enabled: next,
             });
           }}
+          failureText={(error) => templateFailureText(intl, error)}
           onDone={reload}
         />
       ),
@@ -161,7 +160,7 @@ export default function TemplatesPage() {
                     await deleteTemplate(row.id);
                     message.success(t('push.templates.deleted'));
                   } catch (error) {
-                    message.error(describeFailure(intl, error).text);
+                    message.error(templateFailureText(intl, error));
                   }
                   reload();
                 },
@@ -176,6 +175,9 @@ export default function TemplatesPage() {
     <Flex vertical gap={16}>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
         {t('push.templates.note')}
+      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }} data-testid="push-howto">
+        {t('push.templates.noteHowTo')}
       </Typography.Paragraph>
       {locales === null ? (
         <Alert type="info" showIcon title={t('push.templates.matrix.unknown')} />
@@ -199,7 +201,16 @@ export default function TemplatesPage() {
         rowKey="id"
         columns={columns}
         actionRef={ref}
-        request={({ page, pageSize }) => listTemplates({ page, pageSize })}
+        request={async ({ page, pageSize }) => {
+          const answer = await listTemplates({ page, pageSize });
+          if (typeof answer.total === 'number') return { items: answer.items, total: answer.total };
+          // No total in the answer (the backend's list has none): the table shows what was read, all of it.
+          const every = (await listAllTemplates()).items;
+          return {
+            items: every.slice((page - 1) * pageSize, page * pageSize),
+            total: every.length,
+          };
+        }}
         toolbar={
           canWrite
             ? [

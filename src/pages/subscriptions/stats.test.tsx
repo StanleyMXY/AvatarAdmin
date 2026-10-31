@@ -9,7 +9,7 @@ import { resetUmiStub, setTestAccess } from '../../../tests/stubs/umi-max';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import access from '../../access';
 import type { SubscriptionStatRow } from '../../services/subscriptions';
-import StatsPage from './stats';
+import StatsPage, { formatListPrice } from './stats';
 
 beforeEach(() => {
   resetUmiStub();
@@ -143,6 +143,65 @@ describe('the subscription statistics', { timeout: 30000 }, () => {
     ).toBeInTheDocument();
   });
 
+  it('names the day the active count was taken from', async () => {
+    answering([
+      row({ statDate: '2026-10-25', productId: 'a', active: 10 }),
+      row({ statDate: '2026-10-26', productId: 'a', active: 20 }),
+    ]);
+    renderPage(<StatsPage />);
+    const card = await screen.findByTestId('subscription-total-active');
+    await waitFor(() => expect(within(card).getByText('20')).toBeInTheDocument());
+    expect(
+      within(card).getByText('Snapshot of 2026-10-26 (UTC), not added across days'),
+    ).toBeInTheDocument();
+  });
+
+  it('takes the last day that has a snapshot when the last days of the range have none, and says which day', async () => {
+    answering([
+      row({ statDate: '2026-10-24', productId: 'a', active: 7 }),
+      row({ statDate: '2026-10-24', productId: 'b', active: 8 }),
+      row({ statDate: '2026-10-25', productId: 'a', active: 11 }),
+      row({ statDate: '2026-10-25', productId: 'b', active: 12 }),
+      row({ statDate: '2026-10-26', productId: 'a', active: null }),
+      row({ statDate: '2026-10-26', productId: 'b', active: null }),
+    ]);
+    renderPage(<StatsPage />);
+    const card = await screen.findByTestId('subscription-total-active');
+    await waitFor(() => expect(within(card).getByText('23')).toBeInTheDocument());
+    expect(
+      within(card).getByText('Snapshot of 2026-10-25 (UTC), not added across days'),
+    ).toBeInTheDocument();
+  });
+
+  it('does not count a day where only some products have a snapshot, it goes back to the last complete day', async () => {
+    answering([
+      row({ statDate: '2026-10-25', productId: 'a', active: 11 }),
+      row({ statDate: '2026-10-25', productId: 'b', active: 12 }),
+      row({ statDate: '2026-10-26', productId: 'a', active: 20 }),
+      row({ statDate: '2026-10-26', productId: 'b', active: null }),
+    ]);
+    renderPage(<StatsPage />);
+    const card = await screen.findByTestId('subscription-total-active');
+    await waitFor(() => expect(within(card).getByText('23')).toBeInTheDocument());
+    expect(
+      within(card).getByText('Snapshot of 2026-10-25 (UTC), not added across days'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a dash and says there is no snapshot when no day of the range has one', async () => {
+    answering([
+      row({ statDate: '2026-10-25', active: null }),
+      row({ statDate: '2026-10-26', active: null }),
+    ]);
+    renderPage(<StatsPage />);
+    const card = await screen.findByTestId('subscription-total-active');
+    await waitFor(() => expect(within(card).getByText('—')).toBeInTheDocument());
+    expect(
+      within(card).getByText('No day in the selected range has a snapshot'),
+    ).toBeInTheDocument();
+    expect(within(card).queryByText(/Snapshot of/)).toBeNull();
+  });
+
   it('shows a dash, never 0 or null, for a snapshot that is missing and a price that is missing', async () => {
     answering([row({ active: null, listPriceAmount: null, listPriceCurrency: null, new: 0 })]);
     renderPage(<StatsPage />);
@@ -177,7 +236,7 @@ describe('the subscription statistics', { timeout: 30000 }, () => {
   it('writes the list price with its currency, whatever the currency', async () => {
     answering([
       row({ productId: 'a', listPriceAmount: '1290.00', listPriceCurrency: 'THB' }),
-      row({ productId: 'b', listPriceAmount: 149000, listPriceCurrency: 'IDR' }),
+      row({ productId: 'b', listPriceAmount: '149000', listPriceCurrency: 'IDR' }),
       row({ productId: 'c', listPriceAmount: '9.99', listPriceCurrency: 'no-such-currency' }),
     ]);
     renderPage(<StatsPage />);
@@ -189,6 +248,124 @@ describe('the subscription statistics', { timeout: 30000 }, () => {
     expect(text).toMatch(/IDR\s?149,000/);
     expect(text).toMatch(/9\.99/);
     expect(text).toContain('no-such-currency');
+  });
+
+  it('writes a list price from its decimal string, never through a floating point number', async () => {
+    answering([
+      row({ productId: 'big', listPriceAmount: '9007199254740993.01', listPriceCurrency: 'USD' }),
+      row({ productId: 'fine', listPriceAmount: '24.999', listPriceCurrency: 'USD' }),
+      row({ productId: 'tail', listPriceAmount: '0.1234567', listPriceCurrency: 'EUR' }),
+    ]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(3),
+    );
+    const text = document.body.textContent as string;
+    expect(text).toContain('$9,007,199,254,740,993.01');
+    expect(text).not.toContain('9,007,199,254,740,994');
+    expect(text).toContain('$24.999');
+    expect(text).toContain('0.1234567');
+  });
+
+  it('writes a list price sent as a JSON number, and still writes a long string exactly', async () => {
+    answering([
+      row({ productId: 'num', listPriceAmount: 9.99, listPriceCurrency: 'USD' }),
+      row({ productId: 'int', listPriceAmount: 149000, listPriceCurrency: 'IDR' }),
+      row({ productId: 'bare', listPriceAmount: 12.5, listPriceCurrency: null }),
+      row({ productId: 'big', listPriceAmount: '9007199254740993.01', listPriceCurrency: 'USD' }),
+    ]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(4),
+    );
+    const prices = [...document.querySelectorAll('tbody tr.ant-table-row')].map(
+      (tr) => tr.querySelectorAll('td')[9].textContent,
+    );
+    expect(prices[0]).toBe('$9.99');
+    expect(prices[1]).toMatch(/^IDR\s?149,000(\.00)?$/);
+    expect(prices[2]).toBe('12.5');
+    expect(prices[3]).toBe('$9,007,199,254,740,993.01');
+  });
+
+  it.each([
+    ['a boolean', true],
+    ['an object', { amount: 9.99 }],
+    ['an array', [9.99]],
+  ])('shows a dash for a price that is %s, never [object Object]', async (_name, amount) => {
+    answering([
+      row({ listPriceAmount: amount as unknown as string | null, listPriceCurrency: 'USD' }),
+    ]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(1),
+    );
+    const cells = [...document.querySelectorAll('tbody tr.ant-table-row td')].map(
+      (c) => c.textContent,
+    );
+    expect(cells[9]).toBe('—');
+    expect(document.body.textContent).not.toMatch(/NaN|Infinity|\[object|true/);
+  });
+
+  it('formats a number that is not finite as a dash, with or without a currency', () => {
+    for (const amount of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(formatListPrice(amount, 'USD', 'en-US')).toBe('—');
+      expect(formatListPrice(amount, null, 'en-US')).toBe('—');
+    }
+    expect(formatListPrice(-9.99, 'USD', 'en-US')).toBe('-$9.99');
+    expect(formatListPrice(0, 'USD', 'en-US')).toBe('$0.00');
+  });
+
+  it('writes the list price in the number format of the language of the interface', async () => {
+    answering([
+      row({ productId: 'g', store: 'GOOGLE', listPriceAmount: '1290.5', listPriceCurrency: 'THB' }),
+    ]);
+    renderPage(<StatsPage />, 'zh-CN');
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(1),
+    );
+    expect(document.body.textContent).toMatch(/THB\s?1,290\.50/);
+  });
+
+  it.each([
+    ['both missing', null, null],
+    ['no amount', null, 'USD'],
+    ['an empty amount', '', 'USD'],
+    ['an amount that is not a number', 'abc', 'USD'],
+    ['an amount in exponent form', '1e21', 'USD'],
+  ])('shows a dash for a price with %s, never NaN or null', async (_name, amount, currency) => {
+    answering([row({ listPriceAmount: amount as string | null, listPriceCurrency: currency })]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(1),
+    );
+    const cells = [...document.querySelectorAll('tbody tr.ant-table-row td')].map(
+      (c) => c.textContent,
+    );
+    expect(cells[9]).toBe('—');
+    expect(document.body.textContent).not.toMatch(/NaN|null|undefined/);
+  });
+
+  it('writes an amount with no currency as a plain number', async () => {
+    answering([row({ listPriceAmount: '12.50', listPriceCurrency: null })]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(1),
+    );
+    const cells = [...document.querySelectorAll('tbody tr.ant-table-row td')].map(
+      (c) => c.textContent,
+    );
+    expect(cells[9]).toBe('12.50');
+  });
+
+  it('has the list price column right after the refunds', async () => {
+    useMockBackend(subscriptionsMock);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row').length).toBeGreaterThan(0),
+    );
+    const heads = [...document.querySelectorAll('thead th')].map((c) => c.textContent);
+    expect(heads.at(-1)).toBe('List price');
+    expect(heads.at(-2)).toBe('Refunds');
   });
 
   it('pages the rows 20 to a page', async () => {

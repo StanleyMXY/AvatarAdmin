@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Select, Switch, Typography } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
 import type { Me } from '../../services/auth';
@@ -15,6 +16,7 @@ import { describeFailure } from '../../session/describe';
 import { trimSpec } from '../../utils/trimSpec';
 import { checkNewPassword, type RowProtection } from './adminRules';
 import { failureToForm } from './formFailure';
+import { withScopeHint } from './texts';
 import { useRead } from './useRead';
 
 type Values = {
@@ -116,7 +118,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
       onClose();
     } catch (error) {
       const placed = failureToForm(intl, form, error, FIELDS);
-      setFailure(placed.text);
+      setFailure(placed.text === null ? null : withScopeHint(intl, error, placed.text));
     }
   });
 
@@ -152,6 +154,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
           superAdmin: admin?.superAdmin ?? false,
         }}
       >
+        <RevalidateOnLocaleChange />
         {protection.own && !creating ? (
           <Alert
             type="info"

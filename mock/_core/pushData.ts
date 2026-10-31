@@ -92,6 +92,11 @@ export type PushStore = {
   uploads: Map<string, MockUpload>;
   /** `app.supported_locales`, which decides which languages a recall reason needs a template in. */
   supportedLocales: string[];
+  /**
+   * How `GET /push/templates` answers: with `total` (the default), or the way the backend's contract
+   * (a14) writes it, without `total`, paged or not paged at all. For tests of the page.
+   */
+  templateList: 'with-total' | 'paged-without-total' | 'unpaged-without-total';
   next: { template: number; task: number; schedule: number; upload: number };
 };
 
@@ -407,6 +412,7 @@ function seed(now: Date): PushStore {
     deliveries,
     uploads: new Map(),
     supportedLocales: [...META_DEFAULTS.supportedLocales],
+    templateList: 'with-total',
     next: { template: tid, task: 29, schedule: 5, upload: 1 },
   };
 }

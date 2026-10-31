@@ -7,7 +7,8 @@ import {
   type SavedFunnelRow,
 } from './_core/analyticsData';
 import { guard, hasPermission } from './_core/auth';
-import { type AdminReq, invalidRequest, MockHttpError, type MockReq, ok } from './_core/http';
+import { currentValue } from './_core/configStore';
+import { type AdminReq, fail, invalidRequest, MockHttpError, type MockReq, ok } from './_core/http';
 import { META_DEFAULTS } from './_core/meta';
 import { paginateQuery } from './_core/paginate';
 import { daysIn, text, validDay } from './_core/statRange';
@@ -225,12 +226,19 @@ export default {
     return ok({ items: [...names].sort() });
   }),
 
+  // Checked in this order: the steps, the window, the range, then the limit of funnels being computed
+  // (analytics.funnel_max_concurrency, 2 by default): at the limit the answer is 429 RATE_LIMITED at
+  // once, with no data and no Retry-After.
   'GET /api/admin/analytics/funnel': guard('ANALYTICS:VIEW', (req) => {
-    const range = liveRange(req);
     const steps = checkSteps(text(req.query.steps) === '' ? [] : text(req.query.steps).split(','));
     const hours = checkWindow(
       req.query.windowHours === undefined ? 24 : integerParam(req.query.windowHours),
     );
+    const range = liveRange(req);
+    const limit = currentValue('analytics.funnel_max_concurrency');
+    if (analyticsStore.funnelInFlight >= (typeof limit === 'number' ? limit : 2)) {
+      return fail(429, 'RATE_LIMITED', 'Too many funnels are being computed');
+    }
     const depths = [...subjectsOf(inRange(analyticsStore.events, range)).values()].map((list) =>
       depthOf(list, steps, hours * 3600000),
     );

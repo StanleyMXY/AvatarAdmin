@@ -1,7 +1,9 @@
 import { resolveInitialLocale } from '../utils/resolveLocale';
 import { unwrapResponse } from './envelope';
-import { ApiError, isAbortError, networkError } from './errors';
+import { ApiError, abortError, isAbortError, networkError } from './errors';
+import { markServiceReachable, markServiceUnavailable } from './serviceStatus';
 import { getToken, handleForbidden, handleTokenExpired } from './session';
+import { DEFAULT_TIMEOUT_MS, type Deadline, startDeadline, timeoutError } from './timeout';
 
 /** Every admin endpoint is under this prefix; service functions give the path after it. */
 export const ADMIN_API_BASE = '/api/admin';
@@ -77,9 +79,19 @@ export function reportSessionSignals(error: unknown, sentToken: string | null): 
   else if (error.code === 'ADMIN_FORBIDDEN') handleForbidden();
 }
 
-/** A failure of the transport: an abort stays an abort, anything else is NETWORK_ERROR. */
-export function transportFailure(cause: unknown): unknown {
+/**
+ * A failure of the transport. Running out of time is REQUEST_TIMEOUT; an abort by the caller stays
+ * an abort; anything else is NETWORK_ERROR. The cause is never kept: the browser's own message can
+ * carry the address that was asked for.
+ */
+export function transportFailure(cause: unknown, deadline?: Deadline): unknown {
+  if (deadline?.timedOut()) return timeoutError();
   return isAbortError(cause) ? cause : networkError();
+}
+
+/** Throws the abort when the caller's signal is already aborted, before anything is sent. */
+export function throwIfAborted(deadline: Deadline): void {
+  if (deadline.signal.aborted && !deadline.timedOut()) throw abortError();
 }
 
 /** Unwraps an answer and reports its session signals. */
@@ -103,6 +115,8 @@ export async function apiRequest<T>(o: {
   params?: RequestParams;
   body?: unknown;
   signal?: AbortSignal;
+  /** Milliseconds to wait for the whole answer; 30 seconds when not given. */
+  timeoutMs?: number;
   /**
    * False for a request whose 401 ADMIN_INVALID_TOKEN is about something other than the session
    * token (the enrollment token of the authenticator setup): the session layer is not told.
@@ -113,19 +127,46 @@ export async function apiRequest<T>(o: {
   const hasBody = o.body !== undefined;
   const { headers, sentToken } = buildHeaders(hasBody);
 
+  const deadline = startDeadline(o.timeoutMs ?? DEFAULT_TIMEOUT_MS, o.signal);
   let status: number;
   let text: string;
   try {
+    throwIfAborted(deadline);
     const response = await fetch(url, {
       method: o.method,
       headers,
       body: hasBody ? JSON.stringify(o.body) : undefined,
-      signal: o.signal,
+      signal: deadline.signal,
     });
     status = response.status;
     text = await response.text();
   } catch (cause) {
-    throw transportFailure(cause);
+    throw transportFailure(cause, deadline);
+  } finally {
+    deadline.dispose();
   }
-  return unwrapAndReport<T>(status, text, sentToken, o.reportSession);
+  try {
+    const data = unwrapAndReport<T>(status, text, sentToken, o.reportSession);
+    markServiceReachable();
+    return data;
+  } catch (error) {
+    noteServiceStatus(o.method, error);
+    throw error;
+  }
+}
+
+/** Answers that say nothing about whether the backend can be reached. */
+const NO_BACKEND_ANSWER = ['NETWORK_ERROR', 'REQUEST_TIMEOUT', 'INVALID_RESPONSE'];
+
+/**
+ * A read that met the gateway's own "unavailable" page raises the shell's notice (with a retry
+ * button, which is only safe for a read); any answer of the backend itself takes it down again.
+ */
+function noteServiceStatus(method: Method, error: unknown): void {
+  if (!(error instanceof ApiError)) return;
+  if (error.code === 'GATEWAY_UNAVAILABLE') {
+    if (method === 'GET') markServiceUnavailable();
+  } else if (!NO_BACKEND_ANSWER.includes(error.code)) {
+    markServiceReachable();
+  }
 }

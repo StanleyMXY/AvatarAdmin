@@ -3,6 +3,7 @@ import { PERMISSION_CODES } from '../../access/permissionCodes';
 import type { PermissionNode } from '../../services/system';
 import {
   buildIndex,
+  codesNotHeld,
   isBuiltinNode,
   isSelectable,
   nodeName,
@@ -38,17 +39,19 @@ function random(seed: number) {
 const pick = <T>(rand: () => number, items: readonly T[]): T =>
   items[Math.floor(rand() * items.length)];
 
-/** A random forest: every node has a parent among the nodes before it, or none. A tenth cannot be chosen. */
+/**
+ * A random forest: every node has a parent among the nodes before it, or none. A node can be chosen
+ * when its code is in the real permission list; a tenth are custom nodes and a tenth are built-in
+ * nodes the list lacks, and neither can be chosen.
+ */
 function randomForest(rand: () => number): PermissionNode[] {
   const size = 1 + Math.floor(rand() * 24);
   const nodes: PermissionNode[] = [];
   for (let i = 0; i < size; i += 1) {
     const parent = i === 0 || rand() < 0.25 ? null : nodes[Math.floor(rand() * i)].code;
-    // A built-in node whose code the application does not know cannot be chosen; a custom one can.
-    const unknownBuiltin = rand() < 0.1;
-    nodes.push(
-      node(`N${i}`, parent, { builtin: unknownBuiltin, sortOrder: Math.floor(rand() * 5) }),
-    );
+    const kind = rand();
+    const code = kind < 0.1 ? `CUSTOM:${i}` : kind < 0.2 ? `NEW:${i}` : PERMISSION_CODES[i];
+    nodes.push(node(code, parent, { builtin: kind >= 0.1, sortOrder: Math.floor(rand() * 5) }));
   }
   // shuffle: the order of the backend's answer carries no meaning
   for (let i = nodes.length - 1; i > 0; i -= 1) {
@@ -64,7 +67,7 @@ type RefNode = { code: string; selectable: boolean; children: RefNode[] };
 function nest(nodes: PermissionNode[]): RefNode[] {
   const make = (n: PermissionNode): RefNode => ({
     code: n.code,
-    selectable: !(n.builtin && !(PERMISSION_CODES as readonly string[]).includes(n.code)),
+    selectable: (PERMISSION_CODES as readonly string[]).includes(n.code),
     children: nodes.filter((c) => c.parent === n.code).map(make),
   });
   return nodes.filter((n) => n.parent === null).map(make);
@@ -93,16 +96,10 @@ function refToggle(roots: RefNode[], set: Set<string>, code: string): Set<string
   if (!target.selectable) return out;
   if (refState(roots, set, code) === 'checked') {
     for (const n of flatten(target)) out.delete(n.code);
-    for (const a of path.slice(0, -1)) out.delete(a.code);
   } else {
     for (const n of flatten(target)) if (n.selectable) out.add(n.code);
-    for (let i = path.length - 2; i >= 0; i -= 1) {
-      const a = path[i];
-      const below = flatten(a)
-        .slice(1)
-        .filter((n) => n.selectable);
-      if (a.selectable && below.every((n) => out.has(n.code))) out.add(a.code);
-    }
+    // every page above it that may be chosen: a function cannot be used without the page it is on
+    for (let i = path.length - 2; i >= 0; i -= 1) if (path[i].selectable) out.add(path[i].code);
   }
   return out;
 }
@@ -136,9 +133,11 @@ describe('which nodes are built in and which can be chosen', () => {
     expect(isBuiltinNode(node('USER:VIEW', null, { builtin: false }))).toBe(true);
   });
 
-  it('lets a code of the real permission list be chosen, a custom node too, but not a built-in one the list lacks', () => {
+  it('lets only a code of the real permission list be chosen: not a custom node, not a built-in one the list lacks', () => {
     expect(isSelectable(node('USER:VIEW', null, { builtin: true }))).toBe(true);
-    expect(isSelectable(node('CUSTOM:A', null, { builtin: false }))).toBe(true);
+    // a real code stays a system node whatever the backend says about it
+    expect(isSelectable(node('USER:VIEW', null, { builtin: false }))).toBe(true);
+    expect(isSelectable(node('CUSTOM:A', null, { builtin: false }))).toBe(false);
     expect(isSelectable(node('NEW:BUILTIN', null, { builtin: true }))).toBe(false);
     expect(isSelectable(node('NEW:BUILTIN', null, { builtin: undefined as never }))).toBe(false);
   });
@@ -183,47 +182,155 @@ describe('choosing nodes of the permission tree', () => {
     node('USER:EXPORT', 'USER:VIEW', { builtin: true, sortOrder: 3 }),
     node('STATS:VIEW', null, { builtin: true, sortOrder: 4 }),
     node('STATS:EXPORT', 'STATS:VIEW', { builtin: true, sortOrder: 5 }),
-    node('CUSTOM:G', null, { sortOrder: 6 }),
-    node('CUSTOM:G1', 'CUSTOM:G', { sortOrder: 7 }),
-    node('CUSTOM:G1X', 'CUSTOM:G1', { sortOrder: 8 }),
+    node('SMS:RECORD', null, { builtin: true, sortOrder: 6 }),
+    node('SMS:RECORD:EXPORT', 'SMS:RECORD', { builtin: true, sortOrder: 7 }),
+    node('SMS:RECORD:PHONE_VIEW', 'SMS:RECORD:EXPORT', { builtin: true, sortOrder: 8 }),
+    node('CUSTOM:G', null, { sortOrder: 9 }),
+    node('CUSTOM:G1', 'CUSTOM:G', { sortOrder: 10 }),
   ];
   const state = (value: string[], code: string) => stateOf(tree, value, code);
 
   it('checks the parent and every descendant together', () => {
     expect(toggleCode(tree, [], 'USER:VIEW')).toEqual(['USER:BAN', 'USER:EXPORT', 'USER:VIEW']);
-    expect(toggleCode(tree, [], 'CUSTOM:G')).toEqual(['CUSTOM:G', 'CUSTOM:G1', 'CUSTOM:G1X']);
+    expect(toggleCode(tree, [], 'SMS:RECORD')).toEqual([
+      'SMS:RECORD',
+      'SMS:RECORD:EXPORT',
+      'SMS:RECORD:PHONE_VIEW',
+    ]);
   });
 
-  it('takes one descendant away: the parent goes out of the value and shows half checked', () => {
+  it('never checks a custom node, not by a click on it and not through its parent', () => {
+    expect(toggleCode(tree, [], 'CUSTOM:G')).toEqual([]);
+    expect(toggleCode(tree, ['STATS:VIEW'], 'CUSTOM:G1')).toEqual(['STATS:VIEW']);
+    const mixed = [
+      node('USER:VIEW', null, { builtin: true }),
+      node('CUSTOM:UNDER', 'USER:VIEW'),
+      node('USER:BAN', 'USER:VIEW', { builtin: true }),
+    ];
+    expect(toggleCode(mixed, [], 'USER:VIEW')).toEqual(['USER:BAN', 'USER:VIEW']);
+    // a custom code in the value is dropped
+    expect(toggleCode(mixed, ['CUSTOM:UNDER'], 'USER:BAN')).toEqual(['USER:BAN', 'USER:VIEW']);
+    expect(toggleCode(mixed, ['CUSTOM:UNDER', 'STATS:VIEW'], 'STATS:VIEW')).toEqual([]);
+  });
+
+  it('takes one descendant away: the parent keeps its code, so the role holds the page and a part of its functions', () => {
     const all = toggleCode(tree, [], 'USER:VIEW');
     const less = toggleCode(tree, all, 'USER:BAN');
-    expect(less).toEqual(['USER:EXPORT']);
-    expect(state(less, 'USER:VIEW')).toBe('half');
+    expect(less).toEqual(['USER:EXPORT', 'USER:VIEW']);
+    expect(state(less, 'USER:VIEW')).toBe('checked');
     expect(state(less, 'USER:BAN')).toBe('none');
     expect(state(less, 'USER:EXPORT')).toBe('checked');
   });
 
-  it('checks the parent when the last missing descendant is checked, all the way up', () => {
+  it('keeps the page code of a role that holds the page and one function when that function is taken away', () => {
+    // the role "customer service": the page code and one function code
+    expect(toggleCode(tree, ['USER:BAN', 'USER:VIEW'], 'USER:BAN')).toEqual(['USER:VIEW']);
+    // taking away every function leaves the page alone
+    expect(toggleCode(tree, ['USER:VIEW', 'USER:EXPORT'], 'USER:EXPORT')).toEqual(['USER:VIEW']);
+  });
+
+  it('keeps every node above when a deep node is taken away', () => {
+    const all = toggleCode(tree, [], 'SMS:RECORD');
+    expect(toggleCode(tree, all, 'SMS:RECORD:PHONE_VIEW')).toEqual([
+      'SMS:RECORD',
+      'SMS:RECORD:EXPORT',
+    ]);
+    expect(toggleCode(tree, all, 'SMS:RECORD:EXPORT')).toEqual(['SMS:RECORD']);
+  });
+
+  it('can make a role of the page alone, and of the page with any part of its functions', () => {
+    // every set of the codes of the page USER:VIEW that has the page code is reachable by clicks
+    const seen = new Set<string>(['']);
+    const queue: string[][] = [[]];
+    while (queue.length > 0) {
+      const value = queue.shift() as string[];
+      for (const code of ['USER:VIEW', 'USER:BAN', 'USER:EXPORT']) {
+        const next = toggleCode(tree, value, code);
+        if (!seen.has(next.join('|'))) {
+          seen.add(next.join('|'));
+          queue.push(next);
+        }
+      }
+    }
+    for (const wanted of [
+      ['USER:VIEW'],
+      ['USER:BAN', 'USER:VIEW'],
+      ['USER:EXPORT', 'USER:VIEW'],
+      ['USER:BAN', 'USER:EXPORT', 'USER:VIEW'],
+    ]) {
+      expect(seen.has(wanted.join('|')), wanted.join(',')).toBe(true);
+    }
+  });
+
+  it('checking a function checks every page above it, all the way up, and nothing else', () => {
+    expect(toggleCode(tree, [], 'USER:BAN')).toEqual(['USER:BAN', 'USER:VIEW']);
     expect(toggleCode(tree, ['USER:BAN'], 'USER:EXPORT')).toEqual([
       'USER:BAN',
       'USER:EXPORT',
       'USER:VIEW',
     ]);
-    expect(toggleCode(tree, ['CUSTOM:G1'], 'CUSTOM:G1X')).toEqual([
-      'CUSTOM:G',
-      'CUSTOM:G1',
-      'CUSTOM:G1X',
+    // the middle node and the page above it, not the sibling below the page
+    expect(toggleCode(tree, [], 'SMS:RECORD:PHONE_VIEW')).toEqual([
+      'SMS:RECORD',
+      'SMS:RECORD:EXPORT',
+      'SMS:RECORD:PHONE_VIEW',
     ]);
-    expect(toggleCode(tree, [], 'USER:BAN')).toEqual(['USER:BAN']);
-    expect(state(['USER:BAN'], 'USER:VIEW')).toBe('half');
+    expect(toggleCode(tree, [], 'SMS:RECORD:EXPORT')).toEqual([
+      'SMS:RECORD',
+      'SMS:RECORD:EXPORT',
+      'SMS:RECORD:PHONE_VIEW',
+    ]);
+    // a page that is already there stays, and the other pages are not touched
+    expect(toggleCode(tree, ['STATS:VIEW'], 'USER:BAN')).toEqual([
+      'STATS:VIEW',
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+    // the page is checked and its other functions are not
+    expect(state(toggleCode(tree, [], 'USER:BAN'), 'USER:EXPORT')).toBe('none');
   });
 
-  it('unchecking a parent clears every descendant, and unchecking a deep node clears the nodes above it', () => {
+  it('checking a function of a role that has the functions but lost the page (an old role) puts the page back', () => {
+    expect(toggleCode(tree, ['USER:BAN'], 'USER:EXPORT')).toContain('USER:VIEW');
+    expect(toggleCode(tree, ['STATS:EXPORT'], 'USER:BAN')).toEqual([
+      'STATS:EXPORT',
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+  });
+
+  it('skips a node above that cannot be chosen, and goes on to the ones above that', () => {
+    const list = [
+      node('STATS:VIEW', null, { builtin: true }),
+      node('CUSTOM:GROUP', 'STATS:VIEW'),
+      node('USER:BAN', 'CUSTOM:GROUP', { builtin: true }),
+      node('NEW:BUILTIN', 'STATS:VIEW', { builtin: true }),
+      node('USER:EXPORT', 'NEW:BUILTIN', { builtin: true }),
+    ];
+    expect(toggleCode(list, [], 'USER:BAN')).toEqual(['STATS:VIEW', 'USER:BAN']);
+    expect(toggleCode(list, [], 'USER:EXPORT')).toEqual(['STATS:VIEW', 'USER:EXPORT']);
+  });
+
+  it('taking a function away after it was checked leaves the page, and the page alone can then be taken away', () => {
+    const one = toggleCode(tree, [], 'USER:BAN');
+    expect(toggleCode(tree, one, 'USER:BAN')).toEqual(['USER:VIEW']);
+    expect(toggleCode(tree, ['USER:VIEW'], 'USER:VIEW')).toEqual([]);
+  });
+
+  it('unchecking a parent clears the parent and every descendant, and nothing else', () => {
     expect(
       toggleCode(tree, ['USER:BAN', 'USER:EXPORT', 'USER:VIEW', 'STATS:VIEW'], 'USER:VIEW'),
     ).toEqual(['STATS:VIEW']);
-    const all = toggleCode(tree, [], 'CUSTOM:G');
-    expect(toggleCode(tree, all, 'CUSTOM:G1X')).toEqual([]);
+    // a node in the middle goes with what is below it; the node above it stays
+    expect(
+      toggleCode(
+        tree,
+        ['SMS:RECORD', 'SMS:RECORD:EXPORT', 'SMS:RECORD:PHONE_VIEW'],
+        'SMS:RECORD:EXPORT',
+      ),
+    ).toEqual(['SMS:RECORD']);
+    // the page itself is taken away by unchecking the page
+    expect(toggleCode(tree, ['SMS:RECORD'], 'SMS:RECORD')).toEqual([]);
   });
 
   it('clicking a half checked parent checks it with everything below', () => {
@@ -245,7 +352,7 @@ describe('choosing nodes of the permission tree', () => {
       ['STATS:VIEW', 'STATS:VIEW', 'GONE:CODE', 'NEW:BUILTIN'],
       'USER:BAN',
     );
-    expect(out).toEqual(['STATS:VIEW', 'USER:BAN']);
+    expect(out).toEqual(['STATS:VIEW', 'USER:BAN', 'USER:VIEW']);
   });
 
   it('ignores a click on a node that cannot be chosen or is not there', () => {
@@ -261,7 +368,7 @@ describe('choosing nodes of the permission tree', () => {
       node('USER:BAN', 'USER:VIEW', { builtin: true }),
     ];
     expect(toggleCode(list, [], 'USER:VIEW')).toEqual(['USER:BAN', 'USER:VIEW']);
-    // the parent counts as complete although a child cannot be chosen
+    // the page above is checked although a sibling cannot be chosen
     expect(toggleCode(list, [], 'USER:BAN')).toEqual(['USER:BAN', 'USER:VIEW']);
   });
 
@@ -269,6 +376,71 @@ describe('choosing nodes of the permission tree', () => {
     const value = ['USER:BAN'];
     toggleCode(tree, value, 'USER:EXPORT');
     expect(value).toEqual(['USER:BAN']);
+  });
+});
+
+describe('choosing nodes as an administrator who holds only some of the codes', () => {
+  const tree = [
+    node('USER:VIEW', null, { builtin: true, sortOrder: 1 }),
+    node('USER:BAN', 'USER:VIEW', { builtin: true, sortOrder: 2 }),
+    node('USER:EXPORT', 'USER:VIEW', { builtin: true, sortOrder: 3 }),
+    node('STATS:VIEW', null, { builtin: true, sortOrder: 4 }),
+  ];
+  const held = (...codes: string[]) => new Set(codes);
+
+  it('does not change anything on a click on a node that is not held, checked or not', () => {
+    const grantable = held('USER:VIEW', 'USER:BAN');
+    expect(toggleCode(tree, [], 'USER:EXPORT', grantable)).toEqual([]);
+    expect(toggleCode(tree, ['USER:BAN', 'USER:VIEW'], 'USER:EXPORT', grantable)).toEqual([
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+    expect(
+      toggleCode(tree, ['USER:BAN', 'USER:EXPORT', 'USER:VIEW'], 'USER:EXPORT', grantable),
+    ).toEqual(['USER:BAN', 'USER:EXPORT', 'USER:VIEW']);
+    expect(toggleCode(tree, [], 'STATS:VIEW', grantable)).toEqual([]);
+  });
+
+  it('checks a function without the page above it when the page is not held: a code that is not held is never added', () => {
+    expect(toggleCode(tree, [], 'USER:BAN', held('USER:BAN'))).toEqual(['USER:BAN']);
+    // the page above is not held and cannot be clicked either
+    expect(toggleCode(tree, [], 'USER:VIEW', held('USER:BAN'))).toEqual([]);
+    expect(toggleCode(tree, ['USER:BAN'], 'USER:VIEW', held('USER:BAN'))).toEqual(['USER:BAN']);
+  });
+
+  it('checks a function and the page above it when both are held', () => {
+    expect(toggleCode(tree, [], 'USER:BAN', held('USER:VIEW', 'USER:BAN'))).toEqual([
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+  });
+
+  it('checks a page with the functions below it that are held, and not the others', () => {
+    expect(toggleCode(tree, [], 'USER:VIEW', held('USER:VIEW', 'USER:BAN'))).toEqual([
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+    expect(toggleCode(tree, [], 'USER:VIEW', held('USER:VIEW'))).toEqual(['USER:VIEW']);
+  });
+
+  it('takes away only the held nodes below a node that is unchecked, and keeps the codes that are not held', () => {
+    const grantable = held('USER:VIEW', 'USER:BAN');
+    const role = ['USER:BAN', 'USER:EXPORT', 'USER:VIEW'];
+    expect(toggleCode(tree, role, 'USER:VIEW', grantable)).toEqual(['USER:EXPORT']);
+    // taking a function away keeps the page
+    expect(toggleCode(tree, ['USER:BAN', 'USER:VIEW'], 'USER:BAN', grantable)).toEqual([
+      'USER:VIEW',
+    ]);
+  });
+
+  it('changes nothing for an administrator who holds nothing', () => {
+    expect(toggleCode(tree, ['STATS:VIEW'], 'STATS:VIEW', held())).toEqual(['STATS:VIEW']);
+    expect(toggleCode(tree, [], 'USER:VIEW', held())).toEqual([]);
+  });
+
+  it('is the same as no limit when the set is missing or null', () => {
+    expect(toggleCode(tree, [], 'USER:EXPORT', null)).toEqual(['USER:EXPORT', 'USER:VIEW']);
+    expect(toggleCode(tree, [], 'USER:EXPORT', undefined)).toEqual(['USER:EXPORT', 'USER:VIEW']);
   });
 });
 
@@ -330,17 +502,22 @@ describe('the same rules against a reference, on random trees and random clicks'
       if (!selectable.has(click.code)) {
         expect(after, label).toEqual([...before].sort());
       } else if (before.includes(click.code)) {
-        for (const code of [...below, ...above])
-          expect(after.includes(code), `${label} off ${code}`).toBe(false);
+        for (const code of below) expect(after.includes(code), `${label} off ${code}`).toBe(false);
+        // the nodes above keep what they had
+        for (const code of above)
+          expect(after.includes(code), `${label} kept ${code}`).toBe(before.includes(code));
       } else {
         for (const code of below) {
           if (selectable.has(code)) expect(after.includes(code), `${label} on ${code}`).toBe(true);
         }
         for (const code of above) {
-          // only additions above
+          // only additions above, and every node above that may be chosen is there now
           expect(before.includes(code) && !after.includes(code), `${label} lost ${code}`).toBe(
             false,
           );
+          if (selectable.has(code))
+            expect(after.includes(code), `${label} page ${code}`).toBe(true);
+          else expect(after.includes(code), `${label} not choosable ${code}`).toBe(false);
         }
       }
       // a click on a chosen node and a second click on it: the node and everything below it ends up off
@@ -394,5 +571,37 @@ describe('the parent of a custom node', () => {
         );
       }
     }
+  });
+});
+
+describe('the codes of a role that the administrator does not hold', () => {
+  const held = new Set(['USER:VIEW', 'USER:BAN']);
+
+  it('lists the codes that are not held, once each, in the order of the role', () => {
+    expect(
+      codesNotHeld(['USER:VIEW', 'USER:EXPORT', 'COST:VIEW', 'USER:EXPORT', 'USER:BAN'], held),
+    ).toEqual(['USER:EXPORT', 'COST:VIEW']);
+  });
+
+  it('is empty when every code is held, when the role has none, and for a super administrator (no set)', () => {
+    expect(codesNotHeld(['USER:BAN', 'USER:VIEW'], held)).toEqual([]);
+    expect(codesNotHeld([], held)).toEqual([]);
+    expect(codesNotHeld(['COST:VIEW'], null)).toEqual([]);
+  });
+
+  it('counts everything against an empty set, also codes the tree does not know', () => {
+    expect(codesNotHeld(['USER:VIEW', 'OLD:THING'], new Set())).toEqual(['USER:VIEW', 'OLD:THING']);
+  });
+
+  it('writes a value that is not text out as plain text and leaves out what is nothing', () => {
+    expect(codesNotHeld([42, { a: 1 }, null, undefined, '', 'ผู้ใช้:ดู', 'USER:VIEW'], held)).toEqual([
+      '42',
+      '{"a":1}',
+      'ผู้ใช้:ดู',
+    ]);
+  });
+
+  it('compares the exact code: case and spaces count', () => {
+    expect(codesNotHeld(['user:view', ' USER:VIEW'], held)).toEqual(['user:view', ' USER:VIEW']);
   });
 });

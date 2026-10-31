@@ -1,11 +1,11 @@
 import { useIntl } from '@umijs/max';
-import { Alert, Button, Descriptions, Drawer, Skeleton } from 'antd';
+import { Alert, Button, Descriptions, Drawer, Flex, Skeleton, Typography } from 'antd';
 import { useCallback } from 'react';
 import { getSession, type SessionDetail } from '../../services/sessions';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { AccountCell } from './AccountCell';
-import { devicePrefix, formatDuration, isGuest, when } from './format';
+import { devicePrefix, formatDuration, formatMinutes, isGuest, when } from './format';
 import { PlainValue } from './PlainValue';
 import { useStatRead } from './useStatRead';
 
@@ -88,6 +88,16 @@ function Details({ id }: { id: string }) {
           <PlainValue value={labelOf(intl, 'sessions.renderMode', data.renderMode)} />,
         ),
         item('deadlineAt', t('sessions.detail.deadlineAt'), when(data.deadlineAt, intl.locale)),
+        item(
+          'maxDurationMinutes',
+          t('sessions.detail.maxDurationMinutes'),
+          <Flex vertical gap={2}>
+            <span>{formatMinutes(data.maxDurationMinutes, intl.locale, t)}</span>
+            <Typography.Text type="secondary">
+              {t('sessions.detail.maxDurationMinutesNote')}
+            </Typography.Text>
+          </Flex>,
+        ),
         item('startedAt', t('sessions.detail.startedAt'), when(data.startedAt, intl.locale)),
         item(
           'agentJoinedAt',

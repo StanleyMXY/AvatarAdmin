@@ -16,12 +16,17 @@ const messages: Record<string, string> = {
   'system.common.saved': '已保存',
   'system.common.deleted': '已删除',
   'system.common.readFailed': '读取失败：{message}',
+  'system.sentences': '{first}。{second}',
+  'system.scopeHint':
+    '管理员只能授出自己持有的权限；不能修改自己持有的角色；只能修改权限都在自己持有范围内的角色和管理员。什么都没有改变。',
 
   // ---- 管理员 ----
   'system.admins.note':
     '不能修改自己的角色、超级管理员标志和状态，也不能删除自己的账号。最后一个启用的超级管理员不能被停用或删除，它的标志也不能清除。只有超级管理员能设置或清除超级管理员标志。',
   'system.admins.refusedHint':
     '后端对自己的账号和最后一个启用的超级管理员拒绝这个操作。什么都没有改变。',
+  'system.admins.forbiddenHint':
+    '后端拒绝了这个操作，什么都没有改变。可能的原因：这是你自己的账号；管理员只能授出自己持有的权限；只能对权限都在自己持有范围内的管理员操作。',
   'system.admins.new': '新建管理员',
   'system.admins.you': '我',
   'system.admins.col.username': '用户名',
@@ -70,6 +75,11 @@ const messages: Record<string, string> = {
     '超级管理员通过所有权限检查。只有超级管理员能设置或清除这个标志。',
   'system.admins.superNeedsSuper': '只有超级管理员能修改这一项。',
   'system.admins.superLast': '这是最后一个启用的超级管理员：不能清除它的标志。',
+  'system.admins.ownResetPasswordReason':
+    '不能在这里重置自己的密码。要改自己的密码，请用账户菜单里的“修改密码”。',
+  'system.admins.ownResetTotpReason': '不能重置自己的二次验证，请让另一位管理员来做。',
+  'system.admins.ownDisableReason': '不能停用或删除自己的账号。',
+  'system.admins.lastSuperReason': '这是最后一个启用的超级管理员：不能停用或删除。',
   'system.admins.ownNote': '这是你自己的账号：不能修改自己的角色和超级管理员标志。',
   'system.admins.createDone': '管理员已创建。第一次登录时必须改密码。',
   'system.admins.resetTitle': '重置密码：{name}',
@@ -81,7 +91,7 @@ const messages: Record<string, string> = {
 
   // ---- 角色 ----
   'system.roles.note':
-    '保存时角色的权限整体替换。勾选一个节点会同时勾选它下面的全部节点；只有部分后代被勾选的节点显示为半选，不在角色里。自定义节点可以分配给角色，但对任何接口都没有效力。',
+    '保存时角色的权限整体替换。勾选一个节点会同时勾选它下面的全部节点和它所在的页面。取消一个功能不会取消它所在的页面，所以角色可以只有页面加一部分功能；取消页面本身会把页面和它下面的全部节点一起取消。自定义节点不能分配给角色。',
   'system.roles.new': '新建角色',
   'system.roles.col.name': '名称',
   'system.roles.col.remark': '备注',
@@ -100,11 +110,15 @@ const messages: Record<string, string> = {
   'system.roles.treeFailed': '读取权限树失败：{message}',
   'system.roles.treeRetry': '重新读取',
   'system.roles.treeLoading': '正在读取权限树……',
-  'system.roles.unknownCodes': '角色里的这些权限码不在权限树里，保存时会被去掉：{codes}',
+  'system.roles.notHeld': '这个角色含有你没有的权限：{codes}，你不能保存对它的修改。',
+  'system.roles.notHeldMany':
+    '这个角色含有你没有的权限：{codes} 等共 {count} 个，你不能保存对它的修改。',
+  'system.roles.unknownCodes':
+    '角色里的这些权限码不能分配给角色（自定义节点和应用不认识的码），保存时会被去掉：{codes}',
 
   // ---- 权限树 ----
   'system.permissions.note':
-    '自定义节点可以分配给角色，用来给权限分组或为以后的页面预留，对现有接口没有效力；接口和页面只检查系统内置的权限码。',
+    '自定义节点用来给权限分组或为以后的页面预留，不能分配给角色，对现有接口没有效力；接口和页面只检查系统内置的权限码。',
   'system.permissions.new': '新增节点',
   'system.permissions.col.name': '名称',
   'system.permissions.col.code': '权限码',

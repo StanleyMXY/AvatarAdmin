@@ -5,6 +5,7 @@ import {
   maskIp,
   resetAnalyticsStore,
 } from './_core/analyticsData';
+import { resetConfigStore, saved } from './_core/configStore';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
 import analytics from './analytics.mock';
@@ -12,6 +13,7 @@ import analytics from './analytics.mock';
 beforeEach(() => {
   resetStore();
   resetAnalyticsStore();
+  resetConfigStore();
 });
 
 type H = Parameters<typeof call>[0];
@@ -348,6 +350,63 @@ describe('GET /analytics/funnel', () => {
       query: { ...wide, steps: 'a,b' },
     });
     expect(status).toBe(200);
+  });
+});
+
+describe('GET /analytics/funnel: the limit of funnels being computed', () => {
+  const funnel = (query: Record<string, string> = {}) =>
+    act('GET /api/admin/analytics/funnel', 'root', {
+      query: { ...wide, steps: 'a,b', windowHours: '24', ...query },
+    });
+  const limit = (value: number) =>
+    saved.set('analytics.funnel_max_concurrency', {
+      value,
+      updatedAt: '',
+      updatedBy: '',
+      updatedByUsername: '',
+    });
+
+  it('answers 429 RATE_LIMITED with no data once as many funnels as the limit (2 by default) are being computed', async () => {
+    analyticsStore.funnelInFlight = 2;
+    const { status, body } = await funnel();
+    expect(status).toBe(429);
+    expect(body.code).toBe('RATE_LIMITED');
+    expect(body.data).toBeNull();
+    analyticsStore.funnelInFlight = 1;
+    expect((await funnel()).status).toBe(200);
+  });
+
+  it('reads the limit from analytics.funnel_max_concurrency', async () => {
+    limit(3);
+    analyticsStore.funnelInFlight = 2;
+    expect((await funnel()).status).toBe(200);
+    analyticsStore.funnelInFlight = 3;
+    expect((await funnel()).status).toBe(429);
+    limit(1);
+    analyticsStore.funnelInFlight = 1;
+    expect((await funnel()).status).toBe(429);
+  });
+
+  it('frees the place once it has answered: the count is the same after a good and after a refused request', async () => {
+    analyticsStore.funnelInFlight = 0;
+    await funnel();
+    await funnel({ steps: 'a' });
+    expect(analyticsStore.funnelInFlight).toBe(0);
+  });
+
+  it('checks the steps, the window and the range before the limit, so a bad request is 400 even when it is full', async () => {
+    analyticsStore.funnelInFlight = 2;
+    const code = async (query: Record<string, string>) => (await funnel(query)).status;
+    expect(await code({ steps: 'a' })).toBe(400);
+    expect(await code({ windowHours: '0' })).toBe(400);
+    expect(await code({ from: 'x' })).toBe(400);
+    expect(await code({ from: day(0), to: day(40) })).toBe(400);
+    expect(await code({})).toBe(429);
+  });
+
+  it('does not limit the saved funnels', async () => {
+    analyticsStore.funnelInFlight = 99;
+    expect((await act('GET /api/admin/analytics/funnels', 'root')).status).toBe(200);
   });
 });
 

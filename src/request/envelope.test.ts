@@ -78,6 +78,29 @@ describe('unwrapResponse', () => {
     expect(fail(500, '{"code":"200","message":"success","data":1}').code).toBe('INVALID_RESPONSE');
   });
 
+  it.each([502, 503, 504])(
+    'throws GATEWAY_UNAVAILABLE for a %i page without an envelope',
+    (status) => {
+      for (const body of ['<html><body>Bad Gateway</body></html>', '', 'upstream connect error']) {
+        const e = fail(status, body);
+        expect([e.code, e.httpStatus]).toEqual(['GATEWAY_UNAVAILABLE', status]);
+        expect(e.message).not.toContain('Bad Gateway');
+      }
+    },
+  );
+
+  it.each([500, 501, 505, 400, 404, 200])(
+    'keeps INVALID_RESPONSE for an HTML page with status %i',
+    (status) => {
+      expect(fail(status, '<html>x</html>').code).toBe('INVALID_RESPONSE');
+    },
+  );
+
+  it('keeps the backend code when a 503 carries an envelope', () => {
+    const e = fail(503, '{"code":"TEMPORARILY_UNAVAILABLE","message":"m","data":null}');
+    expect(e.code).toBe('TEMPORARILY_UNAVAILABLE');
+  });
+
   it('throws RATE_LIMITED for a 429 without an envelope', () => {
     const e = fail(429, '');
     expect([e.code, e.httpStatus]).toEqual(['RATE_LIMITED', 429]);

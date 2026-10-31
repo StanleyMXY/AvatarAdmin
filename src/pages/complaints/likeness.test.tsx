@@ -87,6 +87,43 @@ describe('the complaint list', { timeout: 30000 }, () => {
     expect(marked.length).toBe(cells.length);
   });
 
+  it('asks for the complaints that are not closed when that is chosen, and by default asks for no state', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    await rowOf(1);
+    expect(new URL(calls[0].url, 'http://x').searchParams.has('status')).toBe(false);
+    await user.click(screen.getByRole('combobox', { name: 'State' }));
+    const options = await screen.findAllByText('Not closed', {
+      selector: '.ant-select-item-option-content',
+    });
+    await user.click(options[options.length - 1]);
+    await user.click(screen.getByRole('button', { name: /查\s*询/ }));
+    await waitFor(() => expect(calls.some((c) => c.url.includes('status=OPEN'))).toBe(true));
+    // only the two states that are not closed are left in the list
+    await waitFor(() => {
+      const shown = new Set(
+        avatarState.complaints
+          .filter((c) => document.body.textContent?.includes(c.contactEmail))
+          .map((c) => c.status),
+      );
+      expect([...shown].every((s) => s === 'RECEIVED' || s === 'INVESTIGATING')).toBe(true);
+      expect(shown.size).toBeGreaterThan(0);
+    });
+  });
+
+  it('says "not closed" in Chinese, first among the choices of the state', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />, 'zh-CN');
+    await rowOf(1);
+    await user.click(screen.getByRole('combobox', { name: '状态' }));
+    const items = await screen.findAllByText('未结案', {
+      selector: '.ant-select-item-option-content',
+    });
+    expect(items.length).toBeGreaterThan(0);
+  });
+
   it('asks the backend for the state that was chosen', async () => {
     const calls = backend();
     const user = userEvent.setup();

@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import type { FormInstance } from 'antd';
 import { Alert, App, Form, Input, InputNumber, Modal, Typography } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type AdCampaign,
@@ -185,6 +186,7 @@ export function UnitModal({
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         {editing ? (
           <>
             <Form.Item label={t('ads.units.field.campaign')}>

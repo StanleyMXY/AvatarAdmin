@@ -32,6 +32,12 @@ export type SessionDetail = SessionRow & {
   timezone: string | null;
   renderMode: string | null;
   deadlineAt: string | null;
+  /**
+   * The longest length of the call, in whole minutes (0 or more), as it was when the call was made;
+   * a setting changed later does not change it. It explains a deadline that differs from the
+   * setting now. Missing from an answer of a backend that does not send it.
+   */
+  maxDurationMinutes?: number | null;
   endReason: string | null;
   agentJoinedAt: string | null;
   userJoinedAt: string | null;

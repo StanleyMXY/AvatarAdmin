@@ -23,6 +23,13 @@ const messages: Record<string, string> = {
   'stat.common.dayN': '第 {n} 天',
   'stat.common.backfilled': '回填值',
   'stat.common.noPrevious': '没有对比数据',
+  'stat.common.provisional': '临时值',
+  'stat.common.provisional.tip': '这一天（UTC）还没结束，数值还会变化。',
+  'stat.common.provisional.changeTip':
+    '其中一天（UTC）还没结束，涨跌只作参考，用灰色显示，不判断好坏。',
+  'stat.common.provisional.chartNote': '空心点是临时值：这一天（UTC）还没结束，数值还会变化。',
+  'stat.common.provisional.columnNote':
+    '空心点（柱为虚线边框）是临时值：这一天（UTC）还没结束，数值还会变化。',
 };
 
 export default messages;

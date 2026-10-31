@@ -51,6 +51,10 @@ const messages: Record<string, string> = {
   'sessions.detail.language': '语言',
   'sessions.detail.renderMode': '渲染方式',
   'sessions.detail.deadlineAt': '截止时间',
+  'sessions.detail.maxDurationMinutes': '发起时的最长时长',
+  'sessions.detail.maxDurationMinutesNote':
+    '发起通话时记下的值，之后改设置不影响已发起的通话；用来解释截止时间为什么和现在的设置不一样。',
+  'sessions.minutes': '{n} 分钟',
   'sessions.detail.startedAt': '开始时间',
   'sessions.detail.agentJoinedAt': '数字人加入时间',
   'sessions.detail.userJoinedAt': '用户加入时间',

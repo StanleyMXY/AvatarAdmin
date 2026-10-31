@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Form, Input, Modal } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
@@ -55,6 +56,7 @@ export function ApproveModal({ open, onSubmit, onClose }: Props) {
         requiredMark={false}
         onFinish={(values) => run(trimSpec(values.note ?? ''))}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="note"
           label={t('credits.requests.approveNote')}

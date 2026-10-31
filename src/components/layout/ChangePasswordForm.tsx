@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Form, Input } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { changePassword } from '../../services/auth';
 import { describeFailure } from '../../session/describe';
 import { checkPasswordChange } from '../../session/passwordRules';
@@ -77,6 +78,7 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
 
   return (
     <Form form={form} layout="vertical" onFinish={submit} requiredMark={false}>
+      <RevalidateOnLocaleChange />
       <Form.Item name="oldPassword" label={t('auth.password.old')} rules={[rule('oldPassword')]}>
         <Input.Password autoComplete="current-password" />
       </Form.Item>

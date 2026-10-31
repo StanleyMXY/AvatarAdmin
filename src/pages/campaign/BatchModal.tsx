@@ -112,8 +112,9 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
     if (!ready || result === null) return;
     setFailure(null);
     setRefused([]);
+    let done: Awaited<ReturnType<typeof batchCosts>>;
     try {
-      await batchCosts(result.rows);
+      done = await batchCosts(result.rows);
     } catch (error) {
       setFailure(describeFailure(intl, error).text);
       // What the backend says about each row: its reason in words (or the code), never its own message.
@@ -127,7 +128,15 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
       }
       return;
     }
-    message.success(t('campaign.batch.imported', { count: result.rows.length }));
+    message.success(
+      done
+        ? t('campaign.batch.importedSplit', {
+            count: done.imported,
+            added: done.imported - done.overwritten,
+            overwritten: done.overwritten,
+          })
+        : t('campaign.batch.imported', { count: result.rows.length }),
+    );
     onSaved();
     onClose();
   });

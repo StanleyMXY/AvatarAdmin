@@ -1,11 +1,13 @@
 import { buildHeaders, reportSessionSignals, resolveUrl } from './apiClient';
 import { unwrapResponse } from './envelope';
 import { abortError, networkError } from './errors';
+import { TRANSFER_TIMEOUT_MS, timeoutError } from './timeout';
 
 /**
  * Uploads one file as multipart form data under the field name `file` (the form every admin
  * upload endpoint expects), with progress. XMLHttpRequest is used because `fetch` cannot report
- * upload progress. Resolves with the envelope's `data` (for example `{ uploadId }`).
+ * upload progress. Resolves with the envelope's `data` (for example `{ uploadId }`). It is given up
+ * on after 5 minutes (REQUEST_TIMEOUT).
  */
 export function uploadFile<T>(o: {
   url: string;
@@ -13,6 +15,8 @@ export function uploadFile<T>(o: {
   fields?: Record<string, string>;
   onProgress?: (loaded: number, total: number) => void;
   signal?: AbortSignal;
+  /** Milliseconds for the whole upload; 5 minutes when not given. */
+  timeoutMs?: number;
 }): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     if (o.signal?.aborted) {
@@ -25,6 +29,7 @@ export function uploadFile<T>(o: {
     const finish = () => o.signal?.removeEventListener('abort', onAbort);
 
     xhr.open('POST', resolveUrl(o.url));
+    xhr.timeout = o.timeoutMs ?? TRANSFER_TIMEOUT_MS;
     // No Content-Type: the browser adds multipart/form-data with its boundary.
     for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
 
@@ -44,7 +49,10 @@ export function uploadFile<T>(o: {
       finish();
       reject(networkError());
     };
-    xhr.ontimeout = xhr.onerror;
+    xhr.ontimeout = () => {
+      finish();
+      reject(timeoutError());
+    };
     xhr.onabort = () => {
       finish();
       reject(abortError());

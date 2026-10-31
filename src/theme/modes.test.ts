@@ -192,3 +192,110 @@ describe('useThemeMode', () => {
     expect(result.current[0]).toBe('dim');
   });
 });
+
+// ---- the colours of links and of primary-coloured text ----
+const TEXT_BACKGROUNDS = (t: ReturnType<typeof getModeTokens>) => [
+  t.colorBgContainer,
+  t.colorBgLayout,
+  t.colorBgElevated,
+];
+
+const PRIMARIES = [
+  { base: '#0ABAB5', hover: '#3DCBC7', active: '#089A96' },
+  { base: '#FFD700', hover: '#FFE24D', active: '#CCAC00' },
+  { base: '#00FFFF', hover: '#66FFFF', active: '#00CCCC' },
+  { base: '#7C3AED', hover: '#9061F9', active: '#6D28D9' },
+  { base: '#FFFFFF', hover: '#FFFFFF', active: '#EEEEEE' },
+  { base: '#000000', hover: '#222222', active: '#000000' },
+];
+
+describe.each(THEME_MODES)('links and primary-coloured text in %s mode', (mode: ThemeMode) => {
+  const resolved = (tokens = getModeTokens(mode)) =>
+    antdTheme.getDesignToken(toAntdTheme(tokens)) as unknown as Record<string, string>;
+  const NAMES = [
+    'colorLink',
+    'colorLinkHover',
+    'colorLinkActive',
+    'colorPrimaryText',
+    'colorPrimaryTextHover',
+    'colorPrimaryTextActive',
+  ];
+
+  it.each(NAMES)(
+    '%s is at least 4.5:1 on the container, the page and the raised background',
+    (name) => {
+      const tokens = getModeTokens(mode);
+      const value = resolved(tokens)[name];
+      expect(value).toMatch(/^#[0-9a-f]{6}$/i);
+      for (const bg of TEXT_BACKGROUNDS(tokens)) {
+        expect(contrastRatio(value, bg)).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
+
+  it('the dedicated colours are in the mode tokens and are what the theme hands to Ant Design', () => {
+    const tokens = getModeTokens(mode);
+    const theme = toAntdTheme(tokens).token as Record<string, string>;
+    expect([theme.colorLink, theme.colorLinkHover, theme.colorLinkActive]).toEqual([
+      tokens.colorLink,
+      tokens.colorLinkHover,
+      tokens.colorLinkActive,
+    ]);
+    expect([
+      theme.colorPrimaryText,
+      theme.colorPrimaryTextHover,
+      theme.colorPrimaryTextActive,
+    ]).toEqual([tokens.colorLink, tokens.colorLinkHover, tokens.colorLinkActive]);
+  });
+
+  it('the selected item of a menu, a tab and the current page number use the dedicated colour, not the raw primary', () => {
+    const tokens = getModeTokens(mode);
+    const components = toAntdTheme(tokens).components as Record<string, Record<string, string>>;
+    expect(components.Menu.itemSelectedColor).toBe(tokens.colorLink);
+    expect(components.Menu.subMenuItemSelectedColor).toBe(tokens.colorLink);
+    expect(components.Menu.horizontalItemSelectedColor).toBe(tokens.colorLink);
+    expect(components.Tabs.itemSelectedColor).toBe(tokens.colorLink);
+    expect(components.Tabs.itemHoverColor).toBe(tokens.colorLinkHover);
+    expect(components.Tabs.itemActiveColor).toBe(tokens.colorLinkActive);
+    expect(components.Pagination.itemActiveColor).toBe(tokens.colorLink);
+    expect(components.Pagination.itemActiveColorHover).toBe(tokens.colorLinkHover);
+  });
+
+  it('all three link colours stay readable whatever primary colour the build sets', () => {
+    for (const primary of PRIMARIES) {
+      const tokens = getModeTokens(mode, primary);
+      for (const name of ['colorLink', 'colorLinkHover', 'colorLinkActive'] as const) {
+        for (const bg of TEXT_BACKGROUNDS(tokens)) {
+          expect(contrastRatio(tokens[name], bg)).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  it('a primary colour that is already readable is kept as the link colour', () => {
+    const tokens = getModeTokens(mode);
+    if (TEXT_BACKGROUNDS(tokens).every((bg) => contrastRatio(tokens.colorPrimary, bg) >= 4.5)) {
+      expect(tokens.colorLink).toBe(tokens.colorPrimary);
+    } else {
+      expect(tokens.colorLink).not.toBe(tokens.colorPrimary);
+    }
+  });
+
+  it('moves away from the background on hover and press (darker on light, lighter on dark)', () => {
+    const tokens = getModeTokens(mode);
+    const [bg] = TEXT_BACKGROUNDS(tokens);
+    expect(contrastRatio(tokens.colorLinkHover, bg)).toBeGreaterThan(
+      contrastRatio(tokens.colorLink, bg),
+    );
+    expect(contrastRatio(tokens.colorLinkActive, bg)).toBeGreaterThan(
+      contrastRatio(tokens.colorLinkHover, bg),
+    );
+  });
+
+  it('keeps the primary colour itself for fills and borders', () => {
+    const tokens = getModeTokens(mode);
+    expect((toAntdTheme(tokens).token as Record<string, string>).colorPrimary).toBe(
+      tokens.colorPrimary,
+    );
+  });
+});

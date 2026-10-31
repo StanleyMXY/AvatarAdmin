@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { resetSessionState, setToken } from '../../request/session';
 import {
+  COMPLAINT_FILTER_STATUSES,
   getComplaint,
   getComplaintEvidence,
   listComplaints,
@@ -24,8 +25,21 @@ describe('likeness complaints', () => {
     const calls = answer({ items: [], total: 0 });
     await listComplaints({ page: 1, pageSize: 20, status: 'RECEIVED' });
     await listComplaints({ page: 2, pageSize: 50 });
+    await listComplaints({ page: 1, pageSize: 20, status: 'OPEN' });
+    expect(calls[2].url).toBe('/api/admin/likeness-complaints?page=1&pageSize=20&status=OPEN');
     expect(calls[0].url).toBe('/api/admin/likeness-complaints?page=1&pageSize=20&status=RECEIVED');
     expect(calls[1].url).toBe('/api/admin/likeness-complaints?page=2&pageSize=50');
+  });
+
+  it('offers "not closed" first, then the five states, and nothing else, as the filter', () => {
+    expect(COMPLAINT_FILTER_STATUSES).toEqual([
+      'OPEN',
+      'RECEIVED',
+      'INVESTIGATING',
+      'RESOLVED_REMOVED',
+      'RESOLVED_NOT_FOUND',
+      'REJECTED',
+    ]);
   });
 
   it('reads one complaint with its events', async () => {

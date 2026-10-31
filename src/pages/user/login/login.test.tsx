@@ -24,6 +24,9 @@ const meOf = (extra: Record<string, unknown> = {}) =>
     ...extra,
   });
 
+const TOTP_INVALID_EN =
+  'The verification code is wrong, already used or expired, or your authenticator cannot be checked. If it keeps failing, ask a super administrator to reset your two-factor authentication.';
+
 type Call = { url: string; body: Record<string, unknown> | null };
 const bodyOf = (init: RequestInit) => (init.body ? JSON.parse(init.body as string) : null);
 
@@ -181,11 +184,53 @@ describe('the sign-in page', () => {
     const code = await screen.findByLabelText('Verification code');
     await user.type(code, '111111');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(
-      await screen.findByText('The verification code is wrong, already used, or expired.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(TOTP_INVALID_EN)).toBeInTheDocument();
     expect(screen.getByLabelText('Verification code')).toHaveValue('');
     expect(screen.getByLabelText('User name')).toHaveValue('ploy');
+  });
+
+  // 401 ADMIN_TOTP_INVALID also means the stored secret cannot be decrypted (a changed key, a damaged
+  // row): the same answer as a wrong code, counted the same, so the page needs no special case, but
+  // its words must cover that and say who can fix it.
+  it('names the unreadable secret and the way out in the text for ADMIN_TOTP_INVALID, in both languages', async () => {
+    stubFetch((call) =>
+      bodyOf(call.init)?.totp
+        ? jsonResponse(401, envelope('ADMIN_TOTP_INVALID'))
+        : jsonResponse(401, envelope('ADMIN_TOTP_REQUIRED')),
+    );
+    const user = userEvent.setup();
+    renderPage(<Login />, 'zh-CN');
+    await user.type(screen.getByLabelText('用户名'), 'ploy');
+    await user.type(screen.getByLabelText('密码'), 'pw');
+    await user.click(screen.getByRole('button', { name: /登\s?录/ }));
+    await user.type(await screen.findByLabelText('验证码'), '111111');
+    await user.click(screen.getByRole('button', { name: /登\s?录/ }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('无法校验');
+    expect(alert.textContent).toContain('联系超级管理员重置你的二次验证');
+  });
+
+  it('keeps the same page and the same request for a secret that cannot be decrypted: the lock of 429 follows after the same wrong answers', async () => {
+    let tries = 0;
+    stubFetch((call) => {
+      if (!bodyOf(call.init)?.totp) return jsonResponse(401, envelope('ADMIN_TOTP_REQUIRED'));
+      tries += 1;
+      return tries < 3
+        ? jsonResponse(401, envelope('ADMIN_TOTP_INVALID'))
+        : jsonResponse(429, envelope('RATE_LIMITED', { retryAfterSeconds: 250 }));
+    });
+    const user = userEvent.setup();
+    renderPage(<Login />);
+    await fill(user, 'ploy', 'pw');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    const code = await screen.findByLabelText('Verification code');
+    for (let i = 0; i < 3; i++) {
+      await user.type(code, '000000');
+      await user.click(screen.getByRole('button', { name: 'Sign in' }));
+      await waitFor(() => expect(tries).toBe(i + 1));
+    }
+    expect(await screen.findByText(/5 minutes/)).toBeInTheDocument();
+    expect(history.replace).not.toHaveBeenCalled();
   });
 
   it('goes to the setup page for ENROLL_REQUIRED, with the token in memory and not in the address or any storage', async () => {

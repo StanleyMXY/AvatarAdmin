@@ -1,5 +1,6 @@
 import { PERMISSION_CODES } from '../../access/permissionCodes';
 import type { PermissionNode } from '../../services/system';
+import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 
 // The rules of the permission tree, as pure functions: which node is built in, which can be chosen
@@ -18,12 +19,13 @@ export function isBuiltinNode(node: Pick<PermissionNode, 'code' | 'builtin'>): b
 }
 
 /**
- * Whether a role may be given this node. Every code of the real permission list may. A custom node
- * may too (contract 17.3: it can be given to a role, it has no effect on any endpoint). A node that is
- * built in but whose code the application does not have in its list may not: nothing would check it.
+ * Whether a role may be given this node. Only a code of the real permission list may: the system
+ * nodes. A custom node may not (it has no effect on any endpoint, so giving it to a role grants
+ * nothing), and neither may a built-in node whose code the application does not have in its list:
+ * nothing would check it.
  */
-export function isSelectable(node: Pick<PermissionNode, 'code' | 'builtin'>): boolean {
-  return REAL_CODES.has(node.code) || node.builtin === false;
+export function isSelectable(node: Pick<PermissionNode, 'code'>): boolean {
+  return REAL_CODES.has(node.code);
 }
 
 const usable = (name: unknown): name is string => typeof name === 'string' && trimSpec(name) !== '';
@@ -159,36 +161,41 @@ export function stateOf(
 
 /**
  * The value after a click on the box of `code` (the complete, sorted list of codes).
- * - Checking a node checks it and every descendant that may be chosen; then each node above it is
- *   checked too if everything below that node is now checked.
- * - Unchecking a node (it was checked) takes out the node and every descendant, and every node above
- *   it: those are no longer fully checked, so they leave the value and show half checked.
+ * - Checking a node checks it and every descendant that may be chosen, and every node above it that
+ *   may be chosen (the pages it is on), the rest of what is below those nodes left as it was.
+ * - Unchecking a node (it was checked) takes out the node and every descendant. The nodes above it
+ *   keep their codes: a role may hold a page and only a part of the functions of that page, and
+ *   taking one function away must not take the page away. A node above leaves the value only when
+ *   the person unchecks that node itself.
  * - A click on a node that is not there or may not be chosen changes nothing.
+ * - With `grantable` (the codes the signed-in administrator holds, when they are not a super
+ *   administrator) only those nodes can be changed: a node outside it is never checked or unchecked
+ *   by a click on another node, and a click on it changes nothing. The backend refuses a role with a
+ *   code the administrator does not hold, so this only keeps the page from offering it.
  * Codes in `value` that are not nodes a role may have are dropped.
  */
 export function toggleCode(
   nodes: readonly PermissionNode[] | TreeIndex,
   value: readonly string[],
   code: string,
+  grantable?: ReadonlySet<string> | null,
 ): string[] {
   const index = Array.isArray(nodes) ? buildIndex(nodes) : (nodes as TreeIndex);
   const selectable = selectableSet(index);
+  const mayChange = (c: string) => selectable.has(c) && (!grantable || grantable.has(c));
   const chosen = chosenIn(index, value);
-  if (!selectable.has(code)) return [...chosen].sort();
+  if (!mayChange(code)) return [...chosen].sort();
   const below = descendantsOf(index, code);
   const above = ancestorsOf(index, code);
   if (stateIn(index, chosen, code) === 'checked') {
     chosen.delete(code);
-    for (const c of below) chosen.delete(c);
-    for (const c of above) chosen.delete(c);
+    for (const c of below) if (!grantable || grantable.has(c)) chosen.delete(c);
   } else {
     chosen.add(code);
-    for (const c of below) if (selectable.has(c)) chosen.add(c);
-    for (const c of above) {
-      if (!selectable.has(c)) continue;
-      const rest = descendantsOf(index, c).filter((d) => selectable.has(d));
-      if (rest.every((d) => chosen.has(d))) chosen.add(c);
-    }
+    for (const c of below) if (mayChange(c)) chosen.add(c);
+    // A function cannot be used without the page it is on: every node above that may be chosen comes
+    // with it, whether or not the rest of what is below that node is checked.
+    for (const c of above) if (mayChange(c)) chosen.add(c);
   }
   return [...chosen].sort();
 }
@@ -210,4 +217,23 @@ export function parentCandidates(nodes: readonly PermissionNode[], code: string)
   const index = buildIndex(nodes);
   const blocked = new Set([code, ...descendantsOf(index, code)]);
   return index.codes.filter((c) => !blocked.has(c));
+}
+
+/**
+ * The codes of a role that the signed-in administrator does not hold, each once and written as
+ * plain text, in the order the role has them (what the backend sends is not trusted to be text).
+ * The backend refuses to save a role that has any of them, so the dialog says so beforehand.
+ * `held` is null for a super administrator, who holds everything, and when it is not known.
+ */
+export function codesNotHeld(
+  roleCodes: readonly unknown[],
+  held: ReadonlySet<string> | null,
+): string[] {
+  if (held === null) return [];
+  const seen = new Set<string>();
+  for (const raw of roleCodes) {
+    const code = plainText(raw);
+    if (code !== '' && !held.has(code)) seen.add(code);
+  }
+  return [...seen];
 }

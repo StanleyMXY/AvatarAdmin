@@ -28,6 +28,7 @@ const PUSH_CONFIG_KEYS = [
   'push.schedule_scan_seconds',
   'push.task_image_retention_days',
   'push.task_lease_minutes',
+  'push.task_poll_seconds',
   'recall.inactive_hours',
   'recall.local_send_hour',
   'recall.min_gap_hours',
@@ -37,7 +38,7 @@ const PUSH_CONFIG_KEYS = [
 ];
 
 describe('the recall parameter page', { timeout: 30000 }, () => {
-  it('shows the twelve keys of PUSH:CONFIG: recall.*, push.default_locale and the rest, and no other key', async () => {
+  it('shows the thirteen keys of PUSH:CONFIG: recall.*, push.default_locale and the rest, and no other key', async () => {
     signInAs('root');
     useMockBackend(configMock);
     renderPage(<RecallPage />);
@@ -45,7 +46,7 @@ describe('the recall parameter page', { timeout: 30000 }, () => {
     expect(shownKeys()).toEqual(PUSH_CONFIG_KEYS);
   });
 
-  it('shows the same twelve to an administrator who has only PUSH:CONFIG, and nothing else', async () => {
+  it('shows the same thirteen to an administrator who has only PUSH:CONFIG, and nothing else', async () => {
     adminOf('support').permissions = ['PUSH:CONFIG'];
     signInAs('support');
     useMockBackend(configMock);
@@ -59,7 +60,7 @@ describe('the recall parameter page', { timeout: 30000 }, () => {
     useMockBackend(configMock);
     renderPage(<RecallPage />);
     expect(await screen.findByText(/parameters of the daily recall push/)).toBeInTheDocument();
-    await waitFor(() => expect(shownKeys().length).toBe(12));
+    await waitFor(() => expect(shownKeys().length).toBe(13));
   });
 
   it('is written in Chinese too', async () => {

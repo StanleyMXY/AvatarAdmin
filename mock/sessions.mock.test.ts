@@ -192,12 +192,41 @@ describe('the session endpoints of the mock backend', () => {
       'userJoinedAt',
       'userLeftAt',
       'durationSeconds',
+      'maxDurationMinutes',
     ]) {
       expect(body.data, key).toHaveProperty(key);
     }
     const guest = await detail(SESSION.guest);
     expect(guest.body.data.accountId).toBeNull();
     expect(guest.body.data.deviceId).toBe(GUEST_DEVICE);
+  });
+
+  it('gives the longest length the call had when it was made, as whole minutes, in the details and not in the list', async () => {
+    for (const s of sessionsState.sessions) {
+      const { body } = await detail(s.id);
+      expect(Number.isInteger(body.data.maxDurationMinutes), s.id).toBe(true);
+      expect(body.data.maxDurationMinutes, s.id).toBeGreaterThanOrEqual(0);
+    }
+    // a call whose limit was not the usual one: the deadline is that many minutes after the start
+    const odd = sessionsState.sessions.find((s) => s.maxDurationMinutes !== 60);
+    expect(odd).toBeTruthy();
+    expect(Date.parse(odd?.deadlineAt ?? '') - Date.parse(odd?.startedAt ?? '')).toBe(
+      (odd?.maxDurationMinutes ?? 0) * 60_000,
+    );
+    const { body } = await list({ pageSize: '100' });
+    expect(Object.keys(body.data.items[0]).sort()).toEqual(
+      [
+        'accountId',
+        'deviceId',
+        'durationSeconds',
+        'endedAt',
+        'id',
+        'language',
+        'modelTier',
+        'requestedAt',
+        'startedAt',
+      ].sort(),
+    );
   });
 
   it('answers 404 RESOURCE_NOT_FOUND for a session that does not exist', async () => {

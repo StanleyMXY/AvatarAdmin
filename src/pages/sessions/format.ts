@@ -33,6 +33,12 @@ export function formatDuration(seconds: unknown, t: Translate): string {
   return t('sessions.duration.s', { s });
 }
 
+/** A limit in whole minutes (0 or more); a dash for anything else, including a fraction or a missing value. */
+export function formatMinutes(minutes: unknown, locale: string, t: Translate): string {
+  if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < 0) return DASH;
+  return t('sessions.minutes', { n: new Intl.NumberFormat(locale).format(minutes) });
+}
+
 /** A number for a card or a cell: at most `digits` decimals in the language of the interface. */
 export function formatDecimal(value: number, locale: string, digits: number): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);

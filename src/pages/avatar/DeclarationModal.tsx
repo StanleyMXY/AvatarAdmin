@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { createDeclaration } from '../../services/avatar';
 import { trimSpec } from '../../utils/trimSpec';
@@ -65,6 +66,7 @@ export function DeclarationModal({ open, onClose, onSaved }: Props) {
         initialValues={{ version: '', texts: {} }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item
           name="version"
           label={t('avatar.declarations.version')}

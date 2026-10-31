@@ -18,12 +18,14 @@ afterEach(() => {
 });
 
 type Calls = ReturnType<typeof useMockBackend>;
-const funnelCalls = (calls: Calls) =>
+const funnelCalls = (calls: { url: string }[]) =>
   calls.filter((c) => new URL(c.url, 'http://x').pathname.endsWith('/analytics/funnel'));
 const writes = (calls: Calls, method: string) => calls.filter((c) => c.method === method);
 const lastFunnel = (calls: Calls) => new URL(funnelCalls(calls).at(-1)?.url as string, 'http://x');
 const button = (name: string | RegExp) => screen.queryByRole('button', { name });
 const queryButton = () => screen.getByRole('button', { name: 'Query' });
+/** Anything on the page that still shows a loading state (the table's own spin container is not one). */
+const busyMarks = () => document.querySelector('.ant-spin-spinning, [aria-busy="true"]');
 
 const openPage = async (user = userEvent.setup()) => {
   const calls = useMockBackend(analyticsMock);
@@ -112,13 +114,75 @@ describe('the funnel page: saved funnels', { timeout: 40000 }, () => {
     }
   });
 
-  it('fills the steps and the window from the chosen funnel, and does not query by itself', async () => {
+  it('fills the steps and the window from the chosen funnel and asks at once, with the steps, the window and the days now in the form', async () => {
     const { user, calls } = await openPage();
     const second = analyticsStore.funnels.filter((f) => f.isPreset)[1];
     await choose(user, second.name);
     await waitFor(() => expect(stepTags()).toEqual(second.steps));
     expect(windowBox().value).toBe(String(second.windowHours));
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    const url = lastFunnel(calls);
+    expect(url.searchParams.get('steps')).toBe(second.steps.join(','));
+    expect(url.searchParams.get('windowHours')).toBe(String(second.windowHours));
+    expect(url.searchParams.get('to')).toBe(new Date().toISOString().slice(0, 10));
+    expect(await screen.findByTestId('funnel-result')).toBeInTheDocument();
+  });
+
+  it('asks at once for a custom funnel too, and for an administrator who can only view', async () => {
+    signIn('support', { codes: VIEW });
+    seed('Mine', ['a', 'b', 'c'], 12);
+    const { user, calls } = await openPage();
+    await choose(user, 'Mine');
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    expect(lastFunnel(calls).searchParams.get('steps')).toBe('a,b,c');
+    expect(lastFunnel(calls).searchParams.get('windowHours')).toBe('12');
+  });
+
+  it('asks again for each funnel chosen, but not when the choice is cleared and not when a step or the window is edited', async () => {
+    seed('First', ['a', 'b'], 6);
+    seed('Second', ['c', 'd'], 8);
+    const { user, calls } = await openPage();
+    await choose(user, 'First');
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    await choose(user, 'Second');
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(2));
+    expect(lastFunnel(calls).searchParams.get('steps')).toBe('c,d');
+    await addStep(user, 'e');
+    fireEvent.change(windowBox(), { target: { value: '9' } });
+    await user.click(
+      document.querySelector('#analytics-funnel-saved')?.closest('.ant-select') as HTMLElement,
+    );
+    const clear = document.querySelector('.ant-select-clear') as HTMLElement;
+    fireEvent.mouseDown(clear);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(funnelCalls(calls)).toHaveLength(2);
+  });
+
+  it('does not ask for a saved funnel that could not be asked (a step with a comma), and says why', async () => {
+    const calls = stubBackend({
+      funnels: [funnelRow('Broken', ['a,b', 'c'])],
+      funnel: () => [],
+    });
+    const user = userEvent.setup();
+    renderPage(<FunnelPage />);
+    await choose(user, 'Broken');
+    expect(await screen.findByText(/comma/i)).toBeInTheDocument();
+    expect(queryButton()).toBeDisabled();
+    await new Promise((r) => setTimeout(r, 150));
     expect(funnelCalls(calls)).toHaveLength(0);
+  });
+
+  it('does not ask again when a funnel is saved: that is not choosing one', async () => {
+    const { user, calls } = await openPage();
+    await choose(user, presetName(0));
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    await user.click(button(/Save as/) as HTMLElement);
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Name'), 'Brand new');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes(calls, 'POST')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(funnelCalls(calls)).toHaveLength(1);
   });
 
   it('gives a preset no Edit and no Delete, but Save as stays (to make a copy)', async () => {
@@ -148,8 +212,9 @@ describe('the funnel page: saved funnels', { timeout: 40000 }, () => {
     expect(button(/Save as/)).toBeNull();
     expect(button('Edit')).toBeNull();
     expect(button('Delete')).toBeNull();
-    await user.click(queryButton());
     await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    await user.click(queryButton());
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(2));
   });
 
   it('saves the current steps and window under a new name with one POST, however often the button is pressed', async () => {
@@ -316,7 +381,6 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     const { user, calls } = await openPage();
     await choose(user, presetName(1));
     await waitFor(() => expect(stepTags().length).toBe(4));
-    await user.click(queryButton());
     await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
     const url = lastFunnel(calls);
     expect(url.searchParams.get('steps')).toBe(
@@ -338,7 +402,6 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
       const { user, calls } = await openPage(userEvent.setup({ advanceTimers: () => {} }));
       await choose(user, presetName(0));
       await waitFor(() => expect(stepTags().length).toBe(2));
-      await user.click(queryButton());
       await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
       expect(lastFunnel(calls).searchParams.get('to')).toBe('2026-10-26');
       expect(lastFunnel(calls).searchParams.get('from')).toBe('2026-10-20');
@@ -358,7 +421,6 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     const user = userEvent.setup();
     renderPage(<FunnelPage />);
     await choose(user, 'F');
-    await user.click(queryButton());
     const table = await screen.findByTestId('funnel-result');
     const rows = Array.from(table.querySelectorAll('tbody tr.ant-table-row')).map((r) =>
       Array.from(r.querySelectorAll('td')).map((td) => td.textContent),
@@ -402,12 +464,102 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     const user = userEvent.setup();
     renderPage(<FunnelPage />);
     await choose(user, 'F');
-    await user.click(queryButton());
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain(enUS['error.INVALID_REQUEST']);
     expect(alert.textContent).not.toContain('range is longer than 31 days');
     expect(within(alert).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     expect(stepTags()).toEqual(['a', 'b']);
+  });
+
+  it('says to try again later when too many funnels are being computed (429, no data), with no countdown, and the next press asks again', async () => {
+    const { user, calls } = await openPage();
+    await choose(user, presetName(0));
+    await screen.findByTestId('funnel-result');
+    expect(funnelCalls(calls)).toHaveLength(1);
+    analyticsStore.funnelInFlight = 2;
+    await user.click(queryButton());
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(enUS['error.RATE_LIMITED']);
+    expect(alert.textContent).not.toMatch(/\d+\s*(s|sec|second|minute|min)\b/i);
+    expect(screen.queryByTestId('funnel-result')).toBeNull();
+    // the buttons stay usable and the form is kept
+    expect(queryButton()).toBeEnabled();
+    expect(within(alert).getByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(stepTags()).toEqual(['app_open', 'register_completed']);
+    expect(funnelCalls(calls)).toHaveLength(2);
+    // nothing keeps spinning after the refusal
+    expect(busyMarks()).toBeNull();
+    // when the place is free again the same press works
+    analyticsStore.funnelInFlight = 0;
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await screen.findByTestId('funnel-result');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(busyMarks()).toBeNull();
+    expect(funnelCalls(calls)).toHaveLength(3);
+  });
+
+  it('disables Query while a query runs (a second press would take another place of the backend), and enables it again after the answer and after a 429', async () => {
+    let release: (() => void) | undefined;
+    let refuse = false;
+    let asked = 0;
+    stubFetch(async ({ url }) => {
+      const parsed = new URL(url, 'http://x');
+      if (parsed.pathname.endsWith('/analytics/funnels'))
+        return jsonResponse(200, envelope('200', { items: [funnelRow('F', ['a', 'b'])] }));
+      if (parsed.pathname.endsWith('/event-names'))
+        return jsonResponse(200, envelope('200', { items: [] }));
+      asked += 1;
+      await new Promise<void>((r) => (release = r));
+      if (refuse) return jsonResponse(429, envelope('RATE_LIMITED', null, 'Too many funnels'));
+      return jsonResponse(
+        200,
+        envelope('200', {
+          steps: [
+            { eventName: 'a', count: 5, conversionFromPrevious: null },
+            { eventName: 'b', count: 4, conversionFromPrevious: 0.8 },
+          ],
+        }),
+      );
+    });
+    const user = userEvent.setup();
+    renderPage(<FunnelPage />);
+    await choose(user, 'F');
+    await waitFor(() => expect(asked).toBe(1));
+    // running: the button is off and a press (also by keyboard or script) sends nothing
+    await waitFor(() => expect(queryButton()).toBeDisabled());
+    fireEvent.click(queryButton());
+    await user.click(queryButton());
+    expect(asked).toBe(1);
+    release?.();
+    await screen.findByTestId('funnel-result');
+    await waitFor(() => expect(queryButton()).toBeEnabled());
+    // the next query is refused with 429: the button comes back
+    refuse = true;
+    await user.click(queryButton());
+    await waitFor(() => expect(asked).toBe(2));
+    expect(queryButton()).toBeDisabled();
+    release?.();
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(enUS['error.RATE_LIMITED']);
+    await waitFor(() => expect(queryButton()).toBeEnabled());
+    expect(busyMarks()).toBeNull();
+  });
+
+  it('says it in Chinese too, never the words of the backend', async () => {
+    const user = userEvent.setup();
+    useMockBackend(analyticsMock);
+    renderPage(<FunnelPage />, 'zh-CN');
+    await user.click(await screen.findByRole('combobox', { name: '已保存的漏斗' }));
+    const options = await screen.findAllByText(presetName(0), {
+      selector: '.ant-select-item-option-content *, .ant-select-item-option-content',
+    });
+    await user.click(options[options.length - 1]);
+    await screen.findByTestId('funnel-result');
+    analyticsStore.funnelInFlight = 2;
+    await user.click(screen.getByRole('button', { name: /查\s?询/ }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('请求过于频繁，请稍后再试');
+    expect(alert.textContent).not.toMatch(/Too many funnels/);
   });
 
   it('shows the answer of the newest query, also when an older one arrives later', async () => {
@@ -426,9 +578,7 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     const user = userEvent.setup();
     renderPage(<FunnelPage />);
     await choose(user, 'Short');
-    await user.click(queryButton());
     await choose(user, 'Long');
-    await user.click(queryButton());
     await screen.findByText('c', { selector: 'td *, td' });
     release?.();
     await new Promise((r) => setTimeout(r, 100));
@@ -478,7 +628,9 @@ describe('the funnel page: what may be asked', { timeout: 40000 }, () => {
     await addStep(user, 'x,y');
     expect(queryButton()).toBeDisabled();
     expect(screen.getByText('An event name cannot contain a comma')).toBeInTheDocument();
-    expect(funnelCalls(calls)).toHaveLength(0);
+    // only the ask made when the funnel was chosen: the broken form is not asked
+    await new Promise((r) => setTimeout(r, 150));
+    expect(funnelCalls(calls)).toHaveLength(1);
   });
 
   it('refuses a step that is only blanks', async () => {

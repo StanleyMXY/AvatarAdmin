@@ -1,13 +1,15 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal, Select, Switch, Typography } from 'antd';
 import { useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { createTemplate, SMS_TYPES, type SmsTemplate, updateTemplate } from '../../services/sms';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { countryCodeProblem } from './channelRules';
 import { failureToForm } from './formFailure';
-import { isLastOtpTemplate } from './lastOtp';
+import { isLastOtpTemplate, keepsEnglishFallback } from './lastOtp';
+import { isEnglishFallbackRefusal, templateFailureText } from './templateFailure';
 import {
   buildTemplateBody,
   CODE_PLACEHOLDER,
@@ -15,7 +17,7 @@ import {
   SMS_PLACEHOLDERS,
   type TemplateFormValues,
 } from './templateRules';
-import { guardedFailureText, type useLastOtpPrompt } from './useLastOtpPrompt';
+import type { useLastOtpPrompt } from './useLastOtpPrompt';
 
 type Values = Omit<TemplateFormValues, 'smsType'> & { smsType?: TemplateFormValues['smsType'] };
 
@@ -44,6 +46,8 @@ const asCoverage = (t: Partial<SmsTemplate>) => ({
   id: plainText(t.id),
   enabled: t.enabled === true,
   smsType: plainText(t.smsType),
+  locale: t.locale,
+  country: t.country,
 });
 
 /**
@@ -70,6 +74,18 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
         guarded = true;
       }
     }
+    // The narrower rule: the last enabled English OTP template with no country must stay that way.
+    if (template && !guarded) {
+      const others = all ?? [template];
+      const after = {
+        smsType: values.smsType ?? '',
+        locale: values.locale,
+        country: values.country,
+      };
+      if (!keepsEnglishFallback(asCoverage(template), after, others.map(asCoverage))) {
+        if (!(await ask('change', 'englishTemplate'))) return;
+      }
+    }
     const input = values as TemplateFormValues;
     try {
       if (template)
@@ -77,7 +93,11 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
       else await createTemplate(buildTemplateBody(input, 'create'));
     } catch (error) {
       const result = failureToForm(intl, form, error, FIELDS);
-      setFailure({ text: guardedFailureText(intl, error, guarded), more: result.unplaced });
+      // The refusal about the English template names no field: its words stand alone at the top.
+      setFailure({
+        text: templateFailureText(intl, error, guarded),
+        more: isEnglishFallbackRefusal(error) ? [] : result.unplaced,
+      });
       return;
     }
     message.success(t('sms.common.saved'));
@@ -125,6 +145,7 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         {editing ? (
           <Form.Item label={t('sms.templates.field.code')}>
             <Typography.Text strong style={{ overflowWrap: 'anywhere' }}>

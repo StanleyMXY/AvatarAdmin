@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Flex, Form, Input, InputNumber, Modal, Spin, Switch } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { getTier, MEMORY_NAME_PATTERN, saveTier, type TierSettings } from '../../services/memory';
 import { describeFailure } from '../../session/describe';
@@ -184,6 +185,7 @@ export function TierForm({ open, tierName, existing, starting, onClose, onSaved 
         {creating ? <Alert type="info" showIcon title={t('memory.tier.createNote')} /> : null}
         <Spin spinning={loading}>
           <Form form={form} layout="vertical" requiredMark={false} onFinish={submit}>
+            <RevalidateOnLocaleChange />
             {creating ? (
               <Form.Item
                 name="tierName"

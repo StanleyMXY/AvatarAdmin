@@ -1,9 +1,14 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { type ReactNode, useEffect } from 'react';
 import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { history, resetUmiStub, setTestLocation } from '../../../tests/stubs/umi-max';
 import type { AdminRoute } from '../../access/canAccess';
+import {
+  markServiceReachable,
+  markServiceUnavailable,
+  resetServiceStatus,
+} from '../../request/serviceStatus';
 import { TABS_STORAGE_KEY, TabManager } from './TabManager';
 
 const routes: AdminRoute[] = [
@@ -41,6 +46,8 @@ const messages = {
     'menu.users.abuse': 'Multi-account',
     'menu.users.detail': 'User detail',
     'menu.system.audit': 'Audit log',
+    'error.GATEWAY_UNAVAILABLE': 'The service is temporarily unavailable. Please try again later.',
+    'pages.common.retry': 'Retry',
     'pages.tabs.refresh': 'Refresh',
     'pages.tabs.close': 'Close',
     'pages.tabs.closeOthers': 'Close others',
@@ -54,6 +61,8 @@ const messages = {
     'menu.users.abuse': '多开检测',
     'menu.users.detail': '用户详情',
     'menu.system.audit': '审计日志',
+    'error.GATEWAY_UNAVAILABLE': '服务暂时不可用，请稍后重试',
+    'pages.common.retry': '重试',
     'pages.tabs.refresh': '刷新',
     'pages.tabs.close': '关闭',
     'pages.tabs.closeOthers': '关闭其他',
@@ -120,6 +129,7 @@ const choose = async (tabName: string, item: string) => {
 };
 
 beforeEach(() => {
+  resetServiceStatus();
   resetUmiStub();
   setTestLocation({ pathname: '/dashboard' });
   mounts = 0;
@@ -151,7 +161,21 @@ describe('TabManager: opening tabs', () => {
     const ui = render(<Shell />);
     visit('/users/42', ui);
     visit('/users/43', ui);
-    expect(tabLabels()).toEqual(['Overview', 'User detail', 'User detail']);
+    expect(tabLabels()).toEqual(['Overview', 'User detail · 42', 'User detail · 43']);
+  });
+
+  it('writes the identifier in the title in either language', () => {
+    const ui = render(<Shell />);
+    visit('/users/42', ui);
+    expect(tab('User detail').textContent).toBe('User detail · 42');
+    ui.rerender(<Shell locale="zh-CN" />);
+    expect(tabLabels()).toEqual(['总览', '用户详情 · 42']);
+  });
+
+  it('gives a page with a fixed address no identifier', () => {
+    const ui = render(<Shell />);
+    visit('/users/list', ui);
+    expect(tabLabels()).toEqual(['Overview', 'User list']);
   });
 
   it('opens no tab for a path that is not a page, or for a page the administrator may not see', () => {
@@ -419,5 +443,53 @@ describe('TabManager: titles and language', () => {
       </IntlProvider>,
     );
     expect(tabLabels()).toEqual(['/dashboard', '/users/list']);
+  });
+});
+
+describe('TabManager: the service is unavailable', () => {
+  const notice = () => screen.queryByRole('alert');
+
+  it('shows nothing while the service answers', () => {
+    render(<Shell />);
+    expect(notice()).toBeNull();
+  });
+
+  it('shows the text in the language in use, with a retry button, when a read found the gateway down', () => {
+    const ui = render(<Shell />);
+    act(() => markServiceUnavailable());
+    expect(notice()?.textContent).toContain(
+      'The service is temporarily unavailable. Please try again later.',
+    );
+    expect(
+      within(notice() as HTMLElement).getByRole('button', { name: 'Retry' }),
+    ).toBeInTheDocument();
+    ui.rerender(<Shell locale="zh-CN" />);
+    expect(notice()?.textContent).toContain('服务暂时不可用，请稍后重试');
+    expect(
+      within(notice() as HTMLElement).getByRole('button', { name: /重\s*试/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('retry loads the open page again and takes the notice away', () => {
+    render(<Shell />);
+    const before = mounts;
+    act(() => markServiceUnavailable());
+    fireEvent.click(within(notice() as HTMLElement).getByRole('button', { name: 'Retry' }));
+    expect(mounts).toBe(before + 1);
+    expect(notice()).toBeNull();
+  });
+
+  it('goes away by itself when a request is answered again', () => {
+    render(<Shell />);
+    act(() => markServiceUnavailable());
+    act(() => markServiceReachable());
+    expect(notice()).toBeNull();
+  });
+
+  it('goes away when another page is opened', () => {
+    const ui = render(<Shell />);
+    act(() => markServiceUnavailable());
+    visit('/users/list', ui);
+    expect(notice()).toBeNull();
   });
 });

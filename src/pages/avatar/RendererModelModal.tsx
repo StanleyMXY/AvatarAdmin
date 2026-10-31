@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select, Typography } from 'antd';
 import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
+import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { createRendererModel, PLATFORMS, type Platform } from '../../services/avatar';
 import { trimSpec } from '../../utils/trimSpec';
@@ -124,6 +125,7 @@ export function RendererModelModal({ open, onClose, onSaved }: Props) {
         }}
         onFinish={(values) => run(values)}
       >
+        <RevalidateOnLocaleChange />
         <Form.Item label={t('avatar.models.file')} extra={t('avatar.models.fileHint')}>
           <UploadBox>
             <UploadField<{ uploadId: string }>
