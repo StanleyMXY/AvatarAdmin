@@ -2,7 +2,14 @@ import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { envelope, jsonResponse, stubFetch, textResponse } from '../../tests/httpStubs';
 import { resetUmiStub, setTestInitialState } from '../../tests/stubs/umi-max';
-import { getToken, resetSessionState, setToken } from '../request/session';
+import { TABS_STORAGE_KEY } from '../components/layout/TabManager';
+import {
+  clearToken,
+  getToken,
+  resetSessionState,
+  setSessionHandlers,
+  setToken,
+} from '../request/session';
 import { loadSession } from './loadSession';
 import { useAdminMeta } from './useSession';
 
@@ -20,6 +27,7 @@ const meBody = (extra: Record<string, unknown> = {}) =>
 beforeEach(() => {
   resetUmiStub();
   sessionStorage.clear();
+  localStorage.clear();
   resetSessionState();
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -136,6 +144,94 @@ describe('loadSession', () => {
       expect(getToken()).toBe('tok');
     },
   );
+
+  it('keeps the remembered tabs when the account cannot be read: a failed read is not a sign-out', async () => {
+    setToken('tok');
+    localStorage.setItem(TABS_STORAGE_KEY, '["/dashboard","/users/42"]');
+    stubFetch(() => jsonResponse(500, envelope('INTERNAL_ERROR')));
+    expect(await loadSession()).toEqual({ unavailable: true });
+    expect(localStorage.getItem(TABS_STORAGE_KEY)).toBe('["/dashboard","/users/42"]');
+  });
+
+  it('does not ask for the shared values once the token is gone, and says there is no session', async () => {
+    setToken('tok');
+    localStorage.setItem(TABS_STORAGE_KEY, '["/dashboard"]');
+    let release: (r: Response) => void = () => {};
+    const calls = stubFetch((call) =>
+      call.url.endsWith('/me')
+        ? new Promise<Response>((resolve) => {
+            release = resolve;
+          })
+        : Promise.resolve(jsonResponse(200, envelope('200', { maxRecipients: 1 }))),
+    );
+    const pending = loadSession();
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    clearToken(); // signed out while the account is being read
+    release(jsonResponse(200, meBody()));
+    expect(await pending).toEqual({});
+    expect(calls.map((c) => c.url)).toEqual(['/api/admin/me']);
+    expect(localStorage.getItem(TABS_STORAGE_KEY)).toBeNull();
+  });
+
+  it("does not ask for the shared values with another account's token, and does not touch what that account remembered", async () => {
+    setToken('tokA');
+    localStorage.setItem(TABS_STORAGE_KEY, '["/dashboard"]');
+    let release: (r: Response) => void = () => {};
+    const calls = stubFetch((call) =>
+      call.url.endsWith('/me')
+        ? new Promise<Response>((resolve) => {
+            release = resolve;
+          })
+        : Promise.resolve(jsonResponse(200, envelope('200', { maxRecipients: 1 }))),
+    );
+    const pending = loadSession();
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    setToken('tokB'); // another administrator signed in while the account was being read
+    release(jsonResponse(200, meBody({ username: 'old' })));
+    expect(await pending).toEqual({});
+    expect(calls.map((c) => c.url)).toEqual(['/api/admin/me']);
+    expect(getToken()).toBe('tokB');
+    expect(localStorage.getItem(TABS_STORAGE_KEY)).toBe('["/dashboard"]');
+  });
+
+  it('gives no session, and does not look at the account, when the token was replaced during a failed read', async () => {
+    setToken('tokA');
+    let reject: () => void = () => {};
+    const calls = stubFetch(
+      () =>
+        new Promise<Response>((_, rej) => {
+          reject = () => rej(new TypeError('offline'));
+        }),
+    );
+    const pending = loadSession();
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    setToken('tokB');
+    reject();
+    expect(await pending).toEqual({});
+  });
+
+  it('does not tell the session layer about a refusal of /me itself, and reads it once', async () => {
+    setToken('tok');
+    const onForbidden = vi.fn();
+    setSessionHandlers({ onExpired: vi.fn(), onForbidden });
+    const calls = stubFetch(() => jsonResponse(403, envelope('ADMIN_FORBIDDEN')));
+    expect(await loadSession()).toEqual({ unavailable: true });
+    expect(onForbidden).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('still tells the session layer when the shared values are refused', async () => {
+    setToken('tok');
+    const onForbidden = vi.fn();
+    setSessionHandlers({ onExpired: vi.fn(), onForbidden });
+    stubFetch((call) =>
+      call.url.endsWith('/me')
+        ? jsonResponse(200, meBody())
+        : jsonResponse(403, envelope('ADMIN_FORBIDDEN')),
+    );
+    expect((await loadSession()).meta).toEqual({});
+    expect(onForbidden).toHaveBeenCalledTimes(1);
+  });
 
   it('is empty, not unavailable, when the token was refused: nothing to retry', async () => {
     setToken('old');

@@ -31,9 +31,14 @@ export function useSession() {
     async (token: string, redirect?: string | null): Promise<string | undefined> => {
       setToken(token);
       const next = await loadSession();
-      if (!next.me || getToken() === null) {
-        // The token was given but the account cannot be read: do not stay half signed in.
+      // The token was refused or replaced while the account was being read: that session is over,
+      // and what was read belongs to it. A replacement is another sign-in's token: leave it alone.
+      if (getToken() !== token) return undefined;
+      if (!next.me) {
+        // The token was given but the account cannot be read: do not stay half signed in, and do not
+        // leave the notice of an earlier failed read in the state for the gate to show.
         clearToken();
+        await setInitialState({});
         return undefined;
       }
       clearPendingEnroll();

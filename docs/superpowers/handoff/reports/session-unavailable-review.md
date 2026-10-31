@@ -86,3 +86,49 @@
 
 - 全量测试：按 `CLAUDE.md` 留到全部任务做完后跑一次。我只跑了 `src/session`（97 条全部通过的基线）、`src/components`、`src/pages/user` 以及变异涉及的文件；`npx tsc --noEmit` 和 `biome check src/session src/components/layout` 在拷贝上没有报错。
 - 真实 Umi 浏览器里的提示页和退出：测试用的是 `@umijs/max` 的替身，`pure` 布局下 `childrenRender` 是否照常渲染门页，我是从 `src/.umi/plugin-layout/Layout.tsx` 的代码读出来的（它把 `childrenRender` 放在布局里面渲染），没有在真实浏览器里点过。
+
+## 修复
+
+处理了上面的 1 条立即修和 7 条记录项。立即修未修 0、记录项 0（上面 7 条都已修）、未运行 2（同上：全量测试留到全部任务做完后跑一次；真实浏览器里的提示页和退出没有点过）、阻塞 0。做法：每条先写会失败的测试并看到红，再修；评审点名存活的变异逐个确认现在会变红。
+
+### 立即修：重试在途时退出，旧读取的结果仍被写进状态
+
+- `src/session/loadSession.ts`：开始时记下令牌；读 `/me` 之后、读 `/meta` 之前、读 `/meta` 之后都复查令牌是否还是开始时的那个，变了就不再往下读，返回 `{}`。令牌是空了（被服务器拒绝或退出），顺手忘掉标签页；令牌是被另一个账号换掉了，不动标签页（那是正在登录的账号的）。读 `/me` 失败的分支同样先看令牌是否变了，变了不返回 `unavailable`。这样复现三（退出后旧请求返回，再发无令牌的 `/meta` 而弹出假的“登录已过期”）不会再发生。
+- `src/session/SessionGate.tsx`：`retry` 开始时记下令牌，读完后如果现在的令牌是另一个非空令牌就丢弃结果，不调用 `setInitialState`。令牌只是空了的情形仍写入（此时结果是 `{}`，等于“未登录”），所以“重试遇到令牌被拒”的既有行为不变。没有照评审字面写成“令牌变了一律丢弃”，原因是令牌为空时丢弃会让没有挂载 `SessionBridge` 的场合（既有测试）停在提示页；生产里两种写法效果相同。
+- `src/session/useSession.ts`：`establish` 读完后，令牌不再是自己给的那个（被拒绝或被换掉）就直接返回 `undefined`，既不写状态，也不清别人的令牌；原来的写法在 `loadSession` 返回 `{}` 时会把新登录的令牌清掉。
+- 测试（评审的三个复现）：`SessionGate.test.tsx` 的“重试在途时退出”三条：旧读取成功返回，状态不变、没有 `/meta` 请求、没有“已过期”提示、没有多余的跳转；退出后另一个账号登录，旧读取成功不覆盖；旧读取失败不把提示页盖回新账号。另有 `loadSession.test.tsx` 三条（令牌空了不读 `/meta`；令牌被换不读 `/meta` 且不动对方的标签页；失败读取期间令牌被换返回 `{}`）和 `establish.test.tsx` 两条（令牌被换时不清对方的令牌、不写状态）。红：修之前 `SessionGate.test.tsx` 4 条、`loadSession.test.tsx` 4 条、`establish.test.tsx` 3 条失败。
+
+### 记录项
+
+1. `/me` 本身答 403：`src/request/apiClient.ts` 给 `apiRequest` 加了 `reportForbidden`（默认真），`reportSessionSignals`、`unwrapAndReport` 跟着传；`src/services/auth/index.ts` 的 `getMe` 传 `false`。令牌被拒（401）照旧上报。结果：`/me` 答 403 时不弹“无权限”、不多读一次（也消除了 `/me` 一直答 403 时 `onForbidden` 与 `readMeAgain` 互相触发的可能）；其他接口的 403 仍然走 `SessionBridge.onForbidden` 重新取权限，`/meta` 的 403 也照旧上报。测试：`apiClient.test.ts` 一条，`loadSession.test.tsx` 两条（`/me` 的 403 不上报、`/meta` 的 403 仍上报），`SessionGate.test.tsx` 一条（重试遇到 403：没有“无权限”提示，`/me` 只读一次）。
+2. 已删除管理员的令牌：写成 `docs/contract-requests/2026-10-31-admin-frontend-deleted-admin-token.md`，用评审里的完整变更请求（名称、行为、检查顺序、错误、测试）；前端不改，继续按现有做法（提示页有重试和退出）。
+3. 登录或绑定失败时残留的 `unavailable`：`establish` 在读不到账号时清令牌并把状态置 `{}`。测试：`establish.test.tsx`（后端 500 和网络失败各一条，状态为 `{}`；原状态是 `unavailable` 时被清掉）。
+4. 门页退出：`SessionGate.test.tsx` 的退出测试现在断言令牌（内存和 `sessionStorage`）为空、标签页键被删、`history.replace('/user/login')`、提示页消失。
+5. 读不到账号时保留标签页：`loadSession.test.tsx` 一条，标签页键放着，读不到账号后仍在。
+6. 绑定页登录后读不到账号：`enroll.test.tsx` 补一条与登录页对应的测试（提示文字、令牌为空、不跳转）；`establish` 失败不写状态由 `establish.test.tsx` 守着。
+7. 文字：`src/session/state.ts`、`ServiceUnavailable.tsx`、`SessionGate.tsx`、`src/app.tsx` 的注释和 `src/app.test.tsx` 的测试名改成“账号读不到（令牌还在）”；`isServiceUnreachable` 没有生产调用，连同 `src/request/errors.test.ts` 里它的测试一起删除（`errors.ts`）。
+
+### 评审点名存活的变异，现在的结果
+
+在 `/home/user/AvatarAdmin` 里逐个临时改动、跑相关测试、恢复，全部变红（被抓住）：
+
+| 变异 | 现在 |
+| --- | --- |
+| 门页退出按钮只清令牌 | 2 条失败 |
+| `loadSession` 在读不到账号时忘掉标签页 | 1 条失败 |
+| 绑定页去掉登录后读不到账号的提示 | 1 条失败 |
+| `establish` 失败时写入 `unavailable` 状态 | 3 条失败 |
+| `retry` 不比较令牌就写状态 | 2 条失败 |
+| `loadSession` 去掉读 `/meta` 前的令牌复查 | 3 条失败 |
+| `loadSession` 只检查令牌是否为空（不检查被换） | 1 条失败 |
+| `getMe` 恢复为上报 403 | 2 条失败 |
+| `establish` 在令牌被换时仍清令牌 | 2 条失败 |
+| `apiRequest` 忽略 `reportForbidden` | 1 条失败 |
+
+### 验证
+
+`src/session`、`src/components/layout`、`src/pages/user`、`src/request`、`src/app.test.tsx`、`tests/noHardcodedText.test.ts`、`src/locales`：39 个文件、1093 条全部通过；`npx tsc --noEmit` 无报错；改动的文件 `biome check` 无报错无警告。没有新增语言文字。
+
+### 另外看到的（不在这次评审范围，没有改）
+
+`SessionBridge.onForbidden` 和 `useSession.refreshPermissions` 读完 `/me` 后都是把 `me` 并进应用状态，没有核对令牌是否还是开始读取时的那个；403 触发的重新读取在途时退出，理论上同一类竞态会把账号写回已退出的状态。我没有复现，也没有改，需要负责人决定是否另立任务。

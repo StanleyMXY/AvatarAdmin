@@ -77,6 +77,23 @@ describe('the authenticator setup page', () => {
     expect(JSON.stringify(Object.entries(localStorage))).not.toContain('tok-new');
   });
 
+  it('does not stay signed in when the account cannot be read after the code was accepted, and says so', async () => {
+    stubFetch((call) =>
+      call.url.endsWith('/totp/enroll')
+        ? jsonResponse(200, envelope('200', { token: 'tok-new', expiresAt: 'x' }))
+        : jsonResponse(500, envelope('INTERNAL_ERROR')),
+    );
+    const user = userEvent.setup();
+    renderPage(<Enroll />);
+    await user.type(screen.getByLabelText('Verification code'), '000000');
+    await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+    expect(
+      await screen.findByText('Signed in, but your account could not be read. Try again.'),
+    ).toBeInTheDocument();
+    expect(getToken()).toBeNull();
+    expect(history.replace).not.toHaveBeenCalled();
+  });
+
   it('goes to the page the sign-in was heading for', async () => {
     setPendingEnroll({ enrollToken: 'e', otpauthUri: OTPAUTH, redirect: '/users/list?x=1' });
     stubFetch((call) =>

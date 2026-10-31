@@ -73,10 +73,14 @@ export function buildHeaders(json: boolean): {
 }
 
 /** Tells the session layer about the answers that matter to it; the error is thrown by the caller. */
-export function reportSessionSignals(error: unknown, sentToken: string | null): void {
+export function reportSessionSignals(
+  error: unknown,
+  sentToken: string | null,
+  reportForbidden = true,
+): void {
   if (!(error instanceof ApiError)) return;
   if (error.code === 'ADMIN_INVALID_TOKEN') handleTokenExpired(sentToken);
-  else if (error.code === 'ADMIN_FORBIDDEN') handleForbidden();
+  else if (error.code === 'ADMIN_FORBIDDEN' && reportForbidden) handleForbidden();
 }
 
 /**
@@ -100,11 +104,12 @@ export function unwrapAndReport<T>(
   text: string,
   sentToken: string | null,
   reportSession = true,
+  reportForbidden = true,
 ): T {
   try {
     return unwrapResponse<T>(httpStatus, text);
   } catch (error) {
-    if (reportSession) reportSessionSignals(error, sentToken);
+    if (reportSession) reportSessionSignals(error, sentToken, reportForbidden);
     throw error;
   }
 }
@@ -122,6 +127,11 @@ export async function apiRequest<T>(o: {
    * token (the enrollment token of the authenticator setup): the session layer is not told.
    */
   reportSession?: boolean;
+  /**
+   * False for the read of the account itself (`GET /me`): a 403 there cannot be answered by reading
+   * the permissions again, which is what the session layer would do. A lost token is still reported.
+   */
+  reportForbidden?: boolean;
 }): Promise<T> {
   const url = `${resolveUrl(o.url)}${buildQuery(o.params)}`;
   const hasBody = o.body !== undefined;
@@ -146,7 +156,7 @@ export async function apiRequest<T>(o: {
     deadline.dispose();
   }
   try {
-    const data = unwrapAndReport<T>(status, text, sentToken, o.reportSession);
+    const data = unwrapAndReport<T>(status, text, sentToken, o.reportSession, o.reportForbidden);
     markServiceReachable();
     return data;
   } catch (error) {

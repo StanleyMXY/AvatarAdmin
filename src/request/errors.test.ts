@@ -3,7 +3,6 @@ import {
   ApiError,
   describeError,
   isOutcomeUnknown,
-  isServiceUnreachable,
   networkError,
   type Page,
   timeoutError,
@@ -161,18 +160,5 @@ describe('isOutcomeUnknown', () => {
     expect(isOutcomeUnknown(answered('ADMIN_FORBIDDEN', 403))).toBe(false);
     expect(isOutcomeUnknown(answered('RATE_LIMITED', 429))).toBe(false);
     expect(isOutcomeUnknown(answered('INTERNAL_ERROR', 500))).toBe(false);
-  });
-});
-
-describe('isServiceUnreachable', () => {
-  it('is true for network, time limit and the gateway page, and only for those', () => {
-    expect(isServiceUnreachable(networkError())).toBe(true);
-    expect(isServiceUnreachable(timeoutError())).toBe(true);
-    expect(isServiceUnreachable(answered('GATEWAY_UNAVAILABLE', 504))).toBe(true);
-    expect(isServiceUnreachable(answered('ADMIN_INVALID_TOKEN', 401))).toBe(false);
-    expect(isServiceUnreachable(answered('INTERNAL_ERROR', 500))).toBe(false);
-    expect(isServiceUnreachable(answered('INVALID_RESPONSE', 200))).toBe(false);
-    expect(isServiceUnreachable(new Error('x'))).toBe(false);
-    expect(isServiceUnreachable(undefined)).toBe(false);
   });
 });

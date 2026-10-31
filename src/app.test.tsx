@@ -72,7 +72,7 @@ describe('layout', () => {
     expect(screen.getByText('Page not found')).toBeInTheDocument();
   });
 
-  it('draws no menu or header only while the account could not be read because the service is unreachable', () => {
+  it('draws no menu or header only while the account could not be read and the token is still held', () => {
     expect(layout({ initialState: { unavailable: true } }).pure).toBe(true);
     expect(layout({ initialState: { me: signedIn(false, []), unavailable: true } }).pure).toBe(
       false,

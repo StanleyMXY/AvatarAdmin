@@ -2,9 +2,9 @@ import { useIntl } from '@umijs/max';
 import { Button, Result, Space } from 'antd';
 
 /**
- * Fills the page when the account could not be read because the service could not be reached. The
- * person is still signed in (the token is kept); `onRetry` reads the account again, and `onSignOut`
- * lets them leave when the error lasts.
+ * Fills the page when the account could not be read (the network, the gateway or the backend
+ * failed). The person is still signed in (the token is kept); `onRetry` reads the account again,
+ * and `onSignOut` lets them leave when the error lasts.
  */
 export function ServiceUnavailable({
   onRetry,

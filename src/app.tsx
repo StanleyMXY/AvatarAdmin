@@ -57,7 +57,7 @@ export const layout = ({ initialState }: { initialState?: InitialState }) => {
     title: buildVars.productName,
     logo: buildVars.logoUrl,
     layout: 'mix' as const,
-    // The account could not be read because the service is unreachable: nothing of the shell (menu,
+    // The account could not be read (token still held): nothing of the shell (menu,
     // header) belongs to a person we cannot name yet, so the notice fills the whole page.
     pure: !me && initialState?.unavailable === true,
     fixedHeader: true,
