@@ -51,7 +51,7 @@
    - 假后端（`mock/sms.mock.ts`、`mock/_core/smsData.ts`）：凭据存成映射；null 值、非文本值、空名称或只有空白的名称、不是映射（null、文本、列表）→ 400 `EMPTY_NOT_ALLOWED` on `credentials`，创建和更新都一样、不改任何东西；省略或 `{}` 保持不变；答案里仍只有 `hasCredentials`。
    - 服务类型 `src/services/sms/types.ts`：`credentials?: Record<string,string>`。语言文件两种语言加了六条文字、改了两条（`sms.channels.credentialsSet`、`note.credentials`）。
    - 问题文件：`docs/contract-requests/2026-10-31-admin-frontend-sms-credentials-shape.md`（是否整体替换还是按名称合并；每个供应商需要哪些名称，请在 `GET /sms/meta` 里给 `credentialNames`；字符串的旧写法后端怎么答；长度和条数上限）。
-   - 和 msg 区域的分工：只动了渠道表单、渠道规则、渠道的假后端和服务类型，没碰模板、记录；共享的 `mock/sms.mock.ts`、`mock/sms.mock.test.ts`、`src/locales/*/sms.ts` 里有别的代理的未提交改动，我的提交只含我的块（见提交说明）。
+   - 和 msg 区域的分工：只动了渠道表单、渠道规则、渠道的假后端和服务类型，没碰模板、记录；共享的 `mock/sms.mock.ts`、`mock/sms.mock.test.ts`、`src/locales/*/sms.ts` 在我提交时已没有别的代理的未提交改动（对方先提交了），所以第二个提交里只有渠道凭据的改动。
    - 测试：`channelRules.test.ts`（映射、空行不发、不发 null、`credentialProblems`）、`channels.form.test.tsx`（打开无行且无回显、密码框属性、一边空和重名拦下并且不发请求、多种语言的值进请求、重新打开无行、失败不显示凭据和后端文字、后端拒绝放在凭据下）、`mock/sms.mock.test.ts`（7 种非法形状 × 创建和更新、`{}` 保持、任意语言的值）。RED：`npx vitest run mock/sms.mock.test.ts src/services/sms src/pages/sms/channelRules.test.ts` → 18 failed | 69 passed；GREEN：同时加上 `channels.form.test.tsx channels.test.tsx channels.testsend.test.tsx` → 6 个文件 156 passed。真实浏览器：打开编辑时 0 行，只填名称提交时“Enter a value for this name”，补值后请求体是 `{"apiKey":"ñandú-ผู้ใช้-密钥"}`，重新打开 0 行，页面 HTML 里没有这个值。
 
 ## 真实浏览器检查（Playwright Chromium，草稿目录拷贝，`dev:mock` 端口 8741/8742，用完按进程号停）
