@@ -178,6 +178,32 @@ describe('the credentials are write-only', () => {
     expect(form.getByText(/No credentials are set yet/)).toBeInTheDocument();
   });
 
+  const NOT_FILLED_IN =
+    'are in a form that the browser does not fill in, like the other dialogs: the form, the name box and the value box all say so';
+  const expectNotFilledIn = async (
+    user: ReturnType<typeof userEvent.setup>,
+    box: ReturnType<typeof within>,
+  ) => {
+    expect(document.querySelector('.ant-modal form')?.getAttribute('autocomplete')).toBe('off');
+    await user.click(box.getByRole('button', { name: 'Add a credential' }));
+    const name = box.getByLabelText('Credential name') as HTMLInputElement;
+    const value = box.getByLabelText('Credential value') as HTMLInputElement;
+    expect(name.autocomplete).toBe('off');
+    expect(value.type).toBe('password');
+    expect(value.autocomplete).toBe('new-password');
+    expect(value.hasAttribute('name')).toBe(false);
+  };
+
+  it(`${NOT_FILLED_IN} (a new channel)`, async () => {
+    const { user } = await load();
+    await expectNotFilledIn(user, await openNew(user));
+  });
+
+  it(`${NOT_FILLED_IN} (an edit)`, async () => {
+    const { user } = await load();
+    await expectNotFilledIn(user, await openEdit(user, 'gw_th_otp'));
+  });
+
   it('are not in the request of an edit that did not type any, which carries the editable fields and no other', async () => {
     const calls = backend();
     leakSecrets();

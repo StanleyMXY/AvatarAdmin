@@ -178,6 +178,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
         form={form}
         name="smsChannel"
         layout="vertical"
+        autoComplete="off"
         requiredMark={false}
         initialValues={{
           channelCode: '',
