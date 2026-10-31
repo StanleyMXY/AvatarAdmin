@@ -6,7 +6,7 @@
 
 **未运行 1：** 全量测试和构建（规则：全部任务做完后由主会话跑一次）。本区域只跑了和改动有关的测试，最后一轮的命令和结果在文末。
 **记录项 1：** 邮件模板主题或正文含 NUL 字符时后端答 400（清单 W2a 第 5 条）。正常表单输入不会产生 NUL，没有改动；触发它需要在请求里手工塞入 NUL，结果是 400 `INVALID_REQUEST`，页面显示按码翻译的文字，没有数据损失。邮件模板页由别的区域负责，这里不改。
-**变更（按业界通行做法自己定）：** ① 角色权限树里非超级管理员持有以外的节点预先禁用；② 短信渠道凭据由一个文本框改成“名称 + 值”若干行（见下 W2a 第 1 条）。理由都写在对应行。
+**变更（按业界通行做法自己定）：** 角色权限树里非超级管理员持有以外的节点预先禁用。理由写在对应行。短信渠道凭据由一个文本框改成“名称 + 值”若干行不算变更：字符串形状和后端的映射对不上，是协议对不上，归立即修（已修，见下 W2a 第 4 条）。
 
 ## a1 管理员只能授出自己持有的权限（四类 403 `ADMIN_FORBIDDEN`）
 
@@ -86,3 +86,27 @@
 ## 最后一轮测试
 
 命令：`npx vitest run mock/system.mock.test.ts mock/auth.mock.test.ts mock/sms.mock.test.ts src/pages/system src/pages/user src/pages/sms/channelRules.test.ts src/pages/sms/channels.form.test.tsx src/pages/sms/channels.test.tsx src/pages/sms/channels.testsend.test.tsx src/services/system src/services/sms src/services/auth src/session tests/noHardcodedText.test.ts src/locales`（`src/pages/user` 也匹配了 `src/pages/users`，多跑了用户页）。结果：46 个文件、1393 条里 1385 条通过、8 条失败；失败都是机器负载高（平均负载约 10，别的代理同时在跑测试）时 30 秒超时或等待超时，没有断言失败：`audit.test.tsx` 3 条、`roles.test.tsx` 3 条、`users/detailTabs.test.tsx` 2 条（用户页，不是本区域）。单独重跑：`npx vitest run src/pages/system/audit.test.tsx` → 24 passed；`npx vitest run src/pages/system/roles.test.tsx src/pages/users/detailTabs.test.tsx` → 57 passed。因此这一组没有失败项，但“一次跑完全绿”我没有拿到，只拿到“失败的都单独重跑通过”。`npx tsc --noEmit` 对本区域路径没有诊断；`npx biome check` 对本区域文件没有错误。
+
+## 评审后修复（独立评审的 5 条记录项和 1 条变更候选）
+
+立即修未修 0、记录项 0、未运行 2、阻塞 0。评审文件：`backend-d1-authsys-review.md`。每条先写会失败的测试（或做变异留下失败证据）再修，只跑了相关的快速测试。
+
+1. **重置密码对话框的 403 句子没有测试守着：已补**（提交 `dd2b2a2`）。`admins.test.tsx` 的 `reset password` 里新增两条：英文界面下，后端答 403 且 `message` 带标记时，对话框里是“你没有执行此操作的权限”加整句规则说明，标记不出现，对话框和页面都留着、不跳转；中文界面一条。变异：把 `ResetPasswordModal.tsx:52` 改成 `placed.text`，两条都变红（2 failed）。
+2. **`toggleCode` 的 `grantable` 参数直接单元测试：已补**（提交 `0442349`）。`permissionTree.test.ts` 新增一组 7 条：点没持有的节点（勾上的和没勾的）不变；只持有功能码时勾功能码不带没持有的页面码；持有页面码时一起勾；勾页面只带持有的后代；取消只去掉持有的后代并保留没持有的码；一无所有时点什么都不变；集合为 null 或缺省等于不限制。变异（都在 `permissionTree.ts`，改完立刻还原）：`:197` 的 `mayChange` 改回 `selectable.has` → 1 条变红；`:186` 改回 `selectable.has` → 3 条变红；`:191` 取消时去掉没持有的后代 → 1 条变红；`:194` 勾选时带上没持有的后代 → 1 条变红。
+3. **中文 403 文字两句话之间没有标点：已修**（提交 `dd2b2a2`）。`texts.ts` 的 `withScopeHint` 和 `protectedFailureText`（403 和 409 两处）都改用语言文件里的连接文字 `system.sentences`：英文 `{first} {second}`，中文 `{first}。{second}`。409 的 `refusedHint` 是同一个函数里的同一种拼法，一并改了。新增 `texts.test.ts`（中英文各验 403 和 409，另验别的失败不加句子、不显示后端文字）。变异：中文连接文字改回空格 → 3 条变红。
+4. **报告对短信渠道凭据的分类前后不一致：已统一为“立即修”**。第 9 行的“变更”里去掉了短信渠道凭据，改成一句说明它是协议对不上、归立即修（已修），并把原来写错的指向“W2a 第 1 条”改成“第 4 条”；第 49 行本来就是“立即修”，不动。
+5. **短信渠道表单缺表单级 `autoComplete="off"`：已补**（提交 `688927f`）。`ChannelModal.tsx` 的 `<Form>` 加了 `autoComplete="off"`；值输入保持 `type=password`、`autocomplete=new-password`、没有 `name`，名称输入 `autocomplete=off`。`channels.form.test.tsx` 新增两条（新建和编辑各一条）断言这四项。RED：2 failed（表单属性为 null）；去掉这一行再跑 → 又是 2 failed。
+
+**变更候选（角色含有操作者没持有的权限码时，页面预先说明并禁用保存）：已做**（提交 `03193f1`，按业界通行做法定为要做，负责人已授权）。
+- 做法：非超级管理员打开已有角色的编辑对话框时，把角色的**全部**权限码（包括权限树不认识的码，因为后端按角色原有的全部码判断）和 `me.permissions` 比较，有不持有的就在对话框顶部显示一条警告：“这个角色含有你没有的权限：A, B，你不能保存对它的修改。”英文 “This role has permissions you do not hold: A, B. You cannot save changes to it.”，同时“保存”按钮禁用；权限树仍然显示，可以看。最多列 20 个码，超过 20 个时写前 20 个再写总数：“……{前 20 个} 等共 {总数} 个，……”（英文 “and others, N in total”）。“等 N 个”里的 N 我按总数理解，写成“等共 N 个”以免被读成剩余数；如果你要的是剩余数，改 `system.roles.notHeldMany` 一个键和一处 `count` 即可。每个码经 `plainText` 写成文字（标记、泰语、阿拉伯语、数字、对象、空值都当文字处理；空值不算码；同一个码只列一次）。超级管理员不受限，新建角色（没有已有的码）也不受限。假后端不用改。
+- 文件：`RoleModal.tsx`、`permissionTree.ts`（新函数 `codesNotHeld`）、`src/locales/{zh-CN,en-US}/system.ts`（`system.roles.notHeld`、`system.roles.notHeldMany`）。
+- 测试：`roles.test.tsx` 新增一组 10 条（先 RED：7 failed），覆盖提示和禁用保存且点保存、在名称框按回车都不发请求、列 20 个和恰好 20 个、奇怪的码、树不认识的码、全部持有照常保存、空角色和新建角色、超级管理员（含账号权限码为空的超级管理员）、一无所有的管理员、中文；`permissionTree.test.ts` 新增 `codesNotHeld` 5 条。原来那条“编辑含没持有码的角色，保存收到 403”的测试，因为现在这个角色根本保存不了，改成用一个全部在持有范围内的角色并让假请求答 403，仍然验证“按码的一句加规则说明、不显示后端文字、对话框留着、不跳转”。
+- 变异检查（都改完立刻还原，共 14 个，全部变红）：从不显示（7 条红）、保存不禁用（6 条红）、上限 21（2 条红）、上限 19（3 条红）、数字写成剩余数（2 条红）、20 个时也走“等共”（1 条红）、超级管理员也受限（2 条红）、不经 `plainText`（2 条红）、不去重（1 条红）、空值也算（2 条红）、集合为 null 时当全部不持有（3 条红）、只数树里认识的码（1 条红）。另外一个防御用的“保存函数里再判一次”我删掉了：保存按钮禁用、表单没有提交按钮，回车不会保存（有测试），那一行在界面上不可达，留着就是一行没人守的代码。
+- 深度自检（权限判断）：① 这是**帮助页面提前说明**，不是权限判断本身，后端仍是最终裁决，403 的老路径照旧（有测试）。② 风险：`GET /me` 的 `permissions` 是否正好等于后端判断时的“持有”（各角色权限码的并集）清单里没核实（后端清单第 4 节第 5 条）；如果 `/me` 少列了，某个角色会被错误地挡住保存；如果多列了，页面放行、后端 403，退回到原来的表现。这个出入只有后端能确认，建议向后端问一次。③ 页面不知道“这个角色是你自己被分配的角色”（后端规则：不能改自己持有的角色），这种角色里的码本来都是持有的，页面放行，后端 403，走原来的 403 句子。④ 删除角色同样要求角色原有的码都被持有，本次没有给删除按钮加预先禁用（没有要求，是另一个新增行为）。⑤ 操作者的 `me` 还没读到时不限制（和已有的复选框禁用一致），不会误挡。⑥ 比较是原样比较，大小写和空格都算，和后端一致。
+- 设计文档 5.16 对角色对话框的描述需要在 main 上补一句（由负责人决定谁改）：非超级管理员打开含有自己没持有的权限码的角色时，对话框提示并禁用保存。
+
+**测试结果（相关的快速测试）：** `npx vitest run src/pages/system src/pages/sms/channels.form.test.tsx src/pages/sms/channels.test.tsx tests/noHardcodedText.test.ts src/locales --testTimeout=60000` → 18 个文件、830 条全部通过（含语言文件两种语言键相同的检查和“禁止写死文字”扫描）。提交前的钩子（biome 和暂存文件的类型检查）通过；一次钩子报了测试里一个参数缺类型，已修后重新提交。
+
+**未运行 2：** ① 真实 Chrome 的密码管理器和自动填充（评审的未运行 1，本机只有无头浏览器，只验了属性）；② 全量测试和构建（规则：全部任务做完后由主会话跑一次）。
+
+**语言覆盖：** 新测试的角色码含泰语、阿拉伯语、标记文字、数字和对象；界面文字只覆盖 zh-CN 和 en-US；印尼语、越南语、西班牙语在新增测试里没有额外加（沿用原有假数据里的角色名“Soporte al cliente”“Quan sát hệ thống”“Pengguna baru”）。
