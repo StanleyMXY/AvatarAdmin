@@ -66,11 +66,27 @@ const pick = (input: HTMLElement, value: string) => {
 const setText = (input: HTMLElement, value: string) =>
   fireEvent.change(input, { target: { value } });
 
+/** Adds a row to the credentials and fills it. */
+async function addCredential(
+  user: ReturnType<typeof userEvent.setup>,
+  form: ReturnType<typeof within>,
+  name: string,
+  value: string,
+) {
+  await user.click(form.getByRole('button', { name: 'Add a credential' }));
+  const names = form.getAllByLabelText('Credential name');
+  const values = form.getAllByLabelText('Credential value');
+  setText(names[names.length - 1], name);
+  setText(values[values.length - 1], value);
+}
+
 /** Fills what a new channel needs, with the values of `over` where it has them. */
 async function fillNew(
   user: ReturnType<typeof userEvent.setup>,
   form: ReturnType<typeof within>,
-  over: Partial<Record<'code' | 'name' | 'url' | 'credentials' | 'ext' | 'priority', string>> = {},
+  over: Partial<Record<'code' | 'name' | 'url' | 'ext' | 'priority', string>> & {
+    credentials?: [string, string];
+  } = {},
 ) {
   await user.type(form.getByRole('textbox', { name: 'Channel code' }), over.code ?? 'gw_new');
   await user.type(form.getByRole('textbox', { name: 'Name' }), over.name ?? 'New channel ไทย');
@@ -79,7 +95,8 @@ async function fillNew(
     form.getByRole('textbox', { name: 'API address' }),
     over.url ?? 'https://sms.example.com/v1/send',
   );
-  if (over.credentials !== undefined) setText(form.getByLabelText('Credentials'), over.credentials);
+  if (over.credentials !== undefined)
+    await addCredential(user, form, over.credentials[0], over.credentials[1]);
   if (over.ext !== undefined)
     setText(form.getByRole('textbox', { name: 'Extension (JSON)' }), over.ext);
   await chooseOption(user, 'Type', 'OTP', await dialog());
@@ -133,20 +150,26 @@ describe('the credentials are write-only', () => {
     expect(cellsOf(await rowOf('gw_es_promo'))[7]).toBe('Not set');
   });
 
-  it('keep the box empty when a channel is edited, also when the backend sends the credentials by mistake', async () => {
+  it('keep the rows empty when a channel is edited, also when the backend sends the credentials by mistake', async () => {
     backend();
     leakSecrets();
     const user = userEvent.setup();
     renderPage(<ChannelsPage />);
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
     const form = await openEdit(user, 'gw_th_otp');
-    const box = form.getByLabelText('Credentials') as HTMLInputElement;
+    // nothing is drawn of what is saved: no row, no name, no value
+    expect(form.queryAllByLabelText('Credential value')).toHaveLength(0);
+    expect(form.queryAllByLabelText('Credential name')).toHaveLength(0);
+    expect(document.body.innerHTML).not.toContain(SECRET);
+    expect(form.getByText(/Credentials are set/)).toBeInTheDocument();
+    expect(form.getByText(/Add no entries to keep them/)).toBeInTheDocument();
+    // a value box is a password box that the browser does not fill in or reveal
+    await user.click(form.getByRole('button', { name: 'Add a credential' }));
+    const box = form.getByLabelText('Credential value') as HTMLInputElement;
     expect(box.value).toBe('');
     expect(box.type).toBe('password');
     expect(box.autocomplete).toBe('new-password');
-    expect(document.body.innerHTML).not.toContain(SECRET);
-    expect(form.getByText(/Credentials are set/)).toBeInTheDocument();
-    expect(form.getByText(/Leave this box empty to keep them/)).toBeInTheDocument();
+    expect(form.queryByRole('button', { name: /show|hide|reveal/i })).not.toBeInTheDocument();
   });
 
   it('say so when none are set yet', async () => {
@@ -177,34 +200,43 @@ describe('the credentials are write-only', () => {
     );
     expect(JSON.stringify(body)).not.toContain(SECRET);
     // The credentials the backend holds are untouched.
-    expect(channel('gw_th_otp').credentials).toBe('seed-secret-1');
+    expect(channel('gw_th_otp').credentials).toEqual({ apiKey: 'seed-secret-1' });
   });
 
-  it('are not in the request of an edit where only blanks were typed', async () => {
+  it('are not in the request of an edit where a row was added and left blank, or removed again', async () => {
     const { calls, user } = await load();
     const form = await openEdit(user, 'gw_th_otp');
-    setText(form.getByLabelText('Credentials'), '   ');
+    await addCredential(user, form, '   ', '   ');
+    await addCredential(user, form, 'gone', 'gone-value');
+    await user.click(form.getAllByRole('button', { name: 'Remove this credential' })[1]);
     await user.click(form.getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect('credentials' in (writesOf(calls)[0].body as object)).toBe(false);
-    expect(channel('gw_th_otp').credentials).toBe('seed-secret-1');
+    expect(JSON.stringify(writesOf(calls)[0].body)).not.toContain('gone-value');
+    expect(channel('gw_th_otp').credentials).toEqual({ apiKey: 'seed-secret-1' });
   });
 
   it('go in the request once when typed, without the blanks around them, and the dialog and the list do not show them afterwards', async () => {
     const { calls, user } = await load();
     const form = await openEdit(user, 'gw_th_otp');
-    setText(form.getByLabelText('Credentials'), '  fresh-secret-77 ');
+    await addCredential(user, form, ' apiKey ', '  fresh-secret-77 ');
+    await addCredential(user, form, 'ผู้ใช้', 'كلمة-السر-ĐÃ-lưu-ñ');
     await user.click(form.getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect((writesOf(calls)[0].body as { credentials: string }).credentials).toBe(
-      'fresh-secret-77',
-    );
-    expect(channel('gw_th_otp').credentials).toBe('fresh-secret-77');
+    // a map of names to text values, once, without the blanks around the names and the values
+    expect((writesOf(calls)[0].body as { credentials: unknown }).credentials).toEqual({
+      apiKey: 'fresh-secret-77',
+      ผู้ใช้: 'كلمة-السر-ĐÃ-lưu-ñ',
+    });
+    expect(channel('gw_th_otp').credentials).toEqual({
+      apiKey: 'fresh-secret-77',
+      ผู้ใช้: 'كلمة-السر-ĐÃ-lưu-ñ',
+    });
     await dialogsClosed();
     expect(document.body.innerHTML).not.toContain('fresh-secret-77');
-    // The box is empty when the channel is opened again.
+    // No row is drawn when the channel is opened again.
     const again = await openEdit(user, 'gw_th_otp');
-    expect((again.getByLabelText('Credentials') as HTMLInputElement).value).toBe('');
+    expect(again.queryAllByLabelText('Credential value')).toHaveLength(0);
   });
 
   it('are not shown in the failure of a save, and what was typed stays only in the box', async () => {
@@ -218,7 +250,7 @@ describe('the credentials are write-only', () => {
     renderPage(<ChannelsPage />);
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
     const form = await openEdit(user, 'gw_th_otp');
-    setText(form.getByLabelText('Credentials'), 'typed-secret-55');
+    await addCredential(user, form, 'apiKey', 'typed-secret-55');
     await user.click(form.getByRole('button', { name: 'Submit' }));
     expect(
       await screen.findByText('Some input is not valid. Please check the fields and try again.'),
@@ -231,10 +263,12 @@ describe('the credentials are write-only', () => {
   it('are sent on a create when typed and left out when not', async () => {
     const { calls, user } = await load();
     let form = await openNew(user);
-    await fillNew(user, form, { credentials: ' typed-secret ' });
+    await fillNew(user, form, { credentials: ['apiKey', ' typed-secret '] });
     await user.click(form.getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect((writesOf(calls)[0].body as { credentials: string }).credentials).toBe('typed-secret');
+    expect((writesOf(calls)[0].body as { credentials: unknown }).credentials).toEqual({
+      apiKey: 'typed-secret',
+    });
     await dialogsClosed();
     form = await openNew(user);
     await fillNew(user, form, { code: 'gw_second' });
@@ -242,6 +276,54 @@ describe('the credentials are write-only', () => {
     await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
     expect('credentials' in (writesOf(calls)[1].body as object)).toBe(false);
     expect(channel('gw_second').credentials).toBeNull();
+  });
+});
+
+describe('the credentials are names with text values (400 EMPTY_NOT_ALLOWED on credentials otherwise)', () => {
+  it('asks for a name for a value and a value for a name, and sends nothing until every row is whole', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'gw_th_otp');
+    await addCredential(user, form, 'apiKey', '');
+    await addCredential(user, form, '', 'a-value');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    expect(await form.findByText('Enter a value for this name')).toBeInTheDocument();
+    expect(form.getByText('Enter a name for this value')).toBeInTheDocument();
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('refuses the same name twice, after the blanks are cut', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'gw_th_otp');
+    await addCredential(user, form, 'apiKey', 'one');
+    await addCredential(user, form, ' apiKey ', 'two');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    expect(await form.findByText('This name is used twice')).toBeInTheDocument();
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('puts the refusal of the backend on the credentials, as the text of its reason and never the words of the backend', async () => {
+    backend();
+    overrideFetch(async ({ method }) =>
+      method === 'PUT'
+        ? jsonAnswer(
+            400,
+            'INVALID_REQUEST',
+            { details: [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }] },
+            'backend words about credentials',
+          )
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<ChannelsPage />);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    const form = await openEdit(user, 'gw_th_otp');
+    await addCredential(user, form, 'apiKey', 'v');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    const fieldText = await form.findByText('It must not be empty.');
+    expect(fieldText.closest('.ant-form-item')?.textContent).toContain('Credentials');
+    expect(document.body.textContent).not.toContain('backend words about credentials');
   });
 });
 
@@ -491,12 +573,12 @@ describe('the dialog', () => {
     const { user } = await load();
     let form = await openNew(user);
     await user.type(form.getByRole('textbox', { name: 'Name' }), 'Typed and abandoned');
-    setText(form.getByLabelText('Credentials'), 'abandoned-secret');
+    await addCredential(user, form, 'apiKey', 'abandoned-secret');
     await user.click(form.getByRole('button', { name: 'Cancel' }));
     await dialogsClosed();
     form = await openEdit(user, 'gw_ar_otp');
     expect(form.getByRole('textbox', { name: 'Name' })).toHaveValue(channel('gw_ar_otp').name);
-    expect((form.getByLabelText('Credentials') as HTMLInputElement).value).toBe('');
+    expect(form.queryAllByLabelText('Credential value')).toHaveLength(0);
     await user.click(form.getByRole('button', { name: 'Cancel' }));
     await dialogsClosed();
     form = await openNew(user);
@@ -544,7 +626,7 @@ describe('a channel that is not what the contract says', () => {
     renderPage(<ChannelsPage />);
     await waitFor(() => expect(rows().length).toBe(1));
     const form = await openEdit(user, 'odd_one');
-    expect((form.getByLabelText('Credentials') as HTMLInputElement).value).toBe('');
+    expect(form.queryAllByLabelText('Credential value')).toHaveLength(0);
     expect(form.getByRole('textbox', { name: 'Extension (JSON)' })).toHaveValue('[\n  1,\n  2\n]');
     expect(form.getByRole('spinbutton', { name: 'Priority' })).toHaveValue('');
     expect(document.body.innerHTML).not.toContain(SECRET);

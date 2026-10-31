@@ -3,6 +3,7 @@ import {
   apiUrlProblem,
   buildChannelBody,
   countryCodeProblem,
+  credentialProblems,
   normalizeCountries,
 } from './channelRules';
 
@@ -49,31 +50,58 @@ describe('the body of a channel', () => {
     name: '  ช่อง  ',
     providerCode: 'gateway-a',
     apiUrl: ' https://sms.example.com/v1 ',
-    credentials: '',
+    credentials: [] as { name?: string; value?: string }[],
     extConfig: '{"appId":"a","senderIds":{"TH":"AV"}}',
     countries: ['th', 'vn'],
     smsType: 'OTP' as const,
     priority: 5,
     enabled: true,
   };
-  it('leaves the credentials out when the box is empty or only blanks, on a create and on an update', () => {
+  it('leaves the credentials out when there is no row, or every row is blank, on a create and on an update', () => {
+    const blank = String.fromCharCode(0x3000);
     expect('credentials' in buildChannelBody(values, 'create')).toBe(false);
-    expect('credentials' in buildChannelBody({ ...values, credentials: '   ' }, 'create')).toBe(
-      false,
-    );
+    expect('credentials' in buildChannelBody({ ...values, credentials: [] }, 'create')).toBe(false);
+    expect(
+      'credentials' in
+        buildChannelBody({ ...values, credentials: [{ name: '   ', value: '' }] }, 'create'),
+    ).toBe(false);
     expect('credentials' in buildChannelBody(values, 'update')).toBe(false);
     expect('credentials' in buildChannelBody({ ...values, credentials: undefined }, 'update')).toBe(
       false,
     );
     expect(
       'credentials' in
-        buildChannelBody({ ...values, credentials: String.fromCharCode(0x3000) }, 'update'),
+        buildChannelBody(
+          { ...values, credentials: [{ name: blank, value: undefined }, {}] },
+          'update',
+        ),
     ).toBe(false);
   });
-  it('sends typed credentials once, without the blanks around them', () => {
-    expect(buildChannelBody({ ...values, credentials: ' s3cret ' }, 'update')).toMatchObject({
-      credentials: 's3cret',
-    });
+  it('sends the typed rows once as a map of names to text values, without the blanks around them', () => {
+    expect(
+      buildChannelBody(
+        {
+          ...values,
+          credentials: [
+            { name: ' apiKey ', value: ' s3cret ' },
+            { name: 'ผู้ใช้', value: 'ñandú' },
+            { name: '', value: '' },
+          ],
+        },
+        'update',
+      ),
+    ).toMatchObject({ credentials: { apiKey: 's3cret', ผู้ใช้: 'ñandú' } });
+  });
+  it('never sends a null, a missing or a number as a value or a name', () => {
+    const body = buildChannelBody(
+      { ...values, credentials: [{ name: 'a', value: 'b' }] },
+      'update',
+    ) as { credentials: Record<string, unknown> };
+    for (const [name, value] of Object.entries(body.credentials)) {
+      expect(typeof name).toBe('string');
+      expect(name).not.toBe('');
+      expect(typeof value).toBe('string');
+    }
   });
   it('has the code and the switch on a create only, and the countries in capitals', () => {
     expect(buildChannelBody(values, 'create')).toEqual({
@@ -98,5 +126,30 @@ describe('the body of a channel', () => {
         countries: [],
       },
     );
+  });
+});
+
+describe('the rows of the credentials', () => {
+  it('has no problem for whole rows with different names, or for rows left blank', () => {
+    expect(
+      credentialProblems([{ name: 'a', value: '1' }, { name: 'b', value: '2' }, {}, { name: ' ' }]),
+    ).toEqual([null, null, null, null]);
+  });
+  it('wants a value for a name and a name for a value', () => {
+    expect(
+      credentialProblems([
+        { name: 'a', value: '' },
+        { name: '', value: 'x' },
+      ]),
+    ).toEqual([{ value: 'REQUIRED' }, { name: 'REQUIRED' }]);
+  });
+  it('marks the second of two equal names, after the blanks are cut, and keeps names that differ in case', () => {
+    expect(
+      credentialProblems([
+        { name: 'Key', value: '1' },
+        { name: ' Key ', value: '2' },
+        { name: 'key', value: '3' },
+      ]),
+    ).toEqual([null, { name: 'DUPLICATE' }, null]);
   });
 });

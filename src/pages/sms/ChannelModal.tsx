@@ -1,5 +1,17 @@
 import { useIntl } from '@umijs/max';
-import { Alert, App, Form, Input, InputNumber, Modal, Select, Switch, Typography } from 'antd';
+import {
+  Alert,
+  App,
+  Button,
+  Flex,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+  Switch,
+  Typography,
+} from 'antd';
 import { useState } from 'react';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -17,6 +29,7 @@ import {
   buildChannelBody,
   type ChannelFormValues,
   countryCodeProblem,
+  credentialProblems,
   normalizeCountries,
 } from './channelRules';
 import { failureToForm } from './formFailure';
@@ -81,9 +94,10 @@ function extConfigText(value: unknown): string {
 }
 
 /**
- * New or edit channel. The credentials box is write-only: it is always empty when the dialog opens,
- * whatever the backend sent, and its text goes into the request only when something was typed (an
- * empty box leaves the key out, which tells the backend to keep what it holds). The code cannot be
+ * New or edit channel. The credentials are write-only rows of a name and a value: there is no row when
+ * the dialog opens, whatever the backend sent, and the request carries them (as a map of names to text
+ * values) only when a whole row was typed; no row leaves the key out, which tells the backend to keep
+ * what it holds. A row with entries replaces everything stored, so the person types all of them again. The code cannot be
  * changed after it was written, and the switch has its own request. Mounted only while it is open, so
  * that nothing typed in one dialog is there in the next.
  */
@@ -170,7 +184,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
           name: plainText(channel?.name),
           providerCode: channel ? plainText(channel.providerCode) : undefined,
           apiUrl: plainText(channel?.apiUrl),
-          credentials: '',
+          credentials: [],
           extConfig: channel ? extConfigText(channel.extConfig) : '',
           countries: channel ? normalizeCountries(channel.countries) : [],
           smsType: channel && SMS_TYPES.includes(channel.smsType) ? channel.smsType : undefined,
@@ -253,7 +267,6 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
           <Input dir="ltr" />
         </Form.Item>
         <Form.Item
-          name="credentials"
           label={t('sms.channels.field.credentials')}
           extra={
             <>
@@ -268,12 +281,78 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
             </>
           }
         >
-          <Input.Password
-            autoComplete="new-password"
-            visibilityToggle={false}
-            dir="ltr"
-            placeholder={editing ? t('sms.channels.credentialsPlaceholder') : undefined}
-          />
+          <Form.List name="credentials">
+            {(rows, { add, remove }, { errors }) => (
+              <Flex vertical gap={8}>
+                {rows.map((row) => (
+                  <Flex key={row.key} gap={8} align="flex-start">
+                    <Form.Item
+                      name={[row.name, 'name']}
+                      style={{ flex: 1, marginBottom: 0 }}
+                      dependencies={[['credentials']]}
+                      rules={[
+                        {
+                          validator: async () => {
+                            const problem = credentialProblems(form.getFieldValue('credentials'))[
+                              row.name
+                            ]?.name;
+                            if (problem === 'REQUIRED')
+                              throw new Error(t('sms.channels.credentialNameRequired'));
+                            if (problem === 'DUPLICATE')
+                              throw new Error(t('sms.channels.credentialNameDuplicate'));
+                          },
+                        },
+                      ]}
+                    >
+                      <Input
+                        aria-label={t('sms.channels.credentialName')}
+                        placeholder={t('sms.channels.credentialName')}
+                        autoComplete="off"
+                        spellCheck={false}
+                        dir="ltr"
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      name={[row.name, 'value']}
+                      style={{ flex: 1, marginBottom: 0 }}
+                      dependencies={[['credentials']]}
+                      rules={[
+                        {
+                          validator: async () => {
+                            const problem = credentialProblems(form.getFieldValue('credentials'))[
+                              row.name
+                            ]?.value;
+                            if (problem === 'REQUIRED')
+                              throw new Error(t('sms.channels.credentialValueRequired'));
+                          },
+                        },
+                      ]}
+                    >
+                      <Input.Password
+                        aria-label={t('sms.channels.credentialValue')}
+                        placeholder={t('sms.channels.credentialValue')}
+                        autoComplete="new-password"
+                        visibilityToggle={false}
+                        dir="ltr"
+                      />
+                    </Form.Item>
+                    <Button
+                      aria-label={t('sms.channels.credentialRemove')}
+                      onClick={() => remove(row.name)}
+                    >
+                      {t('sms.channels.credentialRemoveShort')}
+                    </Button>
+                  </Flex>
+                ))}
+                <div>
+                  <Button onClick={() => add({ name: '', value: '' })}>
+                    {t('sms.channels.credentialAdd')}
+                  </Button>
+                </div>
+                <Form.ErrorList errors={errors} />
+              </Flex>
+            )}
+          </Form.List>
         </Form.Item>
         <Form.Item
           name="extConfig"

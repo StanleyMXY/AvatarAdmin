@@ -40,7 +40,7 @@ const messages: Record<string, string> = {
   'sms.channels.note.selection':
     'For a country, the enabled OTP channel with the smallest priority number is used. When a send fails, it is not retried on another channel.',
   'sms.channels.note.credentials':
-    'Credentials are write-only: they are never shown again after saving. When you edit a channel, leave the box empty to keep the saved ones.',
+    'Credentials are write-only: they are never shown again after saving. When you edit a channel, add no entries to keep the saved ones.',
   'sms.channels.new': 'New channel',
   'sms.channels.readOnly':
     'You can only view channels. Changing them needs the permission to configure SMS channels.',
@@ -77,10 +77,17 @@ const messages: Record<string, string> = {
   'sms.channels.hostsHelp': 'This provider only allows these hosts: {hosts}',
   'sms.channels.credentialsNew': 'Optional now; they can be added later by editing the channel.',
   'sms.channels.credentialsSet':
-    'Credentials are set. Leave this box empty to keep them; type new ones to replace them.',
+    'Credentials are set. Add no entries to keep them; adding entries replaces all of them, so enter every name and value again.',
   'sms.channels.credentialsNotSet': 'No credentials are set yet.',
   'sms.channels.credentialsWriteOnly': 'Write-only: saved credentials are never shown.',
-  'sms.channels.credentialsPlaceholder': 'Leave empty to keep the saved credentials',
+  'sms.channels.credentialName': 'Credential name',
+  'sms.channels.credentialValue': 'Credential value',
+  'sms.channels.credentialAdd': 'Add a credential',
+  'sms.channels.credentialRemove': 'Remove this credential',
+  'sms.channels.credentialRemoveShort': 'Remove',
+  'sms.channels.credentialNameRequired': 'Enter a name for this value',
+  'sms.channels.credentialValueRequired': 'Enter a value for this name',
+  'sms.channels.credentialNameDuplicate': 'This name is used twice',
   'sms.channels.extConfigHelp':
     'A JSON object, for example the appId and the sender IDs by country. Leave empty for none.',
   'sms.channels.countriesHelp':

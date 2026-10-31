@@ -176,7 +176,30 @@ function channelDetails(body: Record<string, unknown>, creating: boolean): Detai
   if (ext !== undefined && ext !== null && (typeof ext !== 'object' || Array.isArray(ext))) {
     details.push({ ref: 'extConfig', reason: 'OUT_OF_RANGE' });
   }
+  details.push(...credentialsDetail(body));
   return details;
+}
+
+/**
+ * `credentials` is a map of names to text values. A null value or a name that is empty or only
+ * blanks, and anything that is not such a map (null, text, a list), is 400 EMPTY_NOT_ALLOWED on
+ * `credentials`. An absent key or an empty map leaves the stored credentials as they are.
+ */
+function credentialsDetail(body: Record<string, unknown>): Detail[] {
+  if (!('credentials' in body)) return [];
+  const value = body.credentials;
+  const refused: Detail[] = [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return refused;
+  const whole = Object.entries(value).every(
+    ([name, text]) => trimSpec(name) !== '' && typeof text === 'string',
+  );
+  return whole ? [] : refused;
+}
+
+/** The map the body carries, or null when it carries none (absent, or empty). */
+function credentialsOf(body: Record<string, unknown>): Record<string, string> | null {
+  const value = body.credentials as Record<string, string> | undefined;
+  return value && Object.keys(value).length > 0 ? { ...value } : null;
 }
 
 const countriesOf = (value: unknown): string[] =>
@@ -327,7 +350,7 @@ export default {
       name: trimSpec(textOf(body.name)),
       providerCode: textOf(body.providerCode),
       apiUrl: trimSpec(textOf(body.apiUrl)),
-      credentials: trimSpec(textOf(body.credentials)) === '' ? null : textOf(body.credentials),
+      credentials: credentialsOf(body),
       extConfig: (body.extConfig as Record<string, unknown> | null | undefined) ?? null,
       countries: countriesOf(body.countries),
       smsType: body.smsType as MockChannel['smsType'],
@@ -357,9 +380,9 @@ export default {
       updatedAt: nowIso(),
     };
     refuseLastChannel(channel, next);
-    // A blank or missing credentials field leaves the stored ones alone.
-    if (isText(body.credentials) && trimSpec(body.credentials) !== '')
-      next.credentials = body.credentials;
+    // A missing field or an empty map leaves the stored ones alone; a map with entries replaces them all.
+    const sent = credentialsOf(body);
+    if (sent) next.credentials = sent;
     smsState.channels.set(channel.id, next);
     return ok(channelView(next));
   }),

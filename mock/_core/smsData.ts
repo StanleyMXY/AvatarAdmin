@@ -23,7 +23,8 @@ export type MockChannel = {
   providerCode: string;
   apiUrl: string;
   /** The secret. Never in an answer. */
-  credentials: string | null;
+  /** Names to text values (the backend takes a map); null when there are none. Never copied into an answer. */
+  credentials: Record<string, string> | null;
   extConfig: Record<string, unknown> | null;
   countries: string[];
   smsType: SmsType;
@@ -99,7 +100,7 @@ function seedChannels(ms: number): MockChannel[] {
       name: multilingualSamples.th[0],
       providerCode: 'gateway-a',
       apiUrl: 'https://sms.example.com/v1/send',
-      credentials: 'seed-secret-1',
+      credentials: { apiKey: 'seed-secret-1' },
       extConfig: { appId: 'app-th', senderIds: { TH: 'AVATAR' } },
       countries: ['TH'],
       smsType: 'OTP',
@@ -111,7 +112,7 @@ function seedChannels(ms: number): MockChannel[] {
       name: multilingualSamples.id[0],
       providerCode: 'gateway-b',
       apiUrl: 'https://gw.example.org/api/otp',
-      credentials: 'seed-secret-2',
+      credentials: { apiKey: 'seed-secret-2' },
       extConfig: { appId: 'app-sea', senderIds: { ID: 'AVATAR', VN: 'AVATAR' } },
       countries: ['ID', 'VN'],
       smsType: 'OTP',
@@ -123,7 +124,7 @@ function seedChannels(ms: number): MockChannel[] {
       name: multilingualSamples.ar[0],
       providerCode: 'gateway-a',
       apiUrl: 'https://api.sms-a.example.net/send',
-      credentials: 'seed-secret-3',
+      credentials: { apiKey: 'seed-secret-3' },
       extConfig: null,
       countries: ['SA', 'AE', 'EG'],
       smsType: 'OTP',
@@ -147,7 +148,7 @@ function seedChannels(ms: number): MockChannel[] {
       name: multilingualSamples.longUnbroken,
       providerCode: 'test-stub',
       apiUrl: 'https://stub.example.com/send',
-      credentials: 'seed-secret-5',
+      credentials: { apiKey: 'seed-secret-5' },
       extConfig: null,
       countries: [],
       smsType: 'OTP',

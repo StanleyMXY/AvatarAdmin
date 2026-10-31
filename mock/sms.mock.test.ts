@@ -83,7 +83,7 @@ const goodChannel = (over: Record<string, unknown> = {}) => ({
   name: 'New channel',
   providerCode: 'gateway-a',
   apiUrl: 'https://sms.example.com/v1/send',
-  credentials: 'typed-secret-value',
+  credentials: { apiKey: 'typed-secret-value' },
   extConfig: { appId: 'a1' },
   countries: ['TH'],
   smsType: 'OTP',
@@ -189,7 +189,7 @@ describe('the meta', () => {
 
 describe('the channels never carry a credential', () => {
   const storedSecrets = () =>
-    [...smsState.channels.values()].map((c) => c.credentials).filter(Boolean) as string[];
+    [...smsState.channels.values()].flatMap((c) => Object.values(c.credentials ?? {}));
   it('answers hasCredentials and nothing else about them, in the list and in one channel', async () => {
     expect(storedSecrets().length).toBeGreaterThan(2);
     const list = await get(CHANNELS, { pageSize: 200 });
@@ -222,11 +222,15 @@ describe('the channels never carry a credential', () => {
     expect(created.status).toBe(200);
     expect(JSON.stringify(created.body)).not.toContain('typed-secret-value');
     expect(created.body.data.hasCredentials).toBe(true);
-    const updated = await send(CHANNEL_UPDATE, goodChannel({ credentials: 'another-secret' }), {
-      id: created.body.data.id,
-    });
+    const updated = await send(
+      CHANNEL_UPDATE,
+      goodChannel({ credentials: { apiKey: 'another-secret' } }),
+      {
+        id: created.body.data.id,
+      },
+    );
     expect(JSON.stringify(updated.body)).not.toContain('another-secret');
-    expect(channelBy('gw_new').credentials).toBe('another-secret');
+    expect(channelBy('gw_new').credentials).toEqual({ apiKey: 'another-secret' });
   });
 });
 
@@ -282,7 +286,7 @@ describe('creating a channel', () => {
       enabled: false,
       hasCredentials: true,
     });
-    expect(channelBy('gw_new').credentials).toBe('typed-secret-value');
+    expect(channelBy('gw_new').credentials).toEqual({ apiKey: 'typed-secret-value' });
     expect((await get(CHANNELS)).body.data.total).toBe(6);
   });
 
@@ -349,9 +353,58 @@ describe('updating a channel', () => {
     const answer = await send(CHANNEL_UPDATE, patch, { id });
     expect(answer.status).toBe(200);
     expect(answer.body.data.name).toBe('Renamed');
-    expect(channelBy('gw_th_otp').credentials).toBe('seed-secret-1');
-    await send(CHANNEL_UPDATE, { ...patch, credentials: 'fresh-one' }, { id });
-    expect(channelBy('gw_th_otp').credentials).toBe('fresh-one');
+    expect(channelBy('gw_th_otp').credentials).toEqual({ apiKey: 'seed-secret-1' });
+    // {} keeps them too (the other way to say "unchanged"); a map with entries replaces the whole set
+    await send(CHANNEL_UPDATE, { ...patch, credentials: {} }, { id });
+    expect(channelBy('gw_th_otp').credentials).toEqual({ apiKey: 'seed-secret-1' });
+    await send(CHANNEL_UPDATE, { ...patch, credentials: { token: 'fresh-one' } }, { id });
+    expect(channelBy('gw_th_otp').credentials).toEqual({ token: 'fresh-one' });
+  });
+
+  // 400 EMPTY_NOT_ALLOWED on credentials: a null value, a null or empty name, and anything that is
+  // not a map of text values. Nothing is changed by the refused request.
+  it.each([
+    ['a null value', { apiKey: null }],
+    ['a value that is not text', { apiKey: 5 }],
+    ['an empty name', { '': 'v' }],
+    ['a name of blanks', { '   ': 'v' }],
+    ['text instead of a map', 'a-single-secret'],
+    ['a list', ['a']],
+    ['null', null],
+  ])(
+    'refuses credentials with %s: 400 on credentials, on a create and on an update',
+    async (_name, credentials) => {
+      const id = channelBy('gw_th_otp').id;
+      const before = JSON.stringify(smsState.channels.get(id));
+      const { channelCode: _code, enabled: _e, ...patch } = goodChannel();
+      const updated = await send(CHANNEL_UPDATE, { ...patch, credentials }, { id });
+      expect([updated.status, updated.body.code, updated.body.data.details]).toEqual([
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }],
+      ]);
+      expect(JSON.stringify(smsState.channels.get(id))).toBe(before);
+      const count = smsState.channels.size;
+      const created = await send(CHANNEL_CREATE, goodChannel({ credentials }));
+      expect([created.status, created.body.data.details]).toEqual([
+        400,
+        [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }],
+      ]);
+      expect(smsState.channels.size).toBe(count);
+    },
+  );
+
+  it('accepts a value of any language and an empty map on a create (no credentials then)', async () => {
+    const created = await send(
+      CHANNEL_CREATE,
+      goodChannel({ credentials: { ผู้ใช้: 'ñandú', مفتاح: '密钥' } }),
+    );
+    expect(created.status).toBe(200);
+    const empty = await send(
+      CHANNEL_CREATE,
+      goodChannel({ channelCode: 'gw_two', credentials: {} }),
+    );
+    expect(empty.body.data.hasCredentials).toBe(false);
   });
 
   it('does not change the code or the switch, whatever the body says', async () => {

@@ -42,7 +42,11 @@ export type SmsChannel = {
   updatedAt: string;
 };
 
-/** The body of a create. `credentials` is left out unless something was typed. */
+/**
+ * The body of a create. `credentials` is a map of names to text values (the backend answers 400
+ * EMPTY_NOT_ALLOWED on a null value or an empty name), and it is left out unless something was typed.
+ * With entries it replaces everything stored; absent or `{}` keeps what is stored.
+ */
 export type ChannelInput = {
   channelCode: string;
   name: string;
@@ -53,7 +57,7 @@ export type ChannelInput = {
   smsType: SmsType;
   priority: number;
   enabled: boolean;
-  credentials?: string;
+  credentials?: Record<string, string>;
 };
 
 /** The body of an update: the code and the switch cannot be changed here. */
