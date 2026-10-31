@@ -16,6 +16,7 @@ const messages: Record<string, string> = {
   'system.common.saved': '已保存',
   'system.common.deleted': '已删除',
   'system.common.readFailed': '读取失败：{message}',
+  'system.sentences': '{first}。{second}',
   'system.scopeHint':
     '管理员只能授出自己持有的权限；不能修改自己持有的角色；只能修改权限都在自己持有范围内的角色和管理员。什么都没有改变。',
 

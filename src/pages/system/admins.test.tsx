@@ -683,6 +683,52 @@ describe('reset password', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('says which rules can refuse it after the text of the code when the backend answers 403, never its words, and keeps the dialog and the page', async () => {
+    const { user } = await load();
+    const writes = overrideFetch(({ url, method }) =>
+      method === 'POST' && url.pathname.endsWith('/reset-password')
+        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', null, 'LEAK-ñandú-ผู้ใช้-words')
+        : undefined,
+    );
+    const box = await open(user);
+    await user.type(box.getByLabelText('New password'), PASSWORD);
+    await user.type(box.getByLabelText('Repeat the password'), PASSWORD);
+    await user.click(box.getByRole('button', { name: /Reset password$/ }));
+    expect(
+      await box.findByText(
+        /You do not have permission to do this\. Administrators can only grant permissions they hold\. You cannot change a role you hold, and you can only change roles and administrators whose permissions you all hold\. Nothing was changed\./,
+      ),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('LEAK-');
+    expect(writes).toHaveLength(1);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(history.replace).not.toHaveBeenCalled();
+    expect(history.push).not.toHaveBeenCalled();
+  });
+
+  it('puts a full stop between the text of the code and the sentence of the rules in Chinese', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<AdminsPage />, 'zh-CN');
+    await waitForRows();
+    overrideFetch(({ url, method }) =>
+      method === 'POST' && url.pathname.endsWith('/reset-password')
+        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', null, 'LEAK-words')
+        : undefined,
+    );
+    await user.click(within(await rowOf('reviewer')).getByRole('button', { name: '更多' }));
+    const items = await screen.findAllByRole('menuitem', { name: '重置密码' });
+    await user.click(items[items.length - 1]);
+    const box = within(await dialog());
+    await user.type(box.getByLabelText('新密码'), PASSWORD);
+    await user.type(box.getByLabelText('再输入一次密码'), PASSWORD);
+    await user.click(box.getByRole('button', { name: /重置密码$/ }));
+    expect(
+      await box.findByText(/^你没有执行此操作的权限。管理员只能授出自己持有的权限；/),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('LEAK-');
+  });
+
   it('sends one request for two presses', async () => {
     const { user } = await load();
     const box = await open(user);

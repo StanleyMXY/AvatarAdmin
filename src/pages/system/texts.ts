@@ -35,6 +35,14 @@ export function adminLabel(name: unknown, id: unknown): string {
 }
 
 /**
+ * Two sentences one after the other. The text of an error code has no full stop at its end in
+ * Chinese, so the language file says what goes between the two sentences.
+ */
+function afterText(intl: Translator, text: string, sentence: string): string {
+  return intl.formatMessage({ id: 'system.sentences' }, { first: text, second: sentence });
+}
+
+/**
  * The sentence for a refusal 403 `ADMIN_FORBIDDEN` of a write that hands out or changes roles and
  * administrators, after the text of the code. The backend sends four different messages for four
  * different rules and no structured reason, and what it says is never shown, so one sentence names all
@@ -43,7 +51,7 @@ export function adminLabel(name: unknown, id: unknown): string {
  */
 export function withScopeHint(intl: Translator, error: unknown, text: string): string {
   return error instanceof ApiError && error.code === 'ADMIN_FORBIDDEN'
-    ? `${text} ${intl.formatMessage({ id: 'system.scopeHint' })}`
+    ? afterText(intl, text, intl.formatMessage({ id: 'system.scopeHint' }))
     : text;
 }
 
@@ -58,8 +66,8 @@ const PROTECTION_CODES = ['INVALID_STATE'];
 export function protectedFailureText(intl: Translator, error: unknown): string {
   const { error: failure, text } = describeFailure(intl, error);
   if (failure instanceof ApiError && failure.code === 'ADMIN_FORBIDDEN')
-    return `${text} ${intl.formatMessage({ id: 'system.admins.forbiddenHint' })}`;
+    return afterText(intl, text, intl.formatMessage({ id: 'system.admins.forbiddenHint' }));
   return failure instanceof ApiError && PROTECTION_CODES.includes(failure.code)
-    ? `${text} ${intl.formatMessage({ id: 'system.admins.refusedHint' })}`
+    ? afterText(intl, text, intl.formatMessage({ id: 'system.admins.refusedHint' }))
     : text;
 }

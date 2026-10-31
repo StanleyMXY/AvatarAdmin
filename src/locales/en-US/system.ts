@@ -17,6 +17,7 @@ const messages: Record<string, string> = {
   'system.common.saved': 'Saved',
   'system.common.deleted': 'Deleted',
   'system.common.readFailed': 'Could not read: {message}',
+  'system.sentences': '{first} {second}',
   'system.scopeHint':
     'Administrators can only grant permissions they hold. You cannot change a role you hold, and you can only change roles and administrators whose permissions you all hold. Nothing was changed.',
 
