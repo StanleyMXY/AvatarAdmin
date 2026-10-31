@@ -248,6 +248,17 @@ describe('apiRequest: session signals', () => {
     expect(getToken()).toBe('keep');
   });
 
+  it('reportForbidden: false keeps a 403 ADMIN_FORBIDDEN from calling onForbidden, but the request still throws it and a lost token is still reported', async () => {
+    setToken('keep');
+    stubFetch(() => jsonResponse(403, envelope('ADMIN_FORBIDDEN')));
+    const e = await caught(apiRequest({ method: 'GET', url: '/me', reportForbidden: false }));
+    expect(e.code).toBe('ADMIN_FORBIDDEN');
+    expect(onForbidden).not.toHaveBeenCalled();
+    stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
+    await caught(apiRequest({ method: 'GET', url: '/me', reportForbidden: false }));
+    expect(onExpired).toHaveBeenCalledTimes(1);
+  });
+
   it('other 403 codes do not call onForbidden', async () => {
     stubFetch(() => jsonResponse(403, envelope('SELF_REVIEW_FORBIDDEN')));
     await caught(apiRequest({ method: 'POST', url: '/credits/adjustments/1/approve' }));

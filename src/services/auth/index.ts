@@ -58,8 +58,14 @@ export function normalizeMe(raw: unknown): Me {
   };
 }
 
+/**
+ * `GET /me`. A 403 here is not passed on to the session layer (which would read this same account
+ * again and say "no permission"): the caller treats it like any other failure to read the account.
+ */
 export async function getMe(): Promise<Me> {
-  return normalizeMe(await apiRequest<unknown>({ method: 'GET', url: '/me' }));
+  return normalizeMe(
+    await apiRequest<unknown>({ method: 'GET', url: '/me', reportForbidden: false }),
+  );
 }
 
 /** `GET /meta`: the configuration values and upload limits a page needs but may not be allowed to edit. */

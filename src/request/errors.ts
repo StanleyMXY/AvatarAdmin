@@ -78,19 +78,6 @@ export function isOutcomeUnknown(error: ApiError): boolean {
   );
 }
 
-/**
- * True when no usable answer came from the service: the network failed, the time ran out, or the
- * gateway's own "unavailable" page came back. Different from the backend refusing a request.
- */
-export function isServiceUnreachable(error: unknown): boolean {
-  return (
-    error instanceof ApiError &&
-    (error.code === 'NETWORK_ERROR' ||
-      error.code === 'REQUEST_TIMEOUT' ||
-      error.code === 'GATEWAY_UNAVAILABLE')
-  );
-}
-
 export function abortError(): DOMException {
   return new DOMException('The request was aborted.', 'AbortError');
 }
