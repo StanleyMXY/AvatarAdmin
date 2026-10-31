@@ -378,6 +378,71 @@ describe('choosing nodes of the permission tree', () => {
   });
 });
 
+describe('choosing nodes as an administrator who holds only some of the codes', () => {
+  const tree = [
+    node('USER:VIEW', null, { builtin: true, sortOrder: 1 }),
+    node('USER:BAN', 'USER:VIEW', { builtin: true, sortOrder: 2 }),
+    node('USER:EXPORT', 'USER:VIEW', { builtin: true, sortOrder: 3 }),
+    node('STATS:VIEW', null, { builtin: true, sortOrder: 4 }),
+  ];
+  const held = (...codes: string[]) => new Set(codes);
+
+  it('does not change anything on a click on a node that is not held, checked or not', () => {
+    const grantable = held('USER:VIEW', 'USER:BAN');
+    expect(toggleCode(tree, [], 'USER:EXPORT', grantable)).toEqual([]);
+    expect(toggleCode(tree, ['USER:BAN', 'USER:VIEW'], 'USER:EXPORT', grantable)).toEqual([
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+    expect(
+      toggleCode(tree, ['USER:BAN', 'USER:EXPORT', 'USER:VIEW'], 'USER:EXPORT', grantable),
+    ).toEqual(['USER:BAN', 'USER:EXPORT', 'USER:VIEW']);
+    expect(toggleCode(tree, [], 'STATS:VIEW', grantable)).toEqual([]);
+  });
+
+  it('checks a function without the page above it when the page is not held: a code that is not held is never added', () => {
+    expect(toggleCode(tree, [], 'USER:BAN', held('USER:BAN'))).toEqual(['USER:BAN']);
+    // the page above is not held and cannot be clicked either
+    expect(toggleCode(tree, [], 'USER:VIEW', held('USER:BAN'))).toEqual([]);
+    expect(toggleCode(tree, ['USER:BAN'], 'USER:VIEW', held('USER:BAN'))).toEqual(['USER:BAN']);
+  });
+
+  it('checks a function and the page above it when both are held', () => {
+    expect(toggleCode(tree, [], 'USER:BAN', held('USER:VIEW', 'USER:BAN'))).toEqual([
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+  });
+
+  it('checks a page with the functions below it that are held, and not the others', () => {
+    expect(toggleCode(tree, [], 'USER:VIEW', held('USER:VIEW', 'USER:BAN'))).toEqual([
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+    expect(toggleCode(tree, [], 'USER:VIEW', held('USER:VIEW'))).toEqual(['USER:VIEW']);
+  });
+
+  it('takes away only the held nodes below a node that is unchecked, and keeps the codes that are not held', () => {
+    const grantable = held('USER:VIEW', 'USER:BAN');
+    const role = ['USER:BAN', 'USER:EXPORT', 'USER:VIEW'];
+    expect(toggleCode(tree, role, 'USER:VIEW', grantable)).toEqual(['USER:EXPORT']);
+    // taking a function away keeps the page
+    expect(toggleCode(tree, ['USER:BAN', 'USER:VIEW'], 'USER:BAN', grantable)).toEqual([
+      'USER:VIEW',
+    ]);
+  });
+
+  it('changes nothing for an administrator who holds nothing', () => {
+    expect(toggleCode(tree, ['STATS:VIEW'], 'STATS:VIEW', held())).toEqual(['STATS:VIEW']);
+    expect(toggleCode(tree, [], 'USER:VIEW', held())).toEqual([]);
+  });
+
+  it('is the same as no limit when the set is missing or null', () => {
+    expect(toggleCode(tree, [], 'USER:EXPORT', null)).toEqual(['USER:EXPORT', 'USER:VIEW']);
+    expect(toggleCode(tree, [], 'USER:EXPORT', undefined)).toEqual(['USER:EXPORT', 'USER:VIEW']);
+  });
+});
+
 describe('the same rules against a reference, on random trees and random clicks', () => {
   it('agrees with the reference on the value and on the state of every node, for 400 trees and 12 clicks each', () => {
     for (let seed = 1; seed <= 400; seed += 1) {
