@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PERMISSION_CODES } from '../../access/permissionCodes';
+import enUS from '../../locales/en-US/config';
+import zhCN from '../../locales/zh-CN/config';
 import generated from './configKeys.generated.json';
 import {
   CONFIG_HOSTS,
@@ -244,5 +246,36 @@ describe('validateValue', () => {
 
   it('leaves other JSON values to the server', () => {
     expect(validateValue(spec('chat.model_tiers_allowed'), ['standard'])).toBeNull();
+  });
+});
+
+describe('the words of the settings page name no third-party product', () => {
+  // The key names are the backend's identifiers and stay as they are; the words for operators say
+  // "device attestation", not the product that does it.
+  const NAMES = /app\s?attest|apple|iphone|facebook|google/i;
+  const words = { 'en-US': enUS, 'zh-CN': zhCN };
+
+  for (const [locale, messages] of Object.entries(words)) {
+    it(`has none in the labels, descriptions, risks, hints and refusals in ${locale}`, () => {
+      const found = Object.entries(messages as Record<string, string>)
+        .filter(([key]) => key.startsWith('config.'))
+        .filter(([, text]) => NAMES.test(text))
+        .map(([key]) => key);
+      expect(found).toEqual([]);
+    });
+  }
+
+  it('still names the four device attestation settings in both languages', () => {
+    for (const key of [
+      'integrity.app_attest_max_keys_per_device',
+      'integrity.app_attest_unsupported_allowed',
+      'ratelimit.app_attest_challenge_per_ip_per_hour',
+      'ratelimit.app_attest_key_per_ip_per_hour',
+    ]) {
+      for (const messages of [enUS, zhCN] as Record<string, string>[]) {
+        expect(messages[`config.${key}.label`], key).toBeTruthy();
+        expect(messages[`config.${key}.desc`], key).toBeTruthy();
+      }
+    }
   });
 });

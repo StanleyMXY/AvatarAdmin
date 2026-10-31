@@ -683,18 +683,18 @@ const messages: Record<string, string> = {
   'config.analytics.funnel_max_concurrency.label': '同时计算的漏斗个数上限',
   'config.analytics.funnel_max_concurrency.desc':
     '一个管理端实例同时计算的漏斗个数上限，每次计算最多读 20 万条事件，约 100 MB。超出时漏斗请求答 429，页面提示稍后再试。按实例计数，不是整个集群共用；每次漏斗请求都读取，保存后下一次请求生效。',
-  'config.integrity.app_attest_max_keys_per_device.label': '每台设备的 App Attest 密钥数上限',
+  'config.integrity.app_attest_max_keys_per_device.label': '每台设备的设备认证密钥数上限',
   'config.integrity.app_attest_max_keys_per_device.desc':
-    '同一个设备标识 30 天内最多认证几个 iOS App Attest 密钥；再多一个，手机端得到 403 DEVICE_INTEGRITY_FAILED。苹果在重装、从备份恢复、换机时会生成新密钥；手机端没收到响应时的原样重发不计入。',
-  'config.ratelimit.app_attest_challenge_per_ip_per_hour.label': 'App Attest 挑战每 IP 每小时次数',
+    '同一个设备标识 30 天内最多认证几个 iOS 设备认证密钥；再多一个，手机端得到 403 DEVICE_INTEGRITY_FAILED。系统在重装、从备份恢复、换机时会生成新密钥；手机端没收到响应时的原样重发不计入。',
+  'config.ratelimit.app_attest_challenge_per_ip_per_hour.label': '设备认证挑战每 IP 每小时次数',
   'config.ratelimit.app_attest_challenge_per_ip_per_hour.desc':
-    'App Attest 挑战请求每个 IP 每小时允许的次数。默认是游客每 IP 限额的 3 倍（一次 iOS 游客创建要一个认证挑战和一个断言挑战）。',
-  'config.ratelimit.app_attest_key_per_ip_per_hour.label': 'App Attest 密钥登记每 IP 每小时次数',
+    '设备认证挑战请求每个 IP 每小时允许的次数。默认是游客每 IP 限额的 3 倍（一次 iOS 游客创建要一个认证挑战和一个断言挑战）。',
+  'config.ratelimit.app_attest_key_per_ip_per_hour.label': '设备认证密钥登记每 IP 每小时次数',
   'config.ratelimit.app_attest_key_per_ip_per_hour.desc':
-    'App Attest 密钥登记每个 IP 每小时允许的次数。默认与游客每 IP 每小时限额相同。',
-  'config.integrity.app_attest_unsupported_allowed.label': '允许不支持 App Attest 的 iPhone',
+    '设备认证密钥登记每个 IP 每小时允许的次数。默认与游客每 IP 每小时限额相同。',
+  'config.integrity.app_attest_unsupported_allowed.label': '允许不支持设备认证的 iOS 设备',
   'config.integrity.app_attest_unsupported_allowed.desc':
-    '开（默认）：不能使用 App Attest 的 iPhone 可以创建游客凭据和新账号，作为未经认证的 iOS 设备；已经认证过密钥的设备标识、以及游客记录是 Android 的设备标识不能这样做；原有的按 IP、按设备限流照常。关：这些 iPhone 得到 403 DEVICE_INTEGRITY_FAILED，不能创建游客凭据和新账号。Android 不受影响。每次校验时读取，保存后下一次请求生效。',
+    '开（默认）：不能使用设备认证的 iOS 设备可以创建游客凭据和新账号，作为未经认证的 iOS 设备；已经认证过密钥的设备标识、以及游客记录是 Android 的设备标识不能这样做；原有的按 IP、按设备限流照常。关：这些设备得到 403 DEVICE_INTEGRITY_FAILED，不能创建游客凭据和新账号。Android 不受影响。每次校验时读取，保存后下一次请求生效。',
   'config.events.store_client_ip.label': '事件记录客户端 IP',
   'config.events.store_client_ip.desc':
     '开（默认）：每条埋点事件存客户端 IP。关：新写入的事件不存 IP（埋点列表里这些事件的 IP 一栏为空），国家仍照常由 IP 推出，所以国家统计不变；已经存下的 IP 到事件过期（事件保留天数）才消失。每次写入时读取，保存后下一批事件生效。',
@@ -745,8 +745,10 @@ const messages: Record<string, string> = {
   'config.push.task_poll_seconds.hint':
     '规则：catch-up 分钟数×60 须 ≥ 600 + 轮询秒数；默认值下至少 11。',
   'config.app.supported_locales.reject.OUT_OF_RANGE':
-    '没有保存。每种语言都要先有随版本发布的通知模板文件（现在只有英文），并且列表里必须保留 en。先让文件随版本发布，再把语言加进来。',
+    '没有保存。每种语言都要先有随版本发布的通知模板文件。先让文件随版本发布，再把语言加进来。',
   'config.refusal.missingLanguages': '没有模板文件的语言：{languages}',
+  'config.refusal.unknownReason':
+    '没有保存。服务端拒绝了这次修改，原因是本页还没有对应说明的一种。请对照该配置项说明里的规则检查。',
   'config.usage_price.default_currency.reject.OUT_OF_RANGE':
     '允许的币种必须包含默认币种。要改默认币种，先把新币种加进允许列表；要把当前默认币种从列表里去掉，先改默认币种。',
   'config.usage_price.allowed_currencies.reject.OUT_OF_RANGE':

@@ -91,32 +91,30 @@ describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
     expect(within(guest).getByText('Not set', { selector: '.ant-tag' })).toBeInTheDocument();
   });
 
-  it('spells out the risk of each of the six risk keys, and of no other', async () => {
+  it('spells out the risk of each of the seven risk keys, and of no other', async () => {
     signInAs('root');
     useMockBackend(configMock);
     renderPage(<ConfigForm />);
     await row('render.cloud_enabled');
     const risky = [
-      'render.cloud_enabled',
-      'moderation.underage_reject_below_age',
+      'chat.conversation_languages',
+      'chat.model_tiers_allowed',
       'complaint.likeness_due_hours',
       'guest.call_minutes_total',
-      'chat.model_tiers_allowed',
-      'chat.conversation_languages',
+      'guest.device_retention_days',
+      'moderation.underage_reject_below_age',
+      'render.cloud_enabled',
     ];
+    // every row of the page, not a chosen few: the rows with a risk warning are exactly the seven
+    const warned = [...document.querySelectorAll('[data-testid^="config-row-"]')]
+      .filter((e) => e.querySelector('.ant-alert-warning'))
+      .map((e) => (e.getAttribute('data-testid') as string).replace('config-row-', ''))
+      .sort();
+    expect(warned).toEqual(risky);
     for (const key of risky) {
-      expect(
-        within(screen.getByTestId(`config-row-${key}`)).getAllByRole('alert', { hidden: true })
-          .length + 0,
-      ).toBeGreaterThanOrEqual(0);
-      expect(
-        screen.getByTestId(`config-row-${key}`).querySelector('.ant-alert-warning'),
-        key,
-      ).not.toBeNull();
+      const warning = screen.getByTestId(`config-row-${key}`).querySelector('.ant-alert-warning');
+      expect(warning?.textContent?.length ?? 0, key).toBeGreaterThan(20);
     }
-    expect(
-      screen.getByTestId('config-row-auth.access_ttl_minutes').querySelector('.ant-alert-warning'),
-    ).toBeNull();
   });
 
   it('warns about a key the schema does not know, and shows it read-only', async () => {
@@ -545,19 +543,34 @@ describe('ConfigForm: a refusal that names two keys is shown on both rows, in th
       );
   });
 
-  it('shows the refusal of the catch-up rule on both fields when either is saved', async () => {
+  it('shows the refusal of the catch-up minutes on that field only; the poll seconds keep the rule hint, not a range sentence for a value nobody changed', async () => {
     signInAs('root');
     const calls = useMockBackend(configMock);
     renderPage(<ConfigForm keys={['push.schedule_catchup_minutes', 'push.task_poll_seconds']} />);
     const catchup = await row('push.schedule_catchup_minutes');
     fireEvent.change(within(catchup).getByRole('spinbutton'), { target: { value: '10' } });
     fireEvent.click(within(catchup).getByRole('button', { name: 'Save' }));
-    const poll = screen.getByTestId('config-row-push.task_poll_seconds');
-    await waitFor(() => expect(alertOf(poll)).toBeInTheDocument());
-    expect(alertOf(catchup)).toBeInTheDocument();
-    expect(alertOf(poll)).toHaveTextContent(/catch-up minutes × 60 must stay at least 600/);
+    await waitFor(() => expect(alertOf(catchup)).toBeInTheDocument());
     expect(alertOf(catchup)).toHaveTextContent(/1 to 10080/);
+    const poll = screen.getByTestId('config-row-push.task_poll_seconds');
+    expect(within(poll).queryByRole('alert')).toBeNull();
+    expect(poll).not.toHaveTextContent(/at least 1,/);
+    expect(poll).toHaveTextContent(/Rule: catch-up minutes × 60 must be at least 600/);
     expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+  });
+
+  it('shows the refusal of the poll seconds on that field only when it is the one saved', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['push.schedule_catchup_minutes', 'push.task_poll_seconds']} />);
+    const poll = await row('push.task_poll_seconds');
+    fireEvent.change(within(poll).getByRole('spinbutton'), { target: { value: '3100' } });
+    fireEvent.click(within(poll).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(alertOf(poll)).toBeInTheDocument());
+    expect(alertOf(poll)).toHaveTextContent(/catch-up minutes × 60 must stay at least 600/);
+    const catchup = screen.getByTestId('config-row-push.schedule_catchup_minutes');
+    expect(within(catchup).queryByRole('alert')).toBeNull();
+    expect(catchup).not.toHaveTextContent(/1 to 10080, and/);
   });
 
   it('shows a retention refusal on the statistics window it depends on, as the second key', async () => {
@@ -629,6 +642,73 @@ describe('ConfigForm: a refusal for something that is not a row', { timeout: 300
   });
 });
 
+describe('ConfigForm: a refusal the page has no words for never shows the backend message', {
+  timeout: 30000,
+}, () => {
+  const refuseWith = async (
+    code: string,
+    status: number,
+    data: unknown,
+    key: string,
+    locale: 'en-US' | 'zh-CN' = 'en-US',
+  ) => {
+    signInAs('root');
+    useMockBackend(configMock);
+    const mocked = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string, init: RequestInit = {}) => {
+      if ((init.method ?? 'GET') !== 'PUT') return mocked(input, init);
+      return new Response(JSON.stringify({ code, message: 'BACKEND-MSG-A', data }), { status });
+    });
+    renderPage(<ConfigForm keys={[key, 'auth.phone_login_enabled']} />, locale);
+    const r = await row(key);
+    fireEvent.change(within(r).getByRole('spinbutton'), { target: { value: '300' } });
+    fireEvent.click(
+      within(r).getByRole('button', { name: locale === 'zh-CN' ? /保\s?存/ : 'Save' }),
+    );
+    return r;
+  };
+
+  it.each([
+    ['en-US', /The service refused this change/],
+    ['zh-CN', /服务端拒绝了这次修改/],
+  ] as const)(
+    'says the general words of the key for a reason code it does not know, in %s',
+    async (locale, words) => {
+      const r = await refuseWith(
+        'INVALID_REQUEST',
+        400,
+        { details: [{ ref: 'chat.moderation_deadline_ms', reason: 'WEIRD_REASON' }] },
+        'chat.moderation_deadline_ms',
+        locale,
+      );
+      await waitFor(() => expect(r.querySelectorAll('[role="alert"]').length).toBeGreaterThan(0));
+      expect(r).toHaveTextContent(words);
+      expect(document.body.textContent).not.toContain('BACKEND-MSG-A');
+      expect(document.body.textContent).not.toContain('WEIRD_REASON');
+    },
+  );
+
+  it('keeps it out of the top box for a detail that names no row', async () => {
+    const r = await refuseWith(
+      'INVALID_REQUEST',
+      400,
+      { details: [{ ref: 'SmsTemplate', reason: 'WEIRD_REASON' }] },
+      'chat.moderation_deadline_ms',
+    );
+    const top = await screen.findByTestId('config-refusals');
+    expect(top).toHaveTextContent(/The service refused this change/);
+    expect(within(r).getByRole('alert')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('BACKEND-MSG-A');
+  });
+
+  it('shows no message on the saved row for an error code the page has no words for', async () => {
+    const r = await refuseWith('SOMETHING_NEW', 409, null, 'chat.moderation_deadline_ms');
+    await waitFor(() => expect(within(r).getByRole('alert')).toBeInTheDocument());
+    expect(within(r).getByRole('alert')).toHaveTextContent('Something went wrong.');
+    expect(document.body.textContent).not.toContain('BACKEND-MSG-A');
+  });
+});
+
 describe('ConfigForm: the supported languages', { timeout: 30000 }, () => {
   it('says that each language needs its template file, with the languages the backend names, and no backend message', async () => {
     signInAs('root');
@@ -641,8 +721,10 @@ describe('ConfigForm: the supported languages', { timeout: 30000 }, () => {
     fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(alertOf(r)).toBeInTheDocument());
     expect(alertOf(r)).toHaveTextContent(
-      'Not saved. Every language needs a notification template file that ships with the app version (only English ships now), and en must stay in the list. Ship the file first, then add the language.',
+      'Not saved. Every language needs a notification template file that ships with the app version. Ship the file first, then add the language.',
     );
+    // nothing the checklist does not say: not which language ships today, not a rule about en
+    expect(alertOf(r).textContent).not.toMatch(/only English|ships now|must stay in the list/);
     expect(alertOf(r)).toHaveTextContent(
       'Languages without a template file: th, ar, id, vi, es, zh-Hans',
     );

@@ -7,7 +7,7 @@ import { type ConfigItem, listConfig } from '../../services/config';
 import { describeFailure } from '../../session/describe';
 import { ConfigRow } from './ConfigRow';
 import { specOf } from './configSchema';
-import { refusalTexts } from './refusal';
+import { refusalAlertText, refusalTexts } from './refusal';
 
 type Props = {
   /** Only these keys. */
@@ -163,7 +163,7 @@ export function ConfigForm(props: Props) {
                 refusalField={field}
                 refusalAlert={
                   refusal && refusal.origin === item.key && !field
-                    ? describeFailure(intl, refusal.error).text
+                    ? refusalAlertText(intl, refusal.error)
                     : null
                 }
                 onAttempt={() => setRefusal(null)}

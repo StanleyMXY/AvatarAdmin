@@ -758,20 +758,21 @@ const messages: Record<string, string> = {
   'config.analytics.funnel_max_concurrency.label': 'Funnel calculations at once',
   'config.analytics.funnel_max_concurrency.desc':
     'Most funnel calculations one admin instance runs at the same time. Each reads up to 200,000 events, about 100 MB. Above it a funnel request is answered 429 and the page asks you to try again later. It is counted per instance, not for the cluster, and read on every funnel request.',
-  'config.integrity.app_attest_max_keys_per_device.label': 'App Attest keys per device',
+  'config.integrity.app_attest_max_keys_per_device.label': 'Device attestation keys per device',
   'config.integrity.app_attest_max_keys_per_device.desc':
-    'Most iOS App Attest keys one device identifier may attest within 30 days. One more is refused with 403 DEVICE_INTEGRITY_FAILED. Apple creates a new key on reinstall, restore from backup and a change of phone; a repeat of a request whose answer was lost does not count.',
+    'Most iOS device attestation keys one device identifier may attest within 30 days. One more is refused with 403 DEVICE_INTEGRITY_FAILED. The platform creates a new key on reinstall, restore from backup and a change of phone; a repeat of a request whose answer was lost does not count.',
   'config.ratelimit.app_attest_challenge_per_ip_per_hour.label':
-    'App Attest challenges per IP per hour',
+    'Device attestation challenges per IP per hour',
   'config.ratelimit.app_attest_challenge_per_ip_per_hour.desc':
-    'Number of App Attest challenge requests per IP address per hour. The default is three times the guest limit per IP, because creating one iOS guest takes one attestation challenge and one assertion challenge.',
+    'Number of device attestation challenge requests per IP address per hour. The default is three times the guest limit per IP, because creating one iOS guest takes one attestation challenge and one assertion challenge.',
   'config.ratelimit.app_attest_key_per_ip_per_hour.label':
-    'App Attest key registrations per IP per hour',
+    'Device attestation key registrations per IP per hour',
   'config.ratelimit.app_attest_key_per_ip_per_hour.desc':
-    'Number of App Attest key registrations per IP address per hour. The default is the same as the guest limit per IP per hour.',
-  'config.integrity.app_attest_unsupported_allowed.label': 'Allow iPhones without App Attest',
+    'Number of device attestation key registrations per IP address per hour. The default is the same as the guest limit per IP per hour.',
+  'config.integrity.app_attest_unsupported_allowed.label':
+    'Allow iOS devices without device attestation',
   'config.integrity.app_attest_unsupported_allowed.desc':
-    'On (default): an iPhone that cannot use App Attest may create guest credentials and new accounts as an unattested iOS device. A device identifier that has already attested a key, and one whose guest record is Android, may not; the usual limits per IP and per device still apply. Off: such iPhones get 403 DEVICE_INTEGRITY_FAILED and cannot create guest credentials or new accounts. Android is not affected. Read on every check, so a change applies from the next request.',
+    'On (default): an iOS device that cannot use device attestation may create guest credentials and new accounts as an unattested iOS device. A device identifier that has already attested a key, and one whose guest record is Android, may not; the usual limits per IP and per device still apply. Off: such devices get 403 DEVICE_INTEGRITY_FAILED and cannot create guest credentials or new accounts. Android is not affected. Read on every check, so a change applies from the next request.',
   'config.events.store_client_ip.label': 'Store client IP on events',
   'config.events.store_client_ip.desc':
     'On (default): every analytics event stores the client IP. Off: new events store no IP (the IP column of the event list is empty for them); the country is still derived from the IP, so country statistics do not change. IPs already stored stay until the event expires (event retention). Read on every write, so a change applies from the next batch.',
@@ -824,8 +825,10 @@ const messages: Record<string, string> = {
   'config.push.task_poll_seconds.hint':
     'Rule: catch-up minutes × 60 must be at least 600 + poll seconds; with the default values the catch-up must be at least 11.',
   'config.app.supported_locales.reject.OUT_OF_RANGE':
-    'Not saved. Every language needs a notification template file that ships with the app version (only English ships now), and en must stay in the list. Ship the file first, then add the language.',
+    'Not saved. Every language needs a notification template file that ships with the app version. Ship the file first, then add the language.',
   'config.refusal.missingLanguages': 'Languages without a template file: {languages}',
+  'config.refusal.unknownReason':
+    'Not saved. The service refused this change for a reason this page has no words for yet. Check the rules in the description of the setting.',
   'config.usage_price.default_currency.reject.OUT_OF_RANGE':
     'The allowed currencies must contain the default currency. To change the default, add the new currency to the allowed list first; to take the current default out of the list, change the default first.',
   'config.usage_price.allowed_currencies.reject.OUT_OF_RANGE':
