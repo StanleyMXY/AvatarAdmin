@@ -91,3 +91,17 @@
 ## 收到的转交消息
 
 协调者转来一条写给 growth 区域的提醒（要求把 `src/pages/campaign/settings.test.tsx`、`src/pages/moderation/rules.test.tsx` 的未提交改动带进提交，并修 `rules.test.tsx` 里 “fold look-alike letters” 的失败用例）。这两个文件和那条用例都不是我的区域，里面的改动不是我写的，所以我没有提交也没有改它们；如果这条消息本意是给我，请再确认一次。
+
+## 评审后的修复（2026-10-31）
+
+立即修未修 0、记录项 0、未运行 2、阻塞 0。评审给的 4 条记录项和我自己的记录项 1，共 5 条，都已修。
+
+1. 订阅统计标价若是 JSON 数字，整格显示“—”。`src/pages/subscriptions/stats.tsx` 的 `formatListPrice` 现在接受 `number | string | null`：十进制字符串走原来的精确路径（超过 2^53 的 `9007199254740993.01` 仍显示 `$9,007,199,254,740,993.01`），有限数字按数字格式化（`9.99`/USD 显示 `$9.99`，无币种 `12.5` 显示 `12.5`），NaN、无穷、布尔、对象、数组、坏字符串、null 显示“—”。`src/services/subscriptions/types.ts` 的 `listPriceAmount` 类型改回 `number | string | null`。RED：新测试在改前失败（`expected '—' to be '$9.99'`）。变异：把数字分支的 `Number.isFinite` 去掉，非有限数测试失败；把字符串改成先 `Number()` 再格式化，精确位数测试失败。注意页面测试的假响应要经过 JSON，NaN 和无穷在那里会变成 null，所以非有限数是直接调 `formatListPrice` 测的。
+2. 告警“关联对象”列：`src/pages/monitor/alerts.test.tsx` 补了 refType、refId 为对象、数字（含 0）、数组、布尔的页面测试，断言文字是 JSON 或数字原样，页面没有 `[object`。变异（把 `plainText(...)` 改回 `?? DASH`）使它失败，原代码通过。
+3. 推送任务只有 `note === 'MISSED'` 才显示“错过”：`src/pages/push/tasks.test.tsx` 补了测试（中英文各一遍），给已取消的任务设 `CANCELLED_BY_ADMIN`、小写 `missed`、带前导空格的 ` MISSED`、`MISSED_LATER`，只有任务 5 显示。变异：`row.note ? …` 失败；`trim().toUpperCase()` 后比较也失败。
+4. 假后端“重试哪条反馈就关哪条告警”：`mock/_core/monitorData.ts` 的样例数据多了第二条 `SUPPORT_FORWARD_FAILED` 告警（反馈 5005，账号 2005；5005 本来就是失败的反馈，评审说“假数据里只有 5003 一条失败的反馈”不准确，失败的反馈很多，是只有 5003 有告警）。`mock/support.mock.test.ts` 补测试：先重试第二条，只关它的告警，再重试第一条。变异：把 `resolveAlertsOf('SUPPORT_FEEDBACK', row.id)` 里的 `row.id` 写死成 `'5003'`，新测试失败。`mock/support.mock.ts` 本身不用改，没有动。
+5. 我自己的记录项 1：`push.tasks.sendAtHelp` 中英文改成写明“执行器停机超过 push.schedule_catchup_minutes 分钟时，错过的任务会取消并标为错过”；`tasks.test.tsx` 补了弹窗里的文字断言（中英文）。RED：改回旧文字时两条失败。
+
+只跑了相关测试：`src/pages/subscriptions/stats.test.tsx`、`src/pages/monitor`、`mock/support.mock.test.ts`、`mock/monitor.mock.test.ts`、`src/pages/push/tasks.test.tsx`，加语言文件和禁止写死文字的扫描。唯一的失败来自别的区域尚未提交的改动（`src/locales/parity.test.ts` 报 `push.templates.defaultLanguageRequired` 占位符数量和 `NOT_CURRENCY_CODE` 缺原因文字），不是这次的改动。`npx biome check` 对改动的文件无报错；`npx tsc --noEmit` 在这些路径下无报错。
+
+未运行：全量测试和构建（按规则由主会话统一跑）；Firefox、Safari 里标价的格式化（只有 Chromium 和 Node）。

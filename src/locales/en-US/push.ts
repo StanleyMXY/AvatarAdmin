@@ -114,7 +114,7 @@ const messages: Record<string, string> = {
   'push.tasks.sendAtRequired': 'Pick the time',
   'push.tasks.sendAtPast': 'Pick a time that has not passed',
   'push.tasks.sendAtHelp':
-    'The time is UTC. A task whose time is long past when it is reached is cancelled as missed.',
+    'The time is UTC. If the push executor is down for longer than push.schedule_catchup_minutes minutes, the tasks it missed are cancelled and marked as missed.',
 
   // ---- periodic pushes ----
   'push.schedules.note':

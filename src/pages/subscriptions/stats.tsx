@@ -13,26 +13,33 @@ import { lastNDaysUtc } from '../../utils/utcDay';
 const DECIMAL = /^-?\d+(\.\d+)?$/;
 
 /**
- * A list price with its currency, written from its decimal string without ever turning it into a
+ * A list price with its currency. A decimal string is written as it is, without ever turning it into a
  * floating point number (the browser formats the digits as they are, so "9007199254740993.01" and
- * "24.999" come out as they went in). A missing or malformed amount is a dash; an amount without a
- * currency is a plain number; a currency the browser does not know is written as it is.
+ * "24.999" come out as they went in). A finite JSON number is formatted as the number it is. Anything else
+ * (null, NaN, a malformed string, an object) is a dash; an amount without a currency is a plain number;
+ * a currency the browser does not know is written as it is.
  */
 export function formatListPrice(
-  amount: string | null,
+  amount: number | string | null,
   currency: string | null,
   locale: string,
 ): string {
-  if (typeof amount !== 'string' || !DECIMAL.test(amount)) return DASH;
+  let decimals: number;
+  if (typeof amount === 'string' && DECIMAL.test(amount)) {
+    decimals = amount.split('.')[1]?.length ?? 0;
+  } else if (typeof amount === 'number' && Number.isFinite(amount)) {
+    decimals = 0;
+  } else {
+    return DASH;
+  }
   // A decimal string is a valid argument of `format` (ECMA-402 NumberFormat v3); the typings of this
   // project's `lib` still say number, hence the cast.
   const write = (options: Intl.NumberFormatOptions) =>
     new Intl.NumberFormat(locale, { ...options, maximumFractionDigits: 20 }).format(
-      amount as unknown as number,
+      amount as number,
     );
   // No digit is rounded away and none is dropped: a plain number keeps as many decimals as it was sent with.
-  const plain = () =>
-    write({ minimumFractionDigits: Math.min(20, amount.split('.')[1]?.length ?? 0) });
+  const plain = () => write({ minimumFractionDigits: Math.min(20, decimals) });
   if (!currency) return plain();
   try {
     return write({ style: 'currency', currency });

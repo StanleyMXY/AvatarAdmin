@@ -211,6 +211,9 @@ export function resetMonitorStore(): void {
   const postback = SEEDS.find((seed) => seed.type === 'POSTBACK_CREDENTIAL_FAILED') as Seed;
   add({ ...postback, ref: () => '4' }, 'OPEN', 3, 'pixel_id_malformed');
   add({ ...postback, ref: () => '6' }, 'OPEN', 4, '190');
+  // a second forwarding alert, of another FAILED feedback of the support mock (5005, sent by the account 2005)
+  const forward = SEEDS.find((seed) => seed.type === 'SUPPORT_FORWARD_FAILED') as Seed;
+  add({ ...forward, ref: () => '5005', account: '2005' }, 'OPEN', 6);
   monitorStore.alerts = rows;
 }
 

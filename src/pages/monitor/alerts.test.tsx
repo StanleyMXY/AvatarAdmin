@@ -252,6 +252,37 @@ describe('the four types the backend added', { timeout: 30000 }, () => {
     expect(within(row).getByText(`{"code":"${'ก'.repeat(10)}"}`)).toBeInTheDocument();
   });
 
+  it('writes a related object whose type or id is not a string as text, never as [object Object]', async () => {
+    fixed([
+      alertRow({
+        id: '61',
+        refType: { kind: 'ก' } as unknown as string,
+        refId: { ids: [1, 2] } as unknown as string,
+        detail: 'object-valued ref',
+      }),
+      alertRow({
+        id: '62',
+        refType: 12345 as unknown as string,
+        refId: 0 as unknown as string,
+        detail: 'number-valued ref',
+      }),
+      alertRow({
+        id: '63',
+        refType: ['a', 'b'] as unknown as string,
+        refId: true as unknown as string,
+        detail: 'list-valued ref',
+      }),
+    ]);
+    renderPage(<AlertsPage />);
+    const objectRow = (await screen.findByText('object-valued ref')).closest('tr') as HTMLElement;
+    expect(within(objectRow).getByText('{"kind":"ก"}: {"ids":[1,2]}')).toBeInTheDocument();
+    const numberRow = (await screen.findByText('number-valued ref')).closest('tr') as HTMLElement;
+    expect(within(numberRow).getByText('12345: 0')).toBeInTheDocument();
+    const listRow = (await screen.findByText('list-valued ref')).closest('tr') as HTMLElement;
+    expect(within(listRow).getByText('["a","b"]: true')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('[object');
+  });
+
   it('shows the re-landing alert with the lander and the day as they come, and the class name of the exception', async () => {
     fixed([
       alertRow({

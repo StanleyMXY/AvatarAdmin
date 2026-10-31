@@ -109,7 +109,8 @@ const messages: Record<string, string> = {
   'push.tasks.sendAtLabel': '时间（UTC）',
   'push.tasks.sendAtRequired': '请选择时间',
   'push.tasks.sendAtPast': '请选一个还没到的时间',
-  'push.tasks.sendAtHelp': '时间按 UTC。到点时已经过去很久的任务会被当作错过而取消。',
+  'push.tasks.sendAtHelp':
+    '时间按 UTC。执行器停机超过 push.schedule_catchup_minutes 分钟时，错过的任务会取消并标为错过。',
 
   // ---- 周期推送 ----
   'push.schedules.note':

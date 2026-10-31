@@ -146,6 +146,24 @@ describe('POST /support/feedback/:id/retry', () => {
     expect(monitorStore.alerts.filter((a) => a.status === 'OPEN')).toHaveLength(others);
   });
 
+  it('resolves the alert of the feedback that was retried, whichever of two failed feedbacks it is', async () => {
+    const forwardAlerts = () =>
+      monitorStore.alerts.filter((a) => a.type === 'SUPPORT_FORWARD_FAILED' && a.status === 'OPEN');
+    const [first, second] = forwardAlerts();
+    expect(forwardAlerts()).toHaveLength(2);
+    expect(first.refId).not.toBe(second.refId);
+    // both feedbacks of those alerts are FAILED, so a retry is allowed on either
+    for (const alert of [first, second]) {
+      expect(supportStore.rows.find((r) => r.id === alert.refId)?.forwardStatus).toBe('FAILED');
+    }
+    // retry the second one: only its alert closes, the first stays open
+    expect((await retry('support', second.refId)).status).toBe(200);
+    expect([first.status, second.status]).toEqual(['OPEN', 'RESOLVED']);
+    // then the first one
+    expect((await retry('support', first.refId)).status).toBe(200);
+    expect([first.status, second.status]).toEqual(['RESOLVED', 'RESOLVED']);
+  });
+
   it('leaves the alert open when the retry changed nothing: a feedback that did not fail, or one that is not there', async () => {
     const alert = monitorStore.alerts.find((a) => a.type === 'SUPPORT_FORWARD_FAILED');
     const forwarded = supportStore.rows.find((r) => r.forwardStatus === 'FORWARDED');

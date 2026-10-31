@@ -9,7 +9,7 @@ import { resetUmiStub, setTestAccess } from '../../../tests/stubs/umi-max';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import access from '../../access';
 import type { SubscriptionStatRow } from '../../services/subscriptions';
-import StatsPage from './stats';
+import StatsPage, { formatListPrice } from './stats';
 
 beforeEach(() => {
   resetUmiStub();
@@ -265,6 +265,54 @@ describe('the subscription statistics', { timeout: 30000 }, () => {
     expect(text).not.toContain('9,007,199,254,740,994');
     expect(text).toContain('$24.999');
     expect(text).toContain('0.1234567');
+  });
+
+  it('writes a list price sent as a JSON number, and still writes a long string exactly', async () => {
+    answering([
+      row({ productId: 'num', listPriceAmount: 9.99, listPriceCurrency: 'USD' }),
+      row({ productId: 'int', listPriceAmount: 149000, listPriceCurrency: 'IDR' }),
+      row({ productId: 'bare', listPriceAmount: 12.5, listPriceCurrency: null }),
+      row({ productId: 'big', listPriceAmount: '9007199254740993.01', listPriceCurrency: 'USD' }),
+    ]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(4),
+    );
+    const prices = [...document.querySelectorAll('tbody tr.ant-table-row')].map(
+      (tr) => tr.querySelectorAll('td')[9].textContent,
+    );
+    expect(prices[0]).toBe('$9.99');
+    expect(prices[1]).toMatch(/^IDR\s?149,000(\.00)?$/);
+    expect(prices[2]).toBe('12.5');
+    expect(prices[3]).toBe('$9,007,199,254,740,993.01');
+  });
+
+  it.each([
+    ['a boolean', true],
+    ['an object', { amount: 9.99 }],
+    ['an array', [9.99]],
+  ])('shows a dash for a price that is %s, never [object Object]', async (_name, amount) => {
+    answering([
+      row({ listPriceAmount: amount as unknown as string | null, listPriceCurrency: 'USD' }),
+    ]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(1),
+    );
+    const cells = [...document.querySelectorAll('tbody tr.ant-table-row td')].map(
+      (c) => c.textContent,
+    );
+    expect(cells[9]).toBe('—');
+    expect(document.body.textContent).not.toMatch(/NaN|Infinity|\[object|true/);
+  });
+
+  it('formats a number that is not finite as a dash, with or without a currency', () => {
+    for (const amount of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(formatListPrice(amount, 'USD', 'en-US')).toBe('—');
+      expect(formatListPrice(amount, null, 'en-US')).toBe('—');
+    }
+    expect(formatListPrice(-9.99, 'USD', 'en-US')).toBe('-$9.99');
+    expect(formatListPrice(0, 'USD', 'en-US')).toBe('$0.00');
   });
 
   it('writes the list price in the number format of the language of the interface', async () => {
