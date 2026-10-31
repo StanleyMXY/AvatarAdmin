@@ -10,6 +10,7 @@ import type { AdminRoute } from '../access/canAccess';
 import { PERMISSION_CODES } from '../access/permissionCodes';
 import { indexPages } from '../components/layout/pageIndex';
 import configKeys from '../pages/config/configKeys.generated.json';
+import { EXTRA_CONFIG_KEYS } from '../pages/config/configSchema';
 import en from './en-US';
 import errorCodes from './errorCodes.generated.json';
 import zh from './zh-CN';
@@ -277,13 +278,14 @@ describe('full coverage of the texts against the sources of truth', () => {
   );
 
   it.each(LANGUAGES)(
-    '%s: every configuration key of contract 17.5 has a name and a description',
+    '%s: every configuration key of contract 17.5 and every backend extra key has a name and a description',
     (language) => {
       const dict = dictOf(language);
       const rows = parseConfigRows(contractText());
       expect(rows.length).toBe(225);
       expect(rows.map((r) => r.key)).toEqual(configKeys.map((k) => k.key));
-      for (const { key } of rows) {
+      expect(EXTRA_CONFIG_KEYS).toHaveLength(25);
+      for (const key of [...rows.map((r) => r.key), ...EXTRA_CONFIG_KEYS]) {
         expect(dict[`config.${key}.label`]?.trim(), `${key} label`).toBeTruthy();
         expect(dict[`config.${key}.desc`]?.trim(), `${key} desc`).toBeTruthy();
       }
@@ -294,7 +296,7 @@ describe('full coverage of the texts against the sources of truth', () => {
     '%s: every group of the configuration keys has a title, and no key text is left over',
     (language) => {
       const dict = dictOf(language);
-      const keys = parseConfigRows(contractText()).map((r) => r.key);
+      const keys = [...parseConfigRows(contractText()).map((r) => r.key), ...EXTRA_CONFIG_KEYS];
       for (const group of new Set(keys.map((key) => key.split('.')[0])))
         expect(dict[`config.group.${group}`]?.trim(), group).toBeTruthy();
       const known = new Set(keys);
@@ -305,12 +307,13 @@ describe('full coverage of the texts against the sources of truth', () => {
     },
   );
 
-  it('has a risk text for each of the six risk keys in both languages', () => {
+  it('has a risk text for each of the seven risk keys in both languages', () => {
     const risky = [
       'chat.conversation_languages',
       'chat.model_tiers_allowed',
       'complaint.likeness_due_hours',
       'guest.call_minutes_total',
+      'guest.device_retention_days',
       'moderation.underage_reject_below_age',
       'render.cloud_enabled',
     ];

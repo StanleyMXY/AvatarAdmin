@@ -296,7 +296,7 @@ const messages: Record<string, string> = {
     '没有账号的归因记录和认领记录保留多少天，单位天，不小于 1。',
   'config.attribution.cost_currency.label': '投放成本币种',
   'config.attribution.cost_currency.desc':
-    '投放成本使用的币种，ISO 4217 三位字母代码。整个系统只用一种币种，所以可以直接计算单次获客成本。',
+    '投放成本使用的币种，ISO 4217 三位字母代码。整个系统只用一种币种，所以可以直接计算单次获客成本。只要有成本行就不能改：先逐行删除成本，再改。',
   'config.attribution.cost_batch_max.label': '成本批量录入行数上限',
   'config.attribution.cost_batch_max.desc': '批量录入投放成本时一次最多允许几行。',
   'config.attribution.click_expired_keep_days.label': '过期点击额外保留天数',
@@ -343,7 +343,7 @@ const messages: Record<string, string> = {
     '邮件模板里应用名称占位符的取值。保存时去掉首尾空白后必须是 1 到 100 个字符，否则保存失败。产品名尚未确定，先用工作名。',
   'config.app.supported_locales.label': '支持的界面语言',
   'config.app.supported_locales.desc':
-    '界面和通知（推送、站内通知、客户端配置）支持的语言清单，用语言代码的列表表示。往里加语言之前，客户端要有对应翻译，每个召回触发原因也要有该语言的模板，否则启用召回模板时校验不通过。',
+    '界面和通知（推送、站内通知、客户端配置）支持的语言清单，用语言代码的列表表示。语言的通知模板文件要先随版本发布，才能把它加进来（比较不区分大小写，整个标签要匹配），所以先发布文件再加语言。不必先建召回模板：召回触发原因在某种语言下没有模板时，发送时回退到推送默认语言。',
   'config.push.default_locale.label': '推送默认语言',
   'config.push.default_locale.desc': '归一化后没有对应模板时回退使用的语言。',
   'config.push.schedule_scan_seconds.label': '周期推送扫描间隔',
@@ -488,10 +488,10 @@ const messages: Record<string, string> = {
   'config.usage_price.sync_hour_utc.desc': '每天几点（UTC）同步价格，取值为小时（0 到 23）。',
   'config.usage_price.default_currency.label': '同步价格默认币种',
   'config.usage_price.default_currency.desc':
-    '同步生成的价格行使用的币种，因为价格来源的接口不提供币种。',
+    '同步生成的价格行使用的币种，因为价格来源的接口不提供币种。它必须在价格允许的币种里：要改它，先把新币种加进允许列表。',
   'config.usage_price.allowed_currencies.label': '价格允许的币种',
   'config.usage_price.allowed_currencies.desc':
-    '价格行允许使用的币种清单，用币种代码的列表表示，目前只存美元、不做换算。手填和确认价格时币种不在清单里会被拒绝。',
+    '价格行允许使用的币种清单，用币种代码的列表表示，目前只存美元、不做换算。手填和确认价格时币种不在清单里会被拒绝。同步价格默认币种必须留在清单里：要把它去掉，先改默认币种。',
   'config.usage_price.max_bands.label': '价格最大档位数',
   'config.usage_price.max_bands.desc': '一个价格批次最多允许的档位数。',
   'config.usage_price.source_url.label': '价格来源地址',
@@ -665,6 +665,105 @@ const messages: Record<string, string> = {
   'config.notification.unread_retention_days.desc': '未读的站内通知保留多少天，单位天。',
   'config.notification.max_per_account.label': '每账号通知条数上限',
   'config.notification.max_per_account.desc': '每个账号最多保留多少条站内通知。',
+  'config.chat.moderation_global_concurrency.label': '每个实例同时在途的审核调用上限',
+  'config.chat.moderation_global_concurrency.desc':
+    '每个应用实例（app、worker 各自计数）同时在途的内容审核服务调用上限，所有调用方合计。等空位的时间计入该次调用自己的期限（审核调用超时；聊天批次还有聊天审核期限），超时按审核服务超时处理，该内容进入复核。批次内部的并发（聊天审核并发数）不受影响。这是每个实例各自的上限，不是整个集群共用；改动在下一次等待时生效。',
+  'config.export.parallelism.label': '同时组装的导出任务数',
+  'config.export.parallelism.desc':
+    '后台数据导出同时组装的任务数上限，每个导出任务可能占两个数据库连接。每轮导出开始时读取，保存后从下一轮生效。',
+  'config.ratelimit.apk_download_per_ip_per_min.label': 'APK 下载每 IP 每分钟次数',
+  'config.ratelimit.apk_download_per_ip_per_min.desc':
+    'APK 下载每个 IP 每分钟允许的次数。GET、HEAD、带 Range 的请求各算一次。超出答 429；手机端自更新按响应里的等待时间退避。',
+  'config.ratelimit.push_image_per_ip_per_min.label': '推送图片每 IP 每分钟次数',
+  'config.ratelimit.push_image_per_ip_per_min.desc': '推送图片每个 IP 每分钟允许的请求次数。',
+  'config.ratelimit.ad_media_per_ip_per_min.label': '广告素材每 IP 每分钟次数',
+  'config.ratelimit.ad_media_per_ip_per_min.desc':
+    '广告素材及缩略图每个 IP 每分钟允许的请求次数，素材和缩略图共用一个计数器。',
+  'config.analytics.funnel_max_concurrency.label': '同时计算的漏斗个数上限',
+  'config.analytics.funnel_max_concurrency.desc':
+    '一个管理端实例同时计算的漏斗个数上限，每次计算最多读 20 万条事件，约 100 MB。超出时漏斗请求答 429，页面提示稍后再试。按实例计数，不是整个集群共用；每次漏斗请求都读取，保存后下一次请求生效。',
+  'config.integrity.app_attest_max_keys_per_device.label': '每台设备的 App Attest 密钥数上限',
+  'config.integrity.app_attest_max_keys_per_device.desc':
+    '同一个设备标识 30 天内最多认证几个 iOS App Attest 密钥；再多一个，手机端得到 403 DEVICE_INTEGRITY_FAILED。苹果在重装、从备份恢复、换机时会生成新密钥；手机端没收到响应时的原样重发不计入。',
+  'config.ratelimit.app_attest_challenge_per_ip_per_hour.label': 'App Attest 挑战每 IP 每小时次数',
+  'config.ratelimit.app_attest_challenge_per_ip_per_hour.desc':
+    'App Attest 挑战请求每个 IP 每小时允许的次数。默认是游客每 IP 限额的 3 倍（一次 iOS 游客创建要一个认证挑战和一个断言挑战）。',
+  'config.ratelimit.app_attest_key_per_ip_per_hour.label': 'App Attest 密钥登记每 IP 每小时次数',
+  'config.ratelimit.app_attest_key_per_ip_per_hour.desc':
+    'App Attest 密钥登记每个 IP 每小时允许的次数。默认与游客每 IP 每小时限额相同。',
+  'config.integrity.app_attest_unsupported_allowed.label': '允许不支持 App Attest 的 iPhone',
+  'config.integrity.app_attest_unsupported_allowed.desc':
+    '开（默认）：不能使用 App Attest 的 iPhone 可以创建游客凭据和新账号，作为未经认证的 iOS 设备；已经认证过密钥的设备标识、以及游客记录是 Android 的设备标识不能这样做；原有的按 IP、按设备限流照常。关：这些 iPhone 得到 403 DEVICE_INTEGRITY_FAILED，不能创建游客凭据和新账号。Android 不受影响。每次校验时读取，保存后下一次请求生效。',
+  'config.events.store_client_ip.label': '事件记录客户端 IP',
+  'config.events.store_client_ip.desc':
+    '开（默认）：每条埋点事件存客户端 IP。关：新写入的事件不存 IP（埋点列表里这些事件的 IP 一栏为空），国家仍照常由 IP 推出，所以国家统计不变；已经存下的 IP 到事件过期（事件保留天数）才消失。每次写入时读取，保存后下一批事件生效。',
+  'config.ads.store_client_ip.label': '广告展示记录客户端 IP',
+  'config.ads.store_client_ip.desc':
+    '开（默认）：每条广告展示记录存客户端 IP。关：新写入的展示记录不存 IP（按预加载期限保存的展示元数据也不再带 IP），国家、平台、渠道等照常；已经存下的 IP 到记录过期（广告日志保留天数）才消失。每次写入时读取，保存后下一条记录生效。',
+  'config.attribution.store_click_ip.label': '归因点击记录客户端 IP',
+  'config.attribution.store_click_ip.desc':
+    '开（默认）：每条自建归因的点击记录存客户端 IP。关：新点击不存 IP（点击明细里这些点击的 IP 一栏为空）；自建归因里靠 IP 的指纹匹配对这些点击不再生效（按点击编号的匹配不受影响），所以关掉后安装只能靠点击编号归因。已经存下的点击保留 IP 到被清除（点击保留天数加过期后保留天数）。这个键用归因权限编辑。每次写入点击时读取，保存后下一次点击生效。',
+  'config.chat.message_retention_days.label': '聊天消息保留天数',
+  'config.chat.message_retention_days.desc':
+    '聊天消息和账号已结束的通话记录保留多少天。0（默认）表示保留到账号删除。大于 0 时必须不小于 32，且大于统计回溯天数；每天一次的清理任务（03:30 UTC）删除早于该天数的消息和通话记录，开着或未结算的会话、待人工复核的消息、待处理的文字轮、账号订阅当前周期内的行不删。之后用户的聊天历史、数据导出里没有这些消息，后台的会话列表变短，待复核的已删消息在后台看不到内容；已落地的统计和记忆服务不受影响。每次运行读取，保存后下一次运行生效。',
+  'config.voice.source_sample_retention_days.label': '声音样本原文件保留天数',
+  'config.voice.source_sample_retention_days.desc':
+    '声音样本原文件（和任务上的转写）保留多少天，从音色创建起算。0（默认）表示随音色的生命周期。大于 0：到期由每天一次的清理任务删除，音色本身继续可用；之后数据导出里没有该音色的原始录音，音色在合成服务里丢失时无法用样本重建，待复核的被举报音色没有样本可听（有待复核记录的音色不删）。每次运行读取。',
+  'config.guest.device_retention_days.label': '游客设备记录保留天数',
+  'config.guest.device_retention_days.desc':
+    '游客设备记录从最后一次出现起保留多少天。0（默认）表示不删除。大于 0 时必须不小于 91 加统计回溯天数；到期由每天一次的清理任务删除（仍有未结束游客会话的设备不删）。已落地的统计不变。每次运行读取。',
+  'config.guest.device_retention_days.risk':
+    '游客额度记在设备记录上。记录删除后，该设备下次出现按新设备处理并重新发放额度，所以设得太短会让游客额度被绕过。',
+  'config.support.feedback_retention_days.label': '客服反馈保留天数',
+  'config.support.feedback_retention_days.desc':
+    '客服反馈（含用户原文）保留多少天，从提交起算。0（默认）表示保留到账号删除。大于 0：到期由每天一次的清理任务删除，不分转发状态（待转发、已转发、失败）；还没转发的被删后不会再转发；已经转发给第三方客服工具的副本在对方系统里，这里删不掉。后台客服列表只显示剩下的。每次运行读取。',
+  'config.moderation.record_retention_days.label': '审核记录保留天数',
+  'config.moderation.record_retention_days.desc':
+    '审核记录保留多少天，从创建起算。0（默认）表示不删除。大于 0：到期由每天一次的清理任务删除，状态为待复核（PENDING_REVIEW）的永远不删。之后审核统计里被删日期的数字变小（统计是读记录实时算的），已删的记录在后台打不开。这个键用内容审核权限编辑。每次运行读取。',
+  'config.push.task_poll_seconds.label': '推送任务轮询间隔',
+  'config.push.task_poll_seconds.desc': '推送任务执行器查找到期任务的间隔，单位秒。',
+  'config.memory.call_timeout_seconds.label': '记忆服务调用超时',
+  'config.memory.call_timeout_seconds.desc': '调用记忆服务最长等待多少秒，超时放弃。',
+  'config.attribution.postback_enabled.label': '转化回传开关',
+  'config.attribution.postback_enabled.desc':
+    '把广告投放活动的转化回传给广告平台的开关。默认关闭。',
+  'config.attribution.facebook_graph_version.label': '广告平台接口版本',
+  'config.attribution.facebook_graph_version.desc':
+    '转化回传使用的广告平台接口版本，写法是字母 v、两位数字、一个点、一位数字，例如 v26.0。',
+  'config.ratelimit.events_per_ip_per_minute.label': '事件上报每 IP 每分钟次数',
+  'config.ratelimit.events_per_ip_per_minute.desc':
+    '事件上报请求每个 IP 每分钟允许的次数，超出会被限流。',
+  'config.chat.moderation_concurrency.label': '聊天批次内的审核并发数',
+  'config.chat.moderation_concurrency.desc':
+    '一批聊天消息送审时，批次内部同时进行的审核调用数。整个实例的总上限（每个实例同时在途的审核调用上限）另算。',
+  'config.chat.moderation_deadline_ms.label': '聊天审核期限',
+  'config.chat.moderation_deadline_ms.desc':
+    '一批聊天消息等待审核结果的最长时间，单位毫秒（100 到 2500）。超时该内容进入复核。',
+  'config.push.schedule_catchup_minutes.hint':
+    '规则：catch-up 分钟数×60 须 ≥ 600 + 轮询秒数；默认值下至少 11。',
+  'config.push.task_poll_seconds.hint':
+    '规则：catch-up 分钟数×60 须 ≥ 600 + 轮询秒数；默认值下至少 11。',
+  'config.app.supported_locales.reject.OUT_OF_RANGE':
+    '没有保存。每种语言都要先有随版本发布的通知模板文件（现在只有英文），并且列表里必须保留 en。先让文件随版本发布，再把语言加进来。',
+  'config.refusal.missingLanguages': '没有模板文件的语言：{languages}',
+  'config.usage_price.default_currency.reject.OUT_OF_RANGE':
+    '允许的币种必须包含默认币种。要改默认币种，先把新币种加进允许列表；要把当前默认币种从列表里去掉，先改默认币种。',
+  'config.usage_price.allowed_currencies.reject.OUT_OF_RANGE':
+    '允许的币种必须包含默认币种。要改默认币种，先把新币种加进允许列表；要把当前默认币种从列表里去掉，先改默认币种。',
+  'config.push.schedule_catchup_minutes.reject.OUT_OF_RANGE':
+    '没有保存。取值必须在 1 到 10080 之间，并且 catch-up 分钟数×60 须 ≥ 600 + 推送任务轮询秒数（默认轮询下至少 11）。',
+  'config.push.task_poll_seconds.reject.OUT_OF_RANGE':
+    '没有保存。取值不能小于 1，并且 catch-up 分钟数×60 须保持 ≥ 600 + 这个轮询秒数。',
+  'config.chat.message_retention_days.reject.OUT_OF_RANGE':
+    '没有保存。填 0（保留到账号删除），或不小于 32 天且大于统计回溯天数（stats.land_window_days）。',
+  'config.guest.device_retention_days.reject.OUT_OF_RANGE':
+    '没有保存。填 0（不删除），或不小于 91 加统计回溯天数（stats.land_window_days）。',
+  'config.events.ttl_days.reject.OUT_OF_RANGE':
+    '没有保存。事件保留天数必须不小于 30 加统计回溯天数（stats.land_window_days）。',
+  'config.stats.land_window_days.reject.OUT_OF_RANGE':
+    '没有保存。回溯天数不能小于 1，并且要小于依赖它的几项：事件保留天数（不小于 30 加回溯天数）、聊天消息保留天数（大于回溯天数）、游客设备记录保留天数（不小于 91 加回溯天数）。',
+  'config.refusal.SmsTemplate.EMPTY_NOT_ALLOWED':
+    '还不能开启手机号登录：必须至少有一个启用的验证码短信模板，语言为 en（en-GB、en-US 不算），且不限国家。请先在“短信模板”里新增或启用一个，再重试。',
 };
 
 export default messages;

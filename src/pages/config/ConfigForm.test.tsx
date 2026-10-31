@@ -1,19 +1,24 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { App } from 'antd';
+import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetConfigStore } from '../../../mock/_core/configStore';
+import { resetSmsStore, smsState } from '../../../mock/_core/smsData';
 import { resetStore } from '../../../mock/_core/store';
 import { adminOf } from '../../../mock/_core/testing';
 import * as configMock from '../../../mock/config.mock';
 import { signInAs, useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { resetUmiStub } from '../../../tests/stubs/umi-max';
+import zhCN from '../../locales/zh-CN';
 import { ConfigForm } from './ConfigForm';
 
 beforeEach(() => {
   resetUmiStub();
   resetStore();
   resetConfigStore();
+  resetSmsStore();
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -29,7 +34,10 @@ describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
     const ttl = await row('auth.access_ttl_minutes');
     expect(within(ttl).getByText('auth.access_ttl_minutes')).toBeInTheDocument();
     expect(within(ttl).getByText(/Default/)).toHaveTextContent('1440');
-    expect(document.querySelectorAll('[data-testid^="config-row-"]').length).toBe(225);
+    expect(document.querySelectorAll('[data-testid^="config-row-"]').length).toBe(250);
+    // the backend keys the contract does not list yet are known rows, not "unrecognised settings"
+    expect(screen.queryByText(/Unrecognised settings/)).toBeNull();
+    expect(screen.queryByTestId(/^config-unknown-/)).toBeNull();
     expect(document.querySelectorAll('.ant-card-head-title').length).toBeGreaterThan(40);
   });
 
@@ -51,7 +59,7 @@ describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
     expect(keys).toContain('milestone.days');
     expect(keys).toContain('auth.access_ttl_minutes');
     expect(keys).not.toContain('auth.refresh_ttl_days');
-    expect(keys.filter((k) => k.startsWith('moderation.')).length).toBe(10);
+    expect(keys.filter((k) => k.startsWith('moderation.')).length).toBe(11);
   });
 
   it('shows only the keys of the permission when that is all the administrator has', async () => {
@@ -60,7 +68,8 @@ describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
     useMockBackend(configMock);
     renderPage(<ConfigForm editPermission="MODERATION:CONFIG" />);
     await row('moderation.block_score');
-    expect(document.querySelectorAll('[data-testid^="config-row-"]').length).toBe(10);
+    expect(document.querySelectorAll('[data-testid^="config-row-"]').length).toBe(11);
+    expect(screen.getByTestId('config-row-moderation.record_retention_days')).toBeInTheDocument();
   });
 
   it('shows nothing, not an error, to an administrator without any config permission', async () => {
@@ -320,5 +329,348 @@ describe('ConfigForm: empty and Chinese', { timeout: 30000 }, () => {
     const r = await row('moderation.text_rules');
     expect(r).toHaveTextContent('请在这个页面里编辑：/moderation/rules');
     expect(within(r).getByRole('link', { name: '/moderation/rules' })).toBeInTheDocument();
+  });
+});
+
+const EXTRA_WITH_TEXT = [
+  'chat.moderation_global_concurrency',
+  'export.parallelism',
+  'ratelimit.apk_download_per_ip_per_min',
+  'ratelimit.push_image_per_ip_per_min',
+  'ratelimit.ad_media_per_ip_per_min',
+  'analytics.funnel_max_concurrency',
+  'integrity.app_attest_max_keys_per_device',
+  'ratelimit.app_attest_challenge_per_ip_per_hour',
+  'ratelimit.app_attest_key_per_ip_per_hour',
+  'integrity.app_attest_unsupported_allowed',
+  'events.store_client_ip',
+  'ads.store_client_ip',
+  'attribution.store_click_ip',
+  'chat.message_retention_days',
+  'voice.source_sample_retention_days',
+  'guest.device_retention_days',
+  'support.feedback_retention_days',
+  'moderation.record_retention_days',
+  'push.task_poll_seconds',
+  'memory.call_timeout_seconds',
+  'attribution.postback_enabled',
+  'attribution.facebook_graph_version',
+  'ratelimit.events_per_ip_per_minute',
+  'chat.moderation_concurrency',
+  'chat.moderation_deadline_ms',
+];
+
+describe('ConfigForm: the keys the backend has before the contract lists them', {
+  timeout: 60000,
+}, () => {
+  it.each(['en-US', 'zh-CN'] as const)(
+    'writes a name and a description for each of the 25 in %s',
+    async (locale) => {
+      signInAs('root');
+      useMockBackend(configMock);
+      renderPage(<ConfigForm keys={EXTRA_WITH_TEXT} />, locale);
+      await row('export.parallelism');
+      for (const key of EXTRA_WITH_TEXT) {
+        const r = screen.getByTestId(`config-row-${key}`);
+        const name = r.querySelector('strong')?.textContent ?? '';
+        expect(name, key).not.toBe('');
+        expect(name, key).not.toBe(key);
+        // a description is a line of text of its own under the name
+        const lines = [...r.querySelectorAll('span.ant-typography-secondary')].filter(
+          (e) => !e.querySelector('code') && (e.textContent?.length ?? 0) > 12,
+        );
+        expect(lines.length, key).toBeGreaterThan(0);
+      }
+      if (locale === 'en-US') expect(document.body.textContent).not.toMatch(/[\u3400-\u9fff]/);
+    },
+  );
+
+  it('shows the switches as switches, and a number with its range', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['events.store_client_ip', 'chat.moderation_deadline_ms']} />);
+    const flag = await row('events.store_client_ip');
+    expect(within(flag).getByRole('switch')).toBeChecked();
+    const deadline = await row('chat.moderation_deadline_ms');
+    expect(within(deadline).getByRole('spinbutton')).toHaveAttribute('aria-valuemax', '2500');
+    expect(within(deadline).getByRole('spinbutton')).toHaveAttribute('aria-valuemin', '100');
+    expect(deadline).toHaveTextContent('2000');
+  });
+
+  it('spells out the warning of guest.device_retention_days, which lets guest credit be gained again', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(
+      <ConfigForm keys={['guest.device_retention_days', 'chat.message_retention_days']} />,
+    );
+    const guest = await row('guest.device_retention_days');
+    expect(guest.querySelector('.ant-alert-warning')).not.toBeNull();
+    expect(guest.textContent).toMatch(/new device|new allowance|again/i);
+    expect(
+      screen
+        .getByTestId('config-row-chat.message_retention_days')
+        .querySelector('.ant-alert-warning'),
+    ).toBeNull();
+  });
+
+  it('saves a switch of a key of its own permission with { value }', async () => {
+    adminOf('support').permissions = ['ATTRIBUTION:MANAGE'];
+    signInAs('support');
+    const calls = useMockBackend(configMock);
+    renderPage(<ConfigForm editPermission="ATTRIBUTION:MANAGE" />);
+    const r = await row('attribution.store_click_ip');
+    fireEvent.click(within(r).getByRole('switch'));
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1));
+    expect(calls.find((c) => c.method === 'PUT')).toMatchObject({
+      url: '/api/admin/config/attribution.store_click_ip',
+      body: { value: false },
+    });
+  });
+});
+
+const alertOf = (r: HTMLElement) => within(r).getByRole('alert');
+
+describe('ConfigForm: a refusal that names two keys is shown on both rows, in the words of the code', {
+  timeout: 30000,
+}, () => {
+  const CURRENCY_WORDS =
+    'The allowed currencies must contain the default currency. To change the default, add the new currency to the allowed list first; to take the current default out of the list, change the default first.';
+
+  it('shows the currency rule under the default currency and under the allowed currencies, and not the backend message', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(
+      <ConfigForm keys={['usage_price.default_currency', 'usage_price.allowed_currencies']} />,
+    );
+    const def = await row('usage_price.default_currency');
+    fireEvent.change(within(def).getByRole('textbox'), { target: { value: 'EUR' } });
+    fireEvent.click(within(def).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(alertOf(def)).toHaveTextContent(CURRENCY_WORDS));
+    const allowed = screen.getByTestId('config-row-usage_price.allowed_currencies');
+    expect(alertOf(allowed)).toHaveTextContent(CURRENCY_WORDS);
+    expect(document.body.textContent).not.toContain('must contain usage_price.default_currency');
+    expect(document.body.textContent).not.toMatch(/outside the allowed range/i);
+  });
+
+  it('shows it from the allowed currencies too, in Chinese', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(
+      <ConfigForm keys={['usage_price.default_currency', 'usage_price.allowed_currencies']} />,
+      'zh-CN',
+    );
+    const allowed = await row('usage_price.allowed_currencies');
+    fireEvent.change(within(allowed).getByRole('textbox'), { target: { value: '["THB"]' } });
+    const save = within(allowed).getByRole('button', { name: /保\s?存/ });
+    await waitFor(() => expect(save).not.toBeDisabled());
+    fireEvent.click(save);
+    const words =
+      '允许的币种必须包含默认币种。要改默认币种，先把新币种加进允许列表；要把当前默认币种从列表里去掉，先改默认币种。';
+    await waitFor(() => expect(alertOf(allowed)).toHaveTextContent(words));
+    expect(
+      alertOf(screen.getByTestId('config-row-usage_price.default_currency')),
+    ).toHaveTextContent(words);
+  });
+
+  it('clears the other row at the next attempt, and when the save passes', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(
+      <ConfigForm keys={['usage_price.default_currency', 'usage_price.allowed_currencies']} />,
+    );
+    const allowed = await row('usage_price.allowed_currencies');
+    fireEvent.change(within(allowed).getByRole('textbox'), { target: { value: '["THB"]' } });
+    fireEvent.click(within(allowed).getByRole('button', { name: 'Save' }));
+    const def = screen.getByTestId('config-row-usage_price.default_currency');
+    await waitFor(() => expect(alertOf(def)).toBeInTheDocument());
+    fireEvent.change(within(allowed).getByRole('textbox'), { target: { value: '["USD","THB"]' } });
+    const again = () => within(allowed).getByRole('button', { name: /Save/ });
+    await waitFor(() => expect(again()).not.toHaveClass('ant-btn-loading'));
+    fireEvent.click(again());
+    await waitFor(() => expect(within(def).queryByRole('alert')).toBeNull());
+    expect(within(allowed).queryByRole('alert')).toBeNull();
+  });
+
+  it('changes the words of a refusal that is on show when the language is switched, on both rows', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    const keys = ['usage_price.default_currency', 'usage_price.allowed_currencies'];
+    const view = renderPage(<ConfigForm keys={keys} />);
+    const def = await row('usage_price.default_currency');
+    fireEvent.change(within(def).getByRole('textbox'), { target: { value: 'EUR' } });
+    fireEvent.click(within(def).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(alertOf(def)).toHaveTextContent(/must contain the default currency/),
+    );
+    view.rerender(
+      <IntlProvider locale="zh-CN" messages={zhCN} onError={() => {}}>
+        <App>
+          <ConfigForm keys={keys} />
+        </App>
+      </IntlProvider>,
+    );
+    const words = /允许的币种必须包含默认币种/;
+    expect(
+      alertOf(screen.getByTestId('config-row-usage_price.default_currency')),
+    ).toHaveTextContent(words);
+    expect(
+      alertOf(screen.getByTestId('config-row-usage_price.allowed_currencies')),
+    ).toHaveTextContent(words);
+  });
+
+  it('shows the rule of catch-up minutes and poll seconds as a hint on both fields, also before any refusal', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['push.schedule_catchup_minutes', 'push.task_poll_seconds']} />);
+    const hint =
+      'Rule: catch-up minutes × 60 must be at least 600 + poll seconds; with the default values the catch-up must be at least 11.';
+    for (const key of ['push.schedule_catchup_minutes', 'push.task_poll_seconds']) {
+      const r = await row(key);
+      expect(r).toHaveTextContent(hint);
+      expect(within(r).queryByRole('alert')).toBeNull();
+    }
+  });
+
+  it('shows the hint in Chinese', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(
+      <ConfigForm keys={['push.schedule_catchup_minutes', 'push.task_poll_seconds']} />,
+      'zh-CN',
+    );
+    for (const key of ['push.schedule_catchup_minutes', 'push.task_poll_seconds'])
+      expect(await row(key)).toHaveTextContent(
+        'catch-up 分钟数×60 须 ≥ 600 + 轮询秒数；默认值下至少 11',
+      );
+  });
+
+  it('shows the refusal of the catch-up rule on both fields when either is saved', async () => {
+    signInAs('root');
+    const calls = useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['push.schedule_catchup_minutes', 'push.task_poll_seconds']} />);
+    const catchup = await row('push.schedule_catchup_minutes');
+    fireEvent.change(within(catchup).getByRole('spinbutton'), { target: { value: '10' } });
+    fireEvent.click(within(catchup).getByRole('button', { name: 'Save' }));
+    const poll = screen.getByTestId('config-row-push.task_poll_seconds');
+    await waitFor(() => expect(alertOf(poll)).toBeInTheDocument());
+    expect(alertOf(catchup)).toBeInTheDocument();
+    expect(alertOf(poll)).toHaveTextContent(/catch-up minutes × 60 must stay at least 600/);
+    expect(alertOf(catchup)).toHaveTextContent(/1 to 10080/);
+    expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+  });
+
+  it('shows a retention refusal on the statistics window it depends on, as the second key', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['stats.land_window_days', 'chat.message_retention_days']} />);
+    const retention = await row('chat.message_retention_days');
+    fireEvent.change(within(retention).getByRole('spinbutton'), { target: { value: '32' } });
+    fireEvent.click(within(retention).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(within(retention).queryByRole('alert')).toBeNull());
+    const window = screen.getByTestId('config-row-stats.land_window_days');
+    fireEvent.change(within(window).getByRole('spinbutton'), { target: { value: '40' } });
+    fireEvent.click(within(window).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(alertOf(retention)).toBeInTheDocument());
+    expect(alertOf(retention)).toHaveTextContent(/more than the statistics look-back days/);
+    expect(alertOf(window)).toBeInTheDocument();
+  });
+});
+
+describe('ConfigForm: a refusal for something that is not a row', { timeout: 30000 }, () => {
+  it('puts the words of the code at the top of the form when the detail names SmsTemplate, not a setting key', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    smsState.templates.clear();
+    renderPage(<ConfigForm keys={['auth.phone_login_enabled', 'auth.access_ttl_minutes']} />);
+    const r = await row('auth.phone_login_enabled');
+    fireEvent.click(within(r).getByRole('switch'));
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    const top = await screen.findByTestId('config-refusals');
+    expect(top).toHaveTextContent(
+      'Phone sign-in cannot be turned on yet. There must be at least one enabled OTP SMS template in language en (not en-GB or en-US) with no country set. Add or enable one under SMS templates, then try again.',
+    );
+    expect(within(r).queryByText('Modified')).toBeNull(); // nothing was saved
+    // the row says that the save was refused; the backend message is never shown
+    expect(within(r).getByRole('alert')).toHaveTextContent(
+      'Some input is not valid. Please check the fields and try again.',
+    );
+    expect(document.body.textContent).not.toContain('for every country (no country set)"');
+    expect(document.body.textContent).not.toMatch(/The last enabled OTP template/);
+  });
+
+  it('says it in Chinese, and takes it away at the next attempt', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    smsState.templates.clear();
+    renderPage(<ConfigForm keys={['auth.phone_login_enabled']} />, 'zh-CN');
+    const r = await row('auth.phone_login_enabled');
+    fireEvent.click(within(r).getByRole('switch'));
+    fireEvent.click(within(r).getByRole('button', { name: /保\s?存/ }));
+    expect(await screen.findByTestId('config-refusals')).toHaveTextContent(
+      '还不能开启手机号登录：必须至少有一个启用的验证码短信模板，语言为 en（en-GB、en-US 不算），且不限国家。请先在“短信模板”里新增或启用一个，再重试。',
+    );
+    resetSmsStore();
+    fireEvent.click(within(r).getByRole('button', { name: /保\s?存/ }));
+    await waitFor(() => expect(screen.queryByTestId('config-refusals')).toBeNull());
+  });
+
+  it('shows no top box when the refusal names only rows', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(
+      <ConfigForm keys={['usage_price.default_currency', 'usage_price.allowed_currencies']} />,
+    );
+    const def = await row('usage_price.default_currency');
+    fireEvent.change(within(def).getByRole('textbox'), { target: { value: 'EUR' } });
+    fireEvent.click(within(def).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(alertOf(def)).toBeInTheDocument());
+    expect(screen.queryByTestId('config-refusals')).toBeNull();
+  });
+});
+
+describe('ConfigForm: the supported languages', { timeout: 30000 }, () => {
+  it('says that each language needs its template file, with the languages the backend names, and no backend message', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['app.supported_locales']} />);
+    const r = await row('app.supported_locales');
+    fireEvent.change(within(r).getByRole('textbox'), {
+      target: { value: '["en","th","ar","id","vi","es","zh-Hans"]' },
+    });
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(alertOf(r)).toBeInTheDocument());
+    expect(alertOf(r)).toHaveTextContent(
+      'Not saved. Every language needs a notification template file that ships with the app version (only English ships now), and en must stay in the list. Ship the file first, then add the language.',
+    );
+    expect(alertOf(r)).toHaveTextContent(
+      'Languages without a template file: th, ar, id, vi, es, zh-Hans',
+    );
+    expect(document.body.textContent).not.toContain('without a notification template file:');
+  });
+
+  it('does not depend on the extra field: without data.missingLanguages the sentence still stands', async () => {
+    signInAs('root');
+    const original = globalThis.fetch;
+    useMockBackend(configMock);
+    const mocked = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string, init: RequestInit = {}) => {
+      const response = await mocked(input, init);
+      if ((init.method ?? 'GET') === 'PUT') {
+        const body = await response.json();
+        delete body.data.missingLanguages;
+        return new Response(JSON.stringify(body), { status: response.status });
+      }
+      return response;
+    });
+    void original;
+    renderPage(<ConfigForm keys={['app.supported_locales']} />);
+    const r = await row('app.supported_locales');
+    fireEvent.change(within(r).getByRole('textbox'), { target: { value: '["en","th"]' } });
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(alertOf(r)).toHaveTextContent(/Every language needs a notification template file/),
+    );
+    expect(alertOf(r).textContent).not.toContain('Languages without a template file');
   });
 });

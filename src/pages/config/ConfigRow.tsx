@@ -5,6 +5,7 @@ import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { JsonField, parseJson } from '../../components/JsonField';
 import { LinkInput } from '../../components/LinkInput';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import type { ApiError } from '../../request/errors';
 import {
   type ConfigItem,
   type ConfigWarning,
@@ -20,6 +21,14 @@ type Props = {
   item: ConfigItem;
   /** Called after a save or a reset, so the list can be read again (the server stamps who and when). */
   onChanged: () => void;
+  /** The words of a refusal that names this key (it can be the other key of a rule between two). */
+  refusalField: string | null;
+  /** The words of a failure of this row's own save or reset that no detail explains. */
+  refusalAlert: string | null;
+  /** Called when a save or reset starts, so the words of the last refusal go away. */
+  onAttempt: () => void;
+  /** Called with the failure of a save or reset; the form shows it on every row it names. */
+  onRefused: (failure: ApiError) => void;
 };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -27,7 +36,15 @@ const toText = (value: unknown) =>
   value === null || value === undefined ? '' : JSON.stringify(value, null, 2);
 
 /** One configuration key: its name, what it does, the value editor, the default, who changed it, save and reset. */
-export function ConfigRow({ spec, item, onChanged }: Props) {
+export function ConfigRow({
+  spec,
+  item,
+  onChanged,
+  refusalField,
+  refusalAlert,
+  onAttempt,
+  onRefused,
+}: Props) {
   const intl = useIntl();
   const { message } = App.useApp();
   const t = (id: string, values?: Record<string, string | number>) =>
@@ -38,8 +55,6 @@ export function ConfigRow({ spec, item, onChanged }: Props) {
     spec.kind === 'json' ? toText(item.value) : item.value,
   );
   const [jsonValid, setJsonValid] = useState(true);
-  const [fieldError, setFieldError] = useState<string | null>(null);
-  const [alert, setAlert] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<ConfigWarning[]>([]);
 
   const parsed = useMemo(() => {
@@ -54,9 +69,10 @@ export function ConfigRow({ spec, item, onChanged }: Props) {
   const dirty = parsed.ok ? !same(value, item.value) : true;
   const modified = item.updatedAt !== null;
 
+  // The words of a refusal are worked out by the form from the code of each detail, when they are
+  // shown, so they follow the language; the backend's own message is never shown.
   const save = useSingleFlight(async () => {
-    setFieldError(null);
-    setAlert(null);
+    onAttempt();
     setWarnings([]);
     try {
       const result = await saveConfig(spec.key, value);
@@ -64,21 +80,12 @@ export function ConfigRow({ spec, item, onChanged }: Props) {
       message.success(t('config.saved'));
       onChanged();
     } catch (error) {
-      const { error: apiError, text, fields } = describeFailure(intl, error);
-      const mine = fields.find((f) => f.ref === spec.key);
-      if (mine) setFieldError(mine.text);
-      else
-        setAlert(
-          apiError.code === 'INVALID_REQUEST' && apiError.message
-            ? `${text}: ${apiError.message}`
-            : text,
-        );
+      onRefused(describeFailure(intl, error).error);
     }
   });
 
   const reset = useSingleFlight(async () => {
-    setFieldError(null);
-    setAlert(null);
+    onAttempt();
     setWarnings([]);
     try {
       const result = await resetConfig(spec.key);
@@ -86,7 +93,7 @@ export function ConfigRow({ spec, item, onChanged }: Props) {
       message.success(t('config.saved'));
       onChanged();
     } catch (error) {
-      setAlert(describeFailure(intl, error).text);
+      onRefused(describeFailure(intl, error).error);
     }
   });
 
@@ -169,6 +176,11 @@ export function ConfigRow({ spec, item, onChanged }: Props) {
       {spec.risk && has(`config.${spec.key}.risk`) ? (
         <Alert type="warning" showIcon title={t(`config.${spec.key}.risk`)} />
       ) : null}
+      {has(`config.${spec.key}.hint`) ? (
+        <Typography.Text type="secondary" style={{ overflowWrap: 'anywhere' }}>
+          {t(`config.${spec.key}.hint`)}
+        </Typography.Text>
+      ) : null}
       {unsetNote ? <Alert type="info" showIcon title={unsetNote} /> : null}
       {editor()}
       {spec.editedElsewhere ? (
@@ -184,12 +196,12 @@ export function ConfigRow({ spec, item, onChanged }: Props) {
           {reasonText}
         </Typography.Text>
       ) : null}
-      {fieldError ? (
-        <Typography.Text type="danger" role="alert">
-          {fieldError}
+      {refusalField ? (
+        <Typography.Text type="danger" role="alert" style={{ overflowWrap: 'anywhere' }}>
+          {refusalField}
         </Typography.Text>
       ) : null}
-      {alert ? <Alert type="error" showIcon title={alert} /> : null}
+      {refusalAlert ? <Alert type="error" showIcon title={refusalAlert} /> : null}
       {warnings.map((w) => (
         <Alert
           key={w.code}

@@ -2,8 +2,10 @@ import type { PermissionCode } from '../src/access/permissionCodes';
 import { CONFIG_SCHEMA, specOf } from '../src/pages/config/configSchema';
 import { validateServerLink } from '../src/utils/linkRule';
 import { guard, hasPermission } from './_core/auth';
+import { campaignState } from './_core/campaignData';
 import { currentValue, defaultOf, saved } from './_core/configStore';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
+import { smsState } from './_core/smsData';
 
 /** Keys this administrator may edit, by key name (contract 17.4: no 403, just fewer rows). */
 const editableBy = (admin: Parameters<typeof hasPermission>[0]) =>
@@ -30,6 +32,8 @@ function problemWith(key: string, value: unknown): string | null {
       if (typeof value !== 'number' || !Number.isInteger(value)) return 'NOT_AN_INTEGER';
       if (spec.min !== undefined && value < spec.min) return 'OUT_OF_RANGE';
       if (spec.max !== undefined && value > spec.max) return 'OUT_OF_RANGE';
+      if (spec.zeroOrMin !== undefined && value !== 0 && value < spec.zeroOrMin)
+        return 'OUT_OF_RANGE';
       return null;
     }
     case 'number':
@@ -42,7 +46,8 @@ function problemWith(key: string, value: unknown): string | null {
       return check.ok ? null : check.reasonKey;
     }
     case 'string':
-      return typeof value === 'string' && value.length > 0 ? null : 'EMPTY_NOT_ALLOWED';
+      if (typeof value !== 'string' || value.length === 0) return 'EMPTY_NOT_ALLOWED';
+      return spec.pattern && !spec.pattern.test(value) ? 'OUT_OF_RANGE' : null;
     case 'json':
       return spec.validate ? spec.validate(value) : null;
   }
@@ -57,15 +62,6 @@ function relationProblem(key: string, value: unknown): string | null {
       return 'OUT_OF_RANGE';
     }
   }
-  // Statistics events must outlive the 30-day look-back of the weekly and monthly numbers.
-  if (key === 'events.ttl_days' && typeof value === 'number') {
-    const window = currentValue('stats.land_window_days');
-    if (typeof window === 'number' && value < 30 + window) return 'OUT_OF_RANGE';
-  }
-  if (key === 'stats.land_window_days' && typeof value === 'number') {
-    const ttl = currentValue('events.ttl_days');
-    if (typeof ttl === 'number' && ttl < 30 + value) return 'OUT_OF_RANGE';
-  }
   if (key === 'auth.access_ttl_minutes' && typeof value === 'number') {
     const days = currentValue('auth.refresh_ttl_days');
     if (typeof days === 'number' && value > days * 1440) return 'OUT_OF_RANGE';
@@ -73,6 +69,110 @@ function relationProblem(key: string, value: unknown): string | null {
   if (key === 'auth.refresh_ttl_days' && typeof value === 'number') {
     const minutes = currentValue('auth.access_ttl_minutes');
     if (typeof minutes === 'number' && minutes > value * 1440) return 'OUT_OF_RANGE';
+  }
+  return null;
+}
+
+/** A refusal the way the backend words it: the message, the details (the saved key first) and extra `data` fields. */
+type Refusal = { message: string; details: { ref: string; reason: string }[]; extra?: object };
+
+const refused = ({ message, details, extra }: Refusal) =>
+  new MockHttpError(400, 'INVALID_REQUEST', message, { details, ...extra });
+
+const outOfRange = (...refs: string[]) => refs.map((ref) => ({ ref, reason: 'OUT_OF_RANGE' }));
+
+/** The only language file that ships with the backend: a language needs `notification/templates/<tag>.json`. */
+const SHIPPED_TEMPLATE_FILES = new Set(['en']);
+
+const numberOf = (key: string, saving: string, value: unknown): unknown =>
+  key === saving ? value : currentValue(saving);
+
+/**
+ * The rules between two keys, and the rules that look at something else, for `value` becoming the
+ * value of `key` (a reset passes the default). Contract 17.5 and the backend's checklist:
+ * the default currency is among the allowed ones; catch-up minutes x 60 are at least 600 + the poll
+ * seconds; the retention periods keep clear of the statistics landing window; a language needs its
+ * template file; phone sign-in needs an English OTP template for every country.
+ */
+function refusalFor(key: string, value: unknown): Refusal | null {
+  if (key === 'app.supported_locales' && Array.isArray(value)) {
+    const missing = value.filter(
+      (tag) => typeof tag === 'string' && !SHIPPED_TEMPLATE_FILES.has(tag.toLowerCase()),
+    );
+    if (missing.length > 0) {
+      return {
+        message: `${key} has languages without a notification template file: ${missing.join(', ')}`,
+        details: outOfRange(key),
+        extra: { missingLanguages: missing },
+      };
+    }
+  }
+  if (key === 'usage_price.default_currency' || key === 'usage_price.allowed_currencies') {
+    const other =
+      key === 'usage_price.default_currency'
+        ? 'usage_price.allowed_currencies'
+        : 'usage_price.default_currency';
+    const def = numberOf(key, 'usage_price.default_currency', value);
+    const allowed = numberOf(key, 'usage_price.allowed_currencies', value);
+    if (Array.isArray(allowed) && typeof def === 'string' && !allowed.includes(def)) {
+      return {
+        message: 'usage_price.allowed_currencies must contain usage_price.default_currency',
+        details: outOfRange(key, other),
+      };
+    }
+  }
+  if (key === 'push.schedule_catchup_minutes' || key === 'push.task_poll_seconds') {
+    const other =
+      key === 'push.task_poll_seconds' ? 'push.schedule_catchup_minutes' : 'push.task_poll_seconds';
+    const catchup = numberOf(key, 'push.schedule_catchup_minutes', value);
+    const poll = numberOf(key, 'push.task_poll_seconds', value);
+    if (typeof catchup === 'number' && typeof poll === 'number' && catchup * 60 < 600 + poll) {
+      return {
+        message: 'push.schedule_catchup_minutes x 60 must be at least 600 + push.task_poll_seconds',
+        details: outOfRange(key, other),
+      };
+    }
+  }
+  // Each retention period against the statistics landing window: [key, least value for a window w].
+  const needs: [string, (window: number) => number, (v: number) => boolean][] = [
+    ['events.ttl_days', (w) => 30 + w, () => true],
+    ['chat.message_retention_days', (w) => w + 1, (v) => v > 0],
+    ['guest.device_retention_days', (w) => 91 + w, (v) => v > 0],
+  ];
+  if (needs.some(([k]) => k === key) || key === 'stats.land_window_days') {
+    const window = numberOf(key, 'stats.land_window_days', value);
+    const broken = needs
+      .filter(([k]) => k === key || key === 'stats.land_window_days')
+      .filter(([k, least, applies]) => {
+        const v = numberOf(key, k, value);
+        return (
+          typeof v === 'number' && typeof window === 'number' && applies(v) && v < least(window)
+        );
+      })
+      .map(([k]) => k);
+    if (broken.length > 0) {
+      const refs =
+        key === 'stats.land_window_days'
+          ? ['stats.land_window_days', ...broken]
+          : [key, 'stats.land_window_days'];
+      return {
+        message: `${key} is outside the range allowed with stats.land_window_days`,
+        details: outOfRange(...refs),
+      };
+    }
+  }
+  if (key === 'auth.phone_login_enabled' && value === true) {
+    const served = [...smsState.templates.values()].some(
+      (t) =>
+        t.enabled && t.smsType === 'OTP' && t.locale.toLowerCase() === 'en' && t.country === null,
+    );
+    if (!served) {
+      return {
+        message:
+          'auth.phone_login_enabled needs an enabled OTP SMS template in language en for every country (no country set)',
+        details: [{ ref: 'SmsTemplate', reason: 'EMPTY_NOT_ALLOWED' }],
+      };
+    }
   }
   return null;
 }
@@ -90,6 +190,21 @@ function warningsFor(
     return [{ code: 'AD_SKIP_AFTER_TOO_LONG', message: 'A long skip delay can break store rules' }];
   }
   return [];
+}
+
+/**
+ * One currency is used for all the cost rows, so `attribution.cost_currency` cannot change from the
+ * value in force while a cost row exists (saving the same value always passes). Reset is a change to
+ * the default.
+ */
+function costCurrencyLock(key: string, proposed: unknown) {
+  if (key !== 'attribution.cost_currency' || campaignState.costs.length === 0) return null;
+  const current = currentValue(key);
+  if (proposed === current) return null;
+  return invalidRequest(
+    `${key} cannot be changed from ${String(current)} to ${String(proposed)} because cost rows exist (one currency is used for all cost rows)`,
+    [{ ref: key, reason: 'OUT_OF_RANGE' }],
+  );
 }
 
 const keyOf = (params: Record<string, string>): string => params.key ?? '';
@@ -125,6 +240,10 @@ export default {
     if (!('value' in body)) throw bad(key, 'EMPTY_NOT_ALLOWED');
     const problem = problemWith(key, body.value) ?? relationProblem(key, body.value);
     if (problem) throw bad(key, problem);
+    const refusal = refusalFor(key, body.value);
+    if (refusal) throw refused(refusal);
+    const locked = costCurrencyLock(key, body.value);
+    if (locked) throw locked;
     saved.set(key, {
       value: body.value,
       updatedAt: new Date().toISOString(),
@@ -142,6 +261,10 @@ export default {
     if (!hasPermission(req.admin, spec.editPermission as PermissionCode)) {
       throw new MockHttpError(403, 'ADMIN_FORBIDDEN', 'The administrator may not edit this key');
     }
+    const locked = costCurrencyLock(key, defaultOf(key));
+    if (locked) throw locked;
+    const refusal = refusalFor(key, defaultOf(key));
+    if (refusal) throw refused(refusal);
     saved.delete(key);
     return ok({ key, value: defaultOf(key), warnings: [] });
   }),

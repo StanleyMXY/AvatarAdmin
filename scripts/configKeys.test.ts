@@ -107,4 +107,42 @@ describe('compareConfigKeys', () => {
     );
     expect(problems).toContain('schema has a key twice');
   });
+
+  describe('with the backend extra keys (not in the contract yet)', () => {
+    const x = { key: 'x.extra', editPermission: 'CONFIG:MANAGE' };
+    const y = { key: 'y.extra', editPermission: 'ATTRIBUTION:MANAGE' };
+
+    it('accepts extras in the schema, and in no other place', () => {
+      expect(compareConfigKeys([a, b], [a, b], [a, b, x, y], [x, y])).toEqual([]);
+    });
+
+    it('names an extra that the schema lacks, and a key in the schema that is neither contract nor extra', () => {
+      const problems = compareConfigKeys([a, b], [a, b], [a, b, y], [x, y]);
+      expect(problems).toEqual(['schema is missing x.extra']);
+      expect(compareConfigKeys([a, b], [a, b], [a, b, x, y], [x])).toEqual([
+        'schema has y.extra, which the contract does not',
+      ]);
+    });
+
+    it('tells that an extra is in the contract now, so it leaves the list', () => {
+      const problems = compareConfigKeys([a, b, x], [a, b, x], [a, b, x], [x]);
+      expect(problems).toEqual([
+        'x.extra is in the contract now: remove it from the list of backend extra keys',
+      ]);
+    });
+
+    it('does not let the generated file carry an extra, and names a different permission and a repeated extra', () => {
+      expect(compareConfigKeys([a, b], [a, b, x], [a, b, x], [x])).toEqual([
+        'generated file has x.extra, which the contract does not',
+      ]);
+      expect(
+        compareConfigKeys([a], [a], [a, { ...x, editPermission: 'PUSH:CONFIG' }], [x]),
+      ).toEqual([
+        'schema: x.extra needs PUSH:CONFIG but the list of backend extra keys says CONFIG:MANAGE',
+      ]);
+      expect(compareConfigKeys([a], [a], [a, x], [x, x])).toContain(
+        'the list of backend extra keys has a key twice',
+      );
+    });
+  });
 });
