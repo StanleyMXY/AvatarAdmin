@@ -64,6 +64,10 @@ const messages: Record<string, string> = {
   'pages.export.cancelled': '已取消导出',
   'pages.export.saved': '已保存 {name}',
   'pages.export.narrowRange': '如果范围很大，请缩小日期范围或筛选条件（一次导出有行数上限）。',
+  'pages.export.range.from':
+    '起始日期：超出允许的范围。起始日期必须是有效的一天，并且不能晚于结束日期。',
+  'pages.export.range.to':
+    '结束日期：超出允许的范围。结束日期必须是有效的一天，并且范围不能超过统计允许的最大天数（stats.max_range_days）。',
   'pages.masked.needsPermission': '需要 {name} 权限才能看完整值',
   'pages.json.invalid': 'JSON 格式不对',
 };

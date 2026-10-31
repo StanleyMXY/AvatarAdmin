@@ -622,6 +622,9 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     kind: 'string',
     editPermission: 'ATTRIBUTION:MANAGE',
     group: 'attribution',
+    // An ISO 4217 code: three uppercase letters. The backend's answer to anything else is not
+    // written down, so the page does not send it (and its `OUT_OF_RANGE` stays the cost-row lock).
+    pattern: /^[A-Z]{3}$/,
   },
   {
     key: 'attribution.cost_batch_max',

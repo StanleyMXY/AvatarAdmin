@@ -32,6 +32,23 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** What `GET /meta` answers now (the session read it once at sign-in; the page reads it again). `'fail'` is an answer that cannot be used. */
+let liveMeta: Record<string, unknown> | 'fail' = {};
+const metaMock = {
+  default: {
+    'GET /api/admin/meta': (
+      _req: unknown,
+      res: { status: (c: number) => { json: (b: unknown) => void } },
+    ) => {
+      if (liveMeta === 'fail')
+        res.status(500).json({ code: 'INTERNAL_ERROR', message: 'x', data: null });
+      else res.status(200).json({ code: '200', message: 'success', data: liveMeta });
+    },
+  },
+};
+const metaReads = (calls: { method: string; url: string }[]) =>
+  calls.filter((c) => c.method === 'GET' && c.url === '/api/admin/meta').length;
+
 const open = async (
   codes: string[] = ALL,
   options: {
@@ -42,11 +59,12 @@ const open = async (
     locale?: 'zh-CN' | 'en-US';
   } = {},
 ) => {
+  liveMeta = options.meta ?? { allowedCurrencies: ['USD'] };
   signIn('root', { codes, meta: options.meta ?? { allowedCurrencies: ['USD'] } });
   options.prepare?.();
   if (options.search !== undefined)
     setTestLocation({ pathname: '/cost/prices', search: options.search });
-  const calls = useMockBackend(costMock, monitorMock, configMock);
+  const calls = useMockBackend(metaMock, costMock, monitorMock, configMock);
   renderPage(<PricesPage />, options.locale);
   const user = userEvent.setup();
   if (options.tab) await user.click(await screen.findByRole('tab', { name: options.tab }));
@@ -497,13 +515,148 @@ describe('pending prices', () => {
         }),
       );
       const dialog = await screen.findByRole('dialog');
-      await waitFor(() =>
-        expect(dialog.textContent).toContain('is not one of the allowed currencies'),
-      );
+      await waitFor(() => expect(dialog.textContent).toContain('usage_price.allowed_currencies'));
+      // the list is not known, so nobody is told to choose from it: the words say where to look
+      expect(dialog.textContent).not.toContain('Choose an allowed currency');
+      expect(dialog.textContent).toContain('reload the page');
       expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')[0].body).toEqual({
         effectiveFrom: '2026-10-26',
       });
       expect(batchOf(BATCH.pendingImage).status).toBe('PENDING_REVIEW');
+    });
+
+    it('says in Chinese, for an unknown list, where to look instead of asking to choose', async () => {
+      const { user } = await open(ALL, {
+        meta: {},
+        locale: 'zh-CN',
+        prepare: () => {
+          batchOf(BATCH.pendingImage).currency = 'EUR';
+        },
+      });
+      const card = await cardOf(BATCH.pendingImage);
+      await user.click(card.getByRole('button', { name: /确\s?认/ }));
+      await user.click(
+        within(await screen.findByRole('dialog')).getByRole('button', { name: /确认价格/ }),
+      );
+      const dialog = await screen.findByRole('dialog');
+      await waitFor(() => expect(dialog.textContent).toContain('usage_price.allowed_currencies'));
+      expect(dialog.textContent).toContain('刷新页面');
+      expect(dialog.textContent).not.toContain('请选一个允许的币种');
+    });
+
+    describe('the allowed currencies are read again, not only at sign-in', () => {
+      const confirmWith = async (user: ReturnType<typeof userEvent.setup>, id: string) => {
+        const card = await cardOf(id);
+        await user.click(card.getByRole('button', { name: 'Confirm' }));
+        return screen.findByRole('dialog');
+      };
+
+      it('reads them again when the confirm dialog opens: a currency taken off the list meanwhile cannot be confirmed, and nothing is sent', async () => {
+        const { user, calls } = await open(ALL, {
+          meta: { allowedCurrencies: ['USD', 'EUR'] },
+          prepare: () => {
+            batchOf(BATCH.pendingImage).currency = 'EUR';
+          },
+        });
+        const card = await cardOf(BATCH.pendingImage);
+        await waitFor(() => expect(metaReads(calls)).toBeGreaterThan(0));
+        const before = metaReads(calls);
+        liveMeta = { allowedCurrencies: ['USD'] };
+        await user.click(card.getByRole('button', { name: 'Confirm' }));
+        const dialog = await screen.findByRole('dialog');
+        await waitFor(() => expect(metaReads(calls)).toBe(before + 1));
+        await waitFor(() => expect(dialog.textContent).toContain('is not an allowed one'));
+        expect(within(dialog).getByRole('button', { name: 'Confirm the price' })).toBeDisabled();
+        expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')).toHaveLength(0);
+        // and the card behind it now offers the new list only
+        await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        await dialogsClosed();
+        expect(card.getByRole('button', { name: 'Confirm' })).toBeDisabled();
+      });
+
+      it('uses a list that became known: the currency is sent, and the dialog no longer says it could not be checked', async () => {
+        const { user, calls } = await open(ALL, {
+          meta: {},
+          prepare: () => {
+            batchOf(BATCH.pendingImage).currency = 'EUR';
+          },
+        });
+        await cardOf(BATCH.pendingImage);
+        liveMeta = { allowedCurrencies: ['USD', 'EUR'] };
+        const dialog = await confirmWith(user, BATCH.pendingImage);
+        await waitFor(() =>
+          expect(dialog.textContent).not.toContain('The currency could not be checked'),
+        );
+        const ok = within(dialog).getByRole('button', { name: 'Confirm the price' });
+        await waitFor(() => expect(ok).toBeEnabled());
+        await user.click(ok);
+        await waitFor(() =>
+          expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')).toHaveLength(1),
+        );
+        expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')[0].body).toEqual({
+          effectiveFrom: '2026-10-26',
+          currency: 'EUR',
+        });
+      });
+
+      it('keeps the list it had when the new read fails', async () => {
+        const { user, calls } = await open(ALL, { meta: { allowedCurrencies: ['USD'] } });
+        await cardOf(BATCH.pendingLlm);
+        liveMeta = 'fail';
+        const dialog = await confirmWith(user, BATCH.pendingLlm);
+        const ok = within(dialog).getByRole('button', { name: 'Confirm the price' });
+        await waitFor(() => expect(ok).toBeEnabled());
+        expect(dialog.textContent).not.toContain('is not an allowed one');
+        await user.click(ok);
+        await waitFor(() =>
+          expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')).toHaveLength(1),
+        );
+        expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')[0].body).toEqual({
+          effectiveFrom: '2026-10-26',
+          currency: 'USD',
+        });
+      });
+
+      it('does not let the button of the dialog work before the new list has arrived', async () => {
+        let release: (() => void) | undefined;
+        const { user, calls } = await open(ALL, { meta: { allowedCurrencies: ['USD'] } });
+        await cardOf(BATCH.pendingLlm);
+        const inner = globalThis.fetch as unknown as (
+          i: string,
+          init?: RequestInit,
+        ) => Promise<Response>;
+        vi.stubGlobal('fetch', (input: string, init?: RequestInit) =>
+          String(input).endsWith('/meta')
+            ? new Promise<Response>((resolve) => {
+                release = () => resolve(inner(input, init));
+              })
+            : inner(input, init),
+        );
+        const dialog = await confirmWith(user, BATCH.pendingLlm);
+        expect(within(dialog).getByRole('button', { name: 'Confirm the price' })).toBeDisabled();
+        release?.();
+        await waitFor(() =>
+          expect(within(dialog).getByRole('button', { name: 'Confirm the price' })).toBeEnabled(),
+        );
+        expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')).toHaveLength(0);
+      });
+
+      it('reads them when the page opens too: a list changed on another page since sign-in applies to the cards', async () => {
+        const { calls } = await open(ALL, {
+          meta: { allowedCurrencies: ['USD'] },
+          prepare: () => {
+            batchOf(BATCH.pendingImage).currency = 'EUR';
+            liveMeta = { allowedCurrencies: ['USD', 'EUR'] };
+          },
+        });
+        // `open` sets the live list before `prepare`; the session list stays the old one
+        const card = await cardOf(BATCH.pendingImage);
+        await waitFor(() => expect(metaReads(calls)).toBeGreaterThan(0));
+        await waitFor(() => expect(card.getByRole('button', { name: 'Confirm' })).toBeEnabled());
+        expect(
+          card.queryByText('The currency of this batch is not an allowed one. Choose one.'),
+        ).toBeNull();
+      });
     });
 
     it('says it in Chinese too', async () => {

@@ -141,6 +141,8 @@ const messages: Record<string, string> = {
     'Costs are entered by hand, one amount for each campaign and day (a UTC day), in the one currency of the system.',
   'campaign.costs.currencyLock':
     'The currency cannot be changed while cost rows exist; delete the costs one by one first, then change it.',
+  'config.attribution.cost_currency.invalid.OUT_OF_RANGE':
+    'The currency must be a code of three uppercase letters (ISO 4217), for example USD.',
   'config.attribution.cost_currency.reject.OUT_OF_RANGE':
     'The currency cannot be changed because cost rows exist. Delete all the costs one by one on the Costs tab first, then change the currency.',
   'campaign.costs.enter': 'Enter cost',

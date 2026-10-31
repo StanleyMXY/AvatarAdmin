@@ -148,6 +148,42 @@ describe('the rule that the cost currency cannot change while cost rows exist', 
     expect(saved.get(CURRENCY)?.value).toBe('EUR');
   });
 
+  describe.each([
+    ['en-US', 'Save', /three uppercase letters/i, 'usd'],
+    ['en-US', 'Save', /three uppercase letters/i, 'euro'],
+    ['zh-CN', /保\s?存/, /三位大写字母/, 'US'],
+  ] as const)('a value that is not a currency code (%s, "%s")', (locale, saveName, hint, typed) => {
+    it('is stopped before any request, with the format hint, and not called "cost rows exist"', async () => {
+      signIn('root');
+      campaignState.costs.length = 0;
+      const calls = useMockBackend(configMock, campaignMock);
+      renderPage(<SettingsPage />, locale);
+      const row = await screen.findByTestId(`config-row-${CURRENCY}`);
+      fireEvent.change(within(row).getByRole('textbox'), { target: { value: typed } });
+      await waitFor(() => expect(within(row).getByRole('alert').textContent).toMatch(hint));
+      expect(within(row).getByRole('button', { name: saveName })).toBeDisabled();
+      expect(row.textContent).not.toMatch(/cost rows exist|已有成本行/);
+      expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(0);
+    });
+  });
+
+  it('accepts a three-letter uppercase code and says "cost rows exist" only for that one, refused by the lock', async () => {
+    signIn('root');
+    const calls = useMockBackend(configMock, campaignMock);
+    renderPage(<SettingsPage />);
+    const row = await screen.findByTestId(`config-row-${CURRENCY}`);
+    fireEvent.change(within(row).getByRole('textbox'), { target: { value: 'usd' } });
+    await waitFor(() => expect(within(row).getByRole('alert')).toBeInTheDocument());
+    fireEvent.change(within(row).getByRole('textbox'), { target: { value: 'THB' } });
+    await waitFor(() => expect(within(row).getByRole('button', { name: 'Save' })).toBeEnabled());
+    expect(within(row).queryByRole('alert')).toBeNull();
+    fireEvent.click(within(row).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(within(row).getByRole('alert').textContent).toMatch(/cost rows exist/),
+    );
+    expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+  });
+
   it('lets the currency change once every cost is deleted', async () => {
     signIn('root');
     campaignState.costs.length = 0;

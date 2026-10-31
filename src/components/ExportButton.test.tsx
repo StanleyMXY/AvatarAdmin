@@ -115,6 +115,72 @@ describe('ExportButton', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /Export/ })).not.toBeDisabled());
   });
 
+  describe('a 400 that names the date that was refused', () => {
+    const refuse = (...refs: string[]) =>
+      stubFetch(() =>
+        jsonResponse(
+          400,
+          envelope(
+            'INVALID_REQUEST',
+            { details: refs.map((ref) => ({ ref, reason: 'OUT_OF_RANGE' })) },
+            'backend words that must not show',
+          ),
+        ),
+      );
+    const press = () => fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+
+    it('says the start date is the wrong one when the ref is from, and does not tell to narrow the range', async () => {
+      refuse('from');
+      mount();
+      press();
+      const toast = await screen.findByText(/Start date/);
+      expect(toast.textContent).toContain(
+        'The start date must be a valid day and not after the end date.',
+      );
+      expect(toast.textContent).not.toContain('End date');
+      expect(toast.textContent).not.toContain('narrow the date range');
+      expect(toast.textContent).not.toContain('backend words');
+      expect(saved).toEqual([]);
+    });
+
+    it('says the end date is the wrong one when the ref is to (a range that is too long is reported there)', async () => {
+      refuse('to');
+      mount();
+      press();
+      const toast = await screen.findByText(/End date/);
+      expect(toast.textContent).toContain('stats.max_range_days');
+      expect(toast.textContent).not.toContain('Start date');
+      expect(toast.textContent).not.toContain('backend words');
+    });
+
+    it('names both when both are refused', async () => {
+      refuse('from', 'to');
+      mount();
+      press();
+      const toast = await screen.findByText(/Start date/);
+      expect(toast.textContent).toContain('End date');
+    });
+
+    it('says it in Chinese too', async () => {
+      refuse('from');
+      renderPage(
+        <ExportButton name="daily" params={{ from: 'x', to: 'y' }} viewCode="STATS:VIEW" />,
+        'zh-CN',
+      );
+      fireEvent.click(screen.getByRole('button', { name: /导\s?出/ }));
+      const toast = await screen.findByText(/起始日期/);
+      expect(toast.textContent).toContain('起始日期必须是有效的一天，并且不能晚于结束日期');
+      expect(toast.textContent).not.toContain('backend words');
+    });
+
+    it('keeps the general words for a ref that is not a date (too many rows)', async () => {
+      refuse('filter');
+      mount();
+      press();
+      expect(await screen.findByText(/narrow the date range/)).toBeInTheDocument();
+    });
+  });
+
   it('does not save a JSON error that came with a success status', async () => {
     stubFetch(() => jsonResponse(200, envelope('200', { nothing: true })));
     mount();

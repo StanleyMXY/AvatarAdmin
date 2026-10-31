@@ -107,7 +107,7 @@ export default function FunnelPage() {
 
   /** The Query button and Retry: the form as it is, if it can be asked. */
   const ask = () => {
-    if (valid) void query(body());
+    if (valid && !querying) void query(body());
   };
 
   const choose = (id: string | undefined) => {
@@ -244,7 +244,8 @@ export default function FunnelPage() {
           </Flex>
         ) : null}
         <Flex gap={8} wrap>
-          <Button type="primary" disabled={!valid} onClick={ask}>
+          {/* One query at a time: every press takes a place of the backend (analytics.funnel_max_concurrency), so a second press would get the person a 429 of their own making. */}
+          <Button type="primary" disabled={!valid || querying} onClick={ask}>
             {t('analytics.common.query')}
           </Button>
           {canManage ? (

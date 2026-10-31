@@ -66,12 +66,21 @@ export function ExportButton({ name, params, viewCode, url, requiredCodes }: Pro
         return;
       }
       const { error: failure, text } = describeFailure(intl, error);
-      // The backend refuses an export with too many rows as 400 INVALID_REQUEST; its message is not
-      // shown (codes are translated here), so the text says what to try.
+      // The backend refuses a date range as 400 INVALID_REQUEST with the field in `details` (`from` or
+      // `to`); its message is not shown (codes are translated here), so the text says which date it
+      // was. A refusal that names no date (too many rows) says what to try.
+      const dates = (['from', 'to'] as const).filter((ref) =>
+        failure.details.some((detail) => detail.ref === ref),
+      );
       message.error(
-        failure.code === 'INVALID_REQUEST'
-          ? `${text} ${intl.formatMessage({ id: 'pages.export.narrowRange' })}`
-          : text,
+        failure.code !== 'INVALID_REQUEST'
+          ? text
+          : dates.length > 0
+            ? [
+                text,
+                ...dates.map((ref) => intl.formatMessage({ id: `pages.export.range.${ref}` })),
+              ].join(' ')
+            : `${text} ${intl.formatMessage({ id: 'pages.export.narrowRange' })}`,
       );
     } finally {
       if (controller.current === mine) controller.current = null;

@@ -156,7 +156,14 @@ export function ConfigRow({
     spec.key === 'upload.public_base_url' && item.value === null
       ? t('config.requiresUploadBase')
       : null;
-  const reasonText = problem && has(`reason.${problem}`) ? t(`reason.${problem}`) : problem;
+  // The words of the key for a value the page itself turns down (`config.<key>.invalid.<reason>`), else those of the reason.
+  const reasonText = !problem
+    ? null
+    : has(`config.${spec.key}.invalid.${problem}`)
+      ? t(`config.${spec.key}.invalid.${problem}`)
+      : has(`reason.${problem}`)
+        ? t(`reason.${problem}`)
+        : problem;
 
   return (
     <Flex vertical gap={6} style={{ padding: '12px 0' }} data-testid={`config-row-${spec.key}`}>

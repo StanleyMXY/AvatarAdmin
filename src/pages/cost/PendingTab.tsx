@@ -182,9 +182,11 @@ function PendingCard({
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const listKnown = Array.isArray(allowed);
-  const [currency, setCurrency] = useState<string | undefined>(() =>
-    listKnown ? (allowed.includes(batch.currency) ? batch.currency : undefined) : batch.currency,
-  );
+  // What the person chose; without a choice the batch's own currency, which counts when the list has it.
+  // Worked out from the list as it is now, because the list can change while the card is on screen.
+  const [chosen, setChosen] = useState<string | undefined>();
+  const wanted = chosen ?? batch.currency;
+  const currency = listKnown ? (allowed.includes(wanted) ? wanted : undefined) : wanted;
   const [date, setDate] = useState(batch.effectiveFrom);
   const needsCurrency = listKnown && currency === undefined;
 
@@ -213,7 +215,7 @@ function PendingCard({
                   style={{ minWidth: 140 }}
                   disabled={!listKnown}
                   value={currency}
-                  onChange={setCurrency}
+                  onChange={setChosen}
                   placeholder={listKnown ? undefined : t('cost.pending.noCurrencyList')}
                   options={(listKnown ? allowed : []).map((c) => ({ value: c, label: c }))}
                 />
@@ -278,8 +280,11 @@ function PendingCard({
  */
 export function PendingTab({
   allowedCurrencies,
+  readAllowed,
 }: {
   allowedCurrencies: string[] | null | undefined;
+  /** Reads the allowed currencies again (they can be changed on another page after sign-in); resolves when `allowedCurrencies` is up to date. */
+  readAllowed: () => Promise<void>;
 }) {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
@@ -290,6 +295,15 @@ export function PendingTab({
   const { data, failure, reload } = useLatestRead(listPendingBatches);
   const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [rejecting, setRejecting] = useState<PendingBatch | null>(null);
+  const [reading, setReading] = useState(false);
+
+  // Opening the confirm dialog reads the allowed currencies again; until that is back the dialog
+  // cannot be confirmed, so the currency is checked against the list as it is now.
+  const askConfirm = (c: Confirming) => {
+    setConfirming(c);
+    setReading(true);
+    void readAllowed().finally(() => setReading(false));
+  };
 
   // A batch that is no longer waiting (someone else decided it): show the list as it is now.
   const refreshOnConflict = (error: unknown) => {
@@ -297,6 +311,9 @@ export function PendingTab({
   };
 
   const listKnown = Array.isArray(allowedCurrencies);
+  // The currency chosen on the card is not in the list as it is now (the list changed meanwhile).
+  const currencyOutOfList =
+    confirming !== null && listKnown && !allowedCurrencies.includes(confirming.currency ?? '');
   const today = todayUtc();
 
   return (
@@ -324,7 +341,7 @@ export function PendingTab({
           batch={batch}
           canPrice={canPrice}
           allowed={allowedCurrencies}
-          onConfirm={setConfirming}
+          onConfirm={askConfirm}
           onReject={setRejecting}
         />
       ))}
@@ -333,7 +350,12 @@ export function PendingTab({
         open={confirming !== null}
         title={t('cost.pending.confirmTitle')}
         okText={t('cost.pending.confirmOk')}
-        refTexts={{ currency: 'cost.pending.currencyRefused' }}
+        okDisabled={reading || currencyOutOfList}
+        refTexts={{
+          currency: listKnown
+            ? 'cost.pending.currencyRefused'
+            : 'cost.pending.currencyRefusedNoList',
+        }}
         onClose={() => setConfirming(null)}
         onSubmit={async () => {
           if (!confirming) return;
@@ -370,6 +392,11 @@ export function PendingTab({
                 : t('cost.pending.consequence.future')}
             </div>
             {!listKnown ? <div>{t('cost.pending.consequence.currency')}</div> : null}
+            {currencyOutOfList ? (
+              <Typography.Text type="danger">
+                {t('cost.pending.currencyNowRefused')}
+              </Typography.Text>
+            ) : null}
           </Flex>
         ) : null}
       </ActionModal>

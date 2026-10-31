@@ -24,6 +24,8 @@ const writes = (calls: Calls, method: string) => calls.filter((c) => c.method ==
 const lastFunnel = (calls: Calls) => new URL(funnelCalls(calls).at(-1)?.url as string, 'http://x');
 const button = (name: string | RegExp) => screen.queryByRole('button', { name });
 const queryButton = () => screen.getByRole('button', { name: 'Query' });
+/** Anything on the page that still shows a loading state (the table's own spin container is not one). */
+const busyMarks = () => document.querySelector('.ant-spin-spinning, [aria-busy="true"]');
 
 const openPage = async (user = userEvent.setup()) => {
   const calls = useMockBackend(analyticsMock);
@@ -485,12 +487,62 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     expect(within(alert).getByRole('button', { name: 'Retry' })).toBeEnabled();
     expect(stepTags()).toEqual(['app_open', 'register_completed']);
     expect(funnelCalls(calls)).toHaveLength(2);
+    // nothing keeps spinning after the refusal
+    expect(busyMarks()).toBeNull();
     // when the place is free again the same press works
     analyticsStore.funnelInFlight = 0;
     await user.click(within(alert).getByRole('button', { name: 'Retry' }));
     await screen.findByTestId('funnel-result');
     expect(screen.queryByRole('alert')).toBeNull();
+    expect(busyMarks()).toBeNull();
     expect(funnelCalls(calls)).toHaveLength(3);
+  });
+
+  it('disables Query while a query runs (a second press would take another place of the backend), and enables it again after the answer and after a 429', async () => {
+    let release: (() => void) | undefined;
+    let refuse = false;
+    let asked = 0;
+    stubFetch(async ({ url }) => {
+      const parsed = new URL(url, 'http://x');
+      if (parsed.pathname.endsWith('/analytics/funnels'))
+        return jsonResponse(200, envelope('200', { items: [funnelRow('F', ['a', 'b'])] }));
+      if (parsed.pathname.endsWith('/event-names'))
+        return jsonResponse(200, envelope('200', { items: [] }));
+      asked += 1;
+      await new Promise<void>((r) => (release = r));
+      if (refuse) return jsonResponse(429, envelope('RATE_LIMITED', null, 'Too many funnels'));
+      return jsonResponse(
+        200,
+        envelope('200', {
+          steps: [
+            { eventName: 'a', count: 5, conversionFromPrevious: null },
+            { eventName: 'b', count: 4, conversionFromPrevious: 0.8 },
+          ],
+        }),
+      );
+    });
+    const user = userEvent.setup();
+    renderPage(<FunnelPage />);
+    await choose(user, 'F');
+    await waitFor(() => expect(asked).toBe(1));
+    // running: the button is off and a press (also by keyboard or script) sends nothing
+    await waitFor(() => expect(queryButton()).toBeDisabled());
+    fireEvent.click(queryButton());
+    await user.click(queryButton());
+    expect(asked).toBe(1);
+    release?.();
+    await screen.findByTestId('funnel-result');
+    await waitFor(() => expect(queryButton()).toBeEnabled());
+    // the next query is refused with 429: the button comes back
+    refuse = true;
+    await user.click(queryButton());
+    await waitFor(() => expect(asked).toBe(2));
+    expect(queryButton()).toBeDisabled();
+    release?.();
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(enUS['error.RATE_LIMITED']);
+    await waitFor(() => expect(queryButton()).toBeEnabled());
+    expect(busyMarks()).toBeNull();
   });
 
   it('says it in Chinese too, never the words of the backend', async () => {

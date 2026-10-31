@@ -128,6 +128,8 @@ const messages: Record<string, string> = {
     '直接下载 APK 的落地页用投放代码“{code}”和事件 PAGE_VIEW 或 DOWNLOAD_CLICK 调用这个接口：',
   'campaign.costs.note': '成本由人工录入，每个投放账户每天（UTC 日）一笔，币种整个系统只有一种。',
   'campaign.costs.currencyLock': '已有成本行时不能改币种；先逐行删除成本再改。',
+  'config.attribution.cost_currency.invalid.OUT_OF_RANGE':
+    '币种必须是三位大写字母的币种码（ISO 4217），例如 USD。',
   'config.attribution.cost_currency.reject.OUT_OF_RANGE':
     '已有成本行，不能改币种。请先在“投放成本”页签里逐行删除全部成本，再改币种。',
   'campaign.costs.enter': '录入花费',
