@@ -34,13 +34,14 @@ const itemOf = async (code: string) => {
 };
 
 describe('GET /email/templates (contract 17.4 table, item 14)', () => {
-  it('answers the five templates by template code, ascending, with the fields of the contract and no paging', async () => {
+  it('answers the six templates by template code, ascending, with the fields of the contract and no paging', async () => {
     const answer = await list();
     expect(answer.status).toBe(200);
     const items = answer.body.data.items as Record<string, unknown>[];
     expect(items.map((i) => i.templateCode)).toEqual([
       'DELETION_CONFIRM',
       'LIKENESS_COMPLAINT_RECEIVED',
+      'LOGIN_METHOD_ADDED',
       'PASSWORD_CHANGED',
       'PASSWORD_RESET',
       'REGISTER_CODE',
@@ -78,6 +79,8 @@ describe('GET /email/templates (contract 17.4 table, item 14)', () => {
     ]);
     expect(byCode.PASSWORD_CHANGED.requiredPlaceholders).toEqual(['{time}']);
     expect(byCode.LIKENESS_COMPLAINT_RECEIVED.requiredPlaceholders).toEqual([]);
+    expect(byCode.LOGIN_METHOD_ADDED.placeholders).toEqual(['{method}', '{time}', '{appName}']);
+    expect(byCode.LOGIN_METHOD_ADDED.requiredPlaceholders).toEqual(['{method}', '{time}']);
     for (const item of Object.values(byCode) as {
       placeholders: string[];
       requiredPlaceholders: string[];
@@ -146,6 +149,27 @@ describe('PUT /email/templates/{templateCode}', () => {
     expect(answer.status).toBe(400);
     expect(answer.body.message).toContain('{subscriptionNotice}');
     expect(answer.body.message).not.toContain('{confirmLink}');
+  });
+
+  it('saves and resets the sixth template like the others, and names the missing one of {method} and {time}', async () => {
+    const missingTime = await save('LOGIN_METHOD_ADDED', { subject: 'x', body: 'Added {method}' });
+    expect([missingTime.status, missingTime.body.code]).toEqual([400, 'INVALID_REQUEST']);
+    expect(missingTime.body.message).toContain('{time}');
+    expect(missingTime.body.message).not.toContain('{method}');
+    const missingMethod = await save('LOGIN_METHOD_ADDED', { subject: 'x', body: 'At {time}' });
+    expect(missingMethod.body.message).toContain('{method}');
+    expect((await itemOf('LOGIN_METHOD_ADDED')).modified).toBe(false);
+    expect(
+      (
+        await save('LOGIN_METHOD_ADDED', {
+          subject: 'Nueva forma de acceso ไทย',
+          body: '{method} {time} {appName}',
+        })
+      ).status,
+    ).toBe(200);
+    expect((await itemOf('LOGIN_METHOD_ADDED')).modified).toBe(true);
+    expect((await reset('LOGIN_METHOD_ADDED')).status).toBe(200);
+    expect((await itemOf('LOGIN_METHOD_ADDED')).modified).toBe(false);
   });
 
   it('refuses a subject of 0 or more than 200 characters, counted after the blanks are cut', async () => {

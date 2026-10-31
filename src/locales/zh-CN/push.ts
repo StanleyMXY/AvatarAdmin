@@ -42,11 +42,13 @@ const messages: Record<string, string> = {
 
   // ---- 模板 ----
   'push.templates.note':
-    '召回推送的文字：每个触发原因、每种语言一条模板。一个召回触发原因要在每种支持的语言上都有模板才允许启用；保存时的最终校验在后端。',
+    '召回推送的文字：每个触发原因、每种语言一条模板。一个触发原因只要有启用的模板，就必须有默认语言的启用模板；其他语言可选，没有启用模板的语言会回退到默认语言。保存时的最终校验在后端。',
   'push.templates.matrix.title': '各语言的完整性',
   'push.templates.matrix.reason': '触发原因',
-  'push.templates.matrix.note': '列是支持的语言，红色的格子表示缺模板。',
-  'push.templates.matrix.missing': '缺失',
+  'push.templates.matrix.note':
+    '列是支持的语言。没有启用模板的语言会回退到默认语言：这是提示信息，不是错误。',
+  'push.templates.matrix.fallback': '回退到默认语言',
+  'push.templates.matrix.none': '没有模板',
   'push.templates.matrix.on': '已启用',
   'push.templates.matrix.off': '未启用',
   'push.templates.matrix.unknown':
@@ -69,8 +71,8 @@ const messages: Record<string, string> = {
   'push.templates.deleted': '模板已删除',
   'push.templates.saved': '模板已保存',
   'push.templates.enabledOf': '启用：{reason}，{locale}',
-  'push.templates.missingWarning':
-    '{reason} 在这些语言上没有模板：{locales}。每种支持的语言都有模板之前，后端会拒绝启用。',
+  'push.templates.defaultLanguageRequired':
+    '触发原因“{reason}”需要默认语言 {defaultLocale} 的启用模板：先启用或保留它，再改其他语言。',
   'push.templates.exists': '这个触发原因和语言已经有模板了，请改那一条。',
   'push.templates.reason': '触发原因',
   'push.templates.locale': '语言',
@@ -96,7 +98,7 @@ const messages: Record<string, string> = {
   'push.tasks.cancelConfirm': '取消这个任务吗？取消后不会发送。',
   'push.tasks.cancelled': '任务已取消',
   'push.tasks.created': '任务已创建',
-  'push.tasks.missed': '已错过',
+  'push.tasks.missed': '错过：执行器停机过久，未发送',
   'push.status.PENDING': '等待中',
   'push.status.RUNNING': '发送中',
   'push.status.DONE': '已完成',

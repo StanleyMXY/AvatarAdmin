@@ -5,8 +5,9 @@ import type { CoverageRow } from './coverage';
 import { codeText } from './texts';
 
 /**
- * The completeness matrix of spec 5.11: a row for each recall reason, a column for each supported
- * language. A cell with a template says whether it is on; a cell without one is red.
+ * The matrix of spec 5.11: a row for each recall reason, a column for each supported language. A
+ * cell with a template says whether it is on. A language that has no enabled template falls back
+ * to the default language, which the backend lists: it is shown as information, never as an error.
  */
 export function TemplateMatrix({ rows, locales }: { rows: CoverageRow[]; locales: string[] }) {
   const intl = useIntl();
@@ -32,16 +33,36 @@ export function TemplateMatrix({ rows, locales }: { rows: CoverageRow[]; locales
             title: plainText(locale),
             key: locale,
             render: (_: unknown, row: CoverageRow) => {
-              const found = row.cells.find((c) => c.locale === locale)?.template ?? null;
-              const state = found === null ? 'missing' : found.enabled ? 'on' : 'off';
+              const cell = row.cells.find((c) => c.locale === locale);
+              const found = cell?.template ?? null;
+              const fallback = cell?.fallback ?? null;
+              // What the backend says decides: a language without a template is shown as falling
+              // back only when the backend lists it; otherwise the cell is neutral.
+              const state =
+                found !== null
+                  ? found.enabled
+                    ? 'on'
+                    : 'off'
+                  : fallback === true
+                    ? 'fallback'
+                    : 'none';
               return (
-                <span data-testid={`cell-${row.reason}-${locale}`} data-state={state}>
-                  {state === 'missing' ? (
-                    <Tag color="error">{t('push.templates.matrix.missing')}</Tag>
-                  ) : state === 'on' ? (
+                <span
+                  data-testid={`cell-${row.reason}-${locale}`}
+                  data-state={state}
+                  data-fallback={fallback === null ? undefined : String(fallback)}
+                >
+                  {state === 'on' ? (
                     <Tag color="success">{t('push.templates.matrix.on')}</Tag>
+                  ) : state === 'none' ? (
+                    <Tag>{t('push.templates.matrix.none')}</Tag>
                   ) : (
-                    <Tag>{t('push.templates.matrix.off')}</Tag>
+                    <>
+                      {state === 'off' ? <Tag>{t('push.templates.matrix.off')}</Tag> : null}
+                      {fallback === true ? (
+                        <Tag color="processing">{t('push.templates.matrix.fallback')}</Tag>
+                      ) : null}
+                    </>
                   )}
                 </span>
               );

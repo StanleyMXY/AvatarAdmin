@@ -21,6 +21,8 @@ const messages: Record<string, string> = {
   'email.code.PASSWORD_CHANGED': 'Notice that the password was changed',
   'email.code.LIKENESS_COMPLAINT_RECEIVED':
     'Confirmation that a complaint about a photo was received',
+  'email.code.LOGIN_METHOD_ADDED':
+    'Notice that a sign-in method was added (sent to the account e-mail after a sign-in method is added to the account: Google linked automatically, or the user adding Google sign-in after logging in)',
 
   // ---- what a placeholder stands for (the name between the braces) ----
   'email.placeholder.code': 'the verification code',
@@ -30,6 +32,7 @@ const messages: Record<string, string> = {
   'email.placeholder.confirmLink': 'the link to confirm the deletion of the account',
   'email.placeholder.subscriptionNotice':
     'filled in by the system with the subscription notice, and left empty when the account has no subscription; it cannot be removed',
+  'email.placeholder.method': 'the name of the sign-in method',
   'email.placeholder.time': 'the time of the change',
 
   // ---- the editor ----

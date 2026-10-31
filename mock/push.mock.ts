@@ -9,6 +9,7 @@ import { validateServerLink } from '../src/utils/linkRule';
 import { SCREEN_TARGETS } from '../src/utils/screenTargets';
 import { trimSpec } from '../src/utils/trimSpec';
 import { guard } from './_core/auth';
+import { currentValue } from './_core/configStore';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
 import { paginateQuery } from './_core/paginate';
 import {
@@ -171,13 +172,56 @@ const templateRow = (t: MockTemplate) => {
 
 // ---- templates ----
 
-/** Every supported language needs a template of the reason before any of them may be on (contract 8.4). */
-function completeFor(reason: string, extraLocale?: string): boolean {
-  return pushState.supportedLocales.every(
-    (locale) =>
-      locale === extraLocale ||
-      pushState.templates.some((t) => t.triggerReason === reason && t.locale === locale),
+/** `push.default_locale`: the language every recall reason with an enabled template must have an enabled template in (contract 8.4). */
+function defaultLocale(): string {
+  const value = currentValue('push.default_locale');
+  return typeof value === 'string' && value !== '' ? value : 'en';
+}
+
+/**
+ * The supported languages in which a recall reason has no enabled template: the languages that
+ * fall back to the default one. Whole list, not narrowed by the page (a14).
+ */
+function missingLocales(): Record<string, string[]> {
+  return Object.fromEntries(
+    RECALL_REASONS.map((reason) => [
+      reason,
+      pushState.supportedLocales.filter(
+        (locale) =>
+          !pushState.templates.some(
+            (t) => t.triggerReason === reason && t.locale === locale && t.enabled,
+          ),
+      ),
+    ]),
   );
+}
+
+/**
+ * The one hard rule of contract 8.4 and its three refusals (a5): after the write, a recall reason
+ * with an enabled template has an enabled template in the default language. `before` and `after`
+ * are the template as it was and as it will be (null for a create, for a delete). A write that
+ * touches no enabled template is not judged. Nothing is written when it throws.
+ */
+function enforceDefaultLanguage(before: MockTemplate | null, after: MockTemplate | null): void {
+  if (!(before?.enabled || after?.enabled)) return;
+  const lang = defaultLocale();
+  const next = [...pushState.templates.filter((t) => t !== before), ...(after ? [after] : [])];
+  const reasons = new Set([before?.triggerReason, after?.triggerReason]);
+  for (const reason of reasons) {
+    if (reason === undefined || !RECALL_REASONS.includes(reason)) continue;
+    const enabled = next.filter((t) => t.triggerReason === reason && t.enabled);
+    if (enabled.length === 0 || enabled.some((t) => t.locale === lang)) continue;
+    const hadDefault =
+      before?.enabled === true && before.triggerReason === reason && before.locale === lang;
+    const movedAway = hadDefault && enabled.length === 1 && enabled[0] === after;
+    const base = `${reason} needs an enabled template in ${lang} (the default language) while other languages are enabled`;
+    const message = movedAway
+      ? `${reason} would have no enabled template in ${lang}, the default language: keep this template in ${lang} and enabled, and create the other language as a new template`
+      : hadDefault
+        ? `${base}; disable the other languages of ${reason} first, or keep the ${lang} template enabled`
+        : `${base}; enable or restore it first`;
+    throw new MockHttpError(400, 'INVALID_REQUEST', message, { defaultLocale: lang, reason });
+  }
 }
 
 function templateFields(body: Record<string, unknown>, details: Detail[]) {
@@ -206,7 +250,11 @@ export default {
         Number(a.id) - Number(b.id),
     );
     const page = paginateQuery(rows, req);
-    return ok({ items: page.items.map(templateRow), total: page.total });
+    return ok({
+      items: page.items.map(templateRow),
+      total: page.total,
+      missingLocales: missingLocales(),
+    });
   }),
 
   'POST /api/admin/push/templates': guard('PUSH:TEMPLATE', (req) => {
@@ -225,15 +273,13 @@ export default {
         field: 'locale',
       });
     }
-    if (fields.enabled && !completeFor(triggerReason, locale)) {
-      throw fail([{ ref: 'enabled', reason: 'OUT_OF_RANGE' }]);
-    }
-    const imageFile = body.imageUploadId === undefined ? null : takeUpload(body.imageUploadId);
+    enforceDefaultLanguage(null, { id: '', triggerReason, locale, imageFile: null, ...fields });
+    const picture = body.imageUploadId === undefined ? null : takeUpload(body.imageUploadId);
     const created: MockTemplate = {
       id: String(pushState.next.template++),
       triggerReason,
       locale,
-      imageFile,
+      imageFile: picture,
       ...fields,
     };
     pushState.templates.push(created);
@@ -247,17 +293,32 @@ export default {
     const details: Detail[] = [];
     const fields = templateFields(body, details);
     if (details.length > 0) throw fail(details);
-    if (fields.enabled && !completeFor(found.triggerReason)) {
-      throw fail([{ ref: 'enabled', reason: 'OUT_OF_RANGE' }]);
+    // The key may move too (the backend allows it; this page never sends it).
+    const triggerReason = isText(body.triggerReason) ? body.triggerReason : found.triggerReason;
+    const locale = isText(body.locale) ? trimSpec(body.locale) : found.locale;
+    if (!RECALL_REASONS.includes(triggerReason)) {
+      throw fail([{ ref: 'triggerReason', reason: 'OUT_OF_RANGE' }]);
     }
+    if (locale === '') throw fail([{ ref: 'locale', reason: 'EMPTY_NOT_ALLOWED' }]);
+    if (
+      pushState.templates.some(
+        (t) => t !== found && t.triggerReason === triggerReason && t.locale === locale,
+      )
+    ) {
+      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The template exists already', {
+        field: 'locale',
+      });
+    }
+    enforceDefaultLanguage(found, { ...found, triggerReason, locale, ...fields });
     if (body.imageUploadId !== undefined) found.imageFile = takeUpload(body.imageUploadId);
-    Object.assign(found, fields);
+    Object.assign(found, fields, { triggerReason, locale });
     return ok(templateRow(found));
   }),
 
   'DELETE /api/admin/push/templates/:id': guard('PUSH:TEMPLATE', (req) => {
     const at = pushState.templates.findIndex((t) => t.id === idOf(req));
     if (at < 0) throw notFound('template');
+    enforceDefaultLanguage(pushState.templates[at], null);
     pushState.templates.splice(at, 1);
     return ok(null);
   }),

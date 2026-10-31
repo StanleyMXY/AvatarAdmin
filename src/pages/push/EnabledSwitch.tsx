@@ -9,20 +9,22 @@ type Props = {
   label: string;
   /** Sends the new state. */
   onToggle: (enabled: boolean) => Promise<unknown>;
+  /** The words of a failure; without it, the words of the error code. */
+  failureText?: (error: unknown, enabled: boolean) => string;
   /** The list is read again when the request has ended, whatever the answer was. */
   onDone: () => void;
   disabled?: boolean;
 };
 
 /** An on/off switch in a row: one request per change, and the row is read again afterwards so that it shows what the backend holds. */
-export function EnabledSwitch({ checked, label, onToggle, onDone, disabled }: Props) {
+export function EnabledSwitch({ checked, label, onToggle, failureText, onDone, disabled }: Props) {
   const intl = useIntl();
   const { message } = App.useApp();
   const { run, pending } = useSingleFlight(async (next: boolean) => {
     try {
       await onToggle(next);
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      message.error(failureText ? failureText(error, next) : describeFailure(intl, error).text);
     }
     onDone();
   });

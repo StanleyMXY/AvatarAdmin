@@ -119,7 +119,9 @@ const messages: Record<string, string> = {
 
   // ---- templates ----
   'sms.templates.note.rule':
-    'How a template is chosen for a send: first the one for the country of the number and the language of the user (the Accept-Language request header), then one in the same language for any country, and last the English one. When no template can be used, the send fails.',
+    'How a template is chosen for a send: first the one for the country of the number and the language of the user (the Accept-Language request header), then one in the same language for any country, and last the English one. When no template can be used, the send fails. While phone sign-in is on or phone-number accounts exist, at least one enabled OTP template in English (en) with no country must remain; the backend refuses the change that would remove it.',
+  'sms.templates.englishRefused':
+    'Nothing was changed. While phone sign-in is on or phone-number accounts exist, an enabled OTP template in English (en) for every country (no country set) must remain. Enable or create another one first, then change this one.',
   'sms.templates.new': 'New template',
   'sms.templates.empty': 'No templates',
   'sms.templates.col.code': 'Code',

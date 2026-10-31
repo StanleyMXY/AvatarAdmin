@@ -546,10 +546,146 @@ describe('the templates', () => {
     const { templateCode: _c, enabled: _e, ...patch } = goodTemplate({ smsType: 'MARKETING' });
     expect((await send(TEMPLATE_UPDATE, patch, { id })).body.code).toBe('INVALID_REQUEST');
     expect(smsState.templates.get(id)).toMatchObject({ enabled: true, smsType: 'OTP' });
-    // With another one on, the first can go.
+    // With another one on, the first can go: it has to be one in en for every country (e2).
     await send(TEMPLATE_ENABLED, { enabled: true }, { id: templateBy('otp_th').id });
+    expect((await send(TEMPLATE_ENABLED, { enabled: false }, { id })).body.code).toBe(
+      'INVALID_REQUEST',
+    );
+    await send(TEMPLATE_CREATE, goodTemplate({ templateCode: 'otp_en2', enabled: true }));
     expect((await send(TEMPLATE_ENABLED, { enabled: false }, { id })).status).toBe(200);
     expect((await send(TEMPLATE_DELETE, {}, { id })).status).toBe(200);
+  });
+
+  describe('the last enabled English OTP template for every country (e2, a6)', () => {
+    const EN_MESSAGE =
+      'The last enabled OTP template in language en for every country (no country set) cannot be removed or changed while phone login is on or phone accounts exist';
+    const patchOf = (over: Record<string, unknown> = {}) => {
+      const { templateCode: _c, enabled: _e, ...patch } = goodTemplate(over);
+      return patch;
+    };
+    const refused = (answer: {
+      status: number;
+      body: { code: string; message: string; data: unknown };
+    }) => {
+      expect([answer.status, answer.body.code]).toEqual([400, 'INVALID_REQUEST']);
+      expect(answer.body.message).toBe(EN_MESSAGE);
+      expect(refsOf(answer)).toEqual(['SmsTemplate:OUT_OF_RANGE']);
+    };
+
+    it('refuses to switch off, delete, move to another language, give a country, or turn into another type the only such template, while other OTP templates are on', async () => {
+      const en = templateBy('otp_en');
+      expect(templateBy('otp_th').enabled).toBe(true);
+      refused(await send(TEMPLATE_ENABLED, { enabled: false }, { id: en.id }));
+      refused(await send(TEMPLATE_DELETE, {}, { id: en.id }));
+      refused(await send(TEMPLATE_UPDATE, patchOf({ locale: 'th' }), { id: en.id }));
+      refused(await send(TEMPLATE_UPDATE, patchOf({ country: 'TH' }), { id: en.id }));
+      refused(
+        await send(TEMPLATE_UPDATE, patchOf({ smsType: 'MARKETING', content: 'Sale' }), {
+          id: en.id,
+        }),
+      );
+      expect(smsState.templates.get(en.id)).toEqual(en);
+    });
+
+    it('takes en without regard to case as the language, and not en-GB or a template for one country', async () => {
+      const en = templateBy('otp_en');
+      const upper = await send(
+        TEMPLATE_CREATE,
+        goodTemplate({ templateCode: 'otp_EN', locale: 'EN', enabled: true }),
+      );
+      expect(upper.status).toBe(200);
+      expect((await send(TEMPLATE_ENABLED, { enabled: false }, { id: en.id })).status).toBe(200);
+      // Now the upper-case one is the only one: it is protected the same way.
+      refused(await send(TEMPLATE_DELETE, {}, { id: String(upper.body.data.id) }));
+      // Others that are close do not count as a replacement.
+      await send(
+        TEMPLATE_CREATE,
+        goodTemplate({ templateCode: 'otp_gb', locale: 'en-GB', enabled: true }),
+      );
+      await send(
+        TEMPLATE_CREATE,
+        goodTemplate({ templateCode: 'otp_enth', locale: 'en', country: 'TH', enabled: true }),
+      );
+      await send(
+        TEMPLATE_CREATE,
+        goodTemplate({
+          templateCode: 'promo_en2',
+          smsType: 'MARKETING',
+          content: 'Sale',
+          enabled: true,
+        }),
+      );
+      refused(await send(TEMPLATE_ENABLED, { enabled: false }, { id: String(upper.body.data.id) }));
+    });
+
+    it('lets one go when another enabled OTP template in en for every country remains', async () => {
+      const en = templateBy('otp_en');
+      await send(TEMPLATE_CREATE, goodTemplate({ templateCode: 'otp_en2', enabled: true }));
+      expect((await send(TEMPLATE_ENABLED, { enabled: false }, { id: en.id })).status).toBe(200);
+      expect((await send(TEMPLATE_DELETE, {}, { id: en.id })).status).toBe(200);
+    });
+
+    it('does not judge when phone login is off and no phone account exists, and does not judge a template that was never the qualifying one', async () => {
+      const th = templateBy('otp_th');
+      expect((await send(TEMPLATE_ENABLED, { enabled: false }, { id: th.id })).status).toBe(200);
+      expect((await send(TEMPLATE_DELETE, {}, { id: templateBy('otp_ar').id })).status).toBe(200);
+      smsState.phoneAccounts = 0;
+      saved.set('auth.phone_login_enabled', {
+        value: false,
+        updatedAt: NOW.toISOString(),
+        updatedBy: '1',
+        updatedByUsername: 'root',
+      });
+      expect((await send(TEMPLATE_DELETE, {}, { id: templateBy('otp_en').id })).status).toBe(200);
+    });
+
+    it('judges when phone login is on even without phone accounts', async () => {
+      smsState.phoneAccounts = 0;
+      saved.set('auth.phone_login_enabled', {
+        value: true,
+        updatedAt: NOW.toISOString(),
+        updatedBy: '1',
+        updatedByUsername: 'root',
+      });
+      refused(await send(TEMPLATE_DELETE, {}, { id: templateBy('otp_en').id }));
+    });
+
+    it('does not stop an unrelated edit when the state already lacks such a template, and stops nothing at creation', async () => {
+      templateBy('otp_en').locale = 'en-US';
+      expect(
+        (await send(TEMPLATE_ENABLED, { enabled: false }, { id: templateBy('otp_th').id })).status,
+      ).toBe(200);
+      expect(
+        (
+          await send(TEMPLATE_UPDATE, patchOf({ name: 'Renamed', locale: 'en-US' }), {
+            id: templateBy('otp_en').id,
+          })
+        ).status,
+      ).toBe(200);
+      expect((await send(TEMPLATE_DELETE, {}, { id: templateBy('otp_en').id })).status).toBe(200);
+      expect(
+        (
+          await send(
+            TEMPLATE_CREATE,
+            goodTemplate({ templateCode: 'otp_c', locale: 'th', enabled: true }),
+          )
+        ).status,
+      ).toBe(200);
+    });
+
+    it('answers the old rule of the last OTP template first, with its own message and no SmsTemplate detail', async () => {
+      for (const t of smsState.templates.values())
+        if (t.templateCode !== 'otp_en') t.enabled = false;
+      const answer = await send(
+        TEMPLATE_ENABLED,
+        { enabled: false },
+        { id: templateBy('otp_en').id },
+      );
+      expect(answer.body.message).toBe(
+        'The last enabled OTP template cannot be removed while phone sign-in is on or phone-number accounts exist',
+      );
+      expect(answer.body.data).toBeNull();
+    });
   });
 
   it('deletes a template that is off', async () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { resetConfigStore, saved } from './_core/configStore';
 import { nextRunAt, pushState, resetPushStore } from './_core/pushData';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
@@ -6,6 +7,7 @@ import push from './push.mock';
 
 beforeEach(() => {
   resetStore();
+  resetConfigStore();
   resetPushStore();
 });
 
@@ -187,22 +189,204 @@ describe('templates', () => {
     expect(again.body.code).toBe('INVALID_STATE');
   });
 
-  it('refuses to enable a recall reason while a supported language lacks a template, and enables it when none lacks', async () => {
-    pushState.supportedLocales = ['en', 'vi'];
-    const created = await send(TEMPLATE_CREATE, template({ enabled: false }));
-    const id = created.body.data.id as string;
-    const update = { title: 'x', body: 'y', linkType: 'NONE', linkTarget: '', enabled: true };
-    const refused = await send(TEMPLATE_UPDATE, update, { id });
-    expect(refused.status).toBe(400);
-    expect(refused.body.data.details).toEqual([{ ref: 'enabled', reason: 'OUT_OF_RANGE' }]);
-    await send(TEMPLATE_CREATE, template({ locale: 'vi' }));
-    const accepted = await send(TEMPLATE_UPDATE, update, { id });
-    expect(accepted.status).toBe(200);
-    expect(accepted.body.data.enabled).toBe(true);
+  describe('the list tells which supported languages have no enabled template (a14)', () => {
+    it('answers missingLocales for both recall reasons, in the order of the supported languages, next to items and total', async () => {
+      const r = await get(TEMPLATES, { page: '1', pageSize: '5' });
+      expect(Object.keys(r.body.data).sort()).toEqual(['items', 'missingLocales', 'total']);
+      expect(r.body.data.missingLocales).toEqual({
+        // daily_recall has an enabled template in each of the seven languages
+        daily_recall: [],
+        // streak_at_risk has none enabled: the whole list
+        streak_at_risk: pushState.supportedLocales,
+      });
+    });
+
+    it('counts a template that is off as missing, follows a change, and does not depend on the page or the other reason', async () => {
+      const daily = (locale: string) =>
+        pushState.templates.find((t) => t.triggerReason === 'daily_recall' && t.locale === locale);
+      const th = daily('th');
+      if (!th) throw new Error('no sample');
+      th.enabled = false;
+      const page2 = await get(TEMPLATES, { page: '2', pageSize: '3' });
+      expect(page2.body.data.missingLocales.daily_recall).toEqual(['th']);
+      pushState.supportedLocales = ['th', 'fr', 'en'];
+      const again = await get(TEMPLATES, { pageSize: '200' });
+      expect(again.body.data.missingLocales).toEqual({
+        daily_recall: ['th', 'fr'],
+        streak_at_risk: ['th', 'fr', 'en'],
+      });
+    });
+  });
+
+  describe('the rule of the default language (a5, e1): a reason with an enabled template needs an enabled one in push.default_locale', () => {
+    const update = (over: Record<string, unknown> = {}) => ({
+      title: 'x',
+      body: 'y',
+      linkType: 'NONE',
+      linkTarget: '',
+      enabled: true,
+      ...over,
+    });
+    const find = (reason: string, locale: string) => {
+      const found = pushState.templates.find(
+        (t) => t.triggerReason === reason && t.locale === locale,
+      );
+      if (!found) throw new Error(`no sample ${reason} ${locale}`);
+      return found;
+    };
+    const refusal = (r: {
+      status: number;
+      body: { code: string; message: string; data: unknown };
+    }) => {
+      expect([r.status, r.body.code]).toEqual([400, 'INVALID_REQUEST']);
+      return r.body;
+    };
+
+    it('refuses to create or switch on a template of another language while the reason has none enabled in the default language, with the data of the rule and not the old missingLocales', async () => {
+      const th = find('streak_at_risk', 'th');
+      const switchOn = refusal(await send(TEMPLATE_UPDATE, update(), { id: th.id }));
+      expect(switchOn.data).toEqual({ defaultLocale: 'en', reason: 'streak_at_risk' });
+      expect(switchOn.message).toBe(
+        'streak_at_risk needs an enabled template in en (the default language) while other languages are enabled; enable or restore it first',
+      );
+      const before = pushState.templates.length;
+      const created = refusal(
+        await send(TEMPLATE_CREATE, template({ locale: 'vi', enabled: true })),
+      );
+      expect(created.data).toEqual({ defaultLocale: 'en', reason: 'streak_at_risk' });
+      expect(pushState.templates).toHaveLength(before);
+      expect(th.enabled).toBe(false);
+    });
+
+    it('accepts the default language first and the others in any order, and a disabled template of any language at any time', async () => {
+      expect((await send(TEMPLATE_CREATE, template({ locale: 'vi', enabled: false }))).status).toBe(
+        200,
+      );
+      expect((await send(TEMPLATE_CREATE, template({ enabled: true }))).status).toBe(200);
+      expect(
+        (await send(TEMPLATE_UPDATE, update(), { id: find('streak_at_risk', 'th').id })).status,
+      ).toBe(200);
+      expect((await send(TEMPLATE_CREATE, template({ locale: 'ar', enabled: true }))).status).toBe(
+        200,
+      );
+    });
+
+    it('does not ask for every supported language: a language outside the list and one the list lacks are both free', async () => {
+      pushState.supportedLocales = ['en', 'vi'];
+      expect((await send(TEMPLATE_CREATE, template({ enabled: true }))).status).toBe(200);
+      expect((await send(TEMPLATE_CREATE, template({ locale: 'fr', enabled: true }))).status).toBe(
+        200,
+      );
+    });
+
+    it('refuses to switch off or delete the default-language template while other languages are on, and says what to do', async () => {
+      const en = find('daily_recall', 'en');
+      const off = refusal(await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: en.id }));
+      expect(off.data).toEqual({ defaultLocale: 'en', reason: 'daily_recall' });
+      expect(off.message).toBe(
+        'daily_recall needs an enabled template in en (the default language) while other languages are enabled; disable the other languages of daily_recall first, or keep the en template enabled',
+      );
+      const del = refusal(await send(TEMPLATE_DELETE, {}, { id: en.id }));
+      expect(del.message).toBe(off.message);
+      expect(pushState.templates.includes(en)).toBe(true);
+      expect(en.enabled).toBe(true);
+    });
+
+    it('lets the last enabled template of a reason go, the default language one last', async () => {
+      for (const t of pushState.templates) {
+        if (t.triggerReason === 'daily_recall' && t.locale !== 'en') {
+          expect(
+            (await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: t.id })).status,
+          ).toBe(200);
+        }
+      }
+      const en = find('daily_recall', 'en');
+      expect((await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: en.id })).status).toBe(
+        200,
+      );
+    });
+
+    it('lets any other language be switched off, edited and deleted at any time', async () => {
+      const ar = find('daily_recall', 'ar');
+      expect((await send(TEMPLATE_UPDATE, update({ title: 'ก' }), { id: ar.id })).status).toBe(200);
+      expect((await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: ar.id })).status).toBe(
+        200,
+      );
+      expect((await send(TEMPLATE_DELETE, {}, { id: find('daily_recall', 'vi').id })).status).toBe(
+        200,
+      );
+    });
+
+    it('does not judge a template that is off before and after, even in a reason that breaks the rule', async () => {
+      find('daily_recall', 'en').enabled = false;
+      const off = find('daily_recall', 'ar');
+      off.enabled = false;
+      expect(
+        (await send(TEMPLATE_UPDATE, update({ title: 'Renamed', enabled: false }), { id: off.id }))
+          .status,
+      ).toBe(200);
+      expect((await send(TEMPLATE_DELETE, {}, { id: off.id })).status).toBe(200);
+    });
+
+    it('refuses to move the only enabled template of a reason, the default one, to another language, with the third message', async () => {
+      pushState.templates = pushState.templates.filter(
+        (t) => !(t.triggerReason === 'daily_recall' && t.locale !== 'en'),
+      );
+      const en = find('daily_recall', 'en');
+      const moved = refusal(await send(TEMPLATE_UPDATE, update({ locale: 'th' }), { id: en.id }));
+      expect(moved.data).toEqual({ defaultLocale: 'en', reason: 'daily_recall' });
+      expect(moved.message).toBe(
+        'daily_recall would have no enabled template in en, the default language: keep this template in en and enabled, and create the other language as a new template',
+      );
+      expect(en.locale).toBe('en');
+    });
+
+    it('judges the old reason too when a template changes its reason', async () => {
+      const refused = refusal(
+        await send(TEMPLATE_UPDATE, update({ triggerReason: 'streak_at_risk' }), {
+          id: find('daily_recall', 'en').id,
+        }),
+      );
+      expect(refused.data).toMatchObject({ defaultLocale: 'en' });
+    });
+
+    it('takes the default language from push.default_locale', async () => {
+      saved.set('push.default_locale', {
+        value: 'th',
+        updatedAt: '2026-10-26T10:00:00Z',
+        updatedBy: '1',
+        updatedByUsername: 'root',
+      });
+      const en = find('daily_recall', 'en');
+      // en is no longer the default one: it can go; th is.
+      expect((await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: en.id })).status).toBe(
+        200,
+      );
+      const th = refusal(
+        await send(TEMPLATE_UPDATE, update({ enabled: false }), {
+          id: find('daily_recall', 'th').id,
+        }),
+      );
+      expect(th.data).toEqual({ defaultLocale: 'th', reason: 'daily_recall' });
+    });
+
+    it('does not use the upload of a refused write', async () => {
+      const id = await upload();
+      refusal(
+        await send(TEMPLATE_UPDATE, update({ imageUploadId: id }), {
+          id: find('streak_at_risk', 'th').id,
+        }),
+      );
+      expect(pushState.uploads.get(id)?.used).toBe(false);
+    });
   });
 
   it('updates, answers 404 for an unknown template and deletes', async () => {
-    const id = pushState.templates[0].id;
+    // Not the default-language template of daily_recall: that one stays while other languages are on.
+    const sample = pushState.templates.find(
+      (t) => t.triggerReason === 'daily_recall' && t.locale === 'ar',
+    ) as (typeof pushState.templates)[number];
+    const id = sample.id;
     const r = await send(
       TEMPLATE_UPDATE,
       {
@@ -210,7 +394,7 @@ describe('templates', () => {
         body: 'New body',
         linkType: 'NONE',
         linkTarget: '',
-        enabled: pushState.templates[0].enabled,
+        enabled: sample.enabled,
       },
       { id },
     );

@@ -18,8 +18,9 @@ import { isLastOtpTemplate } from './lastOtp';
 import { PagedTable } from './PagedTable';
 import { StatusSwitch } from './StatusSwitch';
 import { TemplateModal } from './TemplateModal';
+import { templateFailureText } from './templateFailure';
 import { orDash } from './texts';
-import { guardedFailureText, useLastOtpPrompt } from './useLastOtpPrompt';
+import { useLastOtpPrompt } from './useLastOtpPrompt';
 import { useLatestRead } from './useLatestRead';
 import { useServerPage } from './useServerPage';
 
@@ -75,7 +76,7 @@ export default function TemplatesPage() {
       await deleteTemplate(plainText(row.id));
       message.success(t('sms.common.deleted'));
     } catch (error) {
-      message.error(guardedFailureText(intl, error, guarded));
+      message.error(templateFailureText(intl, error, guarded));
     }
     refresh();
   };
@@ -158,7 +159,7 @@ export default function TemplatesPage() {
             if (!next && isLast(row) && !(await ask('disable', 'template'))) return;
             await setTemplateEnabled(plainText(row.id), next);
           }}
-          failureText={(error, next) => guardedFailureText(intl, error, !next && servesCodes(row))}
+          failureText={(error, next) => templateFailureText(intl, error, !next && servesCodes(row))}
           onDone={refresh}
         />
       ),

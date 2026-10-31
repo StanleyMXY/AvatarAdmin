@@ -9,6 +9,7 @@ import { trimSpec } from '../../utils/trimSpec';
 import { countryCodeProblem } from './channelRules';
 import { failureToForm } from './formFailure';
 import { isLastOtpTemplate } from './lastOtp';
+import { isEnglishFallbackRefusal, templateFailureText } from './templateFailure';
 import {
   buildTemplateBody,
   CODE_PLACEHOLDER,
@@ -16,7 +17,7 @@ import {
   SMS_PLACEHOLDERS,
   type TemplateFormValues,
 } from './templateRules';
-import { guardedFailureText, type useLastOtpPrompt } from './useLastOtpPrompt';
+import type { useLastOtpPrompt } from './useLastOtpPrompt';
 
 type Values = Omit<TemplateFormValues, 'smsType'> & { smsType?: TemplateFormValues['smsType'] };
 
@@ -78,7 +79,11 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
       else await createTemplate(buildTemplateBody(input, 'create'));
     } catch (error) {
       const result = failureToForm(intl, form, error, FIELDS);
-      setFailure({ text: guardedFailureText(intl, error, guarded), more: result.unplaced });
+      // The refusal about the English template names no field: its words stand alone at the top.
+      setFailure({
+        text: templateFailureText(intl, error, guarded),
+        more: isEnglishFallbackRefusal(error) ? [] : result.unplaced,
+      });
       return;
     }
     message.success(t('sms.common.saved'));

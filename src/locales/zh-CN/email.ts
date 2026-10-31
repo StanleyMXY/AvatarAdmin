@@ -20,6 +20,8 @@ const messages: Record<string, string> = {
   'email.code.DELETION_CONFIRM': '网页删除账号的确认邮件',
   'email.code.PASSWORD_CHANGED': '密码已更改的通知',
   'email.code.LIKENESS_COMPLAINT_RECEIVED': '照片投诉的收到确认',
+  'email.code.LOGIN_METHOD_ADDED':
+    '登录方式已添加通知（账号新增一种登录方式后发到账号邮箱：Google 自动绑定，或用户登录后自己添加 Google 登录）',
 
   // ---- what a placeholder stands for (the name between the braces) ----
   'email.placeholder.code': '验证码',
@@ -28,6 +30,7 @@ const messages: Record<string, string> = {
   'email.placeholder.resetLink': '重置密码的完整链接，由系统生成',
   'email.placeholder.confirmLink': '确认删除账号的链接',
   'email.placeholder.subscriptionNotice': '由系统填入订阅说明，账号没有订阅时填空；不能删掉',
+  'email.placeholder.method': '登录方式的名称',
   'email.placeholder.time': '更改发生的时间',
 
   // ---- the editor ----

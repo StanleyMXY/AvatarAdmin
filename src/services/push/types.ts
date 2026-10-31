@@ -2,7 +2,9 @@
 // names are the columns of the entities in contract chapter 18). What the contract leaves open is in
 // docs/contract-requests/2026-10-26-admin-frontend-push.md.
 
-export type { Page } from '../../request/errors';
+import type { Page } from '../../request/errors';
+
+export type { Page };
 
 /** What a push opens when it is tapped (contract 8.3). */
 export type LinkType = 'NONE' | 'SCREEN' | 'URL';
@@ -42,6 +44,14 @@ export type PushTemplate = {
   imageUrl: string | null;
   enabled: boolean;
 };
+
+/** The supported languages without an enabled template, for each recall reason (they fall back to the default language). */
+export type MissingLocales = Record<string, string[]>;
+
+/** The answer of `GET /push/templates`; `missingLocales` is read with `readMissingLocales`, not trusted. */
+export type TemplatePage = Page<PushTemplate> & { missingLocales?: unknown };
+
+export type TemplateOverview = { items: PushTemplate[]; missingLocales: MissingLocales | null };
 
 /** What a template can change after it exists (the reason and the language are its key). */
 export type TemplateFields = {

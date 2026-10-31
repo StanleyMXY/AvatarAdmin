@@ -96,19 +96,32 @@ function refuseLastChannel(before: MockChannel, after: MockChannel | null) {
   }
 }
 
+/** The template every country falls back to for codes: enabled, OTP, language en (any case), no country. */
+const isEnglishFallback = (t: Pick<MockTemplate, 'enabled' | 'smsType' | 'locale' | 'country'>) =>
+  t.enabled && t.smsType === 'OTP' && t.locale.toLowerCase() === 'en' && !t.country;
+
 function refuseLastTemplate(before: MockTemplate, after: MockTemplate | null) {
+  if (!phoneSignInMatters()) return;
+  const others = [...smsState.templates.values()].filter((t) => t.id !== before.id);
+  // The rule of the last enabled OTP template comes first, with its own message.
   const wasOtp = before.enabled && before.smsType === 'OTP';
   const stillOtp = after?.enabled === true && after.smsType === 'OTP';
-  if (!wasOtp || stillOtp) return;
-  const others = [...smsState.templates.values()].filter(
-    (t) => t.id !== before.id && t.enabled && t.smsType === 'OTP',
-  );
-  if (others.length === 0 && phoneSignInMatters()) {
+  if (wasOtp && !stillOtp && !others.some((t) => t.enabled && t.smsType === 'OTP')) {
     throw new MockHttpError(
       400,
       'INVALID_REQUEST',
       'The last enabled OTP template cannot be removed while phone sign-in is on or phone-number accounts exist',
     );
+  }
+  // Then the one that must stay: only the removal of the last qualifying template is judged, so a
+  // state that already lacks one does not stop an unrelated edit.
+  if (isEnglishFallback(before) && !(after && isEnglishFallback(after))) {
+    if (!others.some(isEnglishFallback)) {
+      throw invalidRequest(
+        'The last enabled OTP template in language en for every country (no country set) cannot be removed or changed while phone login is on or phone accounts exist',
+        [{ ref: 'SmsTemplate', reason: 'OUT_OF_RANGE' }],
+      );
+    }
   }
 }
 

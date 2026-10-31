@@ -44,12 +44,13 @@ const messages: Record<string, string> = {
 
   // ---- templates ----
   'push.templates.note':
-    'The words of the recall pushes: one template for each trigger reason and language. A recall reason may be switched on only when it has a template in every supported language; the backend makes the final check when you save.',
+    'The words of the recall pushes: one template for each trigger reason and language. A trigger reason that has an enabled template must have an enabled one in the default language; the other languages are optional, and a language without an enabled template falls back to the default language. The backend makes the final check when you save.',
   'push.templates.matrix.title': 'Completeness by language',
   'push.templates.matrix.reason': 'Trigger reason',
   'push.templates.matrix.note':
-    'The columns are the supported languages. A red cell has no template.',
-  'push.templates.matrix.missing': 'Missing',
+    'The columns are the supported languages. A language without an enabled template falls back to the default language: that is information, not an error.',
+  'push.templates.matrix.fallback': 'Uses default language',
+  'push.templates.matrix.none': 'No template',
   'push.templates.matrix.on': 'On',
   'push.templates.matrix.off': 'Off',
   'push.templates.matrix.unknown':
@@ -72,8 +73,8 @@ const messages: Record<string, string> = {
   'push.templates.deleted': 'Template deleted',
   'push.templates.saved': 'Template saved',
   'push.templates.enabledOf': 'On: {reason}, {locale}',
-  'push.templates.missingWarning':
-    '{reason} has no template in: {locales}. The backend will refuse to switch it on until every supported language has one.',
+  'push.templates.defaultLanguageRequired':
+    '{reason} needs an enabled template in the default language ({defaultLocale}): enable or keep it first, then change the other languages.',
   'push.templates.exists':
     'A template for this reason and language exists already. Edit that one instead.',
   'push.templates.reason': 'Trigger reason',
@@ -101,7 +102,7 @@ const messages: Record<string, string> = {
   'push.tasks.cancelConfirm': 'Cancel this task? It will not be sent.',
   'push.tasks.cancelled': 'Task cancelled',
   'push.tasks.created': 'Task created',
-  'push.tasks.missed': 'Missed',
+  'push.tasks.missed': 'Missed: the push executor was down for too long, nothing was sent',
   'push.status.PENDING': 'Waiting',
   'push.status.RUNNING': 'Sending',
   'push.status.DONE': 'Done',

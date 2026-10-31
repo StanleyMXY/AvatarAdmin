@@ -1,5 +1,5 @@
 // In-memory state of the e-mail template endpoints of the mock backend (contract 17.4, item 14 of
-// the field tables). The five templates and their default texts are declared here, in code, as the
+// the field tables). The six templates and their default texts are declared here, in code, as the
 // contract says; a row in `rows` is a change made through the page (the contract's `modified`).
 // It hangs on `globalThis` like the rest of the mock state (see store.ts). Not a mock file itself:
 // Umi's loader reads every file in mock/.
@@ -55,6 +55,15 @@ const DEFAULTS: [string, EmailDefault][] = [
       body: 'Your password was changed at {time}. If this was not you, reset it now.',
       placeholders: ['{time}', '{appName}'],
       requiredPlaceholders: ['{time}'],
+    },
+  ],
+  [
+    'LOGIN_METHOD_ADDED',
+    {
+      subject: 'A new sign-in method was added to your {appName} account',
+      body: '{method} was added as a sign-in method to your account at {time}. If this was not you, secure your account now.',
+      placeholders: ['{method}', '{time}', '{appName}'],
+      requiredPlaceholders: ['{method}', '{time}'],
     },
   ],
   [

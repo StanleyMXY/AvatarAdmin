@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PushTemplate } from '../../services/push';
-import { coverage, missingFor, supportedLocalesOf } from './coverage';
+import { coverage, supportedLocalesOf } from './coverage';
 
 const t = (triggerReason: string, locale: string, enabled = true): PushTemplate => ({
   id: `${triggerReason}-${locale}`,
@@ -37,9 +37,10 @@ describe('coverage: a row for each recall reason, a cell for each supported lang
     t('daily_recall', 'th', false),
     t('streak_at_risk', 'th'),
   ];
+  const missing = { daily_recall: ['th'], streak_at_risk: ['en'] };
 
   it('puts the template in its cell and null where there is none', () => {
-    const rows = coverage(templates, ['en', 'th']);
+    const rows = coverage(templates, ['en', 'th'], missing);
     expect(rows.map((r) => r.reason)).toEqual(['daily_recall', 'streak_at_risk']);
     expect(rows[0].cells.map((c) => [c.locale, c.template?.id ?? null])).toEqual([
       ['en', 'daily_recall-en'],
@@ -51,26 +52,28 @@ describe('coverage: a row for each recall reason, a cell for each supported lang
     ]);
   });
 
+  it('marks a cell as falling back to the default language only where the backend lists the language, and never works it out from the templates', () => {
+    const rows = coverage(templates, ['en', 'th'], missing);
+    expect(rows[0].cells.map((c) => c.fallback)).toEqual([false, true]);
+    expect(rows[1].cells.map((c) => c.fallback)).toEqual([true, false]);
+    // The backend says the language is covered although the page sees no template: the page does not argue.
+    const other = coverage([], ['en'], { daily_recall: [], streak_at_risk: [] });
+    expect(other[0].cells[0]).toEqual({ locale: 'en', template: null, fallback: false });
+  });
+
+  it('does not know when the backend sent no list, or none for the reason', () => {
+    for (const none of [null, {}, { daily_recall: ['en'] }] as (Record<
+      string,
+      string[]
+    > | null)[]) {
+      const rows = coverage(templates, ['en'], none);
+      expect(rows[1].cells[0].fallback).toBeNull();
+    }
+  });
+
   it('does not count a template of another reason or of a language outside the list', () => {
-    const rows = coverage([t('admin', 'en'), t('daily_recall', 'ar')], ['en']);
+    const rows = coverage([t('admin', 'en'), t('daily_recall', 'ar')], ['en'], null);
     expect(rows[0].cells[0].template).toBeNull();
     expect(rows[1].cells[0].template).toBeNull();
-  });
-});
-
-describe('missingFor', () => {
-  const templates = [t('daily_recall', 'en'), t('daily_recall', 'th'), t('streak_at_risk', 'th')];
-
-  it('lists the supported languages the reason has no template in, in the order of the list', () => {
-    expect(missingFor(templates, ['en', 'th', 'ar', 'vi'], 'daily_recall')).toEqual(['ar', 'vi']);
-    expect(missingFor(templates, ['en', 'th'], 'streak_at_risk')).toEqual(['en']);
-  });
-
-  it('counts the language of a template that is being added', () => {
-    expect(missingFor(templates, ['en', 'th'], 'streak_at_risk', 'en')).toEqual([]);
-  });
-
-  it('is empty when the supported languages are not known', () => {
-    expect(missingFor(templates, null, 'streak_at_risk')).toEqual([]);
   });
 });

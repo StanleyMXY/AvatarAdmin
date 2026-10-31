@@ -1,5 +1,6 @@
 import { apiRequest } from '../../request/apiClient';
 import type {
+  MissingLocales,
   Page,
   PushRecord,
   PushRecordDetail,
@@ -10,6 +11,8 @@ import type {
   TaskCreate,
   TemplateCreate,
   TemplateFields,
+  TemplateOverview,
+  TemplatePage,
 } from './types';
 
 export * from './types';
@@ -23,21 +26,43 @@ const list = <T>(url: string, params: Paging): Promise<Page<T>> =>
 
 // ---- templates (PUSH:TEMPLATE) ----
 
-export const listTemplates = (params: Paging): Promise<Page<PushTemplate>> =>
+/** `GET /push/templates`: the page, and `missingLocales` (the same for every page and filter). */
+export const listTemplates = (params: Paging): Promise<TemplatePage> =>
   list('/push/templates', params);
 
 const ALL_PAGE_SIZE = 200;
 
 /**
- * Every template, for the completeness matrix. It reads page after page until it has `total` rows,
- * and stops at a page with no rows, so an answer whose total is wrong cannot make it loop.
+ * For each recall reason, the supported languages that have no enabled template (they fall back to
+ * the default language). Reasons whose value is not a list of texts are left out; anything that is
+ * not an object is no answer at all.
  */
-export async function listAllTemplates(): Promise<PushTemplate[]> {
-  const rows: PushTemplate[] = [];
+export function readMissingLocales(value: unknown): MissingLocales | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const result: MissingLocales = {};
+  for (const [reason, locales] of Object.entries(value)) {
+    if (Array.isArray(locales)) {
+      result[reason] = locales.filter((locale): locale is string => typeof locale === 'string');
+    }
+  }
+  return result;
+}
+
+/**
+ * Every template, for the completeness matrix, and `missingLocales` of the answer. It reads page
+ * after page until it has `total` rows, and stops at a page with no rows, so an answer whose total
+ * is wrong cannot make it loop.
+ */
+export async function listAllTemplates(): Promise<TemplateOverview> {
+  const items: PushTemplate[] = [];
+  let missingLocales: MissingLocales | null = null;
   for (let page = 1; ; page += 1) {
     const answer = await listTemplates({ page, pageSize: ALL_PAGE_SIZE });
-    rows.push(...answer.items);
-    if (answer.items.length === 0 || rows.length >= answer.total) return rows;
+    if (page === 1) missingLocales = readMissingLocales(answer.missingLocales);
+    items.push(...answer.items);
+    if (answer.items.length === 0 || items.length >= answer.total) {
+      return { items, missingLocales };
+    }
   }
 }
 
