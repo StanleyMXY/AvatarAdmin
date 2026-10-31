@@ -39,6 +39,22 @@ describe('failureLines: the words of the codes, never the backend words', () => 
     expect(JSON.stringify(lines)).not.toContain('raw backend words');
   });
 
+  it('says the words given for a ref instead of the words of its reason, and still the others', () => {
+    const lines = failureLines(
+      intl,
+      error('INVALID_REQUEST', [
+        { ref: 'currency', reason: 'OUT_OF_RANGE' },
+        { ref: 'x', reason: 'EMPTY_NOT_ALLOWED' },
+      ]),
+      { currency: 'cost.pending.currencyRefused' },
+    );
+    expect(lines.reasons).toEqual([
+      enUS['cost.pending.currencyRefused' as keyof typeof enUS],
+      'It must not be empty.',
+    ]);
+    expect(JSON.stringify(lines)).not.toContain('raw backend words');
+  });
+
   it('shows a failure that is not an ApiError as a network failure', () => {
     expect(failureLines(intl, new Error('boom')).text).toBe(enUS['error.NETWORK_ERROR']);
   });

@@ -31,11 +31,16 @@ export type SavedFunnelRow = {
   updatedAt: string;
 };
 
-type AnalyticsStore = { events: AnalyticsEventRow[]; funnels: SavedFunnelRow[] };
+type AnalyticsStore = {
+  events: AnalyticsEventRow[];
+  funnels: SavedFunnelRow[];
+  /** How many funnels the (imagined) admin instance is computing now; the mock answers at once, so a test or a hand sets it. */
+  funnelInFlight: number;
+};
 
 const holder = globalThis as { __avatarAdminMockAnalytics?: AnalyticsStore };
 const isFirstLoad = holder.__avatarAdminMockAnalytics === undefined;
-holder.__avatarAdminMockAnalytics ??= { events: [], funnels: [] };
+holder.__avatarAdminMockAnalytics ??= { events: [], funnels: [], funnelInFlight: 0 };
 
 export const analyticsStore: AnalyticsStore = holder.__avatarAdminMockAnalytics;
 
@@ -246,6 +251,7 @@ export function resetAnalyticsStore(): void {
     a.receivedAt < b.receivedAt ? -1 : a.receivedAt > b.receivedAt ? 1 : a.seq - b.seq,
   );
   analyticsStore.events = events;
+  analyticsStore.funnelInFlight = 0;
 
   const created = daysAgoIso(30);
   analyticsStore.funnels = PRESETS.map((preset, i) => ({

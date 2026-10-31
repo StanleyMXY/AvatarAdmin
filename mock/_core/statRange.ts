@@ -8,7 +8,7 @@ export const daysIn = daysBetween;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 export function validDay(value: string): boolean {
-  if (!DAY.test(value)) return false;
+  if (!DAY.test(value) || Number(value.slice(0, 4)) < 1) return false;
   const ms = Date.parse(`${value}T00:00:00Z`);
   return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === value;
 }
@@ -33,7 +33,7 @@ export function rangeOf(
   if (from > to)
     throw invalidRequest('from is after to', [{ ref: 'from', reason: 'OUT_OF_RANGE' }]);
   if (daysIn(from, to).length > META_DEFAULTS.statsMaxRangeDays) {
-    throw invalidRequest(`the range is longer than ${META_DEFAULTS.statsMaxRangeDays} days`, [
+    throw invalidRequest('The range exceeds stats.max_range_days', [
       { ref: 'to', reason: 'OUT_OF_RANGE' },
     ]);
   }

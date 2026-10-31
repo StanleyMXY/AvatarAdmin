@@ -4,7 +4,8 @@ import { ConfigForm } from '../config/ConfigForm';
 
 /**
  * 归因参数 (`ATTRIBUTION:MANAGE`): the keys `attribution.*` with the shared configuration form,
- * and a note on the order in which an install is matched to a click.
+ * a note on the order in which an install is matched to a click, and the rule that the cost currency
+ * cannot change while cost rows exist.
  */
 export default function SettingsPage() {
   const intl = useIntl();
@@ -16,6 +17,12 @@ export default function SettingsPage() {
         data-testid="campaign-settings-order"
         title={intl.formatMessage({ id: 'campaign.settings.order.title' })}
         description={intl.formatMessage({ id: 'campaign.settings.order.content' })}
+      />
+      <Alert
+        type="warning"
+        showIcon
+        data-testid="campaign-settings-currency-lock"
+        title={intl.formatMessage({ id: 'campaign.costs.currencyLock' })}
       />
       <ConfigForm editPermission="ATTRIBUTION:MANAGE" />
     </Flex>

@@ -16,6 +16,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const WIDE_SPACE = String.fromCodePoint(0x3000);
 const NBSP = String.fromCharCode(0xa0);
+const ZERO_WIDTH = String.fromCharCode(0x200b, 0x200d);
 const puts = <T extends { method: string }>(calls: T[]) => calls.filter((c) => c.method === 'PUT');
 const patternBox = (n: number) => screen.getByLabelText(`Match text ${n}`);
 const noteBox = (n: number) => screen.getByLabelText(`Note ${n}`);
@@ -58,6 +59,31 @@ describe('the rule list', { timeout: 30000 }, () => {
     expect(text).toMatch(/matches a rule at "block" is not sent to the moderation service/);
     expect(text).toMatch(/Substring: matches when the text contains this string/);
     expect(text).toMatch(/Whole word/);
+  });
+
+  it('says that substring and whole-word rules also fold look-alike letters and a regular expression does not, with the two known side effects', async () => {
+    await openPage();
+    const text = document.body.textContent as string;
+    expect(text).toMatch(/Substring: .*look-alike letters of another script are folded/s);
+    expect(text).toMatch(/Whole word: .*look-alike letters of another script are folded/s);
+    expect(text).toMatch(/Regular expression: .*look-alike letters are not folded/is);
+    const note = screen.getByTestId('rules-folding-note');
+    expect(note.textContent).toMatch(/сука/);
+    expect(note.textContent).toMatch(/КОТ.*kot/s);
+    expect(note.textContent).toMatch(/sik.*sık sık/s);
+    expect(note.textContent).toMatch(/Regular expression rules are not folded/);
+  });
+
+  it('says the same in Chinese', async () => {
+    installMockBackend(moderationMock, configMock);
+    renderPage(<RulesPage />, 'zh-CN');
+    const note = await screen.findByTestId('rules-folding-note');
+    expect(note.textContent).toMatch(/形近字/);
+    expect(note.textContent).toMatch(/КОТ.*kot/s);
+    expect(note.textContent).toMatch(/sik.*sık sık/s);
+    expect(note.textContent).toMatch(/正则规则不折叠/);
+    expect(document.body.textContent).toMatch(/子串：.*形近字折叠/s);
+    expect(document.body.textContent).toMatch(/正则：.*不做形近字折叠/s);
   });
 
   it('offers the three match modes and the two levels', async () => {
@@ -248,6 +274,27 @@ describe('saving the list', { timeout: 30000 }, () => {
     expect(within(row).queryByText('The regular expression cannot be compiled.')).toBeNull();
   });
 
+  it('says on the row that a text of zero-width characters only is empty after normalising, although it is not blank', async () => {
+    const user = userEvent.setup();
+    const calls = await openPage();
+    const n = await addRule(user, `${ZERO_WIDTH}${ZERO_WIDTH}`);
+    await save(user);
+    await waitFor(() => expect(puts(calls)).toHaveLength(1));
+    const row = patternBox(n).closest('tr') as HTMLElement;
+    expect(await within(row).findByText(/is empty once it is normalised/)).toBeInTheDocument();
+    expect(within(row).queryByText('It must not be empty.')).toBeNull();
+    expect(moderationState.rules).toHaveLength(8);
+  });
+
+  it('keeps "must not be empty" for a text that is blank, which is stopped before it is sent', async () => {
+    const user = userEvent.setup();
+    const calls = await openPage();
+    const n = await addRule(user, '   ');
+    await save(user);
+    expect(puts(calls)).toHaveLength(0);
+    expect(patternBox(n)).toBeInTheDocument();
+  });
+
   it('names several rows at once, each with its own reason', async () => {
     const user = userEvent.setup();
     await openPage();
@@ -390,7 +437,7 @@ describe('the parameters section', { timeout: 30000 }, () => {
     const keys = [...document.querySelectorAll('[data-testid^="config-row-"]')].map((e) =>
       (e.getAttribute('data-testid') as string).replace('config-row-', ''),
     );
-    expect(keys.filter((k) => k.startsWith('moderation.'))).toHaveLength(10);
+    expect(keys.filter((k) => k.startsWith('moderation.'))).toHaveLength(11);
     expect(keys.every((k) => k.startsWith('moderation.'))).toBe(true);
     const rules = screen.getByTestId('config-row-moderation.text_rules');
     expect(within(rules).getByRole('link', { name: '/moderation/rules' })).toBeInTheDocument();

@@ -333,6 +333,7 @@ export function PendingTab({
         open={confirming !== null}
         title={t('cost.pending.confirmTitle')}
         okText={t('cost.pending.confirmOk')}
+        refTexts={{ currency: 'cost.pending.currencyRefused' }}
         onClose={() => setConfirming(null)}
         onSubmit={async () => {
           if (!confirming) return;

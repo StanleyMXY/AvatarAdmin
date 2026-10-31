@@ -35,6 +35,12 @@ const messages: Record<string, string> = {
   'campaign.stats.col.registerRate': '注册转化率',
   'campaign.stats.col.registerRate.tip': '注册数 ÷ 安装数。',
   'campaign.stats.col.cost': '总花费',
+  'campaign.stats.range.line': '{field}：{reason}。{hint}',
+  'campaign.stats.range.from': '起始日期',
+  'campaign.stats.range.from.hint': '起始日期必须是有效的一天，并且不能晚于结束日期。',
+  'campaign.stats.range.to': '结束日期',
+  'campaign.stats.range.to.hint':
+    '结束日期必须是有效的一天，并且范围不能超过统计允许的最大天数（stats.max_range_days）。',
   'campaign.stats.col.cost.in': '总花费（{currency}）',
   'campaign.stats.col.cost.tip': '所选日期内为该投放账户录入的花费总和，系统只有一种币种。',
   'campaign.stats.col.cpa': 'CPA',
@@ -121,6 +127,9 @@ const messages: Record<string, string> = {
   'campaign.link.landing.text':
     '直接下载 APK 的落地页用投放代码“{code}”和事件 PAGE_VIEW 或 DOWNLOAD_CLICK 调用这个接口：',
   'campaign.costs.note': '成本由人工录入，每个投放账户每天（UTC 日）一笔，币种整个系统只有一种。',
+  'campaign.costs.currencyLock': '已有成本行时不能改币种；先逐行删除成本再改。',
+  'config.attribution.cost_currency.reject.OUT_OF_RANGE':
+    '已有成本行，不能改币种。请先在“投放成本”页签里逐行删除全部成本，再改币种。',
   'campaign.costs.enter': '录入花费',
   'campaign.costs.batch': '批量录入',
   'campaign.costs.empty': '这个筛选条件下没有投放成本。',

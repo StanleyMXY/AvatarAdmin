@@ -38,6 +38,13 @@ const messages: Record<string, string> = {
   'campaign.stats.col.registerRate': 'Registration rate',
   'campaign.stats.col.registerRate.tip': 'Registrations divided by installs.',
   'campaign.stats.col.cost': 'Total cost',
+  'campaign.stats.range.line': '{field}: {reason} {hint}',
+  'campaign.stats.range.from': 'Start date',
+  'campaign.stats.range.from.hint':
+    'The start date must be a valid day and not after the end date.',
+  'campaign.stats.range.to': 'End date',
+  'campaign.stats.range.to.hint':
+    'The end date must be a valid day, and the range must not be longer than statistics allow (stats.max_range_days).',
   'campaign.stats.col.cost.in': 'Total cost ({currency})',
   'campaign.stats.col.cost.tip':
     'The costs entered for the campaign on the days of the range, in the one currency of the system.',
@@ -132,6 +139,10 @@ const messages: Record<string, string> = {
     'A landing page that serves the direct download calls this with the code "{code}" and the event PAGE_VIEW or DOWNLOAD_CLICK:',
   'campaign.costs.note':
     'Costs are entered by hand, one amount for each campaign and day (a UTC day), in the one currency of the system.',
+  'campaign.costs.currencyLock':
+    'The currency cannot be changed while cost rows exist; delete the costs one by one first, then change it.',
+  'config.attribution.cost_currency.reject.OUT_OF_RANGE':
+    'The currency cannot be changed because cost rows exist. Delete all the costs one by one on the Costs tab first, then change the currency.',
   'campaign.costs.enter': 'Enter cost',
   'campaign.costs.batch': 'Batch import',
   'campaign.costs.empty': 'There are no costs for this filter.',

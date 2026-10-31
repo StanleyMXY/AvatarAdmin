@@ -102,6 +102,8 @@ const messages: Record<string, string> = {
   'cost.pending.currency': '币种',
   'cost.pending.currencyMissing': '读不到允许的币种，所以这里无法核对币种。',
   'cost.pending.currencyNotAllowed': '这批价格的币种不在允许的币种里，请选择一个。',
+  'cost.pending.currencyRefused':
+    '这个批次最终使用的币种不在允许币种（usage_price.allowed_currencies）里，批次仍待审核。请选一个允许的币种再确认。',
   'cost.pending.noCurrencyList': '允许的币种未知',
   'cost.pending.confirm': '确认',
   'cost.pending.reject': '驳回',

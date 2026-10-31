@@ -540,3 +540,24 @@ describe('the costs are in the one currency of the system', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('the rule that the currency cannot change while cost rows exist', () => {
+  it('is written above the cost list', async () => {
+    await openCosts();
+    const note = screen.getByTestId('campaign-costs-currency-lock');
+    expect(note.textContent).toMatch(
+      /cannot be changed while cost rows exist.*delete the costs one by one/is,
+    );
+  });
+
+  it('is written in Chinese', async () => {
+    const calls = backend();
+    void calls;
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage(<AccountsPage />, 'zh-CN');
+    await user.click(await screen.findByRole('tab', { name: '投放成本' }));
+    expect((await screen.findByTestId('campaign-costs-currency-lock')).textContent).toBe(
+      '已有成本行时不能改币种；先逐行删除成本再改。',
+    );
+  });
+});

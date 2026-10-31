@@ -10,12 +10,14 @@ type Translator = Parameters<typeof describeFailure>[0];
 export function failureLines(
   intl: Translator,
   failure: unknown,
+  /** The language-file key of the words to say for a refused field (`ref`) instead of the words of its reason. */
+  refTexts: Record<string, string> = {},
 ): { text: string; reasons: string[] } {
   const { error, text } = describeFailure(intl, failure);
   const reasons = [
     ...new Set(
       error.details
-        .map((detail) => `reason.${detail.reason}`)
+        .map((detail) => refTexts[detail.ref] ?? `reason.${detail.reason}`)
         .filter((id) => Boolean(intl.messages[id]))
         .map((id) => intl.formatMessage({ id })),
     ),

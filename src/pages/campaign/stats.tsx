@@ -53,6 +53,8 @@ export default function CampaignStatsPage() {
   const [campaignRows, setCampaignRows] = useState<PerformanceRow[] | null>(null);
   const [dayRows, setDayRows] = useState<PerformanceRow[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  // What the backend refused about the dates, by field (`from`, `to`): shown next to the dates.
+  const [rangeRefusals, setRangeRefusals] = useState<string[]>([]);
   const counter = useRef(0);
 
   const load = useCallback(async () => {
@@ -60,6 +62,7 @@ export default function CampaignStatsPage() {
     setCampaignRows(null);
     setDayRows(null);
     setFailure(null);
+    setRangeRefusals([]);
     const query = {
       from: applied.range.from,
       to: applied.range.to,
@@ -74,7 +77,28 @@ export default function CampaignStatsPage() {
       setCampaignRows(byCampaign.items);
       setDayRows(byDay.items);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (mine === counter.current) {
+        const described = describeFailure(intl, error);
+        setFailure(described.text);
+        // A range error names `from` or `to` (the same for every statistics page): say which
+        // date, with the words of the reason and of the field.
+        setRangeRefusals(
+          described.fields.flatMap((field) =>
+            field.ref === 'from' || field.ref === 'to'
+              ? [
+                  intl.formatMessage(
+                    { id: 'campaign.stats.range.line' },
+                    {
+                      field: intl.formatMessage({ id: `campaign.stats.range.${field.ref}` }),
+                      reason: field.text,
+                      hint: intl.formatMessage({ id: `campaign.stats.range.${field.ref}.hint` }),
+                    },
+                  ),
+                ]
+              : [],
+          ),
+        );
+      }
     }
   }, [applied, intl]);
 
@@ -299,6 +323,11 @@ export default function CampaignStatsPage() {
           params={exportParams}
         />
       </Flex>
+      {rangeRefusals.length > 0 ? (
+        <Typography.Text type="danger" data-testid="campaign-stats-range-error">
+          {rangeRefusals.join(' ')}
+        </Typography.Text>
+      ) : null}
       <LandBar name="attribution-daily" onLanded={() => void load()} />
       {failure ? <FailureBar failure={failure} onRetry={() => void load()} /> : null}
       {!loaded && !failure ? <Spin /> : null}

@@ -39,6 +39,7 @@ const open = async (
     search?: string;
     tab?: string;
     prepare?: () => void;
+    locale?: 'zh-CN' | 'en-US';
   } = {},
 ) => {
   signIn('root', { codes, meta: options.meta ?? { allowedCurrencies: ['USD'] } });
@@ -46,7 +47,7 @@ const open = async (
   if (options.search !== undefined)
     setTestLocation({ pathname: '/cost/prices', search: options.search });
   const calls = useMockBackend(costMock, monitorMock, configMock);
-  renderPage(<PricesPage />);
+  renderPage(<PricesPage />, options.locale);
   const user = userEvent.setup();
   if (options.tab) await user.click(await screen.findByRole('tab', { name: options.tab }));
   return { calls, user };
@@ -471,6 +472,61 @@ describe('pending prices', () => {
       const dialog = await screen.findByRole('dialog');
       await waitFor(() => expect(dialog.textContent).toContain('Some input is not valid.'));
       expect(dialog.textContent).not.toContain('cannot confirm');
+      // the words of the code say which currency rule it was, and not the backend words
+      expect(dialog.textContent).toContain(
+        'The currency this batch would end up with is not one of the allowed currencies',
+      );
+      expect(dialog.textContent).not.toContain('must be one of');
+      expect(costState.batches.find((b) => b.batchId === BATCH.pendingImage)?.status).toBe(
+        'PENDING_REVIEW',
+      );
+    });
+
+    it('also says it when the list of allowed currencies is unknown to the page, the batch has an unallowed currency and the backend refuses', async () => {
+      const { user, calls } = await open(ALL, {
+        meta: {},
+        prepare: () => {
+          batchOf(BATCH.pendingImage).currency = 'EUR';
+        },
+      });
+      const card = await cardOf(BATCH.pendingImage);
+      await user.click(card.getByRole('button', { name: 'Confirm' }));
+      await user.click(
+        within(await screen.findByRole('dialog')).getByRole('button', {
+          name: 'Confirm the price',
+        }),
+      );
+      const dialog = await screen.findByRole('dialog');
+      await waitFor(() =>
+        expect(dialog.textContent).toContain('is not one of the allowed currencies'),
+      );
+      expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')[0].body).toEqual({
+        effectiveFrom: '2026-10-26',
+      });
+      expect(batchOf(BATCH.pendingImage).status).toBe('PENDING_REVIEW');
+    });
+
+    it('says it in Chinese too', async () => {
+      const { user } = await open(ALL, {
+        meta: { allowedCurrencies: ['USD', 'EUR'] },
+        locale: 'zh-CN',
+      });
+      const card = await cardOf(BATCH.pendingImage);
+      await chooseOption(
+        user,
+        '币种',
+        'EUR',
+        card
+          .getByRole('combobox', { name: '币种' })
+          .closest('[data-testid^="pending-"]') as HTMLElement,
+      );
+      await user.click(card.getByRole('button', { name: /确\s?认/ }));
+      await user.click(
+        within(await screen.findByRole('dialog')).getByRole('button', { name: /确认价格/ }),
+      );
+      const dialog = await screen.findByRole('dialog');
+      await waitFor(() => expect(dialog.textContent).toContain('不在允许币种'));
+      expect(dialog.textContent).not.toContain('must be one of');
     });
 
     it('without the currency list it confirms without a currency and says that it could not be checked', async () => {

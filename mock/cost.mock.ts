@@ -5,6 +5,7 @@
 import { countCodePoints } from '../src/utils/codePoints';
 import { trimSpec } from '../src/utils/trimSpec';
 import { guard } from './_core/auth';
+import { currentValue } from './_core/configStore';
 import {
   activeToday,
   costState,
@@ -89,9 +90,12 @@ const bandPricesProblems = (bands: unknown[]): Detail[] =>
     return out;
   });
 
-const allowedCurrency = (value: unknown): boolean =>
-  typeof value === 'string' &&
-  (META_DEFAULTS.allowedCurrencies as readonly string[]).includes(value);
+/** `usage_price.allowed_currencies` as saved (else its default, else what `GET /meta` lists); compared as written. */
+const allowedCurrency = (value: unknown): boolean => {
+  const list = currentValue('usage_price.allowed_currencies');
+  const allowed: readonly unknown[] = Array.isArray(list) ? list : META_DEFAULTS.allowedCurrencies;
+  return typeof value === 'string' && allowed.includes(value);
+};
 
 const note = (req: MockReq): string => {
   const value = trimSpec(text(bodyOf(req).note));
@@ -247,29 +251,32 @@ export default {
     return ok({ batchId: created.batchId });
   }),
 
+  // Checked in this order, the first that fails answers: the batch (404), the date, the currency the
+  // batch ends up with (the body's, else its own) against usage_price.allowed_currencies, the bands of
+  // an LLM price, and last the state (409). A refused confirm changes nothing.
   'POST /api/admin/usage/price-batches/:batchId/confirm': guard('COST:PRICE', (req) => {
     const target = batchOf(req.params.batchId);
-    requireStatus(target, 'PENDING_REVIEW');
     const body = bodyOf(req);
-    const problems: Detail[] = [];
     let effectiveFrom = target.effectiveFrom;
-    let currency = target.currency;
     if (body.effectiveFrom !== undefined) {
       const picked = day(body.effectiveFrom);
-      if (picked === null) problems.push({ ref: 'effectiveFrom', reason: 'OUT_OF_RANGE' });
-      else effectiveFrom = picked;
+      if (picked === null)
+        throw invalidRequest('effectiveFrom is not valid', [
+          { ref: 'effectiveFrom', reason: 'OUT_OF_RANGE' },
+        ]);
+      effectiveFrom = picked;
     }
-    if (body.currency !== undefined) {
-      if (allowedCurrency(body.currency)) currency = text(body.currency);
-      else problems.push({ ref: 'currency', reason: 'OUT_OF_RANGE' });
-    }
+    const currency = body.currency !== undefined ? body.currency : target.currency;
+    if (!allowedCurrency(currency))
+      throw invalidRequest('currency must be one of usage_price.allowed_currencies', [
+        { ref: 'currency', reason: 'OUT_OF_RANGE' },
+      ]);
     // The bands are checked again on confirm (contract 14.2).
     if (target.bands && bandsProblem(target.bands))
-      problems.push({ ref: 'bands', reason: 'OUT_OF_RANGE' });
-    if (problems.length > 0)
-      throw invalidRequest(`cannot confirm: ${problems.map((p) => p.ref).join(', ')}`, problems);
+      throw invalidRequest('cannot confirm: bands', [{ ref: 'bands', reason: 'OUT_OF_RANGE' }]);
+    requireStatus(target, 'PENDING_REVIEW');
     target.effectiveFrom = effectiveFrom;
-    target.currency = currency;
+    target.currency = currency as string;
     target.status = 'ACTIVE';
     target.confirmedBy = req.admin.id;
     target.confirmedByUsername = req.admin.username;

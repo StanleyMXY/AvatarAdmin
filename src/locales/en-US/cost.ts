@@ -109,6 +109,8 @@ const messages: Record<string, string> = {
     'The allowed currencies could not be read, so the currency cannot be checked here.',
   'cost.pending.currencyNotAllowed':
     'The currency of this batch is not an allowed one. Choose one.',
+  'cost.pending.currencyRefused':
+    'The currency this batch would end up with is not one of the allowed currencies (usage_price.allowed_currencies). The batch is still waiting for review. Choose an allowed currency and confirm again.',
   'cost.pending.noCurrencyList': 'Allowed currencies unknown',
   'cost.pending.confirm': 'Confirm',
   'cost.pending.reject': 'Reject',

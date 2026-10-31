@@ -14,6 +14,8 @@ type Props = {
   /** Does the write. A rejection stays in the dialog as text; the caller closes the dialog on success. */
   onSubmit: () => Promise<void>;
   onClose: () => void;
+  /** Words (language-file keys) for a refused field, by its `ref`, instead of the words of its reason. */
+  refTexts?: Record<string, string>;
 };
 
 /**
@@ -29,6 +31,7 @@ export function ActionModal({
   okDisabled,
   onSubmit,
   onClose,
+  refTexts,
 }: Props) {
   const intl = useIntl();
   const [failure, setFailure] = useState<{ text: string; reasons: string[] } | null>(null);
@@ -37,7 +40,7 @@ export function ActionModal({
     try {
       await onSubmit();
     } catch (error) {
-      setFailure(failureLines(intl, error));
+      setFailure(failureLines(intl, error, refTexts));
     }
   });
   return (

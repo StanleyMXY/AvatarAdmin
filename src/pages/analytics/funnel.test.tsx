@@ -469,6 +469,47 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     expect(stepTags()).toEqual(['a', 'b']);
   });
 
+  it('says to try again later when too many funnels are being computed (429, no data), with no countdown, and the next press asks again', async () => {
+    const { user, calls } = await openPage();
+    await choose(user, presetName(0));
+    await screen.findByTestId('funnel-result');
+    expect(funnelCalls(calls)).toHaveLength(1);
+    analyticsStore.funnelInFlight = 2;
+    await user.click(queryButton());
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(enUS['error.RATE_LIMITED']);
+    expect(alert.textContent).not.toMatch(/\d+\s*(s|sec|second|minute|min)\b/i);
+    expect(screen.queryByTestId('funnel-result')).toBeNull();
+    // the buttons stay usable and the form is kept
+    expect(queryButton()).toBeEnabled();
+    expect(within(alert).getByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(stepTags()).toEqual(['app_open', 'register_completed']);
+    expect(funnelCalls(calls)).toHaveLength(2);
+    // when the place is free again the same press works
+    analyticsStore.funnelInFlight = 0;
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await screen.findByTestId('funnel-result');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(funnelCalls(calls)).toHaveLength(3);
+  });
+
+  it('says it in Chinese too, never the words of the backend', async () => {
+    const user = userEvent.setup();
+    useMockBackend(analyticsMock);
+    renderPage(<FunnelPage />, 'zh-CN');
+    await user.click(await screen.findByRole('combobox', { name: '已保存的漏斗' }));
+    const options = await screen.findAllByText(presetName(0), {
+      selector: '.ant-select-item-option-content *, .ant-select-item-option-content',
+    });
+    await user.click(options[options.length - 1]);
+    await screen.findByTestId('funnel-result');
+    analyticsStore.funnelInFlight = 2;
+    await user.click(screen.getByRole('button', { name: /查\s?询/ }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('请求过于频繁，请稍后再试');
+    expect(alert.textContent).not.toMatch(/Too many funnels/);
+  });
+
   it('shows the answer of the newest query, also when an older one arrives later', async () => {
     let release: (() => void) | undefined;
     stubBackend({

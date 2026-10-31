@@ -125,9 +125,16 @@ const messages: Record<string, string> = {
   'moderation.rules.title': '文本规则词表',
   'moderation.rules.intro':
     '文本审核先跑这张词表，再调用审核服务。匹配前会先规范化被审核的文字：不分大小写，并去掉零宽字符。正则有执行时间预算，超时按命中“进入复核”处理。命中“直接拦截”的内容不会再发给审核服务。词表最多 moderation.text_rules_max 条。',
-  'moderation.rules.help.SUBSTRING': '子串：包含这段文字就命中，适合中文、泰文等没有空格的文字。',
-  'moderation.rules.help.WORD': '整词：前后都不是字母或数字才算命中，适合拉丁字母等有空格的文字。',
-  'moderation.rules.help.REGEX': '正则：保存时由后端检查能否编译（后端用 Java 语法）。',
+  'moderation.rules.help.SUBSTRING':
+    '子串：包含这段文字就命中，适合中文、泰文等没有空格的文字。规范化之后还会做形近字折叠，另一种文字里的形近字母按同一个字符比较。',
+  'moderation.rules.help.WORD':
+    '整词：前后都不是字母或数字才算命中，适合拉丁字母等有空格的文字。规范化之后还会做形近字折叠，另一种文字里的形近字母按同一个字符比较。',
+  'moderation.rules.help.REGEX':
+    '正则：保存时由后端检查能否编译（后端用 Java 语法）。不做形近字折叠，只按规范化后的文字匹配。',
+  'moderation.rules.foldingNote':
+    '形近字折叠：子串和整词规则在规范化之后，还会把另一种文字里的形近字母折叠成同一个字符（例如西里尔字母 а、с、о，希腊字母 ο，土耳其语无点的 ı 折叠成 i）。所以规则“сука”（西里尔字母）同时命中“сука”和“СУКА”，用形近字母替换拉丁字母写成的词也会命中拉丁写法的规则。ASCII 字母和同一种文字内部的字母不折叠；正则规则不折叠。已知的副作用：全大写的俄语词 КОТ 会命中规则 kot，土耳其语规则 sik 会命中“sık sık”。保存时，子串或整词的匹配文本在规范化并折叠之后如果是空的（例如只有零宽字符），会被拒绝。',
+  'moderation.rules.patternFoldsEmpty':
+    '匹配文本在规范化并折叠之后是空的（例如只有零宽字符），不能保存。请写入实际的文字。',
   'moderation.rules.index': '序号',
   'moderation.rules.pattern': '匹配文本',
   'moderation.rules.matchMode': '匹配方式',

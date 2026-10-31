@@ -131,7 +131,15 @@ export default function ModerationRulesPage() {
       message.success(t('moderation.rules.saved'));
     } catch (error) {
       const described = describeFailure(intlRef.current, error);
-      const { byRow, table, other } = sortDetails(described.fields, rows.length);
+      // A text that is not blank but empty once normalised and folded is refused as empty: say why.
+      const fields = described.fields.map((field, at) => {
+        const detail = described.error.details[at];
+        const row = detail && /^\d+$/.test(detail.ref) ? rows[Number(detail.ref)] : undefined;
+        return detail?.reason === 'EMPTY_NOT_ALLOWED' && row && !rowProblem(row).pattern
+          ? { ...field, text: t('moderation.rules.patternFoldsEmpty') }
+          : field;
+      });
+      const { byRow, table, other } = sortDetails(fields, rows.length);
       setRowErrors(byRow);
       setTableErrors(table);
       setFailure(
@@ -211,6 +219,12 @@ export default function ModerationRulesPage() {
               </li>
             ))}
           </ul>
+          <Alert
+            type="info"
+            showIcon
+            data-testid="rules-folding-note"
+            title={t('moderation.rules.foldingNote')}
+          />
         </Flex>
       </Card>
 
