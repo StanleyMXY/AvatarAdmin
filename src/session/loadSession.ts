@@ -48,11 +48,15 @@ let reading: Promise<SessionState['me'] | undefined> | undefined;
 
 /**
  * Reads the account again (after a 403 the permissions on screen may be out of date). Many 403s
- * arriving together share one read. Resolves to undefined when it cannot be read.
+ * arriving together share one read. Resolves to undefined when it cannot be read, and when the
+ * token changed meanwhile (signed out, or another account signed in): that account is not the
+ * one on screen any more, so it must not be written into the state.
  */
 export function readMeAgain(): Promise<SessionState['me'] | undefined> {
   if (reading) return reading;
+  const started = getToken();
   reading = getMe()
+    .then((me) => (getToken() === started ? me : undefined))
     .catch(() => undefined)
     .finally(() => {
       reading = undefined;

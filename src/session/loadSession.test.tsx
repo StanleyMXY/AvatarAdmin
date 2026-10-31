@@ -10,7 +10,7 @@ import {
   setSessionHandlers,
   setToken,
 } from '../request/session';
-import { loadSession } from './loadSession';
+import { loadSession, readMeAgain } from './loadSession';
 import { useAdminMeta } from './useSession';
 
 const meBody = (extra: Record<string, unknown> = {}) =>
@@ -255,5 +255,31 @@ describe('useAdminMeta', () => {
     const meta = renderHook(() => useAdminMeta()).result.current;
     expect(meta.maxRecipients).toBeNull();
     expect(meta.pushImageMaxBytes).toBe(1024);
+  });
+});
+
+describe('readMeAgain', () => {
+  it('reads the account of the token that is held', async () => {
+    setToken('tok');
+    stubFetch(() => jsonResponse(200, meBody()));
+    expect((await readMeAgain())?.username).toBe('ploy');
+  });
+
+  it('gives nothing when the person signed out while the account was being read', async () => {
+    setToken('tok');
+    stubFetch(() => {
+      clearToken();
+      return jsonResponse(200, meBody());
+    });
+    expect(await readMeAgain()).toBeUndefined();
+  });
+
+  it('gives nothing when another account signed in while the account was being read', async () => {
+    setToken('tok');
+    stubFetch(() => {
+      setToken('other');
+      return jsonResponse(200, meBody({ username: 'first' }));
+    });
+    expect(await readMeAgain()).toBeUndefined();
   });
 });
