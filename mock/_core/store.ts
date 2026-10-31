@@ -26,6 +26,14 @@ export type MockAdmin = {
   tokenVersion: number;
   totpFailures: number;
   lockedUntil: number;
+  /**
+   * Set by a test (or by hand): the stored authenticator secret cannot be decrypted (the key was
+   * changed, the row is damaged). The sign-in then answers 401 ADMIN_TOTP_INVALID whatever the code
+   * is, and counts it like a wrong code. A reset of the authenticator clears it.
+   */
+  totpSecretUnreadable?: boolean;
+  /** Likewise for the secret waiting for its first code: the enrollment token is void (401 ADMIN_INVALID_TOKEN). */
+  enrollSecretUnreadable?: boolean;
 };
 
 type TokenRecord = { adminId: string; tokenVersion: number; expiresAt: number };

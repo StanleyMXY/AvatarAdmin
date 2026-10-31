@@ -11,6 +11,11 @@ import { AuditAdminFilter } from './AuditAdminFilter';
 import { detailText } from './auditDetail';
 import { adminLabel, instantText, orDash } from './texts';
 
+// What the backend takes in these filters; longer text is answered 400, so the boxes stop at the limit.
+const MAX_ACTION = 64;
+const MAX_TARGET_TYPE = 64;
+const MAX_TARGET_ID = 255;
+
 type Filters = {
   adminId?: string;
   action?: string;
@@ -59,11 +64,13 @@ export default function AuditPage() {
     {
       title: t('system.audit.col.action'),
       dataIndex: 'action',
+      fieldProps: { maxLength: MAX_ACTION },
       render: (_, row) => <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.action)}</span>,
     },
     {
       title: t('system.audit.col.targetType'),
       dataIndex: 'targetType',
+      fieldProps: { maxLength: MAX_TARGET_TYPE },
       render: (_, row) => (
         <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.targetType)}</span>
       ),
@@ -71,6 +78,7 @@ export default function AuditPage() {
     {
       title: t('system.audit.col.targetId'),
       dataIndex: 'targetId',
+      fieldProps: { maxLength: MAX_TARGET_ID },
       render: (_, row) => <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.targetId)}</span>,
     },
     {

@@ -85,7 +85,8 @@ export default {
     }
     const totp = text(body.totp);
     if (totp === '') return fail(401, 'ADMIN_TOTP_REQUIRED', 'A verification code is required');
-    if (totp !== FAKE_TOTP_CODE) return wrongCode(admin);
+    // A secret that cannot be decrypted answers like a wrong code and counts like one (contract: 401 ADMIN_TOTP_INVALID).
+    if (totp !== FAKE_TOTP_CODE || admin.totpSecretUnreadable) return wrongCode(admin);
     admin.totpFailures = 0;
     return ok(issueToken(admin));
   }),
@@ -100,6 +101,11 @@ export default {
       return fail(401, 'ADMIN_INVALID_TOKEN', 'The enrollment token is invalid or expired');
     }
     rejectLocked(admin);
+    if (admin.enrollSecretUnreadable) {
+      // The pending secret cannot be decrypted: the token is void and the person signs in again.
+      store.enrollTokens.delete(text(body.enrollToken));
+      return fail(401, 'ADMIN_INVALID_TOKEN', 'The enrollment token is invalid or expired');
+    }
     if (text(body.totp) !== FAKE_TOTP_CODE)
       return wrongCode(admin, Date.now(), text(body.enrollToken));
     store.enrollTokens.delete(text(body.enrollToken));

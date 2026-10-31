@@ -17,12 +17,16 @@ const messages: Record<string, string> = {
   'system.common.saved': 'Saved',
   'system.common.deleted': 'Deleted',
   'system.common.readFailed': 'Could not read: {message}',
+  'system.scopeHint':
+    'Administrators can only grant permissions they hold. You cannot change a role you hold, and you can only change roles and administrators whose permissions you all hold. Nothing was changed.',
 
   // ---- administrators ----
   'system.admins.note':
     'You cannot change your own roles, super administrator flag or status, and you cannot delete your own account. The last enabled super administrator cannot be disabled or deleted, and its flag cannot be cleared. Only a super administrator sets or clears the super administrator flag.',
   'system.admins.refusedHint':
     'The backend refuses this for your own account and for the last enabled super administrator. Nothing was changed.',
+  'system.admins.forbiddenHint':
+    'The backend refused this and nothing was changed. Possible reasons: it is your own account; administrators can only grant permissions they hold; and can only act on administrators whose permissions they all hold.',
   'system.admins.new': 'New administrator',
   'system.admins.you': 'You',
   'system.admins.col.username': 'User name',

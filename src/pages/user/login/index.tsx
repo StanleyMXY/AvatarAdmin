@@ -70,7 +70,8 @@ export default function Login() {
           setTimeout(() => totpRef.current?.focus(), 0);
         } else if (error.code === 'ADMIN_TOTP_INVALID') {
           form.setFieldValue('totp', '');
-          setNotice({ type: 'error', content: { failure } });
+          // The same answer also means the stored secret cannot be read: its own words say so.
+          setNotice({ type: 'error', content: { id: 'auth.login.totpInvalid' } });
           setTimeout(() => totpRef.current?.focus(), 0);
         } else {
           setNotice(failureNotice(failure));

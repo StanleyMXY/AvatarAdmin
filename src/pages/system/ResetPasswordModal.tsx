@@ -7,6 +7,7 @@ import type { Me } from '../../services/auth';
 import { type AdminUser, resetAdminPassword } from '../../services/system';
 import { checkNewPassword } from './adminRules';
 import { failureToForm } from './formFailure';
+import { withScopeHint } from './texts';
 
 type Values = { newPassword: string; confirm: string };
 
@@ -47,7 +48,8 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
       onDone();
       onClose();
     } catch (error) {
-      setFailure(failureToForm(intl, form, error, ['newPassword']).text);
+      const placed = failureToForm(intl, form, error, ['newPassword']);
+      setFailure(placed.text === null ? null : withScopeHint(intl, error, placed.text));
     }
   });
 

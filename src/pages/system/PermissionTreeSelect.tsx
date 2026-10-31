@@ -18,6 +18,12 @@ type Props = {
   value: string[];
   onChange: (value: string[]) => void;
   disabled?: boolean;
+  /**
+   * The codes the signed-in administrator holds, when they are not a super administrator: a node
+   * outside it is shown but cannot be changed (the backend refuses a role with a code they do not hold).
+   * Missing means every node may be changed.
+   */
+  grantable?: ReadonlySet<string> | null;
 };
 
 function treeData(index: TreeIndex, codes: string[]): DataNode[] {
@@ -35,7 +41,7 @@ function treeData(index: TreeIndex, codes: string[]): DataNode[] {
  * permissionTree.ts). Names follow the interface language (the other language, then the code, when
  * a name is missing). A node whose code the application does not know cannot be chosen.
  */
-export function PermissionTreeSelect({ nodes, value, onChange, disabled }: Props) {
+export function PermissionTreeSelect({ nodes, value, onChange, disabled, grantable }: Props) {
   const intl = useIntl();
   const index = useMemo(() => buildIndex(nodes), [nodes]);
   const data = useMemo(() => treeData(index, index.roots), [index]);
@@ -58,8 +64,8 @@ export function PermissionTreeSelect({ nodes, value, onChange, disabled }: Props
             <Checkbox
               checked={state === 'checked'}
               indeterminate={state === 'half'}
-              disabled={disabled || !isSelectable(node)}
-              onChange={() => onChange(toggleCode(index, value, code))}
+              disabled={disabled || !isSelectable(node) || (!!grantable && !grantable.has(code))}
+              onChange={() => onChange(toggleCode(index, value, code, grantable))}
             >
               <span dir="auto" style={{ overflowWrap: 'anywhere' }}>
                 {nodeName(node, intl.locale)}

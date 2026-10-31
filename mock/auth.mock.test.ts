@@ -90,6 +90,42 @@ describe('POST /auth/login', () => {
     expect([status, body.code]).toEqual([401, 'ADMIN_TOTP_INVALID']);
   });
 
+  it('answers 401 ADMIN_TOTP_INVALID for the right code when the stored secret cannot be decrypted, and counts it like a wrong code', async () => {
+    adminOf('root').totpSecretUnreadable = true;
+    const body = { username: 'root', password: mockPassword('root'), totp: FAKE_TOTP_CODE };
+    for (let i = 1; i < TOTP_MAX_FAILURES; i++) {
+      const refused = await login(body);
+      expect([refused.status, refused.body.code, refused.body.data]).toEqual([
+        401,
+        'ADMIN_TOTP_INVALID',
+        null,
+      ]);
+    }
+    const locked = await login(body);
+    expect([locked.status, locked.body.code]).toEqual([429, 'RATE_LIMITED']);
+    expect(locked.body.data.retryAfterSeconds).toBeGreaterThanOrEqual(1);
+  });
+
+  it('asks for the code first when the stored secret cannot be decrypted: nothing is decrypted without a code', async () => {
+    adminOf('root').totpSecretUnreadable = true;
+    const { body } = await login({ username: 'root', password: mockPassword('root') });
+    expect(body.code).toBe('ADMIN_TOTP_REQUIRED');
+  });
+
+  it('lets the administrator in again after a super administrator reset the authenticator', async () => {
+    adminOf('support').totpSecretUnreadable = true;
+    const { default: system } = await import('./system.mock');
+    const { issueToken } = await import('./_core/store');
+    const reset = await call(system['POST /api/admin/admins/:id/reset-totp'], {
+      headers: bearer(issueToken(adminOf('root')).token),
+      params: { id: '1002' },
+    });
+    expect(reset.status).toBe(200);
+    expect(adminOf('support').totpSecretUnreadable).toBeFalsy();
+    const again = await login({ username: 'support', password: mockPassword('support') });
+    expect(again.body.data.status).toBe('ENROLL_REQUIRED');
+  });
+
   it('answers 200 with a token and its expiry for the right code', async () => {
     const { status, body } = await login({
       username: 'root',
@@ -183,6 +219,25 @@ describe('POST /auth/totp/enroll', () => {
     const wrong = await enroll({ enrollToken, totp: '999999' });
     expect([wrong.status, wrong.body.code]).toEqual([401, 'ADMIN_TOTP_INVALID']);
     expect((await enroll({ enrollToken, totp: FAKE_TOTP_CODE })).status).toBe(200);
+  });
+
+  it('answers 401 ADMIN_INVALID_TOKEN and voids the enrollment token when the pending secret cannot be decrypted', async () => {
+    const enrollToken = await start();
+    adminOf('fresh').enrollSecretUnreadable = true;
+    const refused = await enroll({ enrollToken, totp: FAKE_TOTP_CODE });
+    expect([refused.status, refused.body.code, refused.body.data]).toEqual([
+      401,
+      'ADMIN_INVALID_TOKEN',
+      null,
+    ]);
+    // the token is void for good, also for a request that would have been right
+    adminOf('fresh').enrollSecretUnreadable = false;
+    const again = await enroll({ enrollToken, totp: FAKE_TOTP_CODE });
+    expect([again.status, again.body.code]).toEqual([401, 'ADMIN_INVALID_TOKEN']);
+    expect(adminOf('fresh').totpEnrolled).toBe(false);
+    // signing in again gives a new token that works
+    const fresh = await start();
+    expect((await enroll({ enrollToken: fresh, totp: FAKE_TOTP_CODE })).status).toBe(200);
   });
 
   it('returns a token on success, and the administrator can then sign in with the code', async () => {

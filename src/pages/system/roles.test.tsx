@@ -5,6 +5,7 @@ import system from '../../../mock/system.mock';
 import systemPermissions from '../../../mock/system.permissions.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
+import { history } from '../../../tests/stubs/umi-max';
 import { PERMISSION_CODES } from '../../access/permissionCodes';
 import RolesPage from './roles';
 import {
@@ -537,5 +538,93 @@ describe('deleting a role', () => {
     await settled();
     expect(held.started()).toBe(1);
     held.release();
+  });
+});
+
+describe('an administrator who is not a super administrator hands out only what they hold', () => {
+  const HELD = ['ROLE:MANAGE', 'USER:VIEW', 'USER:BAN', 'STATS:VIEW', 'AUDIT:VIEW'];
+  const SCOPE_SENTENCE =
+    /Administrators can only grant permissions they hold\. You cannot change a role you hold, and you can only change roles and administrators whose permissions you all hold\. Nothing was changed\./;
+  beforeEach(() => {
+    signIn('support', { codes: HELD });
+  });
+
+  it('shows the sentence of the rule for a 403 on save, never the words of the backend, and keeps the dialog and the page', async () => {
+    const { user, calls } = await load();
+    // role 5 holds MONITOR:VIEW, which the signed-in administrator does not hold
+    const box = await openEdit(user, 'Quan sát hệ thống');
+    await user.click(save(box));
+    expect(await box.findByText(/You do not have permission to do this\./)).toBeInTheDocument();
+    expect(box.getByText(SCOPE_SENTENCE)).toBeInTheDocument();
+    expect(
+      screen.queryByText('Administrators can only change roles whose permissions they hold'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(1);
+    expect(history.replace).not.toHaveBeenCalled();
+    expect(history.push).not.toHaveBeenCalled();
+  });
+
+  it('shows the same sentence when a role cannot be deleted for the same reason, and keeps the row', async () => {
+    const { user } = await load();
+    // role 3 holds moderation codes that the signed-in administrator does not hold
+    await user.click(within(await rowOf('ผู้ตรวจสอบเนื้อหา')).getByRole('button', { name: 'Delete' }));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(await screen.findByText(SCOPE_SENTENCE, { exact: false })).toBeInTheDocument();
+    expect(tableRows().some((cells) => cells[0] === 'ผู้ตรวจสอบเนื้อหา')).toBe(true);
+    expect(history.replace).not.toHaveBeenCalled();
+  });
+
+  it('switches off the boxes of the permissions the signed-in administrator does not hold, and leaves the held ones on', async () => {
+    const { user } = await load();
+    const box = await openNew(user);
+    for (const code of ['USER:VIEW', 'USER:BAN', 'STATS:VIEW']) {
+      expect(checkbox(box, code), code).toBeEnabled();
+    }
+    for (const code of ['COST:VIEW', 'USER:EXPORT', 'MODERATION:REVIEW']) {
+      expect(checkbox(box, code), code).toBeDisabled();
+    }
+  });
+
+  it('checks only the held nodes below a parent, and sends nothing the administrator does not hold', async () => {
+    const { user, calls } = await load();
+    const box = await openNew(user);
+    await user.type(box.getByLabelText('Name'), 'Within my reach');
+    await user.click(checkbox(box, 'USER:VIEW'));
+    expect(checkbox(box, 'USER:BAN')).toBeChecked();
+    expect(checkbox(box, 'USER:EXPORT')).not.toBeChecked();
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
+      'USER:BAN',
+      'USER:VIEW',
+    ]);
+  });
+
+  it('keeps a code the role has but the administrator does not hold: checked, off, and not removed by unchecking its parent', async () => {
+    systemState.roles.set('70', {
+      id: '70',
+      name: 'Mixed',
+      remark: null,
+      createdAt: '2026-10-06T00:00:00Z',
+      permissionCodes: ['USER:BAN', 'USER:EXPORT', 'USER:VIEW'],
+    });
+    const { user } = await load();
+    const box = await openEdit(user, 'Mixed');
+    // the role holds USER:EXPORT; the administrator does not
+    expect(checkbox(box, 'USER:EXPORT')).toBeChecked();
+    expect(checkbox(box, 'USER:EXPORT')).toBeDisabled();
+    await user.click(checkbox(box, 'USER:VIEW'));
+    expect(checkbox(box, 'USER:EXPORT')).toBeChecked();
+    expect(checkbox(box, 'USER:BAN')).not.toBeChecked();
+  });
+
+  it('does not switch anything off for a super administrator', async () => {
+    signIn('root');
+    const { user } = await load();
+    const box = await openNew(user);
+    for (const code of ['COST:VIEW', 'USER:EXPORT', 'MODERATION:REVIEW']) {
+      expect(checkbox(box, code), code).toBeEnabled();
+    }
   });
 });

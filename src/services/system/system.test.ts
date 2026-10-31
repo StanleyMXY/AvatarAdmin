@@ -269,3 +269,21 @@ describe('the audit log', () => {
     expect(Object.keys(all).filter((name) => /audit/i.test(name))).toEqual(['listAuditLogs']);
   });
 });
+
+describe('the type of a node on update', () => {
+  it('is never sent: the backend answers 400 on type when it changes, and the page shows it fixed', async () => {
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+    // a caller that passes a type along by mistake (the type system forbids it) is not obeyed
+    await updatePermission(
+      'CUSTOM:A',
+      { nameZh: '甲', nameEn: 'A', sortOrder: 1, parent: null, type: 'MENU' } as never,
+      { builtin: false },
+    );
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      nameZh: '甲',
+      nameEn: 'A',
+      sortOrder: 1,
+      parent: null,
+    });
+  });
+});

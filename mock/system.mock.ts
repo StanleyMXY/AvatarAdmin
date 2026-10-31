@@ -4,7 +4,7 @@ import { trimSpec } from '../src/utils/trimSpec';
 import { guard } from './_core/auth';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
 import { paginateQuery } from './_core/paginate';
-import { PASSWORD_MIN_LENGTH, store } from './_core/store';
+import { type MockAdmin, PASSWORD_MIN_LENGTH, store } from './_core/store';
 import {
   adminView,
   descendantCodes,
@@ -31,6 +31,40 @@ const refuse = (details: Detail[]): never => {
 const forbidden = (message: string): never => {
   throw new MockHttpError(403, 'ADMIN_FORBIDDEN', message);
 };
+
+// The four rules "an administrator hands out and acts on only what they hold" (403 ADMIN_FORBIDDEN,
+// `data` null, nothing changed). A super administrator is not bound by them. What an administrator
+// holds is what `GET /me` lists for them (the union of the codes of their roles); a super
+// administrator held by the target counts as holding every code. The order of the checks inside one
+// route is the mock's own: the backend's order is not in the documents we have.
+const SCOPE = {
+  grant: 'Administrators can only grant permissions they hold',
+  ownRole: 'Administrators cannot change a role they hold',
+  role: 'Administrators can only change roles whose permissions they hold',
+  admin: 'Administrators can only act on administrators whose permissions they hold',
+} as const;
+
+const heldCodes = (admin: MockAdmin): ReadonlySet<string> =>
+  new Set<string>(admin.superAdmin ? PERMISSION_CODES : admin.permissions);
+
+/** True when `operator` holds every one of `codes` (a super administrator holds all). */
+const holdsAll = (operator: MockAdmin, codes: Iterable<string>): boolean => {
+  if (operator.superAdmin) return true;
+  const held = heldCodes(operator);
+  return [...codes].every((code) => held.has(code));
+};
+
+const requireHolds = (operator: MockAdmin, codes: Iterable<string>, message: string): void => {
+  if (!holdsAll(operator, codes)) forbidden(message);
+};
+
+/** The codes the roles give together. */
+const codesOfRoles = (roleIds: readonly string[]): string[] =>
+  roleIds.flatMap((id) => systemState.roles.get(id)?.permissionCodes ?? []);
+
+/** Rule 4: the target administrator's codes must all be held by the operator. */
+const requireHoldsTarget = (operator: MockAdmin, target: MockAdmin): void =>
+  requireHolds(operator, heldCodes(target), SCOPE.admin);
 const duplicate = (field: string): never => {
   throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The value exists already', { field });
 };
@@ -86,11 +120,17 @@ function permissionCodesOf(value: unknown): string[] {
   return codes.sort();
 }
 
-function roleFields(body: Record<string, unknown>, ownId?: string) {
+function roleFields(
+  body: Record<string, unknown>,
+  ownId?: string,
+  authorize?: (codes: string[]) => void,
+) {
   const name = textOf(body.name);
   const details: Detail[] = [];
   if (name === '') details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
   if (details.length > 0) refuse(details);
+  const permissionCodes = permissionCodesOf(body.permissionCodes ?? []);
+  authorize?.(permissionCodes);
   const taken = [...systemState.roles.values()].some(
     (role) => role.id !== ownId && role.name.toLowerCase() === name.toLowerCase(),
   );
@@ -99,7 +139,7 @@ function roleFields(body: Record<string, unknown>, ownId?: string) {
   return {
     name,
     remark: remark === '' ? null : remark,
-    permissionCodes: permissionCodesOf(body.permissionCodes ?? []),
+    permissionCodes,
   };
 }
 
@@ -125,6 +165,7 @@ export default {
     const roleIds = roleIdsOf(body.roleIds ?? []);
     if (body.superAdmin === true && !req.admin.superAdmin)
       forbidden('Only a super administrator sets the super administrator flag');
+    requireHolds(req.admin, codesOfRoles(roleIds), SCOPE.grant);
     if ([...store.admins.values()].some((a) => a.username.toLowerCase() === username.toLowerCase()))
       duplicate('username');
     systemState.nextAdminId += 1;
@@ -159,6 +200,7 @@ export default {
     const body = bodyOf(req);
     const touchesRoles = body.roleIds !== undefined;
     const touchesFlag = body.superAdmin !== undefined;
+    requireHoldsTarget(req.admin, admin);
     if (admin.id === req.admin.id && (touchesRoles || touchesFlag))
       forbidden('An administrator cannot change their own roles or super administrator flag');
     if (touchesFlag && typeof body.superAdmin !== 'boolean')
@@ -166,6 +208,7 @@ export default {
     if (touchesFlag && !req.admin.superAdmin)
       forbidden('Only a super administrator sets or clears the super administrator flag');
     const roleIds = touchesRoles ? roleIdsOf(body.roleIds) : undefined;
+    if (roleIds) requireHolds(req.admin, codesOfRoles(roleIds), SCOPE.grant);
     if (
       touchesFlag &&
       body.superAdmin === false &&
@@ -188,6 +231,7 @@ export default {
 
   'POST /api/admin/admins/:id/status': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
+    requireHoldsTarget(req.admin, admin);
     const status = bodyOf(req).status;
     if (status !== 'ACTIVE' && status !== 'DISABLED')
       refuse([{ ref: 'status', reason: 'OUT_OF_RANGE' }]);
@@ -207,6 +251,7 @@ export default {
 
   'POST /api/admin/admins/:id/reset-password': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
+    requireHoldsTarget(req.admin, admin);
     const newPassword = bodyOf(req).newPassword;
     const problem = newPasswordProblem(newPassword, admin.username, 'newPassword');
     if (problem) refuse([problem]);
@@ -219,7 +264,9 @@ export default {
 
   'POST /api/admin/admins/:id/reset-totp': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
+    requireHoldsTarget(req.admin, admin);
     admin.totpEnrolled = false;
+    admin.totpSecretUnreadable = false;
     admin.tokenVersion += 1;
     writeAudit(req.admin, 'ADMIN_RESET_TOTP', 'ADMIN', admin.id, null);
     return ok(null);
@@ -227,6 +274,7 @@ export default {
 
   'DELETE /api/admin/admins/:id': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
+    requireHoldsTarget(req.admin, admin);
     if (admin.id === req.admin.id) forbidden('An administrator cannot delete themselves');
     if (admin.superAdmin && admin.status === 'ACTIVE' && isLastEnabledSuper(admin.id))
       throw new MockHttpError(409, 'INVALID_STATE', 'The last enabled super administrator', {
@@ -246,7 +294,9 @@ export default {
   }),
 
   'POST /api/admin/roles': guard('ROLE:MANAGE', (req) => {
-    const fields = roleFields(bodyOf(req));
+    const fields = roleFields(bodyOf(req), undefined, (codes) =>
+      requireHolds(req.admin, codes, SCOPE.grant),
+    );
     const id = String(systemState.nextRoleId++);
     const role: MockRole = { id, createdAt: new Date().toISOString(), ...fields };
     systemState.roles.set(id, role);
@@ -259,7 +309,14 @@ export default {
 
   'PUT /api/admin/roles/:id': guard('ROLE:MANAGE', (req) => {
     const role = systemState.roles.get(req.params.id) ?? notFound('The role');
-    const fields = roleFields(bodyOf(req), role.id);
+    // A role the operator has themselves cannot be changed by them; the codes the role has now and the
+    // codes asked for must all be held.
+    if (!req.admin.superAdmin && extraOf(req.admin).roleIds.includes(role.id))
+      forbidden(SCOPE.ownRole);
+    requireHolds(req.admin, role.permissionCodes, SCOPE.role);
+    const fields = roleFields(bodyOf(req), role.id, (codes) =>
+      requireHolds(req.admin, codes, SCOPE.grant),
+    );
     const old = role.permissionCodes;
     Object.assign(role, fields);
     syncAllPermissions();
@@ -274,6 +331,7 @@ export default {
 
   'DELETE /api/admin/roles/:id': guard('ROLE:MANAGE', (req) => {
     const role = systemState.roles.get(req.params.id) ?? notFound('The role');
+    requireHolds(req.admin, role.permissionCodes, SCOPE.role);
     const inUse = [...store.admins.values()].some((admin) =>
       extraOf(admin).roleIds.includes(role.id),
     );
@@ -329,6 +387,9 @@ export default {
     if (nameEn === '') details.push({ ref: 'nameEn', reason: 'EMPTY_NOT_ALLOWED' });
     if (!Number.isInteger(body.sortOrder))
       details.push({ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' });
+    // The type of a node never changes (400 on `type`); writing the same type again is no change.
+    if (body.type !== undefined && body.type !== node.type)
+      details.push({ ref: 'type', reason: 'OUT_OF_RANGE' });
     let parent = node.parent;
     if (body.parent !== undefined) {
       const wanted = body.parent === null ? null : String(body.parent);
@@ -388,6 +449,16 @@ export default {
       if (Number.isNaN(ms)) return refuse([{ ref: name, reason: 'OUT_OF_RANGE' }]);
       return ms;
     };
+    // The most the backend takes (characters, not UTF-16 units): longer text is 400, not "no match".
+    for (const [name, limit] of [
+      ['action', 64],
+      ['targetType', 64],
+      ['targetId', 255],
+    ] as const) {
+      const value = text(name);
+      if (value !== undefined && countCodePoints(value) > limit)
+        refuse([{ ref: name, reason: 'TOO_LONG' }]);
+    }
     const from = instant('from');
     const to = instant('to');
     const rows = systemState.audit.filter(

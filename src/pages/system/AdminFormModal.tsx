@@ -16,6 +16,7 @@ import { describeFailure } from '../../session/describe';
 import { trimSpec } from '../../utils/trimSpec';
 import { checkNewPassword, type RowProtection } from './adminRules';
 import { failureToForm } from './formFailure';
+import { withScopeHint } from './texts';
 import { useRead } from './useRead';
 
 type Values = {
@@ -117,7 +118,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
       onClose();
     } catch (error) {
       const placed = failureToForm(intl, form, error, FIELDS);
-      setFailure(placed.text);
+      setFailure(placed.text === null ? null : withScopeHint(intl, error, placed.text));
     }
   });
 

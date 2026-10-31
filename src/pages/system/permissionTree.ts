@@ -167,28 +167,34 @@ export function stateOf(
  *   taking one function away must not take the page away. A node above leaves the value only when
  *   the person unchecks that node itself.
  * - A click on a node that is not there or may not be chosen changes nothing.
+ * - With `grantable` (the codes the signed-in administrator holds, when they are not a super
+ *   administrator) only those nodes can be changed: a node outside it is never checked or unchecked
+ *   by a click on another node, and a click on it changes nothing. The backend refuses a role with a
+ *   code the administrator does not hold, so this only keeps the page from offering it.
  * Codes in `value` that are not nodes a role may have are dropped.
  */
 export function toggleCode(
   nodes: readonly PermissionNode[] | TreeIndex,
   value: readonly string[],
   code: string,
+  grantable?: ReadonlySet<string> | null,
 ): string[] {
   const index = Array.isArray(nodes) ? buildIndex(nodes) : (nodes as TreeIndex);
   const selectable = selectableSet(index);
+  const mayChange = (c: string) => selectable.has(c) && (!grantable || grantable.has(c));
   const chosen = chosenIn(index, value);
-  if (!selectable.has(code)) return [...chosen].sort();
+  if (!mayChange(code)) return [...chosen].sort();
   const below = descendantsOf(index, code);
   const above = ancestorsOf(index, code);
   if (stateIn(index, chosen, code) === 'checked') {
     chosen.delete(code);
-    for (const c of below) chosen.delete(c);
+    for (const c of below) if (!grantable || grantable.has(c)) chosen.delete(c);
   } else {
     chosen.add(code);
-    for (const c of below) if (selectable.has(c)) chosen.add(c);
+    for (const c of below) if (mayChange(c)) chosen.add(c);
     // A function cannot be used without the page it is on: every node above that may be chosen comes
     // with it, whether or not the rest of what is below that node is checked.
-    for (const c of above) if (selectable.has(c)) chosen.add(c);
+    for (const c of above) if (mayChange(c)) chosen.add(c);
   }
   return [...chosen].sort();
 }

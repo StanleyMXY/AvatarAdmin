@@ -7,7 +7,7 @@ import system from '../../../mock/system.mock';
 import systemPermissions from '../../../mock/system.permissions.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
-import { setTestInitialState } from '../../../tests/stubs/umi-max';
+import { history, setTestInitialState } from '../../../tests/stubs/umi-max';
 import { AdminFormModal } from './AdminFormModal';
 import AdminsPage from './admins';
 import {
@@ -1286,5 +1286,46 @@ describe('in Chinese', () => {
     expect(
       within(await rowOf('support')).getByRole('button', { name: '编辑' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('an administrator who is not a super administrator acts only on administrators within what they hold', () => {
+  const HELD = ['ADMIN:MANAGE', 'USER:VIEW', 'STATS:VIEW'];
+  const SENTENCE =
+    /administrators can only grant permissions they hold; and can only act on administrators whose permissions they all hold\./;
+
+  it('shows the sentence of the rules after the text of the code when the backend refuses a row, never its words, and does not leave the page', async () => {
+    signIn('support', { codes: HELD });
+    const { user } = await load();
+    // "finance" holds codes that "support" does not
+    await user.click(await rowButton('finance', 'Disable'));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(await screen.findByText(/You do not have permission to do this\./)).toBeInTheDocument();
+    expect(screen.getByText(SENTENCE, { exact: false })).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Administrators can only act on administrators whose permissions they hold',
+      ),
+    ).not.toBeInTheDocument();
+    expect(adminOf('finance').status).toBe('ACTIVE');
+    expect(history.replace).not.toHaveBeenCalled();
+  });
+
+  it('shows the same sentence in the edit dialog when the roles chosen go beyond what is held', async () => {
+    signIn('support', { codes: HELD });
+    const { user } = await load();
+    // "newhire" holds USER:VIEW and STATS:VIEW only: the row is within reach, the role "财务审核" is not
+    await user.click(await rowButton('newhire', 'Edit'));
+    const box = within(await dialog());
+    await waitFor(() => expect(rolesBox(box)).toBeEnabled());
+    await chooseRole(user, rolesBox(box), '财务审核');
+    await user.click(box.getByRole('button', { name: /Save$/ }));
+    expect(await box.findByText(/You do not have permission to do this\./)).toBeInTheDocument();
+    expect(box.getByText(/Nothing was changed\./, { exact: false })).toBeInTheDocument();
+    expect(
+      box.getByText(/Administrators can only grant permissions they hold\./),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(history.replace).not.toHaveBeenCalled();
   });
 });

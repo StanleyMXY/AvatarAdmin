@@ -11,10 +11,12 @@ import {
   updateRole,
 } from '../../services/system';
 import { describeFailure } from '../../session/describe';
+import { useSession } from '../../session/useSession';
 import { trimSpec } from '../../utils/trimSpec';
 import { failureToForm } from './formFailure';
 import { PermissionTreeSelect } from './PermissionTreeSelect';
 import { buildIndex, isSelectable } from './permissionTree';
+import { withScopeHint } from './texts';
 import { useRead } from './useRead';
 
 type Values = { name: string; remark: string };
@@ -43,6 +45,10 @@ export function RoleModal({ role, onDone, onClose }: Props) {
   const tree = useRead(listPermissions);
   const nodes: PermissionNode[] | null = tree.state.status === 'ok' ? tree.state.data : null;
   const [picked, setPicked] = useState<string[] | null>(null);
+  // What the signed-in administrator holds. Only a help for the boxes: `GET /me` is not known to list
+  // exactly the codes the backend counts as held, so the backend stays the last word (a 403).
+  const { me } = useSession();
+  const grantable = useMemo(() => (me && !me.superAdmin ? new Set(me.permissions) : null), [me]);
 
   // What the role holds, limited to the nodes a role may have; the rest is named below.
   const held = useMemo(() => {
@@ -83,7 +89,11 @@ export function RoleModal({ role, onDone, onClose }: Props) {
       onClose();
     } catch (error) {
       const placed = failureToForm(intl, form, error, ['name', 'remark']);
-      setFailure(placed.text === null ? null : { text: placed.text, unplaced: placed.unplaced });
+      setFailure(
+        placed.text === null
+          ? null
+          : { text: withScopeHint(intl, error, placed.text), unplaced: placed.unplaced },
+      );
     }
   });
 
@@ -165,7 +175,12 @@ export function RoleModal({ role, onDone, onClose }: Props) {
               title={t('system.roles.unknownCodes', { codes: held.dropped.join(', ') })}
             />
           ) : null}
-          <PermissionTreeSelect nodes={nodes} value={value} onChange={setPicked} />
+          <PermissionTreeSelect
+            nodes={nodes}
+            value={value}
+            onChange={setPicked}
+            grantable={grantable}
+          />
         </>
       ) : null}
       {failure ? (

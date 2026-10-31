@@ -267,6 +267,29 @@ describe('the filters', () => {
     expect(tableRows()[0][1]).toBe('USER_BAN');
   });
 
+  it('limits the action and the object type to 64 characters and the object id to 255, so no request goes out that the backend answers with 400', async () => {
+    const { calls, user } = await load();
+    await expand(user);
+    const action = screen.getByRole('textbox', { name: 'Action' });
+    const type = screen.getByRole('textbox', { name: 'Object type' });
+    const id = screen.getByRole('textbox', { name: 'Object ID' });
+    expect(action).toHaveAttribute('maxlength', '64');
+    expect(type).toHaveAttribute('maxlength', '64');
+    expect(id).toHaveAttribute('maxlength', '255');
+    // text in other scripts is cut by the same limit, not refused
+    await user.type(action, 'ก'.repeat(70));
+    await user.type(type, 'ب'.repeat(70));
+    await user.type(id, 'x'.repeat(300));
+    expect((action as HTMLInputElement).value).toHaveLength(64);
+    expect((type as HTMLInputElement).value).toHaveLength(64);
+    expect((id as HTMLInputElement).value).toHaveLength(255);
+    await search(user);
+    await waitFor(() => expect(lastAudit(calls).searchParams.get('targetId')).toHaveLength(255));
+    const q = lastAudit(calls).searchParams;
+    expect(q.get('action')).toHaveLength(64);
+    expect(q.get('targetType')).toHaveLength(64);
+  });
+
   it('filters by administrator: the choice lists the administrators by name and sends the id', async () => {
     const { calls, user } = await load();
     await expand(user);

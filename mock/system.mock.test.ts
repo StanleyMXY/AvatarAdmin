@@ -235,7 +235,17 @@ describe('PUT /admins/:id', () => {
       body: { superAdmin: true },
     });
     expect(ok.body.data.superAdmin).toBe(true);
-    // the other fields stay open to the administrator with ADMIN:MANAGE
+    // the other fields stay open to the administrator with ADMIN:MANAGE, within what they hold
+    withCodes('support', [
+      'ADMIN:MANAGE',
+      'MODERATION:VIEW',
+      'MODERATION:REVIEW',
+      'MODERATION:CONFIG',
+      'COMPLAINT:VIEW',
+      'COMPLAINT:MANAGE',
+      'USER:VIEW',
+      'STATS:VIEW',
+    ]);
     const roles = await run('PUT /api/admin/admins/:id', 'support', {
       params: { id: '1004' },
       body: { roleIds: ['4'] },
@@ -285,6 +295,8 @@ describe('POST /admins/:id/status', () => {
     const self = await setStatus('root', '1001', 'DISABLED');
     expect([self.status, self.body.code]).toEqual([403, 'ADMIN_FORBIDDEN']);
     withCodes('support', ['ADMIN:MANAGE']);
+    // a super administrator holds every code: only someone who holds them all reaches the rule of the last one
+    withCodes('support', [...PERMISSION_CODES]);
     const last = await setStatus('support', '1001', 'DISABLED');
     expect([last.status, last.body.code]).toEqual([409, 'INVALID_STATE']);
     expect(adminOf('root').status).toBe('ACTIVE');
@@ -330,7 +342,7 @@ describe('reset password, reset authenticator, delete', () => {
   it('deletes an administrator but never oneself or the last enabled super administrator, and keeps the audit rows', async () => {
     const self = await run('DELETE /api/admin/admins/:id', 'root', { params: { id: '1001' } });
     expect([self.status, self.body.code]).toEqual([403, 'ADMIN_FORBIDDEN']);
-    withCodes('support', ['ADMIN:MANAGE']);
+    withCodes('support', [...PERMISSION_CODES]);
     const last = await run('DELETE /api/admin/admins/:id', 'support', { params: { id: '1001' } });
     expect([last.status, last.body.code]).toEqual([409, 'INVALID_STATE']);
     const before = systemState.audit.filter((r) => r.adminId === '1004').length;
@@ -470,6 +482,26 @@ describe('the permission tree', () => {
     expect((await update('USER:BAN', { ...rename, parent: 'USER:VIEW' })).status).toBe(200);
   });
 
+  it('refuses a new type for a node, built in or not: 400 on type, nothing changes; the same type written again is no change', async () => {
+    await create({ code: 'CUSTOM:T', type: 'FUNCTION', parent: 'USER:VIEW' });
+    for (const [code, type] of [
+      ['USER:BAN', 'MENU'],
+      ['CUSTOM:T', 'MENU'],
+    ]) {
+      const before = JSON.stringify(systemState.nodes.get(code));
+      const refused = await update(code, { ...rename, type });
+      expect([code, refused.status, refused.body.code, refused.body.data.details]).toEqual([
+        code,
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'type', reason: 'OUT_OF_RANGE' }],
+      ]);
+      expect(JSON.stringify(systemState.nodes.get(code))).toBe(before);
+    }
+    expect((await update('CUSTOM:T', { ...rename, type: 'FUNCTION' })).status).toBe(200);
+    expect((await update('CUSTOM:T', rename)).status).toBe(200);
+  });
+
   it('lets a custom node change its parent, and refuses a loop: under itself or under a descendant', async () => {
     await create({ code: 'CUSTOM:A' });
     await create({ code: 'CUSTOM:B', parent: 'CUSTOM:A' });
@@ -567,6 +599,24 @@ describe('GET /audit-logs', () => {
     expect((await list({ from: 'yesterday' })).status).toBe(400);
   });
 
+  it('refuses an action or an object type of more than 64 characters and an object id of more than 255: 400 TOO_LONG on that parameter', async () => {
+    for (const [name, limit] of [
+      ['action', 64],
+      ['targetType', 64],
+      ['targetId', 255],
+    ] as const) {
+      const over = await list({ [name]: 'ก'.repeat(limit + 1) });
+      expect([name, over.status, over.body.data.details]).toEqual([
+        name,
+        400,
+        [{ ref: name, reason: 'TOO_LONG' }],
+      ]);
+      expect((await list({ [name]: 'ก'.repeat(limit) })).status).toBe(200);
+    }
+    // the limit counts characters, not UTF-16 units: 64 emoji are fine
+    expect((await list({ action: '😀'.repeat(64) })).status).toBe(200);
+  });
+
   it('has the rows every write of this module added, with the administrator that did it', async () => {
     await run('POST /api/admin/roles', 'root', {
       body: { name: 'New', remark: '', permissionCodes: [] },
@@ -585,5 +635,220 @@ describe('GET /audit-logs', () => {
     const answer = await call(system['GET /api/admin/audit-logs'], { headers });
     expect(answer.body.data.items[0].adminUsername).toBe('root');
     expect(adminOf('root-renamed').username).toBe('root-renamed');
+  });
+});
+
+// An administrator who is not a super administrator can only hand out, change and act on what they
+// hold themselves (the four 403 ADMIN_FORBIDDEN rules of the backend, `data` null, nothing changed).
+describe('what an administrator may grant: only what they hold', () => {
+  const MESSAGES = {
+    grant: 'Administrators can only grant permissions they hold',
+    ownRole: 'Administrators cannot change a role they hold',
+    role: 'Administrators can only change roles whose permissions they hold',
+    admin: 'Administrators can only act on administrators whose permissions they hold',
+  };
+  // `support` holds these (and the role "1" of the preset, which holds the support codes).
+  const HELD = ['ADMIN:MANAGE', 'ROLE:MANAGE', 'USER:VIEW', 'STATS:VIEW', 'AUDIT:VIEW'];
+  const refused = (
+    answer: { status: number; body: { code: string; data: unknown; message: string } },
+    message: string,
+  ) => {
+    expect([answer.status, answer.body.code, answer.body.data, answer.body.message]).toEqual([
+      403,
+      'ADMIN_FORBIDDEN',
+      null,
+      message,
+    ]);
+  };
+  const roleBody = (permissionCodes: string[], name = 'Created by support') => ({
+    name,
+    remark: null,
+    permissionCodes,
+  });
+  const roleCount = () => systemState.roles.size;
+
+  beforeEach(() => withCodes('support', HELD));
+
+  describe('roles', () => {
+    it('POST /roles refuses a code the operator does not hold and creates nothing', async () => {
+      const before = roleCount();
+      refused(
+        await run('POST /api/admin/roles', 'support', {
+          body: roleBody(['USER:VIEW', 'COST:VIEW']),
+        }),
+        MESSAGES.grant,
+      );
+      expect(roleCount()).toBe(before);
+      const done = await run('POST /api/admin/roles', 'support', {
+        body: roleBody(['USER:VIEW', 'STATS:VIEW']),
+      });
+      expect(done.status).toBe(200);
+      expect(roleCount()).toBe(before + 1);
+    });
+
+    it('PUT /roles/{id} refuses a role the operator holds, even with the same codes', async () => {
+      const role = systemState.roles.get('1');
+      const answer = await run('PUT /api/admin/roles/:id', 'support', {
+        params: { id: '1' },
+        body: roleBody(['USER:VIEW'], role?.name),
+      });
+      refused(answer, MESSAGES.ownRole);
+      expect(systemState.roles.get('1')?.permissionCodes).toEqual(role?.permissionCodes);
+    });
+
+    it('PUT /roles/{id} refuses a role that has a code the operator does not hold, whatever is sent', async () => {
+      // role "2" (finance) has codes the operator lacks
+      const before = [...(systemState.roles.get('2')?.permissionCodes ?? [])];
+      refused(
+        await run('PUT /api/admin/roles/:id', 'support', {
+          params: { id: '2' },
+          body: roleBody([], 'Finance reduced'),
+        }),
+        MESSAGES.role,
+      );
+      expect(systemState.roles.get('2')?.permissionCodes).toEqual(before);
+    });
+
+    it('PUT /roles/{id} refuses a new code the operator does not hold, in a role the operator may change', async () => {
+      // role "6" has AUDIT:VIEW only, which the operator holds
+      refused(
+        await run('PUT /api/admin/roles/:id', 'support', {
+          params: { id: '6' },
+          body: roleBody(['AUDIT:VIEW', 'COST:VIEW'], 'المدققون'),
+        }),
+        MESSAGES.grant,
+      );
+      expect(systemState.roles.get('6')?.permissionCodes).toEqual(['AUDIT:VIEW']);
+      const done = await run('PUT /api/admin/roles/:id', 'support', {
+        params: { id: '6' },
+        body: roleBody(['AUDIT:VIEW', 'USER:VIEW'], 'المدققون'),
+      });
+      expect(done.status).toBe(200);
+    });
+
+    it('DELETE /roles/{id} refuses a role that has a code the operator does not hold', async () => {
+      refused(
+        await run('DELETE /api/admin/roles/:id', 'support', { params: { id: '3' } }),
+        MESSAGES.role,
+      );
+      // the check comes before "still given to administrators"
+      expect(systemState.roles.has('3')).toBe(true);
+      withCodes('support', [...HELD, 'AUDIT:VIEW']);
+      expect(
+        (await run('DELETE /api/admin/roles/:id', 'support', { params: { id: '6' } })).status,
+      ).toBe(200);
+    });
+
+    it('does not restrict a super administrator', async () => {
+      const done = await run('POST /api/admin/roles', 'root', {
+        body: roleBody(['COST:VIEW', 'USER:VIEW'], 'By root'),
+      });
+      expect(done.status).toBe(200);
+      // not even for a node that is not one of the codes the application checks
+      await run('POST /api/admin/permissions', 'root', {
+        body: {
+          code: 'CUSTOM:X',
+          parent: null,
+          type: 'MENU',
+          sortOrder: 900,
+          nameZh: '甲',
+          nameEn: 'X',
+        },
+      });
+      expect(
+        (await run('POST /api/admin/roles', 'root', { body: roleBody(['CUSTOM:X'], 'Custom') }))
+          .status,
+      ).toBe(200);
+      expect(
+        (await run('PUT /api/admin/roles/:id', 'root', { params: { id: '2' }, body: roleBody([]) }))
+          .status,
+      ).toBe(200);
+    });
+  });
+
+  describe('administrators', () => {
+    const create = (roleIds: string[]) =>
+      run('POST /api/admin/admins', 'support', {
+        body: { username: 'anna', password: GOOD_PASSWORD, roleIds, superAdmin: false },
+      });
+
+    it('POST /admins refuses roles whose codes together are not all held and creates nothing', async () => {
+      const before = store.admins.size;
+      refused(await create(['6', '2']), MESSAGES.grant);
+      expect(store.admins.size).toBe(before);
+      expect((await create(['6'])).status).toBe(200);
+    });
+
+    it('PUT /admins/{id} refuses roleIds whose codes are not all held', async () => {
+      // the target "newhire" holds USER:VIEW and STATS:VIEW, both held by the operator
+      refused(
+        await run('PUT /api/admin/admins/:id', 'support', {
+          params: { id: '1005' },
+          body: { roleIds: ['2'] },
+        }),
+        MESSAGES.grant,
+      );
+      expect(adminOf('newhire').permissions).toEqual(['STATS:VIEW', 'USER:VIEW']);
+      const done = await run('PUT /api/admin/admins/:id', 'support', {
+        params: { id: '1005' },
+        body: { roleIds: ['6'] },
+      });
+      expect(done.status).toBe(200);
+    });
+
+    it('refuses to act on an administrator who holds a code the operator does not hold, on all five routes', async () => {
+      // "finance" (1003) holds codes the operator lacks
+      const target = { params: { id: '1003' } };
+      const before = JSON.stringify([adminOf('finance'), systemState.extras.get('1003')]);
+      const answers = [
+        await run('PUT /api/admin/admins/:id', 'support', { ...target, body: { roleIds: ['6'] } }),
+        await run('POST /api/admin/admins/:id/status', 'support', {
+          ...target,
+          body: { status: 'DISABLED' },
+        }),
+        await run('POST /api/admin/admins/:id/reset-password', 'support', {
+          ...target,
+          body: { newPassword: GOOD_PASSWORD },
+        }),
+        await run('POST /api/admin/admins/:id/reset-totp', 'support', target),
+        await run('DELETE /api/admin/admins/:id', 'support', target),
+      ];
+      for (const answer of answers) refused(answer, MESSAGES.admin);
+      expect(JSON.stringify([adminOf('finance'), systemState.extras.get('1003')])).toBe(before);
+      expect(store.admins.has('1003')).toBe(true);
+    });
+
+    it('lets the operator act on an administrator whose codes are all held', async () => {
+      const target = { params: { id: '1005' } };
+      expect(
+        (
+          await run('POST /api/admin/admins/:id/status', 'support', {
+            ...target,
+            body: { status: 'DISABLED' },
+          })
+        ).status,
+      ).toBe(200);
+      expect((await run('POST /api/admin/admins/:id/reset-totp', 'support', target)).status).toBe(
+        200,
+      );
+      expect((await run('DELETE /api/admin/admins/:id', 'support', target)).status).toBe(200);
+    });
+
+    it('treats a super administrator as holding every code: a non-super operator cannot act on one', async () => {
+      refused(
+        await run('POST /api/admin/admins/:id/reset-password', 'support', {
+          params: { id: '1001' },
+          body: { newPassword: GOOD_PASSWORD },
+        }),
+        MESSAGES.admin,
+      );
+    });
+
+    it('does not restrict a super administrator', async () => {
+      const done = await run('POST /api/admin/admins/:id/reset-totp', 'root', {
+        params: { id: '1003' },
+      });
+      expect(done.status).toBe(200);
+    });
   });
 });

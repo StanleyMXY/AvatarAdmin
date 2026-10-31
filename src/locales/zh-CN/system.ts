@@ -16,12 +16,16 @@ const messages: Record<string, string> = {
   'system.common.saved': '已保存',
   'system.common.deleted': '已删除',
   'system.common.readFailed': '读取失败：{message}',
+  'system.scopeHint':
+    '管理员只能授出自己持有的权限；不能修改自己持有的角色；只能修改权限都在自己持有范围内的角色和管理员。什么都没有改变。',
 
   // ---- 管理员 ----
   'system.admins.note':
     '不能修改自己的角色、超级管理员标志和状态，也不能删除自己的账号。最后一个启用的超级管理员不能被停用或删除，它的标志也不能清除。只有超级管理员能设置或清除超级管理员标志。',
   'system.admins.refusedHint':
     '后端对自己的账号和最后一个启用的超级管理员拒绝这个操作。什么都没有改变。',
+  'system.admins.forbiddenHint':
+    '后端拒绝了这个操作，什么都没有改变。可能的原因：这是你自己的账号；管理员只能授出自己持有的权限；只能对权限都在自己持有范围内的管理员操作。',
   'system.admins.new': '新建管理员',
   'system.admins.you': '我',
   'system.admins.col.username': '用户名',
