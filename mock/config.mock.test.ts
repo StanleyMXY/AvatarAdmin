@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetConfigStore } from './_core/configStore';
+import { pushState, resetPushStore } from './_core/pushData';
 import { resetSmsStore, smsState } from './_core/smsData';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
@@ -9,6 +10,7 @@ beforeEach(() => {
   resetStore();
   resetConfigStore();
   resetSmsStore();
+  resetPushStore();
 });
 
 type H = Parameters<typeof call>[0];
@@ -436,5 +438,62 @@ describe('PUT /config/auth.phone_login_enabled: needs an enabled English OTP tem
     smsState.templates.clear();
     smsState.templates.set(english.id, { ...english, locale: 'EN' });
     expect((await refused()).status).toBe(200);
+  });
+});
+
+describe('PUT and DELETE /config/push.default_locale: every recall reason with an enabled template needs one in the new language', () => {
+  const enableAll = () => {
+    for (const t of pushState.templates) t.enabled = true;
+  };
+
+  it('names the language and the reasons that lack it, in letter order, with ref push.default_locale', async () => {
+    enableAll();
+    pushState.templates = pushState.templates.filter(
+      (t) => !(t.locale === 'es' && t.triggerReason === 'daily_recall'),
+    );
+    pushState.templates = pushState.templates.filter(
+      (t) => !(t.locale === 'es' && t.triggerReason === 'streak_at_risk'),
+    );
+    const { status, body } = await put('root', 'push.default_locale', 'es');
+    expect(status).toBe(400);
+    expect(body.code).toBe('INVALID_REQUEST');
+    expect(body.data.details).toEqual([{ ref: 'push.default_locale', reason: 'OUT_OF_RANGE' }]);
+    expect(body.data.defaultLocale).toBe('es');
+    expect(body.data.reasons).toEqual(['daily_recall', 'streak_at_risk']);
+    expect(body.message).toContain('push.default_locale cannot be es');
+  });
+
+  it('judges only the reasons that have an enabled template, and counts only enabled templates in the new language', async () => {
+    // the seed: daily_recall is enabled in many languages; every streak_at_risk template is disabled
+    const missing = await put('root', 'push.default_locale', 'sw');
+    expect(missing.body.data.reasons).toEqual(['daily_recall']);
+    const thai = await put('root', 'push.default_locale', 'th');
+    expect(thai.status).toBe(200);
+    for (const t of pushState.templates)
+      if (t.triggerReason === 'daily_recall' && t.locale === 'ar') t.enabled = false;
+    expect((await put('root', 'push.default_locale', 'ar')).body.data.reasons).toEqual([
+      'daily_recall',
+    ]);
+  });
+
+  it('compares the tag exactly, case included', async () => {
+    expect((await put('root', 'push.default_locale', 'TH')).status).toBe(400);
+  });
+
+  it('judges a reset to the default language en as well', async () => {
+    expect((await put('root', 'push.default_locale', 'th')).status).toBe(200);
+    for (const t of pushState.templates)
+      if (t.triggerReason === 'daily_recall' && t.locale === 'en') t.enabled = false;
+    const reset = await del('root', 'push.default_locale');
+    expect(reset.status).toBe(400);
+    expect(reset.body.data.defaultLocale).toBe('en');
+    expect(reset.body.data.reasons).toEqual(['daily_recall']);
+  });
+
+  it('is not affected by saving the supported languages, and an empty value is the usual refusal', async () => {
+    expect((await put('root', 'push.default_locale', '')).body.data.details[0].reason).toBe(
+      'EMPTY_NOT_ALLOWED',
+    );
+    expect((await put('root', 'app.supported_locales', ['en'])).status).toBe(200);
   });
 });

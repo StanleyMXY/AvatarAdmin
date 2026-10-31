@@ -372,7 +372,7 @@ const messages: Record<string, string> = {
     'Languages supported by the interface and notifications (push, in-app notifications, client config), as a list of language codes. A language can be added only after its notification template file ships with the app version (the check ignores case and compares the whole tag), so ship the file first and add the language afterwards. Recall templates are not needed first: a recall trigger without a template in a language falls back to the push default language.',
   'config.push.default_locale.label': 'Push default language',
   'config.push.default_locale.desc':
-    'Language used as the fallback when no template exists for the normalised language.',
+    'Language used as the fallback when no template exists for the normalised language. To change it, first enable a template in the new language for every recall reason that has an enabled template (on the push templates page), then change the default language.',
   'config.push.schedule_scan_seconds.label': 'Scheduled push scan interval',
   'config.push.schedule_scan_seconds.desc':
     'How often scheduled push jobs are looked up and created, in seconds.',
@@ -844,6 +844,10 @@ const messages: Record<string, string> = {
     'Not saved. The look-back must be at least 1 and must stay below what depends on it: event retention (at least 30 plus the look-back), chat message retention (more than the look-back) and guest device retention (at least 91 plus the look-back).',
   'config.refusal.SmsTemplate.EMPTY_NOT_ALLOWED':
     'Phone sign-in cannot be turned on yet. There must be at least one enabled OTP SMS template in language en (not en-GB or en-US) with no country set. Add or enable one under SMS templates, then try again.',
+  'config.push.default_locale.reject.OUT_OF_RANGE':
+    'The default language cannot be changed to {lang}: these recall reasons have enabled templates but none in {lang}: {reasons}. Enable a {lang} template for each of them first.',
+  'config.push.default_locale.reject.OUT_OF_RANGE.general':
+    'The default language cannot be changed to this language yet: every recall reason with an enabled template needs an enabled template in it. Enable those templates on the push templates page first, then change the default language.',
 };
 
 export default messages;

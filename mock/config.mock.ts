@@ -5,6 +5,7 @@ import { guard, hasPermission } from './_core/auth';
 import { campaignState } from './_core/campaignData';
 import { currentValue, defaultOf, saved } from './_core/configStore';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
+import { pushState } from './_core/pushData';
 import { smsState } from './_core/smsData';
 
 /** Keys this administrator may edit, by key name (contract 17.4: no 403, just fewer rows). */
@@ -84,6 +85,9 @@ const outOfRange = (...refs: string[]) => refs.map((ref) => ({ ref, reason: 'OUT
 /** The only language file that ships with the backend: a language needs `notification/templates/<tag>.json`. */
 const SHIPPED_TEMPLATE_FILES = new Set(['en']);
 
+/** The recall triggers of contract 8.4: the only reasons the default-language rule judges. */
+const RECALL_REASONS = ['daily_recall', 'streak_at_risk'];
+
 const numberOf = (key: string, saving: string, value: unknown): unknown =>
   key === saving ? value : currentValue(saving);
 
@@ -104,6 +108,24 @@ function refusalFor(key: string, value: unknown): Refusal | null {
         message: `${key} has languages without a notification template file: ${missing.join(', ')}`,
         details: outOfRange(key),
         extra: { missingLanguages: missing },
+      };
+    }
+  }
+  if (key === 'push.default_locale' && typeof value === 'string' && value !== '') {
+    // Every recall reason with an enabled template needs an enabled template in the new language
+    // (the tag is compared exactly); `data` names the language and the reasons that lack it.
+    const reasons = RECALL_REASONS.filter(
+      (reason) =>
+        pushState.templates.some((t) => t.triggerReason === reason && t.enabled) &&
+        !pushState.templates.some(
+          (t) => t.triggerReason === reason && t.enabled && t.locale === value,
+        ),
+    ).sort();
+    if (reasons.length > 0) {
+      return {
+        message: `push.default_locale cannot be ${value}: these recall reasons have enabled templates but none in ${value}: ${reasons.join(', ')}; enable the ${value} template of each of them first`,
+        details: outOfRange(key),
+        extra: { defaultLocale: value, reasons },
       };
     }
   }

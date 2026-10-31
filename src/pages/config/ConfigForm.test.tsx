@@ -674,3 +674,91 @@ describe('ConfigForm: the supported languages', { timeout: 30000 }, () => {
     expect(alertOf(r).textContent).not.toContain('Languages without a template file');
   });
 });
+
+describe('ConfigForm: the push default language', { timeout: 30000 }, () => {
+  const saveLanguage = async (value: string, zh = false) => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['push.default_locale']} />, zh ? 'zh-CN' : 'en-US');
+    const r = await row('push.default_locale');
+    fireEvent.change(within(r).getByRole('textbox'), { target: { value } });
+    fireEvent.click(within(r).getByRole('button', { name: zh ? /保\s?存/ : 'Save' }));
+    return r;
+  };
+
+  it('says which recall reasons lack an enabled template in the new language, and what to do first', async () => {
+    const r = await saveLanguage('sw');
+    await waitFor(() => expect(alertOf(r)).toBeInTheDocument());
+    expect(alertOf(r)).toHaveTextContent(
+      'The default language cannot be changed to sw: these recall reasons have enabled templates but none in sw: Daily recall. Enable a sw template for each of them first.',
+    );
+    expect(document.body.textContent).not.toMatch(/push\.default_locale cannot be/);
+    expect(screen.queryByTestId('config-refusals')).toBeNull();
+  });
+
+  it('says it in Chinese', async () => {
+    const r = await saveLanguage('sw', true);
+    await waitFor(() => expect(alertOf(r)).toBeInTheDocument());
+    expect(alertOf(r)).toHaveTextContent(
+      '默认语言不能改为 sw：这些召回原因有启用的模板、但没有 sw 的启用模板：每日召回。先为每个原因启用 sw 的模板。',
+    );
+  });
+
+  it('shows every reason on its own as plain text, whatever the backend sends in the list', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    const mocked = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string, init: RequestInit = {}) => {
+      const response = await mocked(input, init);
+      if ((init.method ?? 'GET') !== 'PUT') return response;
+      const body = await response.json();
+      body.data.defaultLocale = 'th';
+      body.data.reasons = ['streak_at_risk', '<b>x</b>', 7, { a: 1 }, 'อารบิก ภาษาไทย'];
+      return new Response(JSON.stringify(body), { status: 400 });
+    });
+    renderPage(<ConfigForm keys={['push.default_locale']} />);
+    const r = await row('push.default_locale');
+    fireEvent.change(within(r).getByRole('textbox'), { target: { value: 'sw' } });
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(alertOf(r)).toBeInTheDocument());
+    const text = alertOf(r).textContent as string;
+    expect(text).toContain('Streak at risk');
+    expect(text).toContain('<b>x</b>');
+    expect(text).toContain('7');
+    expect(text).toContain('{"a":1}');
+    expect(text).toContain('อารบิก ภาษาไทย');
+    expect(alertOf(r).querySelector('b')).toBeNull();
+  });
+
+  it('still gives the rule when the answer has no language or reasons', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    const mocked = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string, init: RequestInit = {}) => {
+      const response = await mocked(input, init);
+      if ((init.method ?? 'GET') !== 'PUT') return response;
+      const body = await response.json();
+      delete body.data.defaultLocale;
+      delete body.data.reasons;
+      return new Response(JSON.stringify(body), { status: 400 });
+    });
+    renderPage(<ConfigForm keys={['push.default_locale']} />);
+    const r = await row('push.default_locale');
+    fireEvent.change(within(r).getByRole('textbox'), { target: { value: 'sw' } });
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(alertOf(r)).toHaveTextContent(
+        /every recall reason with an enabled template needs an enabled template in it/,
+      ),
+    );
+  });
+
+  it('saves a language that every such reason has, and says the order of work in the description', async () => {
+    const r = await saveLanguage('th');
+    await waitFor(() => expect(within(r).getByText('Modified')).toBeInTheDocument());
+    expect(within(r).queryByRole('alert')).toBeNull();
+    expect(r).toHaveTextContent(
+      /first enable a template in the new language for every recall reason/,
+    );
+  });
+});

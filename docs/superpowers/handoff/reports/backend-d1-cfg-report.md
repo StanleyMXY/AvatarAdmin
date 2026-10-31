@@ -64,3 +64,16 @@
 
 - `guest.device_retention_days` 标为风险键（清单只写了"警告"）：按业界通行做法，会让游客额度被绕过的设置要有醒目警告，所以加了；负责人不要的话在 `extraConfigKeys.ts` 去掉 `risk: true`、删两条风险文字、把两处"7 个风险键"的测试改回 6。
 - 拒绝的顶部框会滚动到可见处（页面很长）；如不需要，删 `TopRefusals` 里的 `scrollIntoView`。
+
+# 追加：保存或重置 `push.default_locale` 被拒（清单 a5 的后半）
+
+之前 cfg 和 msg 两个区域都认为这一条在对方，实际没人做；现在归设置页，已落实。立即修未修 0、记录项 0（本节新增）、未运行 0（本节新增，全量测试和构建仍留到最后）、阻塞 0。
+
+- 清单 a5：保存 `push.default_locale` 时，某个有启用模板的召回原因没有新语言的启用模板，400 `INVALID_REQUEST`，`data.details` 为 `[{"ref":"push.default_locale","reason":"OUT_OF_RANGE"}]`，另有 `data.defaultLocale`、`data.reasons`（字母序）。
+- 前端：`src/pages/config/refusal.ts` 的 `defaultLocaleWords`。显示在该键的行下，不附后端 message。有语言和原因时："默认语言不能改为 {lang}：这些召回原因有启用的模板、但没有 {lang} 的启用模板：{reasons}。先为每个原因启用 {lang} 的模板。"（英文同义，`config.push.default_locale.reject.OUT_OF_RANGE`）。`reasons` 逐个经 `plainText`，有 `push.reason.<码>` 的用它的文字，没有就显示原码；最多 50 个，用语言对应的列表连接词连起来，作为文本显示，不会被当成标记。没有语言或原因时退回一句通用的规则（`….OUT_OF_RANGE.general`），页面不依赖这两个字段。同一个键的其他原因码（例如空值）仍走原来的按码文字。
+- 键的说明（`config.push.default_locale.desc`，中英文）写了操作顺序：先在推送模板页为每个有启用模板的召回原因启用新语言的模板，再改默认语言。
+- 假后端：`mock/config.mock.ts` 的 `refusalFor` 读 `mock/_core/pushData.ts` 的模板数据（`pushState.templates`；没有复用 `mock/push.mock.ts`，因为 mock 文件只能默认导出，那里的规则是私有函数，这里按同一条规则另写）：只判有启用模板的召回原因（`daily_recall`、`streak_at_risk`），新语言必须有该原因的启用模板，标签精确比较（区分大小写），PUT 和 DELETE（按默认值 `en` 判）都判，返回 `data.defaultLocale`、`data.reasons`（字母序）。
+- 红：`npx vitest run src/pages/config/ConfigForm.test.tsx mock/config.mock.test.ts -t "default language|push.default_locale"` 9 个失败（输出 `/tmp/claude-0/-home-user-AvatarAdmin/430adf2a-3186-5642-af52-8b3912cf69c3/scratchpad/cfg/red2.txt`）。绿：`npx vitest run src/pages/config mock/config.mock.test.ts src/locales` 7 个文件 505 通过；`npx tsc --noEmit` 退出码 0；biome 无问题。
+- 测试位置：`mock/config.mock.test.ts` 文件末尾的 `describe('PUT and DELETE /config/push.default_locale …')`（原因、字母序、只判有启用模板的原因、只算启用的模板、区分大小写、重置、空值）；`src/pages/config/ConfigForm.test.tsx` 文件末尾的 `describe('ConfigForm: the push default language')`（英文、中文、逐个纯文本含 `<b>x</b>`、数字、对象、泰文、缺字段时的通用规则、保存成功、说明里有顺序）。
+- 变异检查 6 个都被抓到：去掉假后端的规则（8 个红）；停用的模板也算（2）；标签不分大小写（1）；页面一律显示通用句（3）；原因显示原码（3）；原因不经 `plainText`（1）。
+- 覆盖的语言：中文、英文、泰文（原因列表里的一项）；其余语言这里不涉及。

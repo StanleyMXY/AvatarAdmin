@@ -1,8 +1,9 @@
 import type { ApiError } from '../../request/errors';
 import { describeFailure } from '../../session/describe';
+import { plainText } from '../../utils/plainText';
 import { specOf } from './configSchema';
 
-type Translator = Parameters<typeof describeFailure>[0];
+type Translator = Parameters<typeof describeFailure>[0] & { locale: string };
 
 /**
  * The words for a save (or reset) the backend refused with `details`, in the language of the page.
@@ -26,6 +27,35 @@ const stringList = (value: unknown): string[] =>
     ? value.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 35)
     : [];
 
+const MAX_LISTED = 50;
+
+/**
+ * The words for the refusal of saving `push.default_locale` (400 with `data.defaultLocale`, the
+ * language, and `data.reasons`, the recall reasons that have an enabled template but none in it).
+ * Each reason is shown on its own, as plain text, in its own words when the language file has them;
+ * without the language or the reasons the general rule is said instead. Null for any other reason.
+ */
+function defaultLocaleWords(intl: Translator, error: ApiError, reason: string): string | null {
+  if (reason !== 'OUT_OF_RANGE') return null;
+  const data = (error.data ?? {}) as { defaultLocale?: unknown; reasons?: unknown };
+  const lang = typeof data.defaultLocale === 'string' ? data.defaultLocale.slice(0, 35) : '';
+  const reasons = Array.isArray(data.reasons)
+    ? data.reasons.slice(0, MAX_LISTED).map((entry) => {
+        const code = plainText(entry);
+        const id = `push.reason.${code}`;
+        return intl.messages[id] ? intl.formatMessage({ id }) : code;
+      })
+    : [];
+  const base = 'config.push.default_locale.reject.OUT_OF_RANGE';
+  if (lang === '' || reasons.length === 0) return intl.formatMessage({ id: `${base}.general` });
+  const list = (
+    typeof Intl.ListFormat === 'function'
+      ? new Intl.ListFormat(intl.locale, { style: 'narrow', type: 'conjunction' }).format(reasons)
+      : reasons.join(', ')
+  ) as string;
+  return intl.formatMessage({ id: base }, { lang, reasons: list });
+}
+
 export function refusalTexts(
   intl: Translator,
   error: ApiError,
@@ -42,7 +72,10 @@ export function refusalTexts(
     const id = isKey
       ? `config.${detail.ref}.reject.${detail.reason}`
       : `config.refusal.${detail.ref}.${detail.reason}`;
-    let text = has(id) ? intl.formatMessage({ id }) : (fields[index]?.text ?? detail.reason);
+    let text =
+      (detail.ref === 'push.default_locale'
+        ? defaultLocaleWords(intl, error, detail.reason)
+        : null) ?? (has(id) ? intl.formatMessage({ id }) : (fields[index]?.text ?? detail.reason));
     if (detail.ref === 'app.supported_locales') {
       const languages = stringList(
         (error.data as { missingLanguages?: unknown } | null)?.missingLanguages,

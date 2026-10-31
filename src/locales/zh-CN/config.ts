@@ -345,7 +345,8 @@ const messages: Record<string, string> = {
   'config.app.supported_locales.desc':
     '界面和通知（推送、站内通知、客户端配置）支持的语言清单，用语言代码的列表表示。语言的通知模板文件要先随版本发布，才能把它加进来（比较不区分大小写，整个标签要匹配），所以先发布文件再加语言。不必先建召回模板：召回触发原因在某种语言下没有模板时，发送时回退到推送默认语言。',
   'config.push.default_locale.label': '推送默认语言',
-  'config.push.default_locale.desc': '归一化后没有对应模板时回退使用的语言。',
+  'config.push.default_locale.desc':
+    '归一化后没有对应模板时回退使用的语言。要改它，先在推送模板页为每个有启用模板的召回原因启用新语言的模板，再改默认语言。',
   'config.push.schedule_scan_seconds.label': '周期推送扫描间隔',
   'config.push.schedule_scan_seconds.desc': '扫描并生成周期推送任务的间隔，单位秒。',
   'config.push.guest_token_retention_days.label': '游客推送令牌保留天数',
@@ -764,6 +765,10 @@ const messages: Record<string, string> = {
     '没有保存。回溯天数不能小于 1，并且要小于依赖它的几项：事件保留天数（不小于 30 加回溯天数）、聊天消息保留天数（大于回溯天数）、游客设备记录保留天数（不小于 91 加回溯天数）。',
   'config.refusal.SmsTemplate.EMPTY_NOT_ALLOWED':
     '还不能开启手机号登录：必须至少有一个启用的验证码短信模板，语言为 en（en-GB、en-US 不算），且不限国家。请先在“短信模板”里新增或启用一个，再重试。',
+  'config.push.default_locale.reject.OUT_OF_RANGE':
+    '默认语言不能改为 {lang}：这些召回原因有启用的模板、但没有 {lang} 的启用模板：{reasons}。先为每个原因启用 {lang} 的模板。',
+  'config.push.default_locale.reject.OUT_OF_RANGE.general':
+    '默认语言还不能改为这种语言：每个有启用模板的召回原因都要有这种语言的启用模板。先在推送模板页为它们启用该语言的模板，再改默认语言。',
 };
 
 export default messages;
