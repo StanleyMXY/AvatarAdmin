@@ -1,9 +1,10 @@
 import { Line } from '@ant-design/plots';
 import { useMemo } from 'react';
 import { fillMissingDays } from '../../services/stats/fillMissingDays';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { hollowPointsMark, provisionalPoints } from './provisionalChart';
+import { wholeNumberTicks } from './wholeNumberTicks';
 
 export type TrendSeries = { field: string; label: string; dashed?: boolean };
 
@@ -18,6 +19,11 @@ type Props<T extends { statDate: string }> = {
    * point (the line itself is not cut). Leave it out for a chart without that distinction.
    */
   today?: string;
+  /**
+   * The numbers are counts (people, requests): the vertical axis then has a tick only at whole
+   * numbers. Leave it out for a chart of amounts or rates.
+   */
+  wholeNumbers?: boolean;
 };
 
 /**
@@ -30,6 +36,7 @@ export function TrendChart<T extends { statDate: string }>({
   from,
   to,
   today,
+  wholeNumbers,
 }: Props<T>) {
   const [mode] = useThemeMode();
   const theme = getChartTheme(mode);
@@ -59,15 +66,18 @@ export function TrendChart<T extends { statDate: string }>({
       yField="value"
       colorField="series"
       theme={theme.g2Theme}
-      scale={{ color: { range: theme.palette } }}
+      scale={{
+        color: { range: theme.palette },
+        ...(wholeNumbers ? { y: { tickMethod: wholeNumberTicks } } : {}),
+      }}
       style={{
         lineDash: (d: unknown) =>
           dashed.includes((Array.isArray(d) ? d[0] : d)?.series) ? [4, 4] : [],
       }}
       annotations={hollow.length > 0 ? [hollowPointsMark(hollow, theme.background)] : undefined}
       axis={{
-        x: { labelFill: theme.textColor },
-        y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+        x: { ...axisTextStyle(theme) },
+        y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
       }}
       height={300}
     />

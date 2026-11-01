@@ -1,7 +1,10 @@
 import { defineConfig } from '@umijs/max';
 import { buildVars, toDefine } from './buildVars';
+import { localeConfig } from './localeConfig';
+import { preloadThemeScripts } from './preloadTheme';
 import proxy from './proxy';
 import routes from './routes';
+import { viewportMetas } from './viewport';
 
 export default defineConfig({
   hash: true,
@@ -16,13 +19,12 @@ export default defineConfig({
   layout: {
     title: buildVars.ADMIN_PRODUCT_NAME,
   },
-  locale: {
-    // Initial language is resolved by the app itself; Umi only provides the intl plumbing.
-    default: 'en-US',
-    antd: true,
-    baseNavigator: false,
-  },
+  // Initial language is resolved by the app itself; Umi only provides the intl plumbing.
+  locale: localeConfig,
   antd: {},
+  metas: viewportMetas,
+  // The saved theme's background before the app has loaded (no flash of white in the dark themes).
+  headScripts: preloadThemeScripts,
   define: toDefine(buildVars),
   proxy,
   // Tools and tests in mock/ are not endpoint files.

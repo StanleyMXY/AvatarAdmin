@@ -133,6 +133,8 @@ const messages: Record<string, string> = {
   'cost.pending.confirmed': 'The price is in force.',
   'cost.pending.rejectTitle': 'Reject this price?',
   'cost.pending.rejectNote': 'Note',
+  'cost.pending.rejectSummary':
+    'Rejecting the price of {model} ({currency}) that starts on {date}.',
   'cost.pending.rejectHint':
     'The price will not take effect. The price sync does not propose the same price again.',
   'cost.pending.rejected': 'The price was rejected.',
@@ -156,6 +158,8 @@ const messages: Record<string, string> = {
   'cost.current.retire': 'Withdraw',
   'cost.current.retireTitle': 'Withdraw this price?',
   'cost.current.retireNote': 'Note',
+  'cost.current.retireSummary':
+    'Withdrawing the price of {model} ({currency}) that started on {date}.',
   'cost.current.retireHint':
     'Withdrawing only affects records stored afterwards; costs already stored do not change. If the model has no other price in force, later requests will have no price.',
   'cost.current.retired': 'The price was withdrawn.',

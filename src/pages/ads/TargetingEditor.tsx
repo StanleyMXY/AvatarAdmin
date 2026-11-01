@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, Button, Checkbox, Flex, Input, Select, Tag, TimePicker, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { type ReactNode, useMemo } from 'react';
+import { trimSpec } from '../../utils/trimSpec';
 import {
   isOvernight,
   PLATFORMS,
@@ -107,7 +108,7 @@ export function TargetingEditor({
             open={false}
             value={value.geo}
             onChange={(geo: string[]) =>
-              set({ geo: unique(geo.map((code) => code.trim().toUpperCase()).filter(Boolean)) })
+              set({ geo: unique(geo.map((code) => trimSpec(code).toUpperCase()).filter(Boolean)) })
             }
           />
         </Flex>,
@@ -152,7 +153,7 @@ export function TargetingEditor({
           open={false}
           value={value.languages}
           onChange={(languages: string[]) =>
-            set({ languages: unique(languages.map((tag) => tag.trim()).filter(Boolean)) })
+            set({ languages: unique(languages.map((tag) => trimSpec(tag)).filter(Boolean)) })
           }
         />,
         'languages',

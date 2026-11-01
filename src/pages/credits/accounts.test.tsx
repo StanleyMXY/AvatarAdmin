@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACCOUNT, creditsState } from '../../../mock/_core/creditsData';
+import { adminOf } from '../../../mock/_core/testing';
 import * as creditsMock from '../../../mock/credits.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
@@ -9,7 +10,13 @@ import { renderPage } from '../../../tests/renderPage';
 import AccountsPage from './accounts';
 import { expandSearch, signIn } from './testSetup';
 
-beforeEach(() => signIn('finance'));
+// The finance preset may not open the user pages; the links to them are the part of the page that follows USER:VIEW.
+beforeEach(() => {
+  signIn('finance');
+  signIn('finance', {
+    codes: [...(adminOf('finance').permissions as string[]), 'USER:VIEW'],
+  });
+});
 afterEach(() => vi.unstubAllGlobals());
 
 const rowOf = async (accountId: string) => {
@@ -33,6 +40,16 @@ describe('the credit account page', { timeout: 30000 }, () => {
       within(row).getByText(new Intl.NumberFormat('en-US').format(earned)),
     ).toBeInTheDocument();
     expect(within(row).getAllByTestId('balance')).toHaveLength(1);
+  });
+
+  it('writes the account ids as plain text, not links into a page that would refuse, without USER:VIEW', async () => {
+    signIn('finance', {
+      codes: (adminOf('finance').permissions as string[]).filter((code) => code !== 'USER:VIEW'),
+    });
+    useMockBackend(creditsMock);
+    renderPage(<AccountsPage />);
+    await screen.findByText(ACCOUNT.active);
+    expect(screen.queryByRole('link', { name: ACCOUNT.active })).toBeNull();
   });
 
   it('shows a negative balance in the warning colour and a balance of zero or more plainly', async () => {

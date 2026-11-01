@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { envelope, jsonResponse, stubFetch, textResponse, XLSX_TYPE } from '../../tests/httpStubs';
+import {
+  envelope,
+  flush,
+  jsonResponse,
+  stubFetch,
+  textResponse,
+  XLSX_TYPE,
+} from '../../tests/httpStubs';
 import { setLocaleProvider } from './apiClient';
 import { downloadFile, parseContentDisposition } from './download';
 import { ApiError } from './errors';
@@ -254,6 +261,202 @@ function slowBody(firstChunk = new Uint8Array(3)) {
   return signals;
 }
 
+describe('downloadFile: what is sent and how the file is handed over', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('asks for an xlsx file first and JSON second, and sends no content type of its own', async () => {
+    const calls = stubFetch(() => xlsx([1]));
+    await downloadFile({ url: '/x', fallbackName: 'a.xlsx' });
+    expect(calls[0].init.headers.Accept).toBe(`${XLSX_TYPE}, application/json;q=0.9`);
+    expect(Object.keys(calls[0].init.headers).map((k) => k.toLowerCase())).not.toContain(
+      'content-type',
+    );
+    expect(calls[0].init.body).toBeUndefined();
+  });
+
+  it('saves a Blob typed as xlsx', async () => {
+    stubFetch(() => xlsx([1, 2]));
+    await downloadFile({ url: '/x', fallbackName: 'a.xlsx' });
+    expect(blobs[0].type).toBe(XLSX_TYPE);
+  });
+
+  it('hands the file over through a link that is in the page while it is clicked, and gone afterwards', async () => {
+    let wasInPage: boolean | undefined;
+    let rel: string | undefined;
+    let target: string | undefined;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      wasInPage = document.body.contains(this);
+      rel = this.rel;
+      target = this.target;
+      saved.push({ download: this.download, href: this.href });
+    });
+    stubFetch(() => xlsx([1]));
+    await downloadFile({ url: '/x', fallbackName: 'a.xlsx' });
+    expect(wasInPage).toBe(true);
+    expect(rel).toBe('noopener');
+    expect(target).toBe('');
+    expect(document.body.querySelectorAll('a[download]')).toHaveLength(0);
+  });
+
+  it('lets go of the object address 10 seconds later, not at once and not never', async () => {
+    vi.useFakeTimers();
+    const revoke = URL.revokeObjectURL as unknown as ReturnType<typeof vi.fn>;
+    stubFetch(() => xlsx([1]));
+    await downloadFile({ url: '/x', fallbackName: 'a.xlsx' });
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(revoke).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(revoke).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(revoke).toHaveBeenCalledWith('blob:fake/1');
+  });
+
+  it('a file of 0 bytes is not saved: it is an answer that is not a file', async () => {
+    stubFetch(() => xlsx([]));
+    const e = await caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx' }));
+    expect([e.code, e.httpStatus]).toEqual(['INVALID_RESPONSE', 200]);
+    expect(saved).toEqual([]);
+    expect(createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('when the browser cannot make the file (no object address, no memory), the person gets an ApiError, not a bare error', async () => {
+    createObjectURL.mockImplementation(() => {
+      throw new Error('Failed to execute createObjectURL');
+    });
+    stubFetch(() => xlsx([1, 2, 3]));
+    const e = await caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx' }));
+    expect(e.code).toBe('UNKNOWN');
+    expect(e.message).not.toContain('createObjectURL');
+    expect(saved).toEqual([]);
+  });
+
+  it('when handing the file over fails half way, the link does not stay in the page and the address is still let go', async () => {
+    vi.useFakeTimers();
+    const revoke = URL.revokeObjectURL as unknown as ReturnType<typeof vi.fn>;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    stubFetch(() => xlsx([1, 2, 3]));
+    const e = await caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx' }));
+    expect(e.code).toBe('UNKNOWN');
+    expect(document.body.querySelectorAll('a[download]')).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(revoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('when the Blob cannot be built, it is an ApiError as well', async () => {
+    vi.stubGlobal(
+      'Blob',
+      class {
+        constructor() {
+          throw new RangeError('Array buffer allocation failed');
+        }
+      },
+    );
+    stubFetch(() => xlsx([1, 2, 3]));
+    const e = await caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx' }));
+    expect(e.code).toBe('UNKNOWN');
+    expect(saved).toEqual([]);
+  });
+
+  it('an answer without a readable body stream is read whole and still reports its size', async () => {
+    const bytes = Uint8Array.from([1, 2, 3, 4]);
+    stubFetch(
+      () =>
+        ({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': XLSX_TYPE }),
+          body: null,
+          arrayBuffer: async () => bytes.buffer,
+        }) as unknown as Response,
+    );
+    const progress: number[] = [];
+    const result = await downloadFile({
+      url: '/x',
+      fallbackName: 'a.xlsx',
+      onProgress: (n) => progress.push(n),
+    });
+    expect(progress).toEqual([4]);
+    expect(result.bytes).toBe(4);
+    expect(blobs[0].size).toBe(4);
+  });
+
+  it('an error answer whose body cannot be read is NETWORK_ERROR, and nothing is saved', async () => {
+    stubFetch(
+      () =>
+        ({
+          ok: false,
+          status: 500,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          body: null,
+          text: async () => {
+            throw new TypeError('network error');
+          },
+        }) as unknown as Response,
+    );
+    const e = await caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx' }));
+    expect(e.code).toBe('NETWORK_ERROR');
+    expect(saved).toEqual([]);
+  });
+
+  it('a progress callback that throws is not called a network error, and the rest of the answer is let go', async () => {
+    const cancelled = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(3));
+      },
+      cancel: cancelled,
+    });
+    stubFetch(() => new Response(stream, { status: 200, headers: { 'content-type': XLSX_TYPE } }));
+    const outcome = await downloadFile({
+      url: '/x',
+      fallbackName: 'a.xlsx',
+      onProgress: () => {
+        throw new Error('progress bar bug');
+      },
+    }).catch((e: unknown) => e);
+    expect(outcome).toBeInstanceOf(Error);
+    expect(outcome).not.toBeInstanceOf(ApiError);
+    expect((outcome as Error).message).toBe('progress bar bug');
+    expect(cancelled).toHaveBeenCalledTimes(1);
+    expect(saved).toEqual([]);
+  });
+
+  it('a 401 for a token that has been replaced since is not an expiry (a slow download from before a new sign-in)', async () => {
+    setToken('old');
+    let release: (r: Response) => void = () => {};
+    stubFetch(() => new Promise<Response>((resolve) => (release = resolve)));
+    const pending = caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx' }));
+    await flush();
+    setToken('new');
+    release(jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
+    expect((await pending).code).toBe('ADMIN_INVALID_TOKEN');
+    expect(onExpired).not.toHaveBeenCalled();
+    expect(getToken()).toBe('new');
+  });
+
+  it('a session handler that throws does not replace the error of the download', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    setSessionHandlers({
+      onExpired: () => {
+        throw new Error('handler bug');
+      },
+      onForbidden: vi.fn(),
+    });
+    setToken('old');
+    stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
+    expect((await caught(downloadFile({ url: '/x', fallbackName: 'a.xlsx' }))).code).toBe(
+      'ADMIN_INVALID_TOKEN',
+    );
+  });
+});
+
 describe('downloadFile: gateway page', () => {
   it.each([502, 503, 504])(
     'a %i page is GATEWAY_UNAVAILABLE and nothing is saved',
@@ -467,6 +670,63 @@ describe('parseContentDisposition', () => {
     expect(parseContentDisposition("attachment; filename*=UTF-8''report%E2%80%AEslx.xlsx")).toBe(
       'reportslx.xlsx',
     );
+  });
+
+  it('removes the characters that cannot be seen and could disguise a name', () => {
+    const encode = (name: string) =>
+      `attachment; filename*=UTF-8''${encodeURIComponent(name).replace(/%2F/g, '/')}`;
+    for (const invisible of [
+      '\u061C', // Arabic letter mark
+      '\u200B', // zero width space
+      '\u2028', // line separator
+      '\u2029', // paragraph separator
+      '\u2060', // word joiner
+      '\u2066', // isolate
+      '\u206A', // deprecated format character
+      '\uFEFF', // byte order mark
+      '\u0085', // next line (a C1 control)
+      '\u009F', // the last C1 control
+      '\u{E0001}', // language tag
+      '\u{E0041}', // tag letter
+    ]) {
+      expect(parseContentDisposition(encode(`re${invisible}port.xlsx`)), invisible).toBe(
+        'report.xlsx',
+      );
+    }
+  });
+
+  it('keeps the joiners that Persian, Indic scripts and emoji sequences need', () => {
+    const persian = 'می\u200Cخواهم.xlsx';
+    const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}.xlsx';
+    const thai = 'รายงานประจำวัน.xlsx';
+    for (const name of [persian, family, thai]) {
+      expect(
+        parseContentDisposition(`attachment; filename*=UTF-8''${encodeURIComponent(name)}`),
+      ).toBe(name);
+    }
+  });
+
+  it('does not take a name from filename* whose character set is not UTF-8, even when the bytes happen to be valid UTF-8', () => {
+    expect(
+      parseContentDisposition(
+        'attachment; filename="plain.xlsx"; filename*=ISO-8859-1\'\'%C3%A9vil.xlsx',
+      ),
+    ).toBe('plain.xlsx');
+    expect(parseContentDisposition("attachment; filename*=ISO-8859-1''%C3%A9vil.xlsx")).toBeNull();
+    expect(parseContentDisposition("attachment; filename*=UTF-16''%C3%A9vil.xlsx")).toBeNull();
+  });
+
+  it('accepts utf-8 in any letter case and as utf8', () => {
+    for (const charset of ['UTF-8', 'utf-8', 'Utf-8', 'utf8', 'UTF8']) {
+      expect(parseContentDisposition(`attachment; filename*=${charset}''a%C3%B1o.xlsx`)).toBe(
+        'año.xlsx',
+      );
+    }
+  });
+
+  it('reads a backslash-escaped quote inside a quoted name, and an escaped backslash', () => {
+    expect(parseContentDisposition('attachment; filename="a\\"b.xlsx"')).toBe('a"b.xlsx');
+    expect(parseContentDisposition('attachment; filename="x\\\\y.xlsx"')).toBe('y.xlsx');
   });
 
   it('removes control characters and gives null when nothing is left', () => {

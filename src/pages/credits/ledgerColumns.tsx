@@ -1,7 +1,7 @@
 import type { ProColumns } from '@ant-design/pro-components';
 import { Typography } from 'antd';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
-import { FALL_COLOR, RISE_COLOR } from '../../theme/tokens';
+import { useModeTokens } from '../../theme/modes';
 import { formatInstant } from '../../utils/format';
 import { DASH, formatCount } from '../../utils/ratio';
 import { formatSigned } from './format';
@@ -34,6 +34,21 @@ const spendKindText = (t: Translate, messages: Record<string, unknown>, code: st
 /** A key (feature, item, purchase): any text, so it is cut to two lines and opens in full on click. */
 const key = (value: string | null | undefined) => <EllipsisPopoverText text={value} width={180} />;
 
+/** A change of the balance: green for plus, red for minus, in the shades that can be read on the page. */
+function Delta({ delta, locale }: { delta: number; locale: string }) {
+  const tokens = useModeTokens();
+  return (
+    <span
+      data-testid="delta"
+      style={{
+        color: delta > 0 ? tokens.colorRiseText : delta < 0 ? tokens.colorFallText : undefined,
+      }}
+    >
+      {formatSigned(delta, locale)}
+    </span>
+  );
+}
+
 /**
  * The columns the account view and the all-accounts list share: change, reason, spend kind,
  * feature, item, quantity, note, time. The caller adds the id and the account; the account view
@@ -51,14 +66,7 @@ export function ledgerColumns<T extends Line>(
       dataIndex: 'delta',
       search: false,
       align: 'right',
-      render: (_, row) => (
-        <span
-          data-testid="delta"
-          style={{ color: row.delta > 0 ? RISE_COLOR : row.delta < 0 ? FALL_COLOR : undefined }}
-        >
-          {formatSigned(row.delta, locale)}
-        </span>
-      ),
+      render: (_, row) => <Delta delta={row.delta} locale={locale} />,
     },
     {
       title: t('credits.ledger.reason'),

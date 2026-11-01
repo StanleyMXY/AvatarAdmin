@@ -1,8 +1,8 @@
 import { useIntl } from '@umijs/max';
 import { Card, Table, Tag, Typography } from 'antd';
+import { codeText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import type { CoverageRow } from './coverage';
-import { codeText } from './texts';
 
 /**
  * The matrix of spec 5.11: a row for each recall reason, a column for each supported language. A

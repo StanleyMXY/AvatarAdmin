@@ -7,6 +7,7 @@ import configMock from '../../../mock/config.mock';
 import exportMock from '../../../mock/export.mock';
 import statsMock from '../../../mock/stats.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import enUS from '../../locales/en-US';
@@ -230,6 +231,58 @@ describe('the cards', { timeout: 40000 }, () => {
     }
   });
 
+  it('divides each ratio by its own denominator: a picture-only range (no video starts, no viewability) still has a click rate and a measurable rate', async () => {
+    backend();
+    answerOverview({
+      ...TOTALS,
+      starts: 0,
+      completions: 0,
+      totalWatchSeconds: 0,
+      viewableImpressions: 0,
+      nonViewableImpressions: 0,
+    });
+    renderPage(<ReportPage />);
+    await waitFor(() => expect(cardValue('impressions')).toBe('1,000'));
+    expect(cardValue('ctr')).toBe('4.00%');
+    expect(cardValue('measurableRate')).toBe('90.00%');
+    expect(cardValue('completionRate')).toBe('—');
+    expect(cardValue('viewableRate')).toBe('—');
+    expect(cardValue('avgWatchSeconds')).toBe('—');
+  });
+
+  it('divides each ratio by its own denominator: a range with video starts and viewability but no impressions counted has a completion rate, a viewable rate and an average, and no click rate or measurable rate', async () => {
+    backend();
+    answerOverview({ ...TOTALS, impressions: 0 });
+    renderPage(<ReportPage />);
+    await waitFor(() => expect(cardValue('starts')).toBe('400'));
+    expect(cardValue('completionRate')).toBe('50.00%');
+    expect(cardValue('viewableRate')).toBe('66.67%');
+    expect(cardValue('avgWatchSeconds')).toBe('7.50 s');
+    expect(cardValue('ctr')).toBe('—');
+    expect(cardValue('measurableRate')).toBe('—');
+  });
+
+  it('works a ratio out from its own numerator and denominator when the server did not send it', async () => {
+    backend();
+    const sentRatios = [
+      'ctr',
+      'completionRate',
+      'viewableRate',
+      'measurableRate',
+      'avgWatchSeconds',
+    ];
+    answerOverview(
+      Object.fromEntries(Object.entries(TOTALS).filter(([k]) => !sentRatios.includes(k))),
+    );
+    renderPage(<ReportPage />);
+    await waitFor(() => expect(cardValue('impressions')).toBe('1,000'));
+    expect(cardValue('ctr')).toBe('4.00%');
+    expect(cardValue('completionRate')).toBe('50.00%');
+    expect(cardValue('viewableRate')).toBe('66.67%');
+    expect(cardValue('measurableRate')).toBe('90.00%');
+    expect(cardValue('avgWatchSeconds')).toBe('7.50 s');
+  });
+
   it('show a dash for a ratio the server sent as null, and for a number that is missing, and never null%, NaN or a negative number', async () => {
     backend();
     answerOverview({
@@ -388,7 +441,7 @@ describe('the drill-down tabs', { timeout: 40000 }, () => {
     const campaigns = rowsOf(tables()[1])
       .map((r) => cellsOf(r)[0])
       .join(' ');
-    expect(campaigns).toContain(adsState.campaigns.get('2')!.name);
+    expect(campaigns).toContain(must(adsState.campaigns.get('2')).name);
     await user.click(screen.getByRole('tab', { name: 'By creative' }));
     await waitFor(() => expect(headsOf(tables()[1])[0]).toBe('Creative'));
     await waitFor(() => expect(rowsOf(tables()[1]).length).toBeGreaterThan(0));
@@ -416,10 +469,77 @@ describe('the drill-down tabs', { timeout: 40000 }, () => {
     for (const at of [5, 7, 13, 14, 15]) expect(cells[at], `column ${at}`).toBe('—');
   });
 
+  it('divides each ratio of a row by its own denominator: with no starts and no viewability only the click rate and the measurable rate remain, with no impressions the others', async () => {
+    backend();
+    const base = {
+      placementId: 1,
+      slotKey: 'splash',
+      placementName: 'Splash',
+      guestImpressions: 0,
+      errors: 0,
+      ctr: 0.04,
+      completionRate: 0.5,
+      viewableRate: 0.6,
+      measurableRate: 0.9,
+      avgWatchSeconds: 7.5,
+    };
+    overrideFetch(async ({ url, method }) =>
+      method === 'GET' && url.pathname === `${REPORT_PATH}by-placement`
+        ? jsonAnswer(200, '200', [
+            {
+              ...base,
+              impressions: 1000,
+              starts: 0,
+              clicks: 40,
+              completions: 0,
+              skips: 0,
+              viewableImpressions: 0,
+              nonViewableImpressions: 0,
+              undeterminedImpressions: 0,
+              totalWatchSeconds: 0,
+            },
+            {
+              ...base,
+              placementId: 2,
+              slotKey: 'banner',
+              impressions: 0,
+              starts: 400,
+              clicks: 0,
+              completions: 200,
+              skips: 0,
+              viewableImpressions: 600,
+              nonViewableImpressions: 300,
+              undeterminedImpressions: 0,
+              totalWatchSeconds: 3000,
+            },
+          ])
+        : undefined,
+    );
+    renderPage(<ReportPage />);
+    await waitFor(() => expect(tables().length).toBe(3));
+    await waitFor(() => expect(rowsOf(tables()[1])).toHaveLength(2));
+    const [pictures, videos] = rowsOf(tables()[1]).map(cellsOf);
+    // columns: 5 click rate, 7 completion rate, 13 viewable rate, 14 measurable rate, 15 average watch time
+    expect([5, 7, 13, 14, 15].map((at) => pictures[at])).toEqual([
+      '4.00%',
+      '—',
+      '—',
+      '90.00%',
+      '—',
+    ]);
+    expect([5, 7, 13, 14, 15].map((at) => videos[at])).toEqual([
+      '—',
+      '50.00%',
+      '60.00%',
+      '—',
+      '7.50 s',
+    ]);
+  });
+
   it('keeps names of 5000 letters, Arabic, Thai and emoji inside the table', async () => {
     backend();
-    adsState.campaigns.get('2')!.name = 'ก'.repeat(5000);
-    adsState.campaigns.get('6')!.name = `عرض ${'🎉'.repeat(30)}`;
+    must(adsState.campaigns.get('2')).name = 'ก'.repeat(5000);
+    must(adsState.campaigns.get('6')).name = `عرض ${'🎉'.repeat(30)}`;
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderPage(<ReportPage />);
     await ready();

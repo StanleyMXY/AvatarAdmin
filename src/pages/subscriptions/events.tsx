@@ -2,6 +2,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Link, useAccess, useIntl } from '@umijs/max';
 import { App, Flex, Tag, Typography } from 'antd';
 import { useRef } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
@@ -153,6 +154,7 @@ export default function EventsPage() {
         ),
     },
     {
+      ...ACTIONS_COLUMN,
       title: t('subscriptions.list.actions'),
       valueType: 'option',
       render: (_, row) => <RowActions actions={actionsOf(row)} />,

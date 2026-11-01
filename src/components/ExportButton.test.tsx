@@ -262,6 +262,72 @@ function hangingFetch() {
   return { calls, signals };
 }
 
+describe('ExportButton: progress', () => {
+  const headers = {
+    'content-type': XLSX_TYPE,
+    'content-disposition': 'attachment; filename="daily-2026-10-21.xlsx"',
+  };
+
+  it('writes the number of bytes received on the button while the file comes, and the plain label again when it is done', async () => {
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    stubFetch(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              stream = controller;
+            },
+          }),
+          { status: 200, headers },
+        ),
+    );
+    mount();
+    expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await waitFor(() => expect(stream).toBeDefined());
+    await act(async () => {
+      stream.enqueue(new Uint8Array(1536));
+    });
+    expect(await screen.findByText('Received 1.5 KB')).toBeInTheDocument();
+    await act(async () => {
+      stream.enqueue(new Uint8Array(1536));
+    });
+    expect(await screen.findByText('Received 3 KB')).toBeInTheDocument();
+    await act(async () => {
+      stream.close();
+    });
+    await waitFor(() => expect(saved).toEqual(['daily-2026-10-21.xlsx']));
+    // (the button still carries its leaving loading icon for a moment, so it is found by its text)
+    expect(await screen.findByText('Export')).toBeInTheDocument();
+    expect(screen.queryByText(/^Received/)).toBeNull();
+  });
+
+  it('writes the size with the number format of the language', async () => {
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    stubFetch(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              stream = controller;
+            },
+          }),
+          { status: 200, headers },
+        ),
+    );
+    renderPage(<ExportButton name="daily" params={{}} viewCode="STATS:VIEW" />, 'zh-CN');
+    fireEvent.click(screen.getByRole('button', { name: /导\s?出/ }));
+    await waitFor(() => expect(stream).toBeDefined());
+    await act(async () => {
+      stream.enqueue(new Uint8Array(2_500_000));
+    });
+    expect(await screen.findByText('已接收 2.38 MB')).toBeInTheDocument();
+    await act(async () => {
+      stream.close();
+    });
+  });
+});
+
 describe('ExportButton: cancel and time limit', () => {
   afterEach(() => {
     vi.useRealTimers();

@@ -1,15 +1,15 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Divider, Flex, Form, Input, Modal, Typography } from 'antd';
-import { useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
+import { type FailureLines, useFailureView } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type EmailTemplate, resetEmailTemplate, saveEmailTemplate } from '../../services/email';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { failureToForm, failureWords } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 import { listOfText, missingPlaceholders } from './placeholders';
 
 export const SUBJECT_MAX = 200;
@@ -35,7 +35,7 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  const { view: failure, show, clear } = useFailureView<FailureLines>();
   const code = plainText(template.templateCode);
   const placeholders = listOfText(template.placeholders);
   const required = listOfText(template.requiredPlaceholders);
@@ -48,15 +48,18 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
   };
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     try {
       await saveEmailTemplate(code, {
         subject: trimSpec(values.subject),
         body: trimSpec(values.body),
       });
     } catch (error) {
-      const result = failureToForm(intl, form, error, ['subject', 'body']);
-      setFailure({ text: result.text, more: result.unplaced });
+      failureToForm(intl, form, error, ['subject', 'body'], {}, { generalReason: true });
+      show((words) => {
+        const result = failureWords(words, error, ['subject', 'body'], {}, { generalReason: true });
+        return { text: result.text, more: result.unplaced };
+      });
       return;
     }
     message.success(t('email.templates.saved'));
@@ -76,17 +79,21 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
     onClose();
   });
 
+  // A save and a restore are both writes of the same template: while one is on its way the dialog
+  // can neither start the other nor be closed.
+  const busy = pending || restore.pending;
+
   return (
     <Modal
       open
       title={t('email.templates.editTitle')}
       width={760}
       mask={{ closable: false }}
-      onCancel={pending ? undefined : onClose}
+      onCancel={busy ? undefined : onClose}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}
-      okButtonProps={{ loading: pending, disabled: pending }}
-      cancelButtonProps={{ disabled: pending }}
+      okButtonProps={{ loading: pending, disabled: busy }}
+      cancelButtonProps={{ disabled: busy }}
       onOk={() => form.submit()}
     >
       <Form
@@ -95,7 +102,7 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
         layout="vertical"
         requiredMark={false}
         initialValues={{ subject: plainText(template.subject), body: plainText(template.body) }}
-        onFinish={(values) => run(values)}
+        onFinish={(values) => (restore.pending ? undefined : run(values))}
       >
         <RevalidateOnLocaleChange />
         <Form.Item label={t('email.templates.field.code')}>
@@ -182,7 +189,7 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
@@ -214,7 +221,7 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
       <Flex align="center" gap={12} wrap>
         <DangerConfirmButton
           confirmText={t('email.templates.restoreAsk')}
-          disabled={!modified || pending}
+          disabled={!modified || busy}
           onConfirm={async () => {
             await restore.run().catch(() => undefined);
           }}

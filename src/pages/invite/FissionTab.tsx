@@ -14,19 +14,19 @@ import {
   Tree,
   Typography,
 } from 'antd';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ReadState } from '../../components/ReadState';
+import { useLatestCall } from '../../hooks/useLatestCall';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getDepthStats, getInviteChain, type InviteChain } from '../../services/invite';
-import { describeFailure } from '../../session/describe';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { formatInstant } from '../../utils/format';
 import { DASH, formatCount } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
-import { checkDepth } from './chainRules';
+import { chainFailureText, checkDepth } from './chainRules';
 import { descendantsOf, levelsBelow, type TreeRow, treeRows } from './chainTree';
 import { count } from './numbers';
-import { ReadState } from './ReadState';
-import { useRead } from './useRead';
 
 /** What the chain form holds, and the query that was last sent (a new object for each press, so the same query can be sent again). */
 export type ChainForm = {
@@ -48,7 +48,7 @@ type Props = {
 type ChainState =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'failed'; text: string }
+  | { kind: 'failed'; error: unknown }
   | { kind: 'loaded'; chain: InviteChain };
 
 type FormProblem = 'account' | 'depth' | null;
@@ -62,28 +62,26 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
   const theme = getChartTheme(mode);
 
   const depthFetcher = useCallback(() => getDepthStats({ from, to }), [from, to]);
-  const depth = useRead(depthFetcher);
+  const depth = useLatestRead(depthFetcher);
 
   // ---- the chain ----
   const [state, setState] = useState<ChainState>({ kind: 'idle' });
   const [problem, setProblem] = useState<FormProblem>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   const { applied } = form;
   useEffect(() => {
     if (!applied) return;
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setState({ kind: 'loading' });
     getInviteChain({ rootAccountId: applied.accountId, maxDepth: applied.maxDepth }).then(
       (chain) => {
-        if (mine === counter.current) setState({ kind: 'loaded', chain });
+        if (isCurrent()) setState({ kind: 'loaded', chain });
       },
       (error) => {
-        if (mine === counter.current) {
-          setState({ kind: 'failed', text: describeFailure(intl, error).text });
-        }
+        if (isCurrent()) setState({ kind: 'failed', error });
       },
     );
-  }, [applied, intl]);
+  }, [applied, begin]);
 
   const submit = () => {
     if (trimSpec(form.accountId) === '') return setProblem('account');
@@ -147,7 +145,7 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
     key: row.key,
     title: (
       <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-all' }}>
-        <bdi>{row.label === '' ? DASH : row.label}</bdi>
+        <bdi dir="ltr">{row.label === '' ? DASH : row.label}</bdi>
         {row.time === '' ? null : (
           <Typography.Text type="secondary">
             {' '}
@@ -205,13 +203,13 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
                 theme={theme.g2Theme}
                 scale={{ color: { range: theme.palette } }}
                 axis={{
-                  x: { labelFill: theme.textColor },
+                  x: { ...axisTextStyle(theme) },
                   y: {
                     title: t('invite.fission.people'),
                     // people are whole numbers: no tick at 0.5
                     labelFormatter: (value: number) =>
                       Number.isInteger(value) ? String(value) : '',
-                    labelFill: theme.textColor,
+                    ...axisTextStyle(theme),
                     gridStroke: theme.gridColor,
                   },
                 }}
@@ -276,7 +274,7 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
             <Typography.Text type="secondary">{t('invite.chain.idle')}</Typography.Text>
           ) : null}
           <ReadState
-            failure={state.kind === 'failed' ? state.text : null}
+            failure={state.kind === 'failed' ? chainFailureText(intl, state.error) : null}
             loading={state.kind === 'loading'}
             onRetry={onLoadChain}
           />

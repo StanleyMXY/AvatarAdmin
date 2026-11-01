@@ -14,7 +14,9 @@ import {
   Typography,
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -27,9 +29,9 @@ import {
 } from '../../services/activity';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
 import { pickedDay } from '../../utils/utcDay';
-import { failureToForm } from './formFailure';
 import { useOverlapFlow } from './useOverlapFlow';
 
 type StepValues = { rewardCredits: number | null; bonusCredits: number | null };
@@ -70,7 +72,7 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
   const probe = useOverlapFlow();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const row = target === null || target === 'new' ? null : target;
   const rowId = row?.id ?? null;
 
@@ -79,28 +81,31 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
   // The failed request is kept, not its text: the text is written when drawn, so a language switch
   // changes it without reading the activity again (which would empty the form being typed in).
   const [loadFailure, setLoadFailure] = useState<{ failure: unknown } | null>(null);
-  const counter = useRef(0);
-  const load = useCallback(async (id: string) => {
-    const mine = ++counter.current;
-    setDetail(null);
-    setLoadFailure(null);
-    try {
-      const answer = await getCheckinActivity(id);
-      if (mine === counter.current) setDetail(answer);
-    } catch (error) {
-      if (mine === counter.current) setLoadFailure({ failure: error });
-    }
-  }, []);
+  const begin = useLatestCall();
+  const load = useCallback(
+    async (id: string) => {
+      const isCurrent = begin();
+      setDetail(null);
+      setLoadFailure(null);
+      try {
+        const answer = await getCheckinActivity(id);
+        if (isCurrent()) setDetail(answer);
+      } catch (error) {
+        if (isCurrent()) setLoadFailure({ failure: error });
+      }
+    },
+    [begin],
+  );
   useEffect(() => {
     if (rowId === null) {
       // Closed, or a new activity: an answer that is still on its way belongs to nobody.
-      counter.current += 1;
+      begin();
       setDetail(null);
       setLoadFailure(null);
       return;
     }
     void load(rowId);
-  }, [rowId, load]);
+  }, [rowId, load, begin]);
 
   const ready = target === 'new' || (row !== null && detail !== null && detail.id === row.id);
 
@@ -127,7 +132,7 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
   }, [detail]);
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     const body: ActivityBody = {
       name: trimSpec(values.name),
       startDate: values.startDate ? pickedDay(values.startDate) : null,
@@ -138,7 +143,10 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
         bonusCredits: step.bonusCredits ?? 0,
       })),
     };
-    const show = (error: unknown) => setFailure(failureToForm(intl, form, error, FIELDS).text);
+    const show = (error: unknown) => {
+      failureToForm(intl, form, error, FIELDS);
+      fail(error);
+    };
     if (detail && row) {
       const rangeChanged = body.startDate !== detail.startDate || body.endDate !== detail.endDate;
       // The state read when the dialog opened decides, not the row of the list (it can be older).

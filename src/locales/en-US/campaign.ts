@@ -58,6 +58,7 @@ const messages: Record<string, string> = {
   'campaign.stats.unattributed.tip':
     'Installs that were claimed on a device but matched no click: organic traffic.',
   'campaign.stats.unattributed.share': 'Share of matched plus unattributed installs: {share}',
+  'campaign.stats.unattributed.shareShort': 'Share: {share}',
   'campaign.accounts.tab.campaigns': 'Campaigns',
   'campaign.accounts.tab.costs': 'Costs',
   'campaign.campaigns.note':
@@ -205,6 +206,7 @@ const messages: Record<string, string> = {
     'Nothing can be imported: {count} problems. A batch is imported whole or not at all.',
   'campaign.batch.errors.more': 'And {count} more problems.',
   'campaign.batch.errors.line': 'Line {line}: {reason}',
+  'campaign.batch.errors.item': 'Item {line}: {reason}',
   'campaign.batch.import': 'Import',
   'campaign.batch.imported': 'Imported {count} rows',
   'campaign.batch.importedSplit': 'Imported {count} rows: {added} added, {overwritten} overwritten',
@@ -215,7 +217,7 @@ const messages: Record<string, string> = {
   'campaign.batch.reason.EMPTY': 'There are no rows.',
   'campaign.batch.reason.TOO_MANY_ROWS': 'There are {count} rows, and a batch has at most {max}.',
   'campaign.batch.reason.JSON_INVALID': 'This is not valid JSON.',
-  'campaign.batch.reason.ROW_NOT_OBJECT': 'This row is not an object.',
+  'campaign.batch.reason.ROW_NOT_OBJECT': 'This item of the array is not an object.',
   'campaign.batch.reason.CSV_QUOTE': 'A quote is opened here and never closed.',
   'campaign.batch.reason.HEADER_MISSING': 'The header has no column "{column}".',
   'campaign.batch.reason.HEADER_UNKNOWN': 'The header has a column that is not known: "{column}".',
@@ -240,6 +242,8 @@ const messages: Record<string, string> = {
   'campaign.batch.reason.REMARK_NOT_TEXT': 'The remark is not text.',
   'campaign.batch.reason.DUPLICATE_IN_BATCH':
     'The same campaign and day is on line {first} already.',
+  'campaign.batch.reason.DUPLICATE_IN_BATCH.item':
+    'The same campaign and day is in item {first} already.',
   'campaign.attribution.tab.clicks': 'Clicks',
   'campaign.attribution.tab.records': 'Installs and registrations',
   'campaign.attribution.tab.summary': 'Summary',

@@ -64,6 +64,7 @@ const messages: Record<string, string> = {
   'stat.guest.quota.exhausted.tip': '已用秒数不小于额度的设备数 ÷（设备数 − 没有额度的设备数）。',
   'stat.guest.quota.avgUsed': '人均已用分钟',
   'stat.guest.quota.avgUsed.tip': '有额度的设备的平均已用时长。',
+  'stat.guest.quota.rangeNote': '按设备第一次出现的日期选取范围内的设备；用量统计到现在。',
   'stat.guest.quota.configLink': '去系统配置修改游客通话总额度',
   'stat.guest.quota.chart': '按已用额度分档的设备数',
   'stat.guest.quota.table': '分档转化',

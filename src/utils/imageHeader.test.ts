@@ -12,16 +12,18 @@ import { readImageSize, sniffFileKind } from './imageHeader';
 const MIB = 1024 * 1024;
 
 /** Records every Blob.slice call on `blob` and returns the total number of bytes asked for. */
-function recordSlices(blob: Blob): () => number {
+function recordSlices(blob: Blob): (() => number) & { calls: () => number } {
   const original = blob.slice.bind(blob);
   let total = 0;
+  let calls = 0;
   vi.spyOn(blob, 'slice').mockImplementation((start?: number, end?: number, type?: string) => {
+    calls++;
     const from = Math.max(0, start ?? 0);
     const to = Math.min(blob.size, end ?? blob.size);
     total += Math.max(0, to - from);
     return original(start, end, type);
   });
-  return () => total;
+  return Object.assign(() => total, { calls: () => calls });
 }
 
 function forbidDecoding() {
@@ -39,6 +41,17 @@ function forbidDecoding() {
     if (tag.toLowerCase() === 'canvas' || tag.toLowerCase() === 'img') fail();
     return create(tag, options);
   }) as typeof document.createElement);
+}
+
+/** Makes every way of reading the whole file throw; only Blob.slice (a new Blob) still works. */
+function forbidWholeFileReads(file: Blob) {
+  const fail = () => {
+    throw new Error('the whole file must not be read');
+  };
+  vi.spyOn(file, 'arrayBuffer').mockImplementation(fail);
+  vi.spyOn(file, 'stream').mockImplementation(fail);
+  vi.spyOn(file, 'text').mockImplementation(fail);
+  vi.stubGlobal('FileReader', fail);
 }
 
 afterEach(() => {
@@ -239,5 +252,127 @@ describe('sniffFileKind', () => {
     const asked = recordSlices(file);
     expect(await sniffFileKind(file)).toBe('ZIP');
     expect(asked()).toBeLessThanOrEqual(12);
+  });
+});
+
+describe('reading only the start of a file', () => {
+  it('readImageSize cannot be satisfied by reading the whole file: a PNG', async () => {
+    const file = fileOf(pngBytes(640, 480), 'big.png', 3 * MIB);
+    forbidWholeFileReads(file);
+    const asked = recordSlices(file);
+    expect(await readImageSize(file)).toEqual({ format: 'PNG', width: 640, height: 480 });
+    expect(asked()).toBeGreaterThan(0);
+    expect(asked()).toBeLessThanOrEqual(64);
+  });
+
+  it('readImageSize cannot be satisfied by reading the whole file: a JPEG', async () => {
+    const file = fileOf(jpegBytes({ width: 640, height: 480 }), 'big.jpg', 3 * MIB);
+    forbidWholeFileReads(file);
+    const asked = recordSlices(file);
+    expect(await readImageSize(file)).toEqual({ format: 'JPEG', width: 640, height: 480 });
+    expect(asked()).toBeGreaterThan(0);
+    expect(asked()).toBeLessThanOrEqual(128 * 1024);
+  });
+
+  it('sniffFileKind cannot be satisfied by reading the whole file', async () => {
+    const file = fileOf(zipBytes(), 'big.zip', 3 * MIB);
+    forbidWholeFileReads(file);
+    const asked = recordSlices(file);
+    expect(await sniffFileKind(file)).toBe('ZIP');
+    expect(asked()).toBeGreaterThan(0);
+    expect(asked()).toBeLessThanOrEqual(12);
+  });
+
+  it('reads a JPEG whose frame header lies after 72 KB in a few blocks of about 64 KB, not byte by byte and not 4 MiB at once', async () => {
+    const before = [jpegSegment(0xe1, 40000), jpegSegment(0xe1, 31000), jpegSegment(0xe2, 1000)];
+    const file = fileOf(jpegBytes({ width: 6000, height: 4000, before }), 'exif.jpg', 6 * MIB);
+    const asked = recordSlices(file);
+    expect(await readImageSize(file)).toEqual({ format: 'JPEG', width: 6000, height: 4000 });
+    // The frame header starts at about 72 KB: one 24-byte read, then blocks of 64 KiB.
+    expect(asked()).toBeLessThanOrEqual(72 * 1024 + 2 * 64 * 1024);
+    expect(asked.calls()).toBeLessThanOrEqual(8);
+  });
+});
+
+describe('a file kind is told by its whole signature, one byte off is not enough', () => {
+  it('PNG: every one of the eight signature bytes counts', async () => {
+    for (let i = 0; i < 8; i++) {
+      const bytes = pngBytes(5, 5);
+      bytes[i] ^= 0x01;
+      expect(await sniffFileKind(fileOf(bytes, 'x'))).toBeNull();
+      expect(await readImageSize(fileOf(bytes, 'x.png'))).toBeNull();
+    }
+  });
+
+  it('PNG: the IHDR chunk length must be 13 and its name IHDR', async () => {
+    const wrongLength = pngBytes(5, 5);
+    wrongLength[11] = 12;
+    expect(await readImageSize(fileOf(wrongLength, 'x.png'))).toBeNull();
+    const wrongLengthHigh = pngBytes(5, 5);
+    wrongLengthHigh[8] = 1;
+    expect(await readImageSize(fileOf(wrongLengthHigh, 'x.png'))).toBeNull();
+    for (let i = 12; i < 16; i++) {
+      const wrongName = pngBytes(5, 5);
+      wrongName[i] ^= 0x01;
+      expect(await readImageSize(fileOf(wrongName, 'x.png'))).toBeNull();
+    }
+  });
+
+  it('JPEG: the first three bytes are FF D8 FF', async () => {
+    const noMarker = jpegBytes({ width: 5, height: 5 });
+    noMarker[2] = 0xfe;
+    expect(await sniffFileKind(fileOf(noMarker, 'x'))).toBeNull();
+    expect(await readImageSize(fileOf(noMarker, 'x.jpg'))).toBeNull();
+    const wrongStart = jpegBytes({ width: 5, height: 5 });
+    wrongStart[0] = 0xfe;
+    expect(await sniffFileKind(fileOf(wrongStart, 'x'))).toBeNull();
+    const wrongSecond = jpegBytes({ width: 5, height: 5 });
+    wrongSecond[1] = 0xd9;
+    expect(await sniffFileKind(fileOf(wrongSecond, 'x'))).toBeNull();
+  });
+
+  it('ZIP: the four bytes are PK 03 04, not just PK', async () => {
+    for (let i = 0; i < 4; i++) {
+      const bytes = zipBytes();
+      bytes[i] ^= 0x01;
+      expect(await sniffFileKind(fileOf(bytes, 'x'))).toBeNull();
+    }
+  });
+
+  it('MP4: every one of the four ftyp bytes counts', async () => {
+    for (let i = 4; i < 8; i++) {
+      const bytes = mp4Bytes();
+      bytes[i] ^= 0x01;
+      expect(await sniffFileKind(fileOf(bytes, 'x'))).toBeNull();
+    }
+  });
+
+  it('JPEG: a frame header that is shorter than seven bytes gives no size', async () => {
+    // SOF0 whose declared length is 6, one short of length + precision + height + width.
+    const bytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xc0, 0, 6, 8, 0, 5, 0, 5, 0x42, 0x42]);
+    expect(await readImageSize(fileOf(bytes, 'x.jpg'))).toBeNull();
+    const exactly = Uint8Array.from([0xff, 0xd8, 0xff, 0xc0, 0, 7, 8, 0, 5, 0, 9, 0x42, 0x42]);
+    expect(await readImageSize(fileOf(exactly, 'x.jpg'))).toEqual({
+      format: 'JPEG',
+      width: 9,
+      height: 5,
+    });
+  });
+
+  it('JPEG: a segment that declares a length under 2 ends the search instead of looping', async () => {
+    for (const length of [0, 1]) {
+      const bytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, length, 0x41, 0x41, 0x41, 0x41]);
+      expect(await readImageSize(fileOf(bytes, 'x.jpg'))).toBeNull();
+    }
+    // Length 2 is a segment with no payload and is skipped.
+    const empty = Uint8Array.from([
+      0xff, 0xd8, 0xff, 0xe0, 0, 2, 0xff, 0xc0, 0, 17, 8, 0, 4, 0, 3, 3, 1, 0x22, 0, 2, 0x11, 1, 3,
+      0x11, 1,
+    ]);
+    expect(await readImageSize(fileOf(empty, 'x.jpg'))).toEqual({
+      format: 'JPEG',
+      width: 3,
+      height: 4,
+    });
   });
 });

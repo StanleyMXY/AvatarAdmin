@@ -77,6 +77,8 @@ const messages: Record<string, string> = {
   'sessions.analytics.col.callsPerCaller': 'Calls per caller',
   'sessions.analytics.col.callsPerCaller.tip':
     'Calls connected / accounts with a call. A dash when nobody called.',
+  'sessions.analytics.invalidNote':
+    'Some days have a count that is missing or not valid ({days}). Those figures are shown as dashes, which here does not mean that nothing happened.',
   'sessions.analytics.chart.y': 'Count / minutes',
 
   'stat.sessionQuality.helper.title': 'How to read this report',
@@ -101,6 +103,8 @@ const messages: Record<string, string> = {
   'sessions.quality.card.notJoined': 'Users who never joined',
   'sessions.quality.card.notJoined.tip':
     'Calls dropped because the user never entered the room. Not a failure of the service.',
+  'sessions.quality.invalidNote':
+    'Some days have a figure that is missing or not valid ({days}). They are shown as they came, and the totals and rates that need them are shown as dashes.',
   'sessions.quality.card.limitMin': 'Red frame below {limit}',
   'sessions.quality.card.limitMax': 'Red frame above {limit}',
 

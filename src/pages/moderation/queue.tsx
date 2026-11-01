@@ -1,10 +1,12 @@
 import type { ProColumns } from '@ant-design/pro-components';
 import { Link, useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Typography } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   getModerationStats,
   listModerationRecords,
@@ -29,7 +31,7 @@ type Filters = {
 type Oldest =
   | { state: 'loading' }
   | { state: 'ready'; seconds: number | null }
-  | { state: 'failed'; message: string };
+  | { state: 'failed'; error: unknown };
 
 /**
  * 审核队列 (`MODERATION:VIEW`): the records of the automatic check, of reports and of complaints.
@@ -41,27 +43,22 @@ export default function ModerationQueuePage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [oldest, setOldest] = useState<Oldest>({ state: 'loading' });
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   // `oldestPendingSeconds` is a current value, whatever the range; one UTC day is the smallest one the endpoint takes.
   const loadOldest = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     try {
       const day = todayUtc();
       const stats = await getModerationStats({ from: day, to: day });
-      if (mine === counter.current)
-        setOldest({ state: 'ready', seconds: stats.oldestPendingSeconds });
+      if (isCurrent()) setOldest({ state: 'ready', seconds: stats.oldestPendingSeconds });
     } catch (error) {
-      if (mine === counter.current) {
-        setOldest({ state: 'failed', message: describeFailure(intl, error).text });
-      }
+      if (isCurrent()) setOldest({ state: 'failed', error });
     }
-  }, [intl]);
+  }, [begin]);
 
-  useEffect(() => {
-    void loadOldest();
-  }, [loadOldest]);
-
+  // The table asks for the list when the page opens and each time the list changes, and asks for
+  // this value with each of those; the retry button of the banner asks for it alone.
   const options = statusOptions(t);
   const now = Date.now();
 
@@ -71,8 +68,19 @@ export default function ModerationQueuePage() {
       dataIndex: 'id',
       search: false,
       render: (_, row) => (
-        <Link to={`/moderation/${encodeURIComponent(row.id)}`}>
-          <EllipsisPopoverText text={row.id} width={140} lines={1} />
+        <Link
+          to={`/moderation/${encodeURIComponent(row.id)}`}
+          title={row.id}
+          style={{
+            display: 'inline-block',
+            maxWidth: 140,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            verticalAlign: 'bottom',
+          }}
+        >
+          {row.id}
         </Link>
       ),
     },
@@ -139,6 +147,7 @@ export default function ModerationQueuePage() {
       render: (_, row) => formatInstant(row.createdAt, intl.locale),
     },
     {
+      ...ACTIONS_COLUMN,
       title: t('moderation.queue.view'),
       valueType: 'option',
       search: false,
@@ -154,7 +163,9 @@ export default function ModerationQueuePage() {
         <Alert
           type="warning"
           showIcon
-          title={t('moderation.queue.oldestFailed', { message: oldest.message })}
+          title={t('moderation.queue.oldestFailed', {
+            message: describeFailure(intl, oldest.error).text,
+          })}
           action={
             <Button size="small" onClick={() => void loadOldest()}>
               {t('pages.common.retry')}
@@ -179,15 +190,21 @@ export default function ModerationQueuePage() {
       <PagedListTable<ModerationRecord, Filters>
         rowKey="id"
         columns={columns}
-        request={({ page, pageSize, status, source, contentType }) => {
+        request={async ({ page, pageSize, status, source, contentType }) => {
           void loadOldest();
-          return listModerationRecords({
+          const answer = await listModerationRecords({
             page,
             pageSize,
             ...(status ? { status } : {}),
             ...(source ? { source } : {}),
             ...(contentType ? { contentType } : {}),
           });
+          // The contract does not list `contentType` among the query parameters yet (question file,
+          // part one): a backend that does not know it would send every type, which must not look
+          // like a filtered list.
+          return contentType
+            ? { ...answer, items: answer.items.filter((row) => row.contentType === contentType) }
+            : answer;
         }}
       />
     </Flex>

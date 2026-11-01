@@ -1,8 +1,9 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { Alert, Button, Descriptions, Drawer, Flex, Spin, Table } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
+import { useFailure } from '../../hooks/useFailure';
 import { getTier, listTiers, type MemoryTier } from '../../services/memory';
-import { describeFailure } from '../../session/describe';
 import { TierForm } from './TierForm';
 
 type Dialog = { name: string | null } | null;
@@ -15,7 +16,7 @@ export default function TiersPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [tiers, setTiers] = useState<MemoryTier[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
 
@@ -23,11 +24,11 @@ export default function TiersPage() {
     try {
       const { items } = await listTiers();
       setTiers(items);
-      setFailure(null);
+      clear();
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      fail(error);
     }
-  }, [intl]);
+  }, [fail, clear]);
 
   useEffect(() => {
     void load();
@@ -86,6 +87,7 @@ export default function TiersPage() {
             dataIndex: 'consolidationThreshold',
           },
           {
+            ...ACTIONS_COLUMN,
             title: t('memory.tier.col.actions'),
             key: 'actions',
             render: (_, row) => (
@@ -128,24 +130,24 @@ function TierDrawer({ name, onClose }: { name: string | null; onClose: () => voi
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [tier, setTier] = useState<MemoryTier | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
 
   useEffect(() => {
     if (name === null) return;
     let live = true;
     setTier(null);
-    setFailure(null);
+    clear();
     getTier(name)
       .then((row) => {
         if (live) setTier(row);
       })
       .catch((error) => {
-        if (live) setFailure(describeFailure(intl, error).text);
+        if (live) fail(error);
       });
     return () => {
       live = false;
     };
-  }, [name, intl]);
+  }, [name, fail, clear]);
 
   const yesNo = (value: boolean) => t(value ? 'memory.common.yes' : 'memory.common.no');
   return (

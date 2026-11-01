@@ -2,6 +2,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Flex, Tag, Typography } from 'antd';
 import { useCallback, useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
@@ -13,11 +14,11 @@ import {
   generateDefaultAvatar,
   listDefaultAvatars,
 } from '../../services/avatar';
+import { codeText } from '../../utils/displayText';
 import { defaultAvatarFailure } from './defaultAvatarFailure';
 import { NewDefaultAvatarModal } from './NewDefaultAvatarModal';
 import { RenameDefaultAvatarModal } from './RenameDefaultAvatarModal';
 import { Thumb } from './Thumb';
-import { codeText } from './texts';
 import { useGenerationPolling } from './useGenerationPolling';
 
 /**
@@ -152,7 +153,7 @@ export default function DefaultAvatarsPage() {
     {
       title: t('avatar.col.actions'),
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) => <RowActions actions={actionsOf(row)} />,
     },
   ];

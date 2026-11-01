@@ -2,6 +2,7 @@ import { guard } from './_core/auth';
 import { sampleText } from './_core/fixtures';
 import { invalidRequest, MockHttpError, ok } from './_core/http';
 import {
+  addDays,
   between,
   dailyRow,
   guestCohortRow,
@@ -109,13 +110,17 @@ export default {
     return ok({
       items: daysIn(from, to).map((day) => {
         const connected = between(500, 1500, 'conn', day);
-        const le2 = Math.round(connected * 0.5);
-        const le5 = Math.round(connected * 0.3);
+        // Every fourth day (by the calendar, so any seven days have one) is a bad one: a third of
+        // the attempts fail and a fifth of the connects are slow. The total of a week then passes
+        // both limits of the build, and the red frames of the page can be looked at.
+        const bad = Math.floor(Date.parse(`${day}T00:00:00Z`) / 86_400_000) % 4 === 0;
+        const le2 = Math.round(connected * (bad ? 0.4 : 0.5));
+        const le5 = Math.round(connected * (bad ? 0.25 : 0.3));
         const le10 = Math.round(connected * 0.15);
         return {
           statDate: day,
           connected,
-          agentUnavailable: between(0, 60, 'au', day),
+          agentUnavailable: bad ? Math.round(connected * 0.5) : between(0, 60, 'au', day),
           limitReached: between(0, 40, 'lr', day),
           discardedUserNotJoined: between(0, 30, 'du', day),
           joinLe2s: le2,
@@ -156,40 +161,68 @@ export default {
 
   'GET /api/admin/stats/usage-cost': guard('COST:VIEW', (req) => {
     const { from, to } = rangeOf(req);
-    const only = text(req.query.currency);
+    // Resource types, sources and tiers are those of contract 14.2 and 17.6. Two currencies stay
+    // apart, and the requests that had no price are the group under `NONE`.
     const lines = [
       {
         resourceType: 'LLM',
         provider: 'provider-a',
         model: 'model-x',
-        unit: 'token',
-        source: 'CHAT',
-        tier: 'STANDARD',
+        unit: 'TOKENS_1M',
+        source: 'CALL',
+        tier: 'FREE',
         currency: 'USD',
       },
       {
-        resourceType: 'TTS',
+        resourceType: 'LLM',
+        provider: 'provider-a',
+        model: 'model-x',
+        unit: 'TOKENS_1M',
+        source: 'TEXT',
+        tier: 'PAID',
+        currency: 'USD',
+      },
+      {
+        resourceType: 'IMAGE_EDIT',
         provider: 'provider-b',
-        model: 'voice-1',
-        unit: 'character',
-        source: 'CALL',
-        tier: 'STANDARD',
+        model: 'edit-1',
+        unit: 'CALL',
+        source: 'GENERATION',
+        tier: 'SYSTEM',
         currency: 'USD',
       },
       {
-        resourceType: 'STT',
+        resourceType: 'CLOUD_RENDER',
         provider: 'provider-c',
-        model: 'listen-1',
-        unit: 'second',
+        model: 'render-1',
+        unit: 'MINUTE',
         source: 'CALL',
-        tier: 'PREMIUM',
+        tier: 'PAID',
+        currency: 'EUR',
+      },
+      {
+        resourceType: 'MATTING',
+        provider: 'provider-d',
+        model: 'matte-1',
+        unit: 'CALL',
+        source: 'GENERATION',
+        tier: 'UNKNOWN',
         currency: 'NONE',
       },
-    ].filter((line) => !only || line.currency === only);
+    ];
+    const asked = (name: string) => text(req.query[name]);
+    const wanted = lines.filter((line) =>
+      (['resourceType', 'provider', 'model', 'source', 'tier', 'currency'] as const).every(
+        (name) => asked(name) === '' || line[name] === asked(name),
+      ),
+    );
+    // Whole micro-units, so that an amount is exact: 6 decimals, written as text.
+    const amount = (micros: number) =>
+      `${Math.floor(micros / 1_000_000)}.${String(micros % 1_000_000).padStart(6, '0')}`;
     return ok({
       items: daysIn(from, to).flatMap((day) =>
-        lines.map((line) => {
-          const requests = between(200, 2000, 'rq', day, line.resourceType);
+        wanted.map((line) => {
+          const requests = between(200, 2000, 'rq', day, line.resourceType, line.source);
           const unpriced = line.currency === 'NONE';
           const llm = line.resourceType === 'LLM';
           return {
@@ -199,8 +232,8 @@ export default {
             inputTokens: llm ? requests * 900 : null,
             cachedInputTokens: llm ? requests * 300 : null,
             outputTokens: llm ? requests * 250 : null,
-            quantity: llm ? null : requests * 40,
-            costAmount: unpriced ? null : Math.round(requests * 0.0031 * 10000) / 10000,
+            quantity: llm ? null : amount(requests * 40_000_000),
+            costAmount: unpriced ? null : amount(requests * 3_100),
             unpricedRequests: unpriced ? requests : 0,
           };
         }),
@@ -275,6 +308,9 @@ export default {
         { ref: 'date', reason: 'OUT_OF_RANGE' },
       ]);
     }
+    // Contract 22.8: `ad-daily` of a day older than the last 7 UTC days leaves the table of the
+    // reasons for no ad as it was and says so.
+    if (name === 'ad-daily') return ok({ nofillSkipped: date < addDays(todayOf(), -6) });
     return ok(null);
   }),
 };

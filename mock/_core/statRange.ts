@@ -1,4 +1,5 @@
 import { daysBetween } from '../../src/utils/utcDay';
+import { currentValue } from './configStore';
 import { invalidRequest, type MockReq } from './http';
 import { META_DEFAULTS } from './meta';
 import { addDays, todayOf } from './statData';
@@ -32,7 +33,10 @@ export function rangeOf(
   }
   if (from > to)
     throw invalidRequest('from is after to', [{ ref: 'from', reason: 'OUT_OF_RANGE' }]);
-  if (daysIn(from, to).length > META_DEFAULTS.statsMaxRangeDays) {
+  // The limit is the key `stats.max_range_days` as it is saved now (the contract's default until then).
+  const limit = currentValue('stats.max_range_days');
+  const longest = typeof limit === 'number' ? limit : META_DEFAULTS.statsMaxRangeDays;
+  if (daysIn(from, to).length > longest) {
     throw invalidRequest('The range exceeds stats.max_range_days', [
       { ref: 'to', reason: 'OUT_OF_RANGE' },
     ]);
@@ -67,7 +71,8 @@ export const channelOf = (req: MockReq): string => {
   return value;
 };
 
-export const TRIGGERS = ['recall', 'announcement', 'notification', 'activity', 'admin'];
+// The trigger reasons of the push statistics (contract 18, `triggerReason`).
+export const TRIGGERS = ['daily_recall', 'streak_at_risk', 'admin', 'system_event'];
 
 export const LAND_NAMES = [
   'daily-event',

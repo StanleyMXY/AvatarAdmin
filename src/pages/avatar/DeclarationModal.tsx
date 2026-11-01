@@ -1,11 +1,11 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal } from 'antd';
-import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { createDeclaration } from '../../services/avatar';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 import { LocalizedTextsField } from './LocalizedTextsField';
 import { cleanTexts, type Texts } from './localized';
 
@@ -22,17 +22,18 @@ export function DeclarationModal({ open, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     try {
       await createDeclaration({
         version: trimSpec(values.version),
         texts: cleanTexts(values.texts),
       });
     } catch (error) {
-      setFailure(failureToForm(intl, form, error, FIELDS).text);
+      failureToForm(intl, form, error, FIELDS);
+      fail(error);
       return;
     }
     message.success(t('avatar.declarations.saved'));
@@ -50,7 +51,7 @@ export function DeclarationModal({ open, onClose, onSaved }: Props) {
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}

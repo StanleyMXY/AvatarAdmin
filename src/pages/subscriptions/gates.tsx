@@ -15,6 +15,8 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type FeatureGate,
@@ -23,7 +25,7 @@ import {
   saveGateCreditCost,
   saveGateDefault,
 } from '../../services/subscriptions';
-import { describeFailure } from '../../session/describe';
+import { failureLine } from '../../session/failureLine';
 import { ConfigForm } from '../config/ConfigForm';
 import { FailureAlert } from './FailureAlert';
 import { FeatureValueEditor } from './FeatureValueEditor';
@@ -133,7 +135,7 @@ function CreditCostCell({
     try {
       await saveGateCreditCost(gate.key, draft);
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      message.error(failureLine(intl, error));
       return;
     }
     message.success(t('subscriptions.saved'));
@@ -167,18 +169,23 @@ export default function GatesPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [gates, setGates] = useState<FeatureGate[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [editing, setEditing] = useState<FeatureGate | null>(null);
 
+  const begin = useLatestCall();
+
   const load = useCallback(async () => {
+    // Only the newest read counts: after two quick changes the first reload may arrive last.
+    const isCurrent = begin();
     try {
       const { items } = await listFeatureGates();
+      if (!isCurrent()) return;
       setGates(items);
-      setFailure(null);
+      clear();
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [intl]);
+  }, [begin, fail, clear]);
 
   useEffect(() => {
     void load();

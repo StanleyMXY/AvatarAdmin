@@ -24,7 +24,7 @@ const messages: Record<string, string> = {
   'system.admins.note':
     '不能修改自己的角色、超级管理员标志和状态，也不能删除自己的账号。最后一个启用的超级管理员不能被停用或删除，它的标志也不能清除。只有超级管理员能设置或清除超级管理员标志。',
   'system.admins.refusedHint':
-    '后端对自己的账号和最后一个启用的超级管理员拒绝这个操作。什么都没有改变。',
+    '后端拒绝了这个操作，什么都没有改变。可能的原因：这是你自己的账号；这是最后一个启用的超级管理员；账号刚被别人改过（请重新读取列表）。',
   'system.admins.forbiddenHint':
     '后端拒绝了这个操作，什么都没有改变。可能的原因：这是你自己的账号；管理员只能授出自己持有的权限；只能对权限都在自己持有范围内的管理员操作。',
   'system.admins.new': '新建管理员',
@@ -80,6 +80,8 @@ const messages: Record<string, string> = {
   'system.admins.ownResetTotpReason': '不能重置自己的二次验证，请让另一位管理员来做。',
   'system.admins.ownDisableReason': '不能停用或删除自己的账号。',
   'system.admins.lastSuperReason': '这是最后一个启用的超级管理员：不能停用或删除。',
+  'system.admins.closedNote': '只有超级管理员能操作这个账号。',
+  'system.admins.ownReasons': '{note}{disable}',
   'system.admins.ownNote': '这是你自己的账号：不能修改自己的角色和超级管理员标志。',
   'system.admins.createDone': '管理员已创建。第一次登录时必须改密码。',
   'system.admins.resetTitle': '重置密码：{name}',
@@ -110,6 +112,8 @@ const messages: Record<string, string> = {
   'system.roles.treeFailed': '读取权限树失败：{message}',
   'system.roles.treeRetry': '重新读取',
   'system.roles.treeLoading': '正在读取权限树……',
+  'system.roles.withoutPage':
+    '下面这些权限没有同时给出它们所在的页面，持有者打不开那个页面：{codes}。需要的话请勾选对应的页面。',
   'system.roles.notHeld': '这个角色含有你没有的权限：{codes}，你不能保存对它的修改。',
   'system.roles.notHeldMany':
     '这个角色含有你没有的权限：{codes} 等共 {count} 个，你不能保存对它的修改。',
@@ -138,6 +142,7 @@ const messages: Record<string, string> = {
   'system.permissions.field.codeHint': '节点创建后不能再改码。',
   'system.permissions.field.code.required': '请输入权限码',
   'system.permissions.field.code.invalid': '权限码不能含空格或控制字符，最多 100 个字符。',
+  'system.permissions.field.code.dots': '权限码不能以点号开头或结尾。',
   'system.permissions.field.code.taken': '已经有这个权限码的节点。',
   'system.permissions.field.type': '类型',
   'system.permissions.field.parent': '父节点',

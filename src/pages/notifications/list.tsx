@@ -3,23 +3,24 @@ import { Alert, Button, DatePicker, Flex, Input, Select, Tag, Typography } from 
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   listNotifications,
   NOTIFICATION_CATEGORIES,
   type NotificationQuery,
   type NotificationRow,
 } from '../../services/notifications';
+import { adminText, codeText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { pickedDay, utcDayRangeToInstants } from '../../utils/utcDay';
 import { NotificationDrawer } from './NotificationDrawer';
-import { PagedTable } from './PagedTable';
 import { SendModal } from './SendModal';
-import { adminText, codeText, instantText } from './texts';
-import { useServerPage } from './useServerPage';
 
 type Range = { from: string; to: string } | null;
 type Filters = {
@@ -88,7 +89,8 @@ export default function NotificationsPage() {
     {
       key: 'category',
       title: t('notifications.col.category'),
-      render: (_, row) => codeText(intl, 'notifications.category', row.category) || DASH,
+      render: (_, row) =>
+        codeText(intl, 'notifications.category', row.category, { writeOut: true }) || DASH,
     },
     {
       key: 'title',
@@ -123,6 +125,7 @@ export default function NotificationsPage() {
       render: (_, row) => instantText(intl.locale, row.createdAt),
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('notifications.col.actions'),
       render: (_, row) => (

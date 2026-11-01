@@ -124,6 +124,7 @@ const messages: Record<string, string> = {
   'cost.pending.confirmed': '价格已生效。',
   'cost.pending.rejectTitle': '驳回这批价格？',
   'cost.pending.rejectNote': '备注',
+  'cost.pending.rejectSummary': '驳回 {model}（{currency}）从 {date} 起的价格。',
   'cost.pending.rejectHint': '这批价格不会生效，价格同步不会再提议同样的价格。',
   'cost.pending.rejected': '已驳回这批价格。',
   'cost.pending.reasons': '被拒绝的原因',
@@ -145,6 +146,7 @@ const messages: Record<string, string> = {
   'cost.current.retire': '撤回',
   'cost.current.retireTitle': '撤回这批价格？',
   'cost.current.retireNote': '备注',
+  'cost.current.retireSummary': '撤回 {model}（{currency}）从 {date} 起的价格。',
   'cost.current.retireHint':
     '撤回只影响之后入库的记录，已入库的费用不改。如果这个模型没有别的生效价格，之后的请求会没有价格。',
   'cost.current.retired': '已撤回这批价格。',

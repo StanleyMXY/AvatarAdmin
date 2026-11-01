@@ -2,10 +2,19 @@ import { Column } from '@ant-design/plots';
 import { useIntl } from '@umijs/max';
 import { useMemo } from 'react';
 import { toDecimalString } from '../../services/cost';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import type { ChartPoint } from './costRows';
 import { legendLabels } from './labels';
+
+/**
+ * What the tooltip shows for one bar piece: the whole name of the model (the legend cuts a long name
+ * and numbers two that start alike, which does not say which is which) and the exact amount.
+ */
+export const costTooltipItem = (d: { model: string; text: string }) => ({
+  name: d.model,
+  value: d.text,
+});
 
 /** `2026-10-24` as `10-24`. */
 const shortDay = (day: string) => String(day).slice(5);
@@ -23,11 +32,12 @@ export function CostChart({ currency, points }: { currency: string; points: Char
     return points.map((p) => ({
       statDate: p.statDate,
       label: labels.get(p.model) ?? p.model,
+      model: p.model,
       value: p.value,
       text: p.text,
     }));
   }, [points]);
-  const axisText = { labelFill: theme.textColor, titleFill: theme.textColor };
+  const axisText = axisTextStyle(theme);
   return (
     <Column
       data={data}
@@ -52,7 +62,7 @@ export function CostChart({ currency, points }: { currency: string; points: Char
         },
       }}
       tooltip={{
-        items: [(d: { label: string; text: string }) => ({ name: d.label, value: d.text })],
+        items: [costTooltipItem],
       }}
       height={300}
     />

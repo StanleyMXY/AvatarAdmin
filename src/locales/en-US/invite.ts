@@ -68,6 +68,7 @@ const messages: Record<string, string> = {
   'invite.chain.accountRequired': 'Enter an account ID',
   'invite.chain.depthError': 'The depth must be a whole number from 1 to {max}',
   'invite.chain.depthErrorOpen': 'The depth must be a whole number of 1 or more',
+  'invite.chain.fieldFailure': '{field}: {reason}',
   'invite.chain.load': 'Load chain',
   'invite.chain.idle': 'Enter an account ID and load its chain.',
   'invite.chain.summary':
@@ -88,6 +89,8 @@ const messages: Record<string, string> = {
   'invite.share.step.linkClick': 'Link click',
   'invite.share.step.downloadClick': 'Download click',
   'invite.share.step.registered': 'Sign-up',
+  'invite.share.funnelStepFirst': '{stage}: {value}',
+  'invite.share.funnelStepRatio': '{stage}: {value}, {ratio} of the step before',
   'invite.share.linesTitle': 'The four steps by day',
   'invite.share.noRows': 'No day has a row in this range.',
   'invite.share.detail': 'Details',

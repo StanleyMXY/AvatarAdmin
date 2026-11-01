@@ -1,7 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Card, Statistic, Tooltip, Typography } from 'antd';
 import type { ReactNode } from 'react';
-import { FALL_COLOR, RISE_COLOR } from '../../theme/tokens';
+import { useModeTokens } from '../../theme/modes';
 import { DASH, formatCount, formatPercent } from '../../utils/ratio';
 
 type Props = {
@@ -23,6 +23,7 @@ type Props = {
 export function StatCard({ title, value, previous, previousLabel, unit = 'count', tip }: Props) {
   const intl = useIntl();
   const locale = intl.locale;
+  const tokens = useModeTokens();
   const shown = unit === 'count' ? formatCount(value, locale) : formatPercent(value, locale);
 
   let change: { text: string; color?: string } = { text: DASH };
@@ -47,7 +48,7 @@ export function StatCard({ title, value, previous, previousLabel, unit = 'count'
         : '%';
     change = {
       text: `${number}${unitText}`,
-      color: rounded > 0 ? RISE_COLOR : rounded < 0 ? FALL_COLOR : undefined,
+      color: rounded > 0 ? tokens.colorRiseText : rounded < 0 ? tokens.colorFallText : undefined,
     };
   }
 

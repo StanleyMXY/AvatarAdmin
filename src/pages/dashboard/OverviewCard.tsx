@@ -1,9 +1,9 @@
 import { history, useIntl } from '@umijs/max';
-import { Button, Card, Skeleton, Typography } from 'antd';
+import { Button, Card, Skeleton, Tooltip, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { ProvisionalTag } from '../../components/stat/ProvisionalTag';
 import { describeFailure } from '../../session/describe';
-import { FALL_COLOR, RISE_COLOR } from '../../theme/tokens';
+import { useModeTokens } from '../../theme/modes';
 import type { ChangeView } from './changeText';
 import { NavButton } from './NavButton';
 
@@ -25,28 +25,42 @@ type Props = {
 };
 
 // Only a change of complete days is green or red; a provisional change keeps the grey of the text.
-const colourOf = (tone: ChangeView['tone']) =>
-  tone === 'rise' ? RISE_COLOR : tone === 'fall' ? FALL_COLOR : undefined;
 
 function Change({ id, label, view }: { id: string; label: string; view: ChangeView }) {
   const intl = useIntl();
-  const colour = colourOf(view.tone);
+  const tokens = useModeTokens();
+  const colour =
+    view.tone === 'rise'
+      ? tokens.colorRiseText
+      : view.tone === 'fall'
+        ? tokens.colorFallText
+        : undefined;
+  const figure = (
+    <span
+      data-testid={id}
+      data-tone={view.tone}
+      style={colour ? { color: colour } : undefined}
+      // A grey change is explained in a tooltip, which a hover and the keyboard focus both open (a
+      // title attribute opens for neither a finger nor a keyboard); the others need no stop.
+      tabIndex={view.tone === 'provisional' ? 0 : undefined}
+    >
+      {view.text}
+    </span>
+  );
   return (
     <div>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {label}{' '}
-        <span
-          data-testid={id}
-          data-tone={view.tone}
-          style={colour ? { color: colour } : undefined}
-          title={
-            view.tone === 'provisional'
-              ? intl.formatMessage({ id: 'stat.common.provisional.changeTip' })
-              : undefined
-          }
-        >
-          {view.text}
-        </span>
+        {view.tone === 'provisional' ? (
+          <Tooltip
+            trigger={['hover', 'focus']}
+            title={intl.formatMessage({ id: 'stat.common.provisional.changeTip' })}
+          >
+            {figure}
+          </Tooltip>
+        ) : (
+          figure
+        )}
       </Typography.Text>
     </div>
   );

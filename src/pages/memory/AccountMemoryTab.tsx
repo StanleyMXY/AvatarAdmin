@@ -2,6 +2,8 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Popconfirm, Select, Spin, Table, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type AccountMemory,
@@ -12,7 +14,6 @@ import {
   getAccountMemory,
   listEmbeddingModels,
 } from '../../services/memory';
-import { describeFailure } from '../../session/describe';
 import { formatInstant } from '../../utils/format';
 import { DASH, formatCount } from '../../utils/ratio';
 
@@ -46,18 +47,24 @@ export default function AccountMemoryTab({ accountId, accountStatus }: Props) {
     intl.formatMessage({ id }, values);
   const [memory, setMemory] = useState<AccountMemory | null>(null);
   const [models, setModels] = useState<EmbeddingModel[]>([]);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [choice, setChoice] = useState<string | undefined>(undefined);
-  const [assignFailure, setAssignFailure] = useState<string | null>(null);
+  const { text: assignFailure, fail: failAssign, clear: clearAssign } = useFailure();
+
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
+    // Only the newest read counts: an answer for the account shown before must not replace this one.
+    const isCurrent = begin();
     try {
-      setMemory(await getAccountMemory(accountId));
-      setFailure(null);
+      const answer = await getAccountMemory(accountId);
+      if (!isCurrent()) return;
+      setMemory(answer);
+      clear();
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [accountId, intl]);
+  }, [accountId, begin, fail, clear]);
 
   useEffect(() => {
     setMemory(null);
@@ -80,11 +87,11 @@ export default function AccountMemoryTab({ accountId, accountStatus }: Props) {
   }, [canAssign]);
 
   const assign = useSingleFlight(async (modelName: string) => {
-    setAssignFailure(null);
+    clearAssign();
     try {
       await assignEmbeddingModel(accountId, modelName);
     } catch (error) {
-      setAssignFailure(describeFailure(intl, error).text);
+      failAssign(error);
       return;
     }
     message.success(t('memory.account.assigned'));

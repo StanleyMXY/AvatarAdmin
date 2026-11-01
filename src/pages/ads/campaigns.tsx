@@ -3,9 +3,12 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Input, Select, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AdCampaign,
   CAMPAIGN_STATUSES,
@@ -17,14 +20,12 @@ import {
   setCampaignStatus,
 } from '../../services/ads';
 import { describeFailure } from '../../session/describe';
+import { adminText, countText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { CampaignModal } from './CampaignModal';
 import { Checklist } from './Checklist';
-import { PagedTable } from './PagedTable';
-import { adminText, countText, instantText } from './texts';
 import { useOptions } from './useOptions';
-import { useServerPage } from './useServerPage';
 
 type Filters = { name: string; status: string };
 const NO_FILTERS: Filters = { name: '', status: '' };
@@ -192,6 +193,7 @@ export default function CampaignsPage() {
       render: (_, row) => instantText(intl.locale, row.updatedAt),
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('ads.common.actions'),
       render: (_, row) => (

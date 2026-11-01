@@ -2,7 +2,10 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Popconfirm, Switch, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { FailureBar } from '../../components/FailureBar';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type ChannelPackage,
@@ -10,10 +13,8 @@ import {
   updateChannelPackage,
 } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
+import { codeText, instantText } from '../../utils/displayText';
 import { DASH } from '../../utils/ratio';
-import { FailureBar } from '../appVersions/FailureBar';
-import { codeText, instantText } from '../appVersions/texts';
-import { useLatestRead } from '../appVersions/useLatestRead';
 import { ChannelModal } from './ChannelModal';
 
 /**
@@ -61,7 +62,11 @@ function EnabledSwitch({
   }
   return (
     <Popconfirm
-      title={t('channels.disableAsk', { name: row.name || row.code })}
+      title={
+        <span style={{ display: 'block', maxWidth: 'min(320px, 80vw)', overflowWrap: 'anywhere' }}>
+          {t('channels.disableAsk', { name: row.name || row.code })}
+        </span>
+      }
       okText={t('channels.disableConfirm')}
       cancelText={t('pages.common.cancel')}
       okButtonProps={{ danger: true, loading: pending, disabled: pending }}
@@ -87,7 +92,7 @@ export default function ChannelsPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [editing, setEditing] = useState<ChannelPackage | 'new' | null>(null);
-  const read = useLatestRead(listChannelPackages);
+  const read = useLatestRead(listChannelPackages, { keepWhileReading: true });
   const rows = read.data ?? [];
 
   const columns: ColumnsType<ChannelPackage> = [
@@ -130,7 +135,7 @@ export default function ChannelsPage() {
       key: 'actions',
       title: t('channels.col.actions'),
       // Stays in sight when the table is wider than its box and scrolls.
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) =>
         canWrite ? (
           <Button type="link" size="small" onClick={() => setEditing(row)}>

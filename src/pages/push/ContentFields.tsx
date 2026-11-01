@@ -1,12 +1,11 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Flex, Form, Input } from 'antd';
-import { type LinkTargetValue, linkTargetRule } from '../../components/LinkTargetField';
+import { linkTargetRule } from '../../components/LinkTargetField';
 import { UploadField } from '../../components/UploadField';
+import type { useUploadSlot } from '../../hooks/useUploadSlot';
 import { trimSpec } from '../../utils/trimSpec';
 import { LinkField } from './LinkField';
 import { PushImage } from './PushImage';
-import { UploadBox } from './UploadBox';
-import type { useUploadSlot } from './uploadSlot';
 
 type Props = {
   slot: ReturnType<typeof useUploadSlot>;
@@ -24,19 +23,8 @@ type Props = {
 export function ContentFields({ slot, currentImageUrl, rejected }: Props) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
-  // The link control for a web address already says what is wrong with it; the rule still blocks
-  // the form, but its own message would repeat that text, so for an address it carries none.
-  const baseLinkRule = linkTargetRule(intl);
-  const linkRule = {
-    validator: async (rule: unknown, value: LinkTargetValue | undefined) => {
-      try {
-        await baseLinkRule.validator(rule, value);
-      } catch (error) {
-        if (value?.linkType === 'URL') throw new Error('');
-        throw error;
-      }
-    },
-  };
+  // The address box of the link control says what is wrong with a web address itself.
+  const linkRule = linkTargetRule(intl, { quietUrl: true });
   const required = (id: string) => async (_: unknown, value: string | undefined) => {
     if (trimSpec(value ?? '') === '') throw new Error(t(id));
   };
@@ -72,15 +60,13 @@ export function ContentFields({ slot, currentImageUrl, rejected }: Props) {
               <span>{t('push.content.imageCurrent')}</span>
             </Flex>
           ) : null}
-          <UploadBox>
-            <UploadField<{ uploadId: string }>
-              key={slot.version}
-              kind="pushImage"
-              onBusyChange={slot.fieldProps.onBusyChange}
-              onUploaded={slot.fieldProps.onUploaded}
-              onCleared={slot.fieldProps.onCleared}
-            />
-          </UploadBox>
+          <UploadField<{ uploadId: string }>
+            key={slot.version}
+            kind="pushImage"
+            onBusyChange={slot.fieldProps.onBusyChange}
+            onUploaded={slot.fieldProps.onUploaded}
+            onCleared={slot.fieldProps.onCleared}
+          />
           {slot.busy ? <Alert type="info" showIcon title={t('push.content.uploadWait')} /> : null}
           {rejected ? (
             <Alert type="error" showIcon title={t('push.content.imageRejected')} />

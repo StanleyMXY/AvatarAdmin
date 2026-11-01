@@ -1,8 +1,6 @@
+import { codeText, type Translator } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
-import { codeText, type Translator } from '../notifications/texts';
-
-export { adminText, codeText, instantText, orDash, type Translator } from '../notifications/texts';
 
 /** The description or the use of a key, from the language file; the key itself where the file has no text for it. */
 export function keyText(intl: Translator, key: unknown, part: 'desc' | 'usage'): string {
@@ -26,7 +24,7 @@ export function readOnlyNote(intl: Translator, key: unknown): string {
 }
 
 export const typeText = (intl: Translator, type: unknown): string =>
-  codeText(intl, 'clientConfig.type', type) || DASH;
+  codeText(intl, 'clientConfig.type', type, { writeOut: true }) || DASH;
 
 /** The reason a value was refused, in words: the shared reason text, else this page's own, else the text of INVALID_REQUEST. */
 export function problemText(intl: Translator, reason: unknown): string {

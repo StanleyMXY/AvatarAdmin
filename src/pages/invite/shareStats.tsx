@@ -2,18 +2,18 @@ import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Spin, Tabs } from 'antd';
 import { useCallback, useMemo, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
+import { ReadState } from '../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getShareChannels, getShareFunnel } from '../../services/invite';
 import { useAdminMeta } from '../../session/useSession';
 import { lastNDaysUtc } from '../../utils/utcDay';
-import { ReadState } from './ReadState';
 import { ShareChannelsTab } from './ShareChannelsTab';
 import { ShareFunnelTab } from './ShareFunnelTab';
 import { ShareOverview } from './ShareOverview';
 import { channelRowsOf, funnelRowsOf } from './shareRows';
-import { useRead } from './useRead';
 
 /**
  * 分享统计 (`INVITE:VIEW`): read from the summary tables, with "re-land this day" for an
@@ -36,8 +36,8 @@ export default function ShareStatsPage() {
     () => getShareChannels({ from: range.from, to: range.to }),
     [range],
   );
-  const funnel = useRead(funnelFetcher);
-  const channels = useRead(channelFetcher);
+  const funnel = useLatestRead(funnelFetcher);
+  const channels = useLatestRead(channelFetcher);
   const funnelRows = useMemo(() => funnelRowsOf(funnel.data?.items), [funnel.data]);
   const channelRows = useMemo(() => channelRowsOf(channels.data?.items), [channels.data]);
 

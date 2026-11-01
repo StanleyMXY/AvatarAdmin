@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import adsMock from '../../../mock/ads.mock';
 import configMock from '../../../mock/config.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import CampaignsPage from './campaigns';
@@ -352,9 +353,9 @@ describe('the state changes and the delete', { timeout: 30000 }, () => {
       body: { status: 'ACTIVE' },
     });
     await waitFor(() =>
-      expect(cellsOf(rows().find((r) => r.textContent?.includes(campaign('7').name))!)[1]).toBe(
-        'Running',
-      ),
+      expect(
+        cellsOf(must(rows().find((r) => r.textContent?.includes(campaign('7').name))))[1],
+      ).toBe('Running'),
     );
   });
 

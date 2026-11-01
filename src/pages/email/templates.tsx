@@ -2,13 +2,14 @@ import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { FailureBar } from '../../components/FailureBar';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { type EmailTemplate, listEmailTemplates } from '../../services/email';
+import { adminText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
-import { FailureBar } from './FailureBar';
 import { TemplateEditor } from './TemplateEditor';
-import { adminText, instantText } from './texts';
-import { useLatestRead } from './useLatestRead';
 
 const isRecord = (row: unknown): row is EmailTemplate => typeof row === 'object' && row !== null;
 
@@ -38,11 +39,17 @@ export default function EmailTemplatesPage() {
         const meaning = describe(code);
         return (
           <Flex vertical>
-            <Typography.Text strong data-kind="code" style={{ overflowWrap: 'anywhere' }}>
-              {code}
+            <Typography.Text strong data-kind="code">
+              <EllipsisPopoverText text={code} lines={2} width={240} dir="ltr" />
             </Typography.Text>
             {meaning ? (
-              <Typography.Text type="secondary" data-kind="description">
+              <Typography.Text
+                type="secondary"
+                data-kind="description"
+                // The cell is as wide as its content (the table scrolls sideways): a sentence that
+                // cannot wrap would make the whole table as wide as the sentence.
+                style={{ maxWidth: 320, whiteSpace: 'normal' }}
+              >
                 {meaning}
               </Typography.Text>
             ) : null}
@@ -78,6 +85,7 @@ export default function EmailTemplatesPage() {
       render: (_, row) => instantText(intl.locale, row.updatedAt),
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('email.templates.col.actions'),
       render: (_, row) => (

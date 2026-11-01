@@ -1,9 +1,16 @@
+import { readFileSync } from 'node:fs';
 import { act, renderHook } from '@testing-library/react';
 import { theme as antdTheme } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { contrastRatio, pickOnPrimary } from './contrast';
+import { contrastRatio, luminance, pickOnPrimary } from './contrast';
 import {
+  applyModeToDocument,
+  getCodeTextColor,
+  getErrorSolidColors,
   getModeTokens,
+  getPresetTagColors,
+  getStatusTextColors,
+  PRESET_TAG_COLORS,
   resetThemeModeForTests,
   THEME_MODES,
   THEME_STORAGE_KEY,
@@ -11,7 +18,7 @@ import {
   toAntdTheme,
   useThemeMode,
 } from './modes';
-import { LAYOUT, RADIUS } from './tokens';
+import { FALL_COLOR, LAYOUT, RADIUS, RISE_COLOR } from './tokens';
 
 beforeEach(() => resetThemeModeForTests());
 afterEach(() => vi.restoreAllMocks());
@@ -209,6 +216,201 @@ const PRIMARIES = [
   { base: '#000000', hover: '#222222', active: '#000000' },
 ];
 
+describe.each(THEME_MODES)('secondary, hint and placeholder text in %s mode', (mode: ThemeMode) => {
+  const resolved = () =>
+    antdTheme.getDesignToken(toAntdTheme(getModeTokens(mode))) as unknown as Record<string, string>;
+
+  it.each([
+    'colorTextSecondary',
+    'colorTextDescription',
+    'colorTextTertiary',
+    'colorTextPlaceholder',
+  ])('%s is at least 4.5:1 on the container, the page and the raised background', (name) => {
+    const tokens = getModeTokens(mode);
+    const value = resolved()[name];
+    expect(value).toMatch(/^#[0-9a-f]{6}$/i);
+    for (const bg of TEXT_BACKGROUNDS(tokens)) {
+      expect(contrastRatio(value, bg)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('hint text is still weaker than the body text', () => {
+    const tokens = getModeTokens(mode);
+    const hint = resolved().colorTextDescription;
+    const [bg] = TEXT_BACKGROUNDS(tokens);
+    expect(contrastRatio(hint, bg)).toBeLessThan(contrastRatio(tokens.colorText, bg));
+  });
+});
+
+describe.each(THEME_MODES)(
+  'the rise and the fall written as text in %s mode',
+  (mode: ThemeMode) => {
+    it('are at least 4.5:1 on the container, the page and the raised background, and keep the colour when it already is', () => {
+      const tokens = getModeTokens(mode);
+      for (const [text, chart] of [
+        [tokens.colorRiseText, RISE_COLOR],
+        [tokens.colorFallText, FALL_COLOR],
+      ] as const) {
+        for (const bg of TEXT_BACKGROUNDS(tokens)) {
+          expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+        }
+        if (TEXT_BACKGROUNDS(tokens).every((bg) => contrastRatio(chart, bg) >= 4.5)) {
+          expect(text).toBe(chart);
+        } else {
+          expect(text).not.toBe(chart);
+        }
+      }
+    });
+
+    it('stay a green and a red: the first channel of the fall leads, the second of the rise leads', () => {
+      const tokens = getModeTokens(mode);
+      const channels = (hex: string) =>
+        [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+      const [rr, rg, rb] = channels(tokens.colorRiseText);
+      const [fr, fg, fb] = channels(tokens.colorFallText);
+      expect(rg).toBeGreaterThan(Math.max(rr, rb));
+      expect(fr).toBeGreaterThan(Math.max(fg, fb));
+    });
+  },
+);
+
+describe.each(THEME_MODES)(
+  'the text colours of the four statuses in %s mode',
+  (mode: ThemeMode) => {
+    const resolved = antdTheme.getDesignToken(
+      toAntdTheme(getModeTokens(mode)),
+    ) as unknown as Record<string, string>;
+    const hex = (color: string) => {
+      const rgb = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);
+      if (!rgb) return color.slice(0, 7);
+      return `#${[rgb[1], rgb[2], rgb[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`;
+    };
+
+    it.each([
+      ['success', 'Success'],
+      ['warning', 'Warning'],
+      ['error', 'Error'],
+      ['info', 'Info'],
+    ] as const)(
+      '%s reaches 4.5:1 on the tint of its tag and on the container, the page and the raised background',
+      (name, status) => {
+        const tokens = getModeTokens(mode);
+        const text = getStatusTextColors(mode)[name];
+        for (const bg of [hex(resolved[`color${status}Bg`]), ...TEXT_BACKGROUNDS(tokens)]) {
+          expect(contrastRatio(text, bg), `${name} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+        }
+      },
+    );
+
+    it('puts the four colours on the document for the style sheet', () => {
+      applyModeToDocument(mode);
+      const style = document.documentElement.style;
+      const colors = getStatusTextColors(mode);
+      expect(style.getPropertyValue('--avatar-success-text')).toBe(colors.success);
+      expect(style.getPropertyValue('--avatar-warning-text')).toBe(colors.warning);
+      expect(style.getPropertyValue('--avatar-error-text')).toBe(colors.error);
+      expect(style.getPropertyValue('--avatar-info-text')).toBe(colors.info);
+    });
+  },
+);
+
+describe.each(THEME_MODES)('solid primary fills in %s mode', (mode: ThemeMode) => {
+  it('a selected solid radio button carries the same text as a primary button, not white', () => {
+    const tokens = getModeTokens(mode);
+    const components = toAntdTheme(tokens).components as Record<string, Record<string, string>>;
+    expect(components.Radio.buttonSolidCheckedColor).toBe(tokens.colorTextOnPrimary);
+    expect(contrastRatio(tokens.colorTextOnPrimary, tokens.colorPrimary)).toBeGreaterThanOrEqual(
+      4.5,
+    );
+  });
+
+  it('puts the colours the global style sheet uses on the document: link, hover, press, text on primary', () => {
+    const tokens = getModeTokens(mode);
+    applyModeToDocument(mode);
+    const style = document.documentElement.style;
+    expect(style.getPropertyValue('--avatar-link')).toBe(tokens.colorLink);
+    expect(style.getPropertyValue('--avatar-link-hover')).toBe(tokens.colorLinkHover);
+    expect(style.getPropertyValue('--avatar-link-active')).toBe(tokens.colorLinkActive);
+    expect(style.getPropertyValue('--avatar-on-primary')).toBe(tokens.colorTextOnPrimary);
+  });
+});
+
+describe('src/global.css (what Ant Design draws with the raw primary colour, set right)', () => {
+  const css = readFileSync('src/global.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = css
+    .split('}')
+    .map((rule) => rule.split('{'))
+    .filter((parts) => parts.length === 2)
+    .map(([selectors, body]) => ({
+      selectors: selectors
+        .split(',')
+        .map((selector) => selector.replace(/\s+/g, ' ').trim())
+        .filter(Boolean),
+      body: body.trim(),
+    }));
+  /** The declarations of the rule that has a selector ending in `ending`. */
+  const bodyOf = (ending: string) =>
+    rules.find((rule) => rule.selectors.some((selector) => selector.endsWith(ending)))?.body;
+
+  it('moves the text of the selected and hovered round radio buttons to the readable link colours, not on the solid style', () => {
+    const base = '.ant-radio-group:not(.ant-radio-group-solid) .ant-radio-button-wrapper';
+    const checked = `${base}-checked:not(.ant-radio-button-wrapper-disabled)`;
+    expect(bodyOf(checked)).toBe('color: var(--avatar-link);');
+    expect(bodyOf(`${base}:not(.ant-radio-button-wrapper-disabled):hover`)).toBe(
+      'color: var(--avatar-link);',
+    );
+    expect(bodyOf(`${checked}:hover`)).toBe('color: var(--avatar-link-hover);');
+    expect(bodyOf(`${checked}:active`)).toBe('color: var(--avatar-link-active);');
+  });
+
+  it('gives the selected day, and the ends of a selected range, of a date picker the text of a primary button', () => {
+    for (const state of ['selected', 'range-start', 'range-end']) {
+      expect(
+        bodyOf(
+          `.ant-picker-cell-in-view.ant-picker-cell-${state}:not(.ant-picker-cell-disabled) .ant-picker-cell-inner`,
+        ),
+      ).toBe('color: var(--avatar-on-primary);');
+    }
+  });
+
+  it('gives the status tags and the status colours of text the readable shades', () => {
+    for (const [tag, text, variable] of [
+      ['success', 'success', 'success'],
+      ['warning', 'warning', 'warning'],
+      ['error', 'danger', 'error'],
+    ]) {
+      expect(bodyOf(`.ant-typography.ant-typography-${text}`)).toBe(
+        `color: var(--avatar-${variable}-text);`,
+      );
+      expect(bodyOf(`.ant-tag-${tag}:not(.ant-tag-solid):not(.ant-tag-disabled)`)).toBe(
+        `color: var(--avatar-${variable}-text);`,
+      );
+    }
+    expect(bodyOf('.ant-tag-processing:not(.ant-tag-solid):not(.ant-tag-disabled)')).toBe(
+      'color: var(--avatar-info-text);',
+    );
+  });
+
+  it('gives the fold and unfold link of a search form the link colour', () => {
+    expect(bodyOf('.ant-pro-query-filter-collapse-button')).toBe('color: var(--avatar-link);');
+  });
+
+  it('beats the rules Ant Design injects at run time: every colour selector starts with html[data-theme]', () => {
+    const colours = rules.filter((rule) => !rule.selectors.includes('body'));
+    expect(colours.length).toBeGreaterThanOrEqual(5);
+    for (const rule of colours)
+      for (const selector of rule.selectors)
+        expect(selector.startsWith('html[data-theme] ')).toBe(true);
+  });
+
+  // The browser gives the body 8px of margin. A modal or a drawer locks the scroll of the page with
+  // `width: calc(100% + <scroll bar>)` on the body; with the margin around it the document becomes
+  // 8px wider than the window and can be dragged sideways while a dialog is open.
+  it('takes the default margin off the body, so that a dialog or a drawer does not make the page wider than the window', () => {
+    expect(bodyOf('body')).toBe('margin: 0;');
+  });
+});
+
 describe.each(THEME_MODES)('links and primary-coloured text in %s mode', (mode: ThemeMode) => {
   const resolved = (tokens = getModeTokens(mode)) =>
     antdTheme.getDesignToken(toAntdTheme(tokens)) as unknown as Record<string, string>;
@@ -297,5 +499,215 @@ describe.each(THEME_MODES)('links and primary-coloured text in %s mode', (mode: 
     expect((toAntdTheme(tokens).token as Record<string, string>).colorPrimary).toBe(
       tokens.colorPrimary,
     );
+  });
+});
+
+// ---- what was still below 4.5:1: preset colour tags, danger buttons, links on a tinted bar, inline code ----
+const hexOf = (color: string) => {
+  const rgb = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);
+  if (!rgb) return color.slice(0, 7).toUpperCase();
+  return `#${[rgb[1], rgb[2], rgb[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+};
+const resolvedTokens = (mode: ThemeMode) =>
+  antdTheme.getDesignToken(toAntdTheme(getModeTokens(mode))) as unknown as Record<string, string>;
+
+describe.each(THEME_MODES)('preset colour tags in %s mode', (mode: ThemeMode) => {
+  it.each(PRESET_TAG_COLORS)(
+    '%s: the text is at least 4.5:1 on the tint of its own tag and on the container, the page and the raised background',
+    (name) => {
+      const tokens = getModeTokens(mode);
+      const text = getPresetTagColors(mode)[name];
+      const tint = hexOf(resolvedTokens(mode)[`${name}1`]);
+      for (const bg of [tint, ...TEXT_BACKGROUNDS(tokens)]) {
+        expect(contrastRatio(text, bg), `${name} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
+
+  it('keeps the colour of Ant Design where it already reads, and moves it only as far as needed', () => {
+    const tokens = getModeTokens(mode);
+    for (const name of PRESET_TAG_COLORS) {
+      const own = hexOf(resolvedTokens(mode)[`${name}7`]);
+      const tint = hexOf(resolvedTokens(mode)[`${name}1`]);
+      const readable = [tint, ...TEXT_BACKGROUNDS(tokens)].every(
+        (bg) => contrastRatio(own, bg) >= 4.5,
+      );
+      if (readable) expect(getPresetTagColors(mode)[name]).toBe(own);
+      else expect(getPresetTagColors(mode)[name]).not.toBe(own);
+    }
+  });
+
+  it('puts the colours on the document for the style sheet', () => {
+    applyModeToDocument(mode);
+    const style = document.documentElement.style;
+    for (const name of PRESET_TAG_COLORS)
+      expect(style.getPropertyValue(`--avatar-tag-${name}-text`)).toBe(
+        getPresetTagColors(mode)[name],
+      );
+  });
+});
+
+describe.each(THEME_MODES)('red (danger) text of buttons in %s mode', (mode: ThemeMode) => {
+  it('rest, hover and press are at least 4.5:1 on the tint of the error bar, the container, the page and the raised background', () => {
+    const tokens = getModeTokens(mode);
+    const colors = getStatusTextColors(mode);
+    const tint = hexOf(resolvedTokens(mode).colorErrorBg);
+    for (const text of [colors.error, colors.errorHover, colors.errorActive])
+      for (const bg of [tint, ...TEXT_BACKGROUNDS(tokens)])
+        expect(contrastRatio(text, bg), `${text} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('puts hover and press on the document for the style sheet', () => {
+    applyModeToDocument(mode);
+    const style = document.documentElement.style;
+    const colors = getStatusTextColors(mode);
+    expect(style.getPropertyValue('--avatar-error-text-hover')).toBe(colors.errorHover);
+    expect(style.getPropertyValue('--avatar-error-text-active')).toBe(colors.errorActive);
+  });
+});
+
+describe.each(THEME_MODES)('solid red (danger) buttons in %s mode', (mode: ThemeMode) => {
+  const text = () => hexOf(resolvedTokens(mode).colorTextLightSolid);
+
+  it('rest, hover and press carry the white text at least 4.5:1', () => {
+    const colors = getErrorSolidColors(mode);
+    for (const fill of [colors.rest, colors.hover, colors.active])
+      expect(contrastRatio(text(), fill), `${text()} on ${fill}`).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('stays red, and hover and press are each darker than the state before (they must show)', () => {
+    const colors = getErrorSolidColors(mode);
+    for (const fill of [colors.rest, colors.hover, colors.active]) {
+      const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(fill.slice(i, i + 2), 16));
+      expect(r, fill).toBeGreaterThan(g);
+      expect(r, fill).toBeGreaterThan(b);
+    }
+    expect(luminance(colors.hover)).toBeLessThan(luminance(colors.rest));
+    expect(luminance(colors.active)).toBeLessThan(luminance(colors.hover));
+  });
+
+  it('moves the red of Ant Design only as far as needed: the rest colour is its first shade toward black that reads', () => {
+    const original = hexOf(resolvedTokens(mode).colorError);
+    expect(contrastRatio(text(), original)).toBeLessThan(4.5);
+    let percent = 1;
+    while (contrastRatio(text(), mixToward(original, '#000000', percent / 100)) < 4.5) percent += 1;
+    expect(getErrorSolidColors(mode).rest).toBe(
+      mixToward(original, '#000000', percent / 100).toUpperCase(),
+    );
+  });
+
+  it('puts the three fills on the document for the style sheet', () => {
+    applyModeToDocument(mode);
+    const style = document.documentElement.style;
+    const colors = getErrorSolidColors(mode);
+    expect(style.getPropertyValue('--avatar-error-solid')).toBe(colors.rest);
+    expect(style.getPropertyValue('--avatar-error-solid-hover')).toBe(colors.hover);
+    expect(style.getPropertyValue('--avatar-error-solid-active')).toBe(colors.active);
+  });
+});
+
+describe.each(THEME_MODES)(
+  'links in a bar with a tinted background in %s mode',
+  (mode: ThemeMode) => {
+    it('stay at least 4.5:1 on the tint of the information, success, warning and error bars', () => {
+      const tokens = getModeTokens(mode);
+      const resolved = resolvedTokens(mode);
+      for (const status of ['Info', 'Success', 'Warning', 'Error'])
+        for (const link of [tokens.colorLink, tokens.colorLinkHover, tokens.colorLinkActive])
+          expect(
+            contrastRatio(link, hexOf(resolved[`color${status}Bg`])),
+            `${link} on ${status}`,
+          ).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('stay readable on those tints whatever primary colour the build sets', () => {
+      for (const primary of PRIMARIES) {
+        const tokens = getModeTokens(mode, primary);
+        const resolved = antdTheme.getDesignToken(toAntdTheme(tokens)) as unknown as Record<
+          string,
+          string
+        >;
+        for (const status of ['Info', 'Success', 'Warning', 'Error'])
+          expect(
+            contrastRatio(tokens.colorLink, hexOf(resolved[`color${status}Bg`])),
+          ).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  },
+);
+
+describe.each(THEME_MODES)('inline code in %s mode', (mode: ThemeMode) => {
+  it('is at least 4.5:1 on the grey tint Ant Design lays under it, on every background', () => {
+    const tokens = getModeTokens(mode);
+    const text = getCodeTextColor(mode);
+    for (const bg of TEXT_BACKGROUNDS(tokens)) {
+      // rgba(150, 150, 150, 0.2) is what Ant Design draws under `code`.
+      expect(contrastRatio(text, mixToward(bg, '#969696', 0.2))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('puts the colour on the document for the style sheet', () => {
+    applyModeToDocument(mode);
+    expect(document.documentElement.style.getPropertyValue('--avatar-code-text')).toBe(
+      getCodeTextColor(mode),
+    );
+  });
+});
+
+function mixToward(a: string, b: string, amount: number): string {
+  const ch = (hex: string, i: number) => Number.parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  return `#${[0, 1, 2]
+    .map((i) =>
+      Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * amount)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+}
+
+describe('src/global.css: the colours moved to 4.5:1', () => {
+  const css = readFileSync('src/global.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const bodies = (selectorPart: string) =>
+    css
+      .split('}')
+      .map((rule) => rule.split('{'))
+      .filter((parts) => parts.length === 2)
+      .filter(([selectors]) =>
+        selectors
+          .split(',')
+          .some((selector) => selector.replace(/\s+/g, ' ').trim().endsWith(selectorPart)),
+      )
+      .map(([, body]) => body.trim());
+
+  it.each(PRESET_TAG_COLORS)('gives the %s tag the readable text colour', (name) => {
+    expect(bodies(`.ant-tag-${name}:not(.ant-tag-solid):not(.ant-tag-disabled)`)).toEqual([
+      `color: var(--avatar-tag-${name}-text);`,
+    ]);
+  });
+
+  it('gives the red button text (link, text, outlined and filled, not the solid one) the readable red, also on hover and press', () => {
+    const base = '.ant-btn-color-dangerous';
+    for (const variant of ['link', 'text', 'outlined', 'dashed', 'filled']) {
+      const rest = `${base}.ant-btn-variant-${variant}:not(:disabled):not(.ant-btn-disabled)`;
+      expect(bodies(rest), variant).toEqual(['color: var(--avatar-error-text);']);
+      expect(bodies(`${rest}:hover`), variant).toEqual(['color: var(--avatar-error-text-hover);']);
+      expect(bodies(`${rest}:active`), variant).toEqual([
+        'color: var(--avatar-error-text-active);',
+      ]);
+    }
+  });
+
+  it('gives the solid red button (a delete or leave confirmation) the deeper red, also on hover and press, and leaves the disabled one alone', () => {
+    const rest =
+      '.ant-btn-color-dangerous.ant-btn-variant-solid:not(:disabled):not(.ant-btn-disabled)';
+    expect(bodies(rest)).toEqual(['background-color: var(--avatar-error-solid);']);
+    expect(bodies(`${rest}:hover`)).toEqual(['background-color: var(--avatar-error-solid-hover);']);
+    expect(bodies(`${rest}:active`)).toEqual([
+      'background-color: var(--avatar-error-solid-active);',
+    ]);
+  });
+
+  it('gives inline code its own readable text colour', () => {
+    expect(bodies('.ant-typography code')).toEqual(['color: var(--avatar-code-text);']);
   });
 });

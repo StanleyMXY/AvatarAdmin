@@ -12,6 +12,7 @@ import {
   Typography,
 } from 'antd';
 import { useCallback } from 'react';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import {
   type AccountAvatar,
   type AccountLook,
@@ -25,7 +26,6 @@ import { GrantCosmeticButton } from '../avatar/GrantCosmetic';
 import { Thumb } from '../avatar/Thumb';
 import { Cell } from './Cell';
 import { labelOf } from './text';
-import { useRead } from './useRead';
 
 /**
  * 形象与服装 (`USER:VIEW`): the avatars of the account, newest first, each with its looks (state,
@@ -38,7 +38,7 @@ export function AvatarsTab({ accountId }: { accountId: string }) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
   const fetcher = useCallback(() => getAccountAvatars(accountId), [accountId]);
-  const { data, failure, reload } = useRead(fetcher, { keep: true });
+  const { data, failure, reload } = useLatestRead(fetcher, { keepWhileReading: true });
   const when = (value: unknown) => {
     const text = plainText(value);
     return text === '' ? DASH : formatInstant(text, intl.locale);

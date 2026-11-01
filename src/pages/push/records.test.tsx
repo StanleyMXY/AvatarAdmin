@@ -37,6 +37,31 @@ describe('the send record page: the list', { timeout: 30000 }, () => {
     expect(document.querySelector('.ant-pagination')?.textContent).toMatch(/2/);
   });
 
+  it('links the account to the user page only for an administrator who may see users', async () => {
+    const accountOf = () => {
+      const first = pushState.records.find((r) => r.id === recordId(1));
+      return String(first?.accountId);
+    };
+    signIn('support', { codes: ['PUSH:VIEW', 'USER:VIEW'] });
+    backend();
+    const withUsers = renderPage(<RecordsPage />);
+    await waitFor(() => expect(bodyRows().length).toBe(20));
+    const account = accountOf();
+    expect(
+      within(bodyRows()[0] as HTMLElement)
+        .getByRole('link', { name: account })
+        .getAttribute('href'),
+    ).toBe(`/users/${encodeURIComponent(account)}`);
+    withUsers.unmount();
+
+    signIn('support', { codes: ['PUSH:VIEW'] });
+    backend();
+    renderPage(<RecordsPage />);
+    await waitFor(() => expect(bodyRows().length).toBe(20));
+    expect(within(bodyRows()[0] as HTMLElement).queryByRole('link', { name: account })).toBeNull();
+    expect(bodyRows()[0].textContent).toContain(account);
+  });
+
   it('asks for the next page when the page is changed', async () => {
     const calls = backend();
     const user = userEvent.setup();

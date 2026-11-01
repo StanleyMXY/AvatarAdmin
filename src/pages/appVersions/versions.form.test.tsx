@@ -5,6 +5,7 @@ import appVersionsMock from '../../../mock/appVersions.mock';
 import channelsMock from '../../../mock/channels.mock';
 import { fileOf, zipBytes } from '../../../tests/imageBytes';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import enUS from '../../locales/en-US';
 import {
@@ -213,7 +214,7 @@ describe('creating a version of a STORE channel', { timeout: 60000 }, () => {
   });
 
   it('does not let a channel that is switched off be chosen', async () => {
-    channelsState.channels.get('play')!.enabled = false;
+    must(channelsState.channels.get('play')).enabled = false;
     const { user } = await load();
     const form = await openNew(user);
     await user.click(form.getByRole('combobox', { name: 'Channel package' }));
@@ -538,7 +539,7 @@ describe('editing a draft', { timeout: 60000 }, () => {
     const { user } = await load();
     const draft = versionBy('play', 120);
     const form = await openEdit(user, draft.id);
-    appVersionsState.versions.get(draft.id)!.status = 'ACTIVE';
+    must(appVersionsState.versions.get(draft.id)).status = 'ACTIVE';
     await user.click(submit(form));
     expect(await form.findByText(enUS['error.INVALID_STATE'])).toBeTruthy();
   });
@@ -587,7 +588,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     const info = await form.findByTestId('apk-info');
     expect(uploads).toHaveLength(1);
     expect(uploads[0].url).toBe('/uploads/apk');
-    const record = [...appVersionsState.uploads.values()].find((u) => !u.used)!;
+    const record = must([...appVersionsState.uploads.values()].find((u) => !u.used));
     expect(info.textContent).toContain(record.apkUrl);
     expect(info.textContent).toContain(record.apkSha256);
     expect(info.querySelectorAll('input, textarea')).toHaveLength(0);
@@ -595,7 +596,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     await waitFor(() =>
       expect(writesOf(calls).filter((c) => c.url !== '/api/admin/uploads/apk')).toHaveLength(1),
     );
-    const create = writesOf(calls).find((c) => c.url === '/api/admin/app-versions')!;
+    const create = must(writesOf(calls).find((c) => c.url === '/api/admin/app-versions'));
     expect(create.body).toEqual({
       channelCode: 'direct',
       versionName: '1.3.0',
@@ -676,7 +677,9 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     );
     await user.click(submit(form));
     await waitFor(() => expect(writesOf(calls).filter((c) => c.method === 'PUT')).toHaveLength(1));
-    const body = writesOf(calls).find((c) => c.method === 'PUT')!.body as { apkUploadId: string };
+    const body = must(writesOf(calls).find((c) => c.method === 'PUT')).body as {
+      apkUploadId: string;
+    };
     expect(body.apkUploadId).not.toBe(old);
     expect(appVersionsState.versions.get(draft.id)?.apkUploadId).toBe(body.apkUploadId);
   });
@@ -739,6 +742,55 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     expect(writesOf(calls).length).toBe(before);
   });
 
+  it('keeps the uploaded file when a 400 does not say that the file is at fault (no details), and asks for it again only when a detail names apkUploadId', async () => {
+    const { user } = await load();
+    const form = await openNew(user);
+    await pickChannel(user, form, /Direct download/);
+    await fillCommon(user, form, { min: '1' });
+    choose(apk());
+    await form.findByTestId('apk-info');
+    const first = overrideFetch(async ({ method, url }) =>
+      method === 'POST' && url.pathname === '/api/admin/app-versions'
+        ? jsonAnswer(400, 'INVALID_REQUEST', { details: [] })
+        : undefined,
+    );
+    await user.click(submit(form));
+    await waitFor(() => expect(first).toHaveLength(1));
+    await settled();
+    expect(form.getByTestId('apk-info')).toBeTruthy();
+    expect(form.queryByText(enUS['appVersions.apk.rejected'])).toBeNull();
+    overrideFetch(async ({ method, url }) =>
+      method === 'POST' && url.pathname === '/api/admin/app-versions'
+        ? jsonAnswer(400, 'INVALID_REQUEST', {
+            details: [{ ref: 'apkUploadId', reason: 'NOT_FOUND' }],
+          })
+        : undefined,
+    );
+    await user.click(submit(form));
+    expect(await form.findByText(enUS['appVersions.apk.rejected'])).toBeTruthy();
+    expect(form.queryByTestId('apk-info')).toBeNull();
+  });
+
+  it('draws an address and a checksum that the upload answered as something other than text as text, and does not break', async () => {
+    const { user } = await load();
+    const form = await openNew(user);
+    await pickChannel(user, form, /Direct download/);
+    overrideFetch(async ({ method, url }) =>
+      method === 'POST' && url.pathname === '/api/admin/uploads/apk'
+        ? jsonAnswer(200, '200', {
+            uploadId: 'up-odd',
+            apkUrl: { a: 1 },
+            apkSizeBytes: 2048,
+            apkSha256: ['abc', 'def'],
+          })
+        : undefined,
+    );
+    choose(apk());
+    const info = await form.findByTestId('apk-info');
+    expect(info.textContent).toContain('2 KB');
+    expect(info.textContent).not.toContain('[object Object]');
+  });
+
   it('switches from a STORE channel to a DIRECT one without keeping the link, and back without keeping the file', async () => {
     const { calls, user } = await load();
     const form = await openNew(user);
@@ -752,7 +804,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     await waitFor(() =>
       expect(writesOf(calls).some((c) => c.url === '/api/admin/app-versions')).toBe(true),
     );
-    const body = writesOf(calls).find((c) => c.url === '/api/admin/app-versions')!.body;
+    const body = must(writesOf(calls).find((c) => c.url === '/api/admin/app-versions')).body;
     expect(body).not.toHaveProperty('storeUrl');
     expect(body).toHaveProperty('apkUploadId');
   });

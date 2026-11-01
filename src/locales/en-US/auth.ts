@@ -17,6 +17,12 @@ const messages: Record<string, string> = {
   'auth.enroll.intro':
     'Scan the QR code with any TOTP-compatible authenticator, then enter the first code it shows.',
   'auth.enroll.qrLabel': 'Authenticator QR code',
+  'auth.enroll.showKey': "Can't scan the code?",
+  'auth.enroll.hideKey': 'Hide the key',
+  'auth.enroll.keyHelp':
+    'In your authenticator choose “enter a setup key” and type this key (time-based, 6 digits).',
+  'auth.enroll.copy': 'Copy',
+  'auth.enroll.copied': 'Copied',
   'auth.enroll.totp': 'Verification code',
   'auth.enroll.totpRequired': 'Enter the verification code',
   'auth.enroll.submit': 'Finish setup',

@@ -86,7 +86,6 @@ const messages: Record<string, string> = {
   'push.templates.localeRequired': 'Enter the language tag',
   'push.templates.fixed': 'The reason and the language cannot be changed once the template exists.',
   'push.templates.enabled': 'Switch on',
-  'push.templates.empty': 'No templates yet.',
 
   // ---- manual tasks ----
   'push.tasks.note':
@@ -97,7 +96,7 @@ const messages: Record<string, string> = {
   'push.tasks.col.sent': 'Sent',
   'push.tasks.col.failed': 'Failed',
   'push.tasks.col.createdBy': 'Created by',
-  'push.tasks.col.scheduledAt': 'Planned time',
+  'push.tasks.col.scheduledAt': 'Planned time (time zone of this computer)',
   'push.tasks.col.actions': 'Actions',
   'push.tasks.new': 'New task',
   'push.tasks.newTitle': 'New push task',
@@ -128,7 +127,7 @@ const messages: Record<string, string> = {
   'push.schedules.col.dates': 'From to',
   'push.schedules.col.enabled': 'On',
   'push.schedules.col.audience': 'Audience',
-  'push.schedules.col.nextRunAt': 'Next task',
+  'push.schedules.col.nextRunAt': 'Next task (time zone of this computer)',
   'push.schedules.col.actions': 'Actions',
   'push.schedules.new': 'New periodic push',
   'push.schedules.newTitle': 'New periodic push',

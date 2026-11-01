@@ -2,11 +2,11 @@ import { useIntl } from '@umijs/max';
 import { Alert, Descriptions, Drawer, Flex, Spin, Tag, Typography } from 'antd';
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { getNotification, type NotificationDetail } from '../../services/notifications';
-import { describeFailure } from '../../session/describe';
+import { adminText, codeText, describeLink, instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
-import { adminText, codeText, describeLink, instantText, orDash } from './texts';
 
 /** Any text, any script, any length: broken anywhere, shown in its own direction, never wider than the drawer. */
 const WRAP: CSSProperties = {
@@ -32,24 +32,24 @@ export function NotificationDrawer({ id, onClose }: { id: string; onClose: () =>
   const t = (key: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id: key }, values);
   const [detail, setDetail] = useState<NotificationDetail | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
 
   // The answer of an earlier row, arriving after the person has moved on, is dropped.
   useEffect(() => {
     let live = true;
     setDetail(null);
-    setFailure(null);
+    clear();
     getNotification(id)
       .then((row) => {
         if (live) setDetail(row);
       })
       .catch((error) => {
-        if (live) setFailure(describeFailure(intl, error).text);
+        if (live) fail(error);
       });
     return () => {
       live = false;
     };
-  }, [id, intl]);
+  }, [id, fail, clear]);
 
   const titles = isPlainObject(detail?.titleI18n) ? detail.titleI18n : {};
   const bodies = isPlainObject(detail?.bodyI18n) ? detail.bodyI18n : {};
@@ -83,7 +83,9 @@ export function NotificationDrawer({ id, onClose }: { id: string; onClose: () =>
               {
                 key: 'category',
                 label: t('notifications.detail.category'),
-                children: codeText(intl, 'notifications.category', detail.category) || DASH,
+                children:
+                  codeText(intl, 'notifications.category', detail.category, { writeOut: true }) ||
+                  DASH,
               },
               {
                 key: 'read',
@@ -112,7 +114,13 @@ export function NotificationDrawer({ id, onClose }: { id: string; onClose: () =>
                 key: 'link',
                 label: t('notifications.detail.link'),
                 children: (
-                  <span style={WRAP}>{describeLink(intl, detail.linkType, detail.linkTarget)}</span>
+                  <span style={WRAP}>
+                    {describeLink(intl, detail.linkType, detail.linkTarget, {
+                      summaryId: 'notifications.link.summary',
+                      empty: DASH,
+                      writeOut: true,
+                    })}
+                  </span>
                 ),
               },
               {

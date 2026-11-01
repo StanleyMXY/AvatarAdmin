@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { memoryStore } from '../../../mock/_core/memoryData';
 import * as memoryMock from '../../../mock/memory.mock';
+import { holdRequests } from '../../../tests/heldRequests';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
@@ -223,6 +224,27 @@ describe('a new tier', { timeout: 30000 }, () => {
     await user.click(screen.getByRole('button', { name: 'New tier' }));
     return screen.findByRole('dialog');
   };
+
+  it('can be saved after an edit dialog was closed while the settings of its tier were still being read', async () => {
+    useMockBackend(memoryMock);
+    // the answer for the tier is held, as on a slow connection
+    const held = holdRequests(
+      (url, method) => method === 'GET' && url.endsWith('/memory/tiers/premium'),
+    );
+    const user = userEvent.setup();
+    renderPage(<TiersPage />);
+    await user.click(within(await rowOf('premium')).getByRole('button', { name: 'Edit' }));
+    const editDialog = await screen.findByRole('dialog');
+    await waitFor(() => expect(held.started()).toBe(1));
+    await user.click(within(editDialog).getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'New tier' }));
+    const dialog = lastDialog();
+    held.release();
+    await new Promise((r) => setTimeout(r, 100));
+    fireEvent.change(within(dialog).getByLabelText('Tier name'), { target: { value: 'gold' } });
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Save' })).toBeEnabled());
+    expect(dialog.querySelector('.ant-spin-spinning')).toBeNull();
+  });
 
   it('asks to confirm "a new tier X will be created" before it sends a name that is not in the list', async () => {
     const calls = useMockBackend(memoryMock);

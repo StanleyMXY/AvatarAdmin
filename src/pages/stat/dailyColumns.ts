@@ -152,3 +152,20 @@ export function isBackfilledCell(def: ColumnDef, row: DailyViewRow): boolean {
     row.activeSubscriptionsBackfilled === true
   );
 }
+
+const COLUMN_BY_FIELD = new Map(SPEC.map((spec) => [spec.field, spec.kind]));
+
+/**
+ * The row as the trend chart takes it: the minute figures to one decimal, as the table shows them
+ * (the chart's tooltip prints the number as it is, and a division gives a long fraction).
+ */
+export function chartRow(row: DailyViewRow): DailyViewRow {
+  const rounded: Record<string, unknown> = { ...row };
+  for (const [field, kind] of COLUMN_BY_FIELD) {
+    const value = row[field];
+    if (kind === 'minutes' && typeof value === 'number' && Number.isFinite(value)) {
+      rounded[field] = Math.round(value * 10) / 10;
+    }
+  }
+  return rounded as DailyViewRow;
+}

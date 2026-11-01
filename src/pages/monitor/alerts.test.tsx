@@ -409,6 +409,17 @@ describe('closing an alert', { timeout: 30000 }, () => {
     expect(await screen.findByText('Close this alert?')).toBeInTheDocument();
   });
 
+  it('wraps the long question about a driving package inside a bounded width, not as wide as the window', async () => {
+    useMockBackend(monitorMock);
+    const user = userEvent.setup();
+    renderPage(<AlertsPage />);
+    const alert = openOf('LOOK_PACKAGE_PREPARE_FAILED');
+    await user.click(within(await rowOf(alert)).getByRole('button', { name: 'Close' }));
+    const question = await screen.findByText(/Closing this alert resets the failure count/);
+    expect(question.style.maxWidth).toBe('min(360px, 80vw)');
+    expect(question.style.overflowWrap).toBe('anywhere');
+  });
+
   it('resets the driving package in the backend when that alert is closed', async () => {
     useMockBackend(monitorMock);
     const user = userEvent.setup();

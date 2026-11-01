@@ -41,7 +41,7 @@ export function AuthEventsTab({ accountId }: { accountId: string }) {
   const columns: TableColumnsType<Row> = [
     {
       title: t('users.authEvents.at'),
-      render: (_, row) => formatInstant(plainText(row.at), intl.locale),
+      render: (_, row) => formatInstant(plainText(row.at), intl.locale) || DASH,
     },
     {
       title: t('users.authEvents.type'),

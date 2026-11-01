@@ -5,22 +5,22 @@ import { useCallback, useMemo, useState } from 'react';
 import { ChannelSelect } from '../../components/ChannelSelect';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ExportButton } from '../../components/ExportButton';
+import { FailureBar } from '../../components/FailureBar';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getReport, type ReportParams } from '../../services/ads';
 import { useAdminMeta } from '../../session/useSession';
+import { codeText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { safeRatio } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
 import { Checklist } from './Checklist';
 import { type DrillRow, DrillTable } from './DrillTable';
-import { FailureBar } from './FailureBar';
 import { ReportCards } from './ReportCards';
 import { countCell, percentText } from './reportFigures';
-import { codeText } from './texts';
-import { useLatestRead } from './useLatestRead';
 
 const TABS = [
   ['placement', 'by-placement'],

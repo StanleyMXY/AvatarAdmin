@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRecipients, recipientsProblem } from './recipients';
+import { parseRecipients, recipientsProblem, visibleId } from './recipients';
 
 const NBSP = String.fromCharCode(0xa0);
 const IDEOGRAPHIC = String.fromCharCode(0x3000);
@@ -79,5 +79,21 @@ describe('recipientsProblem', () => {
     for (const max of [undefined, null, '1000', Number.NaN, 0, -5, Number.POSITIVE_INFINITY]) {
       expect(recipientsProblem(5000, max as number | undefined), String(max)).toBeNull();
     }
+  });
+});
+
+describe('visibleId: an account id with characters that cannot be seen', () => {
+  it('leaves an ordinary id as it is, in any script', () => {
+    expect(visibleId('00000000-0000-0000-0000-0000000000a1')).toBe(
+      '00000000-0000-0000-0000-0000000000a1',
+    );
+    expect(visibleId('ผู้ใช้-ñandú-مرحبا-用户')).toBe('ผู้ใช้-ñandú-مرحبا-用户');
+  });
+
+  it('writes a zero width space, a byte order mark and a no-break space as their code points', () => {
+    expect(visibleId(`${String.fromCharCode(0xfeff)}a1${String.fromCharCode(0x200b)}`)).toBe(
+      '\u2039U+FEFF\u203Aa1\u2039U+200B\u203A',
+    );
+    expect(visibleId(`a${String.fromCharCode(0xa0)}b`)).toBe('a\u2039U+00A0\u203Ab');
   });
 });

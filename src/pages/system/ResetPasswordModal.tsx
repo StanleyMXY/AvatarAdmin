@@ -1,12 +1,13 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal } from 'antd';
-import { useState } from 'react';
+import { useFailureView } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import type { Me } from '../../services/auth';
 import { type AdminUser, resetAdminPassword } from '../../services/system';
+import { plainText } from '../../utils/plainText';
 import { checkNewPassword } from './adminRules';
-import { failureToForm } from './formFailure';
+import { failureToForm, failureView } from './formFailure';
 import { withScopeHint } from './texts';
 
 type Values = { newPassword: string; confirm: string };
@@ -31,11 +32,12 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { view: failure, show, clear } = useFailureView<string | null>();
   const minLength = me?.passwordMinLength;
+  const adminName = plainText(admin.username);
 
   const { run, pending } = useSingleFlight(async () => {
-    setFailure(null);
+    clear();
     let values: Values;
     try {
       values = await form.validateFields();
@@ -43,13 +45,16 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
       return;
     }
     try {
-      await resetAdminPassword(admin.id, values.newPassword);
-      message.success(t('system.admins.resetDone', { name: admin.username }));
+      await resetAdminPassword(plainText(admin.id), values.newPassword);
+      message.success(t('system.admins.resetDone', { name: adminName }));
       onDone();
       onClose();
     } catch (error) {
-      const placed = failureToForm(intl, form, error, ['newPassword']);
-      setFailure(placed.text === null ? null : withScopeHint(intl, error, placed.text));
+      failureToForm(intl, form, error, ['newPassword']);
+      show((words) => {
+        const { text } = failureView(words, error, ['newPassword']);
+        return text === null ? null : withScopeHint(words, error, text);
+      });
     }
   });
 
@@ -57,7 +62,7 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
     <Modal
       open
       width={520}
-      title={t('system.admins.resetTitle', { name: admin.username })}
+      title={t('system.admins.resetTitle', { name: adminName })}
       okText={t('system.admins.resetOk')}
       okButtonProps={{ danger: true, loading: pending, disabled: pending }}
       cancelText={t('system.common.cancel')}
@@ -70,7 +75,7 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
         type="warning"
         showIcon
         style={{ marginBottom: 16 }}
-        title={t('system.admins.resetNote', { name: admin.username })}
+        title={t('system.admins.resetNote', { name: adminName })}
       />
       <Form<Values>
         form={form}
@@ -93,7 +98,7 @@ export function ResetPasswordModal({ admin, me, onDone, onClose }: Props) {
                 const result = checkNewPassword({
                   password: value ?? '',
                   confirm: value ?? '',
-                  username: admin.username,
+                  username: adminName,
                   minLength,
                 });
                 if (result)

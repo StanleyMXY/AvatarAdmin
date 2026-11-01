@@ -2,9 +2,13 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Select, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AppVersion,
   deleteAppVersion,
@@ -17,16 +21,13 @@ import {
 } from '../../services/appVersions';
 import { type ChannelPackage, listChannelPackages } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
+import { adminText, codeText, instantText, orDash } from '../../utils/displayText';
 import { formatBytes } from '../../utils/format';
 import { validateServerLink } from '../../utils/linkRule';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { ActivateModal } from './ActivateModal';
 import { distributionOf } from './distribution';
-import { PagedTable } from './PagedTable';
-import { adminText, codeText, instantText, orDash } from './texts';
-import { useLatestRead } from './useLatestRead';
-import { useServerPage } from './useServerPage';
 import { VersionModal } from './VersionModal';
 
 type Filters = { channelCode: string; platform: string; status: string };
@@ -265,7 +266,7 @@ export default function AppVersionsPage() {
       key: 'actions',
       title: t('appVersions.col.actions'),
       // Stays in sight when the table is wider than its box and scrolls.
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) => {
         const actions = actionsOf(row);
         return actions.length === 0 ? DASH : <RowActions actions={actions} />;

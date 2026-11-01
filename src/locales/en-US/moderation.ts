@@ -62,7 +62,6 @@ const messages: Record<string, string> = {
   'moderation.queue.note':
     'Records that wait come first, the longest waiting at the top. Reports must really be handled.',
   'moderation.queue.view': 'Open',
-  'moderation.queue.reload': 'Refresh',
 
   'moderation.detail.back': 'Back to the review queue',
   'moderation.detail.record': 'Record',
@@ -100,6 +99,8 @@ const messages: Record<string, string> = {
   'moderation.decision.confirmReject': 'Confirm rejection',
   'moderation.decision.approved': 'Approved',
   'moderation.decision.rejected': 'Rejected',
+  'moderation.decision.stateChanged':
+    'Someone else handled this record first. Its state now: {status}.',
 
   'moderation.effect.AVATAR.APPROVE': 'The upload task goes on to generate the avatar.',
   'moderation.effect.AVATAR.REJECT':

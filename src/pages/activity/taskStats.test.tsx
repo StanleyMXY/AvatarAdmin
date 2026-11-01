@@ -4,11 +4,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { daysIn } from '../../../mock/_core/statRange';
 import { envelope, jsonResponse } from '../../../tests/httpStubs';
 import { renderPage } from '../../../tests/renderPage';
+import { withTimeZone } from '../../../tests/withTimeZone';
 import {
   as,
   callsTo,
   cellTexts,
   chartData,
+  rangeInputs,
   serve,
   setRange,
   startStatsTest,
@@ -187,6 +189,31 @@ describe('the range and the answers that come late', { timeout: 30000 }, () => {
     );
   });
 
+  it.each(['Pacific/Kiritimati', 'Etc/GMT+12', 'America/Los_Angeles'])(
+    'sends the days typed as they were typed in %s, to both reports and the landing day as the UTC yesterday',
+    async (zone) => {
+      await withTimeZone(zone, async () => {
+        as(['STATS:VIEW', 'STATS:LAND']);
+        const calls = serve(normal);
+        const user = userEvent.setup();
+        renderPage(<TaskStatsPage />);
+        await screen.findByText('By task');
+        await setRange(user, '2026-09-01', '2026-09-05');
+        await user.click(screen.getByRole('button', { name: 'Search' }));
+        await waitFor(() => expect(callsTo(calls, 'tasks/summary')).toHaveLength(2));
+        for (const path of ['tasks/summary', 'tasks/daily']) {
+          const url = new URL(callsTo(calls, path)[1].url, 'http://x');
+          expect([url.searchParams.get('from'), url.searchParams.get('to')]).toEqual([
+            '2026-09-01',
+            '2026-09-05',
+          ]);
+        }
+        await user.click(screen.getByRole('button', { name: 'Re-land this day' }));
+        expect(await screen.findByText('Re-landed 2026-10-25')).toBeInTheDocument();
+      });
+    },
+  );
+
   it('the answer of an earlier search never replaces the answer of a later one', async () => {
     let releaseFirst: () => void = () => {};
     const first = new Promise<void>((resolve) => {
@@ -236,6 +263,23 @@ describe('the export and landing', { timeout: 30000 }, () => {
       '2026-10-26',
     ]);
     expect(await screen.findByText(/Saved /)).toBeInTheDocument();
+  });
+
+  it('exports the range of the last search, not the range being edited', async () => {
+    as(['STATS:VIEW', 'STATS:EXPORT']);
+    const calls = serve(normal);
+    const user = userEvent.setup();
+    renderPage(<TaskStatsPage />);
+    await screen.findByText('By task');
+    await setRange(user, '2026-10-01', '2026-10-05');
+    expect(rangeInputs()[0]).toHaveValue('2026-10-01');
+    await user.click(screen.getByRole('button', { name: /Export/ }));
+    await waitFor(() => expect(callsTo(calls, 'export/task-summary')).toHaveLength(1));
+    const url = new URL(callsTo(calls, 'export/task-summary')[0].url, 'http://x');
+    expect([url.searchParams.get('from'), url.searchParams.get('to')]).toEqual([
+      '2026-10-20',
+      '2026-10-26',
+    ]);
   });
 
   it('lands task-daily for the day, named as a local day; not drawn without STATS:LAND; one request for two presses', async () => {

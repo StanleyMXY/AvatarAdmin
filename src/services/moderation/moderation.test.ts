@@ -61,6 +61,14 @@ describe('the moderation services', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('asks for the content with the browser cache off, and leaves the cache alone for the other reads', async () => {
+    const calls = answer({});
+    await getModerationContent('7');
+    await getModerationRecord('7');
+    expect(calls[0].init.cache).toBe('no-store');
+    expect(calls[1].init.cache).toBeUndefined();
+  });
+
   it('sends the decision with the note trimmed with the contract set, and without a note field when there is none', async () => {
     const calls = answer(null);
     await decideModeration('9', { decision: 'REJECT', note: `${WIDE_SPACE} ไม่เหมาะสม ` });
@@ -71,6 +79,17 @@ describe('the moderation services', () => {
     expect(body(calls[1])).toEqual({ decision: 'APPROVE' });
     await decideModeration('9', { decision: 'APPROVE', note: `  ${WIDE_SPACE}` });
     expect(body(calls[2])).toEqual({ decision: 'APPROVE' });
+  });
+
+  it('trims U+0085 and U+001C..U+001F from the note, which String.trim keeps', async () => {
+    const calls = answer(null);
+    await decideModeration('9', {
+      decision: 'REJECT',
+      note: `${String.fromCharCode(0x85)}ok${String.fromCharCode(0x1c)}`,
+    });
+    expect(body(calls[0])).toEqual({ decision: 'REJECT', note: 'ok' });
+    await decideModeration('9', { decision: 'APPROVE', note: String.fromCharCode(0x85) });
+    expect(body(calls[1])).toEqual({ decision: 'APPROVE' });
   });
 
   it('asks for the statistics of the UTC days as they are', async () => {

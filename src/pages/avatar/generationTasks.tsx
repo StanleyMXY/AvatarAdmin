@@ -9,9 +9,9 @@ import {
   type GenerationTaskType,
   listGenerationTasks,
 } from '../../services/avatar';
+import { codeText } from '../../utils/displayText';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
-import { codeText } from './texts';
 
 type Filter = { type?: GenerationTaskType };
 

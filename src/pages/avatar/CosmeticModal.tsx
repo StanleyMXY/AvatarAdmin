@@ -2,8 +2,10 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Flex, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
 import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import {
   AVATAR_STYLES,
   type AvatarStyle,
@@ -15,15 +17,13 @@ import {
   updateCosmetic,
 } from '../../services/avatar';
 import { countCodePoints } from '../../utils/codePoints';
+import { codeText } from '../../utils/displayText';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 import { LocalizedTextsField } from './LocalizedTextsField';
 import { cleanTexts, type Texts } from './localized';
 import { SurfacesPicker } from './SurfacesPicker';
 import { Thumb } from './Thumb';
-import { codeText } from './texts';
-import { UploadBox } from './UploadBox';
-import { useUploadSlot } from './uploadSlot';
 
 type Values = {
   key: string;
@@ -78,16 +78,17 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
+  // The language-file key of the problem, not its words: the words are made when drawn.
   const [pictureProblem, setPictureProblem] = useState<string | null>(null);
   const picture = useUploadSlot();
   const editing = item !== null;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     setPictureProblem(null);
     if (!editing && !picture.uploadId) {
-      setPictureProblem(t('avatar.preview.required'));
+      setPictureProblem('avatar.preview.required');
       return;
     }
     const fields = {
@@ -116,9 +117,9 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
       const result = failureToForm(intl, form, error, FIELDS);
       if (result.uploadRejected) {
         picture.reset();
-        setPictureProblem(t('avatar.preview.rejected'));
+        setPictureProblem('avatar.preview.rejected');
       }
-      setFailure(result.text);
+      fail(error);
       return;
     }
     message.success(t('avatar.cosmetics.saved'));
@@ -142,7 +143,7 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
       afterClose={() => {
         form.resetFields();
         picture.reset();
-        setFailure(null);
+        clear();
         setPictureProblem(null);
       }}
       okText={t('pages.common.submit')}
@@ -213,15 +214,13 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
         <Form.Item label={t('avatar.col.preview')}>
           <Flex vertical gap={8}>
             {item ? <Thumb url={item.previewUrl} alt={item.key} size={64} /> : null}
-            <UploadBox>
-              <UploadField<{ uploadId: string }>
-                kind="catalogImage"
-                onBusyChange={picture.fieldProps.onBusyChange}
-                onUploaded={picture.fieldProps.onUploaded}
-                onCleared={picture.fieldProps.onCleared}
-              />
-            </UploadBox>
-            {pictureProblem ? <Alert type="error" title={pictureProblem} showIcon /> : null}
+            <UploadField<{ uploadId: string }>
+              kind="catalogImage"
+              onBusyChange={picture.fieldProps.onBusyChange}
+              onUploaded={picture.fieldProps.onUploaded}
+              onCleared={picture.fieldProps.onCleared}
+            />
+            {pictureProblem ? <Alert type="error" title={t(pictureProblem)} showIcon /> : null}
           </Flex>
         </Form.Item>
         <Form.Item

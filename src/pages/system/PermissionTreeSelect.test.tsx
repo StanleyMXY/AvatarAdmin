@@ -70,6 +70,17 @@ describe('PermissionTreeSelect', () => {
     expect(screen.getByText('USER:BAN')).toBeInTheDocument();
   });
 
+  it('draws the nodes that have a code and does not break on a node without one, or with a code that is not text', () => {
+    const odd = [
+      ...nodes,
+      { parent: null, type: 'MENU', sortOrder: 9, nameEn: 'No code' },
+      { code: 12, parent: null, type: 'MENU', sortOrder: 10, nameEn: 'Number code' },
+    ] as unknown as PermissionNode[];
+    renderPage(<Harness list={odd} />);
+    expect(screen.getAllByRole('checkbox')).toHaveLength(5);
+    expect(screen.queryByText('No code')).toBeNull();
+  });
+
   it('checks the parent together with all its descendants, and gives the complete list', () => {
     const seen = vi.fn();
     renderPage(<Harness onValue={seen} />);
@@ -152,16 +163,23 @@ describe('PermissionTreeSelect', () => {
     expect(screen.getByRole('checkbox', { name: /查看统计/ })).toBeInTheDocument();
   });
 
-  it('cannot choose a built-in node whose code the application does not know, and drops it from the value', () => {
+  it('can choose, and keeps, a built-in node whose code the application does not know yet', () => {
     const seen = vi.fn();
     const list = [
       ...nodes,
       node('FUTURE:PAGE', null, { nameEn: 'A page from the future', nameZh: '未来页面' }),
     ];
     renderPage(<Harness list={list} initial={['FUTURE:PAGE', 'STATS:VIEW']} onValue={seen} />);
-    expect(box(/A page from the future/)).toBeDisabled();
-    expect(box(/A page from the future/)).not.toBeChecked();
+    expect(box(/A page from the future/)).not.toBeDisabled();
+    expect(box(/A page from the future/)).toBeChecked();
     fireEvent.click(box(/Export users/));
+    expect(seen).toHaveBeenLastCalledWith([
+      'FUTURE:PAGE',
+      'STATS:VIEW',
+      'USER:EXPORT',
+      'USER:VIEW',
+    ]);
+    fireEvent.click(box(/A page from the future/));
     expect(seen).toHaveBeenLastCalledWith(['STATS:VIEW', 'USER:EXPORT', 'USER:VIEW']);
   });
 

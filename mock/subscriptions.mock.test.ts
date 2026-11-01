@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { issueToken, resetStore } from './_core/store';
 import { resetSubscriptionsStore, subscriptionsState } from './_core/subscriptionsData';
 import { adminOf, bearer, call } from './_core/testing';
+import { USER } from './_core/usersData';
 import subscriptions from './subscriptions.mock';
 
 beforeEach(() => {
@@ -622,6 +623,18 @@ describe('subscription events', () => {
 
 describe('account entitlements', () => {
   const account = '10000000001';
+
+  it('knows an account of the user module that has no entitlement yet: an empty list, not 404', async () => {
+    const { status, body } = await get(
+      'GET /api/admin/accounts/:id/entitlements',
+      root(),
+      {},
+      { id: USER.rich },
+    );
+    expect(status).toBe(200);
+    expect(body.data.entitlements).toEqual([]);
+    expect(body.data.effective.length).toBeGreaterThan(0);
+  });
 
   it('gives one effective row per switch with the source, and the entitlement rows newest start first', async () => {
     const { status, body } = await get(

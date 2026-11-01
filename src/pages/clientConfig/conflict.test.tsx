@@ -170,6 +170,124 @@ describe('saving a key nobody else changed', () => {
   });
 });
 
+describe('the reload offered after a conflict', () => {
+  /** A save is refused by the backend for the language `th`, then another administrator changes the key, then Save meets the conflict. */
+  async function toTheConflict(user: ReturnType<typeof userEvent.setup>) {
+    const mocked = globalThis.fetch;
+    let refuse = true;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) =>
+        refuse && (init.method ?? 'GET').toUpperCase() === 'PUT'
+          ? jsonResponse(
+              400,
+              envelope('INVALID_REQUEST', { details: [{ ref: 'th', reason: 'TOO_LONG' }] }),
+            )
+          : mocked(input, init),
+      ),
+    );
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    type(valueBox(drawer), 'https://example.com/mine');
+    await user.click(save(drawer));
+    expect(
+      await within(drawer).findByRole('tab', { name: /th.*has an error/ }),
+    ).toBeInTheDocument();
+    refuse = false;
+    await user.click(within(drawer).getByRole('tab', { name: /^Default/ }));
+    simulateOtherAdminEdit('privacyPolicyUrl', {
+      '': 'https://example.com/theirs',
+      th: 'https://example.com/th/theirs',
+    });
+    type(valueBox(drawer), 'https://example.com/mine-again');
+    await user.click(save(drawer));
+    await within(drawer).findByText('Modified by someone else');
+    return drawer;
+  }
+
+  it('reads the key and then lets the list read again, so the list shows their version too', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    type(valueBox(drawer), 'https://example.com/mine');
+    simulateOtherAdminEdit('privacyPolicyUrl', { '': 'https://example.com/theirs' });
+    await user.click(save(drawer));
+    await user.click(await within(drawer).findByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(within(drawer).queryByText('Modified by someone else')).toBeNull());
+    const readsBefore = calls.filter((c) => c.method === 'GET').length;
+    // (the check of the save is already counted: the reload is one read of the key and one of the list)
+    type(valueBox(drawer), 'https://example.com/x');
+    expect(readsBefore).toBeGreaterThan(0);
+    const listReads = calls.filter(
+      (c) => c.method === 'GET' && c.url.endsWith('/api/admin/client-config'),
+    ).length;
+    // opening: 1 (list) ; the check of the save: 1 ; the reload: 1 for the key and 1 for the list
+    expect(listReads).toBe(4);
+  });
+
+  it('takes the red marks of the languages away together with the edit', async () => {
+    backend();
+    const user = userEvent.setup();
+    const drawer = await toTheConflict(user);
+    await user.click(within(drawer).getByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(within(drawer).queryByText('Modified by someone else')).toBeNull());
+    expect(within(drawer).queryByRole('tab', { name: /has an error/ })).toBeNull();
+    expect(
+      within(drawer).queryByText('The backend did not accept it; the whole key was not saved.'),
+    ).toBeNull();
+  });
+
+  it('says in the words of the error when the key cannot be read, and keeps what was typed', async () => {
+    backend();
+    const user = userEvent.setup();
+    const drawer = await toTheConflict(user);
+    interceptListRead(() => jsonResponse(500, envelope('INTERNAL_ERROR', null, 'raw words')));
+    await user.click(within(drawer).getByRole('button', { name: 'Reload' }));
+    expect(
+      await within(drawer).findByText('Server error. Please try again later.'),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('raw words');
+    expect((valueBox(drawer) as HTMLInputElement).value).toBe('https://example.com/mine-again');
+  });
+});
+
+describe('a save and a reset of the same key', () => {
+  it('do not run together: while the reset checks the key, Save is off and a press of it sends nothing', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    type(valueBox(drawer), 'https://example.com/mine');
+    const mocked = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) => {
+        if (
+          (init.method ?? 'GET').toUpperCase() === 'GET' &&
+          String(input).endsWith('/api/admin/client-config')
+        ) {
+          await gate;
+        }
+        return mocked(input, init);
+      }),
+    );
+    await user.click(within(drawer).getByRole('button', { name: 'Reset' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(save(drawer)).toBeDisabled());
+    fireEvent.click(save(drawer));
+    await new Promise((r) => setTimeout(r, 100));
+    release();
+    await screen.findByText('Reset done');
+    expect(puts(calls)).toHaveLength(0);
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
+  });
+});
+
 describe('when the key cannot be read again', () => {
   it('sends nothing and shows the words of the error, keeping the edit', async () => {
     const calls = backend();

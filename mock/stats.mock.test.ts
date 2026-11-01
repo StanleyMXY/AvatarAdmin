@@ -199,12 +199,42 @@ describe('the other reports', () => {
     expect(row.joinLe2s + row.joinLe5s + row.joinLe10s + row.joinGt10s).toBe(row.connected);
   });
 
-  it('push rows can be limited to one trigger reason', async () => {
-    const rows = (await get('push', 'support', { ...range, triggerReason: 'recall' })).body.data
-      .items;
+  it('session quality has a clearly bad day in any seven days, so that the red frames of the page can be seen on the fake backend', async () => {
+    // Any run of seven days: the success rate of the total is under 95% and the share of connects
+    // slower than 10 seconds is over 5% (the limits of the build by default).
+    for (const start of [-30, -17, -8, -3]) {
+      const week = { from: addDays(today, start), to: addDays(today, start + 6) };
+      const items = (await get('session-quality', 'support', week)).body.data.items as {
+        connected: number;
+        agentUnavailable: number;
+        joinGt10s: number;
+      }[];
+      const sum = (key: 'connected' | 'agentUnavailable' | 'joinGt10s') =>
+        items.reduce((total, row) => total + row[key], 0);
+      expect(
+        sum('connected') / (sum('connected') + sum('agentUnavailable')),
+        String(start),
+      ).toBeLessThan(0.95);
+      expect(sum('joinGt10s') / sum('connected'), String(start)).toBeGreaterThan(0.05);
+    }
+  });
+
+  it('push rows can be limited to one trigger reason of the contract', async () => {
+    const rows = (await get('push', 'support', { ...range, triggerReason: 'daily_recall' })).body
+      .data.items;
+    expect(rows.length).toBeGreaterThan(0);
     expect(new Set(rows.map((r: { triggerReason: string }) => r.triggerReason))).toEqual(
-      new Set(['recall']),
+      new Set(['daily_recall']),
     );
+  });
+
+  it('push rows use the four trigger reasons of the contract, and refuse a value that is not one', async () => {
+    const all = (await get('push', 'support', range)).body.data.items;
+    expect(new Set(all.map((r: { triggerReason: string }) => r.triggerReason))).toEqual(
+      new Set(['daily_recall', 'streak_at_risk', 'admin', 'system_event']),
+    );
+    const bad = await get('push', 'support', { ...range, triggerReason: 'recall' });
+    expect(bad.status).toBe(400);
   });
 
   it('task summary has one row per task, with names in several scripts and a null rate for no records', async () => {
@@ -255,6 +285,72 @@ describe('permissions', () => {
       .items;
     expect(only.every((r: { currency: string }) => r.currency === 'USD')).toBe(true);
   });
+
+  const usage = async (query: Record<string, string> = {}) =>
+    (await get('usage-cost', 'finance', { ...range, ...query })).body.data.items as Record<
+      string,
+      unknown
+    >[];
+
+  it('usage cost uses the resource types, sources and tiers of the contract, not others', async () => {
+    const rows = await usage();
+    const RESOURCE = [
+      'LLM',
+      'IMAGE_EDIT',
+      'IMAGE_TO_VIDEO',
+      'MATTING',
+      'DRIVING_PREP',
+      'AGE_ESTIMATION',
+      'CLOUD_RENDER',
+    ];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(RESOURCE).toContain(row.resourceType);
+      expect(['CALL', 'TEXT', 'GENERATION']).toContain(row.source);
+      expect(['GUEST', 'FREE', 'PAID', 'SYSTEM', 'UNKNOWN']).toContain(row.tier);
+    }
+    expect(new Set(rows.map((r) => r.resourceType)).size).toBeGreaterThan(2);
+  });
+
+  it('usage cost writes an amount as a decimal text, never as a number', async () => {
+    const priced = (await usage()).filter((r) => r.currency !== 'NONE');
+    expect(priced.length).toBeGreaterThan(0);
+    for (const row of priced) {
+      expect(typeof row.costAmount).toBe('string');
+      expect(row.costAmount).toMatch(/^\d+\.\d{6}$/);
+    }
+  });
+
+  it('usage cost narrows by resource type, provider, model, source, tier and currency, and the filters add up', async () => {
+    const all = await usage();
+    const type = all[0].resourceType as string;
+    const byType = await usage({ resourceType: type });
+    expect(byType.length).toBeGreaterThan(0);
+    expect(byType.length).toBeLessThan(all.length);
+    expect(byType.every((r) => r.resourceType === type)).toBe(true);
+    for (const [name, field] of [
+      ['provider', 'provider'],
+      ['model', 'model'],
+      ['source', 'source'],
+      ['tier', 'tier'],
+    ] as const) {
+      const value = all[0][field] as string;
+      const rows = await usage({ [name]: value });
+      expect(rows.length, name).toBeGreaterThan(0);
+      expect(
+        rows.every((r) => r[field] === value),
+        name,
+      ).toBe(true);
+    }
+    const both = await usage({ resourceType: type, source: all[0].source as string });
+    expect(both.every((r) => r.resourceType === type && r.source === all[0].source)).toBe(true);
+    expect(await usage({ model: 'no-such-model' })).toEqual([]);
+  });
+
+  it('usage cost has a row group with two currencies that stay apart and a group without a price', async () => {
+    const rows = await usage();
+    expect(new Set(rows.map((r) => r.currency))).toEqual(new Set(['USD', 'EUR', 'NONE']));
+  });
 });
 
 describe('POST /stats/land/:name', () => {
@@ -273,6 +369,16 @@ describe('POST /stats/land/:name', () => {
   it('needs STATS:LAND', async () => {
     expect((await land('support', 'daily-event', addDays(today, -1))).status).toBe(403);
     expect((await land('finance', 'daily-event', addDays(today, -1))).status).toBe(200);
+  });
+
+  it('says nofillSkipped for ad-daily of a day older than the last 7 UTC days, and not for a recent day or another summary', async () => {
+    expect((await land('root', 'ad-daily', addDays(today, -7))).body.data).toEqual({
+      nofillSkipped: true,
+    });
+    expect((await land('root', 'ad-daily', addDays(today, -6))).body.data).toEqual({
+      nofillSkipped: false,
+    });
+    expect((await land('root', 'daily-event', addDays(today, -30))).body.data).toBeNull();
   });
 
   it('refuses a name it does not know with 404, and a bad or future date with 400', async () => {

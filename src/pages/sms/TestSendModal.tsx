@@ -1,14 +1,15 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal, Typography } from 'antd';
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { getSmsMeta, type SmsChannel, sendTestSms } from '../../services/sms';
-import { describeFailure } from '../../session/describe';
+import { failureCode } from '../../session/describe';
+import { countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { countText } from './texts';
-import { useLatestRead } from './useLatestRead';
 
 type Props = { channel: SmsChannel; onClose: () => void };
 
@@ -24,19 +25,18 @@ export function TestSendModal({ channel, onClose }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<{ mobile: string }>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const read = useCallback(() => getSmsMeta(), []);
   const meta = useLatestRead(read);
   const remaining = meta.data ? meta.data.testRemainingToday : undefined;
 
   const { run, pending } = useSingleFlight(async (values: { mobile: string }) => {
-    setFailure(null);
+    clear();
     try {
       await sendTestSms(plainText(channel.id), trimSpec(values.mobile));
     } catch (error) {
-      const { error: failed, text } = describeFailure(intl, error);
-      setFailure(text);
-      if (failed.code === 'RATE_LIMITED') meta.reload();
+      fail(error);
+      if (failureCode(error) === 'RATE_LIMITED') meta.reload();
       return;
     }
     message.success(t('sms.channels.testSent'));

@@ -2,14 +2,15 @@ import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Button, Card, Flex, Statistic, Table, Tooltip } from 'antd';
 import { useCallback, useMemo } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { ReadState } from '../../components/ReadState';
 import { TrendChart } from '../../components/stat/TrendChart';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getInviteStats } from '../../services/invite';
 import { plainText } from '../../utils/plainText';
 import { DASH, formatCount, formatPercent } from '../../utils/ratio';
 import { count, rateOf } from './numbers';
-import { ReadState } from './ReadState';
-import { useRead } from './useRead';
 
 export type StatsQuery = { from: string; to: string; limit: number };
 
@@ -24,7 +25,7 @@ export function InviteOverview({ query, onViewFission }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const fetcher = useCallback(() => getInviteStats(query), [query]);
-  const { data, failure, loading, reload } = useRead(fetcher);
+  const { data, failure, loading, reload } = useLatestRead(fetcher);
 
   const daily = useMemo(
     () =>
@@ -111,6 +112,7 @@ export function InviteOverview({ query, onViewFission }: Props) {
       </Flex>
       <Card size="small" title={t('invite.stats.trend')} data-testid="invite-trend">
         <TrendChart
+          wholeNumbers
           rows={daily}
           xField="statDate"
           from={query.from}
@@ -134,7 +136,9 @@ export function InviteOverview({ query, onViewFission }: Props) {
               {
                 title: t('invite.stats.inviterAccountId'),
                 dataIndex: 'accountId',
-                render: (value: string) => <EllipsisPopoverText text={value} width={320} />,
+                render: (value: string) => (
+                  <EllipsisPopoverText text={value} width={320} dir="ltr" />
+                ),
               },
               {
                 title: t('invite.stats.inviteCount'),
@@ -143,6 +147,7 @@ export function InviteOverview({ query, onViewFission }: Props) {
                 render: (value: number | null) => formatCount(value, intl.locale),
               },
               {
+                ...ACTIONS_COLUMN,
                 title: t('invite.stats.actions'),
                 key: 'actions',
                 render: (_: unknown, row: { accountId: string }) => (

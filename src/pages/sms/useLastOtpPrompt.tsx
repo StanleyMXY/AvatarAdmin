@@ -3,7 +3,7 @@ import { App, Typography } from 'antd';
 import { useCallback } from 'react';
 import { listConfig } from '../../services/config';
 import { describeFailure } from '../../session/describe';
-import type { Translator } from './texts';
+import type { Translator } from '../../utils/displayText';
 
 export type GuardAction = 'disable' | 'delete' | 'change';
 export type GuardSubject = 'channel' | 'template' | 'englishTemplate';

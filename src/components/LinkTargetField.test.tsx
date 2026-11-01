@@ -113,6 +113,23 @@ describe('linkTargetRule', () => {
     );
   });
 
+  it('with quietUrl still refuses a bad address, with no message, because the address box says what is wrong; a screen is still told its message', async () => {
+    const quiet = linkTargetRule({ formatMessage: ({ id }) => enUS[id] }, { quietUrl: true });
+    const quietCheck = (value?: LinkTargetValue) => quiet.validator({}, value);
+    await expect(quietCheck({ linkType: 'URL', linkTarget: 'http://bad' })).rejects.toThrow(
+      new Error(''),
+    );
+    await expect(quietCheck({ linkType: 'URL', linkTarget: 'http://bad' })).rejects.toMatchObject({
+      message: '',
+    });
+    await expect(
+      quietCheck({ linkType: 'URL', linkTarget: 'https://example.com/a' }),
+    ).resolves.toBeUndefined();
+    await expect(quietCheck({ linkType: 'SCREEN', linkTarget: '' })).rejects.toThrow(
+      'Choose a screen',
+    );
+  });
+
   it('stops a form from being submitted with a bad target', async () => {
     const { Form } = await import('antd');
     let submitted = 0;

@@ -3,6 +3,7 @@ import { currentValue } from './_core/configStore';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
 import { DEFAULT_TEI_HOSTS, type ModelRow, memoryStore, type TierRow } from './_core/memoryData';
 import { store } from './_core/store';
+import { usersState } from './_core/usersData';
 
 type Detail = { ref: string; reason: string };
 
@@ -159,7 +160,23 @@ export default {
   }),
 
   'GET /api/admin/accounts/:id/memory': guard('MEMORY:VIEW', (req) => {
-    const account = memoryStore.accounts.get(req.params.id ?? '');
+    const id = req.params.id ?? '';
+    // An account of the user module that was never given a model has no tier and no history yet.
+    const account =
+      memoryStore.accounts.get(id) ??
+      (usersState.users.some((u) => u.id === id)
+        ? {
+            id,
+            status: 'ACTIVE' as const,
+            tier: {
+              tierName: null,
+              syncStatus: 'PENDING' as const,
+              assignedAt: null,
+              lastError: null,
+            },
+            assignments: [],
+          }
+        : undefined);
     if (!account) throw new MockHttpError(404, 'RESOURCE_NOT_FOUND', 'There is no such account');
     // The newest 200 assignments, newest first; `truncated` says there are more and `totalCount`
     // how many there are in all (backend answer of 2026-10-31).

@@ -2,13 +2,13 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, DatePicker, Form, Input, InputNumber, Modal, Typography } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import { useState } from 'react';
+import { type FailureLines, useFailureView } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdCampaign, createCampaign, updateCampaign } from '../../services/ads';
+import { failureToForm, failureWords } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 
 type Values = {
   name: string;
@@ -57,12 +57,12 @@ export function CampaignModal({ open, campaign, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  const { view: failure, show, clear } = useFailureView<FailureLines>();
   const editing = campaign !== null;
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     const body = {
       name: trimSpec(values.name),
       description: trimSpec(values.description ?? '') || null,
@@ -74,8 +74,11 @@ export function CampaignModal({ open, campaign, onClose, onSaved }: Props) {
       if (campaign) await updateCampaign(campaign.id, body);
       else await createCampaign(body);
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS);
-      setFailure({ text: result.text, more: result.unplaced });
+      failureToForm(intl, form, error, FIELDS);
+      show((words) => {
+        const result = failureWords(words, error, FIELDS);
+        return { text: result.text, more: result.unplaced };
+      });
       return;
     }
     message.success(t('ads.common.saved'));
@@ -93,7 +96,7 @@ export function CampaignModal({ open, campaign, onClose, onSaved }: Props) {
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}
@@ -189,7 +192,7 @@ export function CampaignModal({ open, campaign, onClose, onSaved }: Props) {
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

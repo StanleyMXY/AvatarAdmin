@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Select, Switch, Typography } from 'antd';
-import { useState } from 'react';
+import { useFailureView } from '../../hooks/useFailure';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
@@ -13,11 +14,11 @@ import {
   updateAdmin,
 } from '../../services/system';
 import { describeFailure } from '../../session/describe';
+import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { checkNewPassword, type RowProtection } from './adminRules';
-import { failureToForm } from './formFailure';
+import { failureToForm, failureView } from './formFailure';
 import { withScopeHint } from './texts';
-import { useRead } from './useRead';
 
 type Values = {
   username: string;
@@ -60,17 +61,24 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
-  const roles = useRead(loadAllRoles);
+  const { view: failure, show, clear } = useFailureView<string | null>();
+  const roles = useLatestRead(loadAllRoles, { keepWhileReading: true });
   const creating = admin === null;
   const minLength = me?.passwordMinLength;
   const canSetSuper = me?.superAdmin === true;
 
-  const original = admin?.roles.map((r) => r.id) ?? [];
+  // The row comes from the backend: a name that is not text is drawn as text, and a row without a
+  // list of roles has none, instead of the dialog failing to open.
+  const adminName = plainText(admin?.username);
+  const adminRoles = (Array.isArray(admin?.roles) ? admin.roles : []).map((r) => ({
+    id: plainText(r?.id),
+    name: plainText(r?.name),
+  }));
+  const original = adminRoles.map((r) => r.id);
   const chosenRoles = Form.useWatch('roleIds', form) ?? original;
   const chosenSuper = Form.useWatch('superAdmin', form) ?? admin?.superAdmin ?? false;
 
-  const rolesReadable = roles.state.status === 'ok';
+  const rolesReadable = !roles.loading && roles.failure === null;
   const rolesLocked = protection.own || !rolesReadable;
   const flagLocked = protection.own || !canSetSuper || protection.lastSuper;
   const rolesChanged = !rolesLocked && !sameSet(chosenRoles, original);
@@ -78,19 +86,18 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
   const nothingToSave = !creating && !rolesChanged && !flagChanged;
 
   const forbidden =
-    roles.state.status === 'failed' &&
-    roles.state.error instanceof ApiError &&
-    (roles.state.error.httpStatus === 403 || roles.state.error.code === 'ADMIN_FORBIDDEN');
+    roles.error instanceof ApiError &&
+    (roles.error.httpStatus === 403 || roles.error.code === 'ADMIN_FORBIDDEN');
 
   const options = [
-    ...(roles.state.data ?? []).map((role) => ({ value: role.id, label: role.name })),
-    ...(admin?.roles ?? [])
-      .filter((r) => !(roles.state.data ?? []).some((role) => role.id === r.id))
+    ...(roles.data ?? []).map((role) => ({ value: role.id, label: role.name })),
+    ...adminRoles
+      .filter((r) => !(roles.data ?? []).some((role) => role.id === r.id))
       .map((role) => ({ value: role.id, label: role.name })),
   ];
 
   const { run, pending } = useSingleFlight(async () => {
-    setFailure(null);
+    clear();
     let values: Values;
     try {
       values = await form.validateFields();
@@ -117,8 +124,11 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
       onDone();
       onClose();
     } catch (error) {
-      const placed = failureToForm(intl, form, error, FIELDS);
-      setFailure(placed.text === null ? null : withScopeHint(intl, error, placed.text));
+      failureToForm(intl, form, error, FIELDS);
+      show((words) => {
+        const { text } = failureView(words, error, FIELDS);
+        return text === null ? null : withScopeHint(words, error, text);
+      });
     }
   });
 
@@ -132,7 +142,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
       title={
         creating
           ? t('system.admins.createTitle')
-          : t('system.admins.editTitle', { name: admin.username })
+          : t('system.admins.editTitle', { name: adminName })
       }
       okText={t('system.common.save')}
       cancelText={t('system.common.cancel')}
@@ -147,7 +157,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
         layout="vertical"
         autoComplete="off"
         initialValues={{
-          username: admin?.username ?? '',
+          username: adminName,
           password: '',
           confirm: '',
           roleIds: original,
@@ -230,18 +240,18 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
           name="roleIds"
           label={t('system.admins.field.roles')}
           extra={
-            roles.state.status === 'loading' && roles.state.data === null ? (
+            roles.loading && roles.data === null ? (
               t('system.admins.field.rolesLoading')
             ) : forbidden ? (
               t('system.admins.field.rolesForbidden', {
                 permission: t(`permission.${ROLE_LIST_CODE}`),
                 code: ROLE_LIST_CODE,
               })
-            ) : roles.state.status === 'failed' ? (
+            ) : roles.failure !== null ? (
               <Flex gap={8} align="center" wrap>
                 <span>
                   {t('system.admins.field.rolesFailed', {
-                    message: describeFailure(intl, roles.state.error).text,
+                    message: describeFailure(intl, roles.error).text,
                   })}
                 </span>
                 <Button size="small" onClick={roles.reload}>
@@ -257,14 +267,14 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
             optionFilterProp="label"
             options={options}
             disabled={rolesLocked}
-            loading={roles.state.status === 'loading'}
+            loading={roles.loading}
             placeholder={t('system.admins.field.rolesPlaceholder')}
           />
         </Form.Item>
-        {!creating && !rolesReadable && admin.roles.length > 0 ? (
+        {!creating && !rolesReadable && adminRoles.length > 0 ? (
           <Typography.Paragraph type="secondary" style={{ overflowWrap: 'anywhere' }}>
             {t('system.admins.field.rolesCurrent', {
-              names: admin.roles.map((r) => r.name).join(', '),
+              names: adminRoles.map((r) => r.name).join(', '),
             })}
           </Typography.Paragraph>
         ) : null}

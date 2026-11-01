@@ -178,6 +178,46 @@ describe('validateValue', () => {
     expect(
       validateValue(spec('moderation.face_min_det_score'), Number.POSITIVE_INFINITY),
     ).not.toBeNull();
+    expect(validateValue(spec('moderation.face_min_det_score'), Number.NaN)).toBe('NOT_AN_INTEGER');
+  });
+
+  it('checks the plain numbers that the contract gives a range: the face score 0.1 to 1, the mouth area above 0, the brightness 0 to 255', () => {
+    const face = spec('moderation.face_min_det_score');
+    for (const ok of [0.1, 0.5, 1]) expect(validateValue(face, ok), String(ok)).toBeNull();
+    for (const bad of [0.09, 0, -1, 1.01, 2]) {
+      expect(validateValue(face, bad), String(bad)).toBe('OUT_OF_RANGE');
+    }
+    const area = spec('generation.mouth_open_min_area');
+    for (const ok of [0.035, 1, 5000]) expect(validateValue(area, ok), String(ok)).toBeNull();
+    for (const bad of [0, -0.01])
+      expect(validateValue(area, bad), String(bad)).toBe('OUT_OF_RANGE');
+    const brightness = spec('generation.mouth_open_min_brightness');
+    for (const ok of [0, 50, 255]) expect(validateValue(brightness, ok), String(ok)).toBeNull();
+    for (const bad of [-1, 255.5, 256]) {
+      expect(validateValue(brightness, bad), String(bad)).toBe('OUT_OF_RANGE');
+    }
+    expect(validateValue(brightness, '50')).toBe('NOT_AN_INTEGER');
+  });
+
+  it('checks the display name of the app: 1 to 100 characters after the ends are trimmed, counted in code points', () => {
+    const name = spec('app.display_name');
+    expect(validateValue(name, 'AvatarApp')).toBeNull();
+    expect(validateValue(name, 'แอปอวตาร · تطبيق · 头像')).toBeNull();
+    expect(validateValue(name, '😀'.repeat(100))).toBeNull();
+    expect(validateValue(name, '😀'.repeat(101))).toBe('OUT_OF_RANGE');
+    expect(validateValue(name, `  ${'a'.repeat(100)}  `)).toBeNull();
+    expect(validateValue(name, '')).toBe('EMPTY_NOT_ALLOWED');
+    expect(validateValue(name, '   ')).toBe('EMPTY_NOT_ALLOWED');
+    expect(validateValue(name, 5)).toBe('EMPTY_NOT_ALLOWED');
+  });
+
+  it('takes only REGISTER or FIRST_CALL as the moment an invite reward is judged', () => {
+    const trigger = spec('invite.reward_trigger');
+    expect(validateValue(trigger, 'REGISTER')).toBeNull();
+    expect(validateValue(trigger, 'FIRST_CALL')).toBeNull();
+    for (const bad of ['register', 'FIRST CALL', '', 'SIGNUP', ' REGISTER']) {
+      expect(validateValue(trigger, bad), bad).toBe('OUT_OF_RANGE');
+    }
   });
 
   it('checks links with the link rule and its reason codes', () => {
@@ -246,6 +286,36 @@ describe('validateValue', () => {
 
   it('leaves other JSON values to the server', () => {
     expect(validateValue(spec('chat.model_tiers_allowed'), ['standard'])).toBeNull();
+  });
+});
+
+describe('the words of a setting say no more than the contract does', () => {
+  // Contract 17.5: the two moderation scores map the score of the service to a level and the review
+  // score is the lower one; a likeness complaint must be handled within the hours, else an alert is
+  // written. Which side of the threshold a score falls on, and what a longer deadline means for
+  // noticing complaints, are not in the contract.
+  it('does not say that a score "reaches" a threshold, in either language', () => {
+    for (const messages of [enUS, zhCN] as Record<string, string>[]) {
+      for (const key of [
+        'config.moderation.block_score.desc',
+        'config.moderation.review_score.desc',
+      ]) {
+        expect(messages[key], key).not.toMatch(/reach|达到|manual review|人工复核/i);
+      }
+    }
+    expect(enUS['config.moderation.block_score.desc']).toMatch(/block level/);
+    expect(enUS['config.moderation.review_score.desc']).toMatch(/review level/);
+    expect(enUS['config.moderation.review_score.desc']).toMatch(/lower than the block score/);
+  });
+
+  it('gives the likeness deadline the contract sentence and does not guess what a longer one does', () => {
+    for (const messages of [enUS, zhCN] as Record<string, string>[]) {
+      expect(messages['config.complaint.likeness_due_hours.risk']).not.toMatch(
+        /later|noticed|更晚|发现/,
+      );
+    }
+    expect(enUS['config.complaint.likeness_due_hours.risk']).toMatch(/default is 48 hours/);
+    expect(zhCN['config.complaint.likeness_due_hours.risk']).toMatch(/默认 48 小时/);
   });
 });
 

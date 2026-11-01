@@ -122,6 +122,17 @@ describe('pageIdentifier', () => {
     ).toBe('42');
   });
 
+  it('removes every character that sets or isolates the direction of text, the Arabic letter mark among them', () => {
+    const controls = [
+      0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068,
+      0x2069,
+    ];
+    for (const code of controls) {
+      const mark = String.fromCharCode(code);
+      expect(id(`/users/${encodeURIComponent(`ab${mark}c`)}`), code.toString(16)).toBe('abc');
+    }
+  });
+
   it('is nothing when nothing is left of the value', () => {
     expect(id(`/users/${encodeURIComponent(String.fromCharCode(0x200f))}`)).toBeUndefined();
   });

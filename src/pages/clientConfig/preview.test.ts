@@ -27,6 +27,14 @@ describe('resolvePreview: the value the client gets for one requested language (
     expect(resolvePreview(full, 'AR')).toEqual({ source: 'LANGUAGE', matched: 'ar', value: 'A' });
   });
 
+  it('takes off the blanks of the contract around the requested tag, U+0085 and the ideographic space among them', () => {
+    expect(resolvePreview(full, '\u0085th\u3000')).toEqual({
+      source: 'LANGUAGE',
+      matched: 'th',
+      value: 'T',
+    });
+  });
+
   it('matches a regional tag to the language of the key, and the other way round', () => {
     expect(resolvePreview(full, 'th-TH')).toMatchObject({ source: 'LANGUAGE', matched: 'th' });
     expect(resolvePreview(item({ 'th-TH': 'T' }), 'th')).toMatchObject({

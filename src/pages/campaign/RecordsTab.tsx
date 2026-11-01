@@ -1,9 +1,12 @@
 import { useIntl } from '@umijs/max';
 import { Button, Flex, Select, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { HeaderTip } from '../../components/HeaderTip';
+import { PagedTable } from '../../components/PagedTable';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
+import { type Kept, useKeptState } from '../../hooks/useKeptState';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AttributionRecord,
   getRecords,
@@ -12,22 +15,22 @@ import {
   RECORD_SOURCES,
   type RecordSource,
 } from '../../services/campaign';
+import { codeText, instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { lastNDaysUtc, utcDayRangeToInstants } from '../../utils/utcDay';
 import { AccountLink } from './AccountLink';
 import { moneyText, numberOf } from './figures';
-import { HeaderTip } from './HeaderTip';
-import { PagedTable } from './PagedTable';
-import { codeText, instantText, orDash } from './texts';
 import type { CampaignList } from './useCampaigns';
-import { useServerPage } from './useServerPage';
 
 type Filter = {
   range: DayRange;
   source: RecordSource | undefined;
   matchType: MatchType | undefined;
 };
+
+/** The cost a third party reported has no fixed precision (the contract does not say): up to six decimals are kept. */
+const REPORTED_DECIMALS = 6;
 
 const initialFilter = (): Filter => ({
   range: lastNDaysUtc(7),
@@ -42,12 +45,12 @@ const ALL = '';
  * the platform's own identifiers are not in the answer and not on the page. The match type says how
  * sure the match is; the fingerprint is marked as the least reliable.
  */
-export function RecordsTab({ campaigns }: { campaigns: CampaignList }) {
+export function RecordsTab({ campaigns, kept }: { campaigns: CampaignList; kept: Kept }) {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
-  const [draft, setDraft] = useState<Filter>(initialFilter);
-  const [applied, setApplied] = useState<Filter>(initialFilter);
+  const [draft, setDraft] = useKeptState<Filter>(kept, 'records.draft', initialFilter);
+  const [applied, setApplied] = useKeptState<Filter>(kept, 'records.applied', initialFilter);
 
   const { from, to } = utcDayRangeToInstants(applied.range.from, applied.range.to);
   const state = useServerPage(getRecords, {
@@ -109,14 +112,14 @@ export function RecordsTab({ campaigns }: { campaigns: CampaignList }) {
       render: (_, row) =>
         numberOf(row.cost) === null
           ? DASH
-          : `${moneyText(row.cost, intl.locale)} ${plainText(row.costCurrency)}`.trim(),
+          : `${moneyText(row.cost, intl.locale, REPORTED_DECIMALS)} ${plainText(row.costCurrency)}`.trim(),
     },
     { title: t('campaign.records.col.costModel'), ...text('costModel', 100) },
     {
       title: t('campaign.records.col.costSelected'),
       dataIndex: 'costInSelectedCurrency',
       align: 'end',
-      render: (value: unknown) => moneyText(value, intl.locale),
+      render: (value: unknown) => moneyText(value, intl.locale, REPORTED_DECIMALS),
     },
     {
       title: t('campaign.records.col.accountId'),

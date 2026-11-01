@@ -19,7 +19,13 @@ function wasClosed(pageKey: string): boolean {
  */
 export function ReportHelper({ pageKey }: { pageKey: string }) {
   const intl = useIntl();
-  const [closed, setClosed] = useState(() => wasClosed(pageKey));
+  // The closed state belongs to the page key: when the key changes on the same panel, it is read again.
+  const [state, setState] = useState(() => ({ pageKey, closed: wasClosed(pageKey) }));
+  let closed = state.closed;
+  if (state.pageKey !== pageKey) {
+    closed = wasClosed(pageKey);
+    setState({ pageKey, closed });
+  }
   const titleId = `stat.${pageKey}.helper.title`;
   const contentId = `stat.${pageKey}.helper.content`;
   if (closed || !intl.messages[titleId]) return null;
@@ -29,7 +35,7 @@ export function ReportHelper({ pageKey }: { pageKey: string }) {
       showIcon
       closable={{
         onClose: () => {
-          setClosed(true);
+          setState({ pageKey, closed: true });
           try {
             localStorage.setItem(key(pageKey), '1');
           } catch {

@@ -11,8 +11,9 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
+import { useFailure } from '../../hooks/useFailure';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type ClientConfigItem,
@@ -22,7 +23,9 @@ import {
 } from '../../services/clientConfig';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { adminText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
+import { trimSpec } from '../../utils/trimSpec';
 import {
   addLanguage,
   type Draft,
@@ -35,15 +38,7 @@ import {
   valuesOf,
 } from './editorState';
 import { PreviewBox } from './PreviewBox';
-import {
-  adminText,
-  formatValue,
-  instantText,
-  keyText,
-  problemText,
-  readOnlyNote,
-  typeText,
-} from './texts';
+import { formatValue, keyText, problemText, readOnlyNote, typeText } from './texts';
 import { ValueControl } from './ValueControl';
 import { sameVersion } from './version';
 
@@ -81,18 +76,37 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
   const [draft, setDraft] = useState<Draft>(() => draftOf(item));
   const [active, setActive] = useState(() => tabKey(draftOf(item)[0]?.locale ?? ''));
   const [attempted, setAttempted] = useState(false);
+  // The reason the backend gave for each language it refused; its words are made when drawn.
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
-  const [failure, setFailure] = useState<string | null>(null);
+  const failed = useFailure();
+  const failure = failed.text;
   const [refused, setRefused] = useState(false);
+  // Refusals of the backend that name no tab of this editor (`values`, a language that is not here):
+  // shown as a list, so the administrator is not left with the general sentence alone.
+  const [unplaced, setUnplaced] = useState<{ ref: string; reason: string }[]>([]);
   const [conflict, setConflict] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  // A save, a reset and a reload of the editor are writes or reads of the same key that decide on
+  // what they read: while one is under way the others do not start (they would each read "nothing
+  // changed" and then write over one another).
+  const working = useRef(false);
+  const exclusive = async (work: () => Promise<void>) => {
+    if (working.current) return;
+    working.current = true;
+    try {
+      await work();
+    } finally {
+      working.current = false;
+    }
+  };
   const [newLanguage, setNewLanguage] = useState('');
-  const [languageProblem, setLanguageProblem] = useState<string | null>(null);
+  const [languageProblem, setLanguageProblem] = useState<'DUPLICATE' | 'INVALID' | null>(null);
 
   const changed = isChanged(item, draft);
   const problems = problemsOf(type, draft);
   const problemOf = (locale: string) => problems.find((p) => p.locale === locale);
   const errorOf = (locale: string): string | null => {
-    if (locale in serverErrors) return serverErrors[locale];
+    if (locale in serverErrors) return problemText(intl, serverErrors[locale]);
     const found = problemOf(locale);
     return attempted && found ? problemText(intl, found.reason) : null;
   };
@@ -110,18 +124,12 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
   const add = (raw: string, isDefault: boolean) => {
     const result = addLanguage(draft, raw, { allowDefault: isDefault, initial: emptyValue(type) });
     if (!result.ok) {
-      setLanguageProblem(
-        t(
-          result.problem === 'DUPLICATE'
-            ? 'clientConfig.editor.languageDuplicate'
-            : 'clientConfig.editor.languageInvalid',
-        ),
-      );
+      setLanguageProblem(result.problem === 'DUPLICATE' ? 'DUPLICATE' : 'INVALID');
       return;
     }
     setLanguageProblem(null);
     setDraft(result.draft);
-    setActive(tabKey(isDefault ? '' : raw.trim()));
+    setActive(tabKey(isDefault ? '' : trimSpec(raw)));
     setNewLanguage('');
   };
 
@@ -131,95 +139,112 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
     setActive(tabKey(rest[0]?.locale ?? ''));
   };
 
-  const { run: save, pending } = useSingleFlight(async () => {
-    setFailure(null);
-    setRefused(false);
-    setConflict(false);
-    setAttempted(true);
-    if (problems.length > 0) {
-      const first = problems.find((p) => p.locale !== null);
-      if (first?.locale !== undefined && first.locale !== null) setActive(tabKey(first.locale));
-      return;
-    }
-    // A key is saved as a whole, so a save over a newer version would delete what the other
-    // administrator added. Read the key again; if it is no longer the one that was opened, stop.
-    try {
-      if (!sameVersion(item, await readClientConfigKey(key))) {
-        setConflict(true);
+  const { run: save, pending } = useSingleFlight(() =>
+    exclusive(async () => {
+      failed.clear();
+      setRefused(false);
+      setUnplaced([]);
+      setConflict(false);
+      setAttempted(true);
+      if (problems.length > 0) {
+        const first = problems.find((p) => p.locale !== null);
+        if (first?.locale !== undefined && first.locale !== null) setActive(tabKey(first.locale));
         return;
       }
-    } catch (error) {
-      setFailure(describeFailure(intl, error).text);
-      return;
-    }
-    try {
-      await saveClientConfig(key, valuesOf(type, draft));
-    } catch (error) {
-      const { error: failed, text } = describeFailure(intl, error);
-      const byLanguage: Record<string, string> = {};
-      for (const detail of failed.details) {
-        // The contract (1.4) writes the value without a language as `default`; its entry has the empty tag.
-        const tag = detail.ref === 'default' ? '' : detail.ref;
-        if (draft.some((entry) => entry.locale === tag)) {
-          byLanguage[tag] = problemText(intl, detail.reason);
+      // A key is saved as a whole, so a save over a newer version would delete what the other
+      // administrator added. Read the key again; if it is no longer the one that was opened, stop.
+      try {
+        if (!sameVersion(item, await readClientConfigKey(key))) {
+          setConflict(true);
+          return;
         }
+      } catch (error) {
+        failed.fail(error);
+        return;
       }
-      setServerErrors(byLanguage);
-      const first = Object.keys(byLanguage)[0];
-      if (first !== undefined) setActive(tabKey(first));
-      setRefused(Object.keys(byLanguage).length > 0);
-      setFailure(text);
-      return;
-    }
-    message.success(t('clientConfig.editor.saved'));
-    onChanged();
-    onClose();
-  });
+      try {
+        await saveClientConfig(key, valuesOf(type, draft));
+      } catch (error) {
+        const { error: refusal } = describeFailure(intl, error);
+        const byLanguage: Record<string, string> = {};
+        const others: { ref: string; reason: string }[] = [];
+        for (const detail of refusal.details) {
+          // The contract (1.4) writes the value without a language as `default`; its entry has the empty tag.
+          const tag = detail.ref === 'default' ? '' : detail.ref;
+          if (draft.some((entry) => entry.locale === tag)) {
+            byLanguage[tag] = detail.reason;
+          } else {
+            others.push({ ref: detail.ref, reason: detail.reason });
+          }
+        }
+        setServerErrors(byLanguage);
+        setUnplaced(others);
+        const first = Object.keys(byLanguage)[0];
+        if (first !== undefined) setActive(tabKey(first));
+        setRefused(Object.keys(byLanguage).length > 0 || others.length > 0);
+        failed.fail(error);
+        return;
+      }
+      message.success(t('clientConfig.editor.saved'));
+      onChanged();
+      onClose();
+    }),
+  );
 
   // Takes the key as the backend has it now and drops the edit, the tabs and the marks on them.
-  const { run: reload, pending: reloading } = useSingleFlight(async () => {
-    setFailure(null);
-    let fresh: ClientConfigItem | undefined;
-    try {
-      fresh = await readClientConfigKey(key);
-    } catch (error) {
-      setFailure(describeFailure(intl, error).text);
-      return;
-    }
-    if (!fresh) {
-      setFailure(t('error.RESOURCE_NOT_FOUND'));
-      return;
-    }
-    setItem(fresh);
-    setDraft(draftOf(fresh));
-    setActive(tabKey(draftOf(fresh)[0]?.locale ?? ''));
-    setAttempted(false);
-    setServerErrors({});
-    setRefused(false);
-    setConflict(false);
-    onChanged();
-  });
+  const { run: reload, pending: reloading } = useSingleFlight(() =>
+    exclusive(async () => {
+      failed.clear();
+      let fresh: ClientConfigItem | undefined;
+      try {
+        fresh = await readClientConfigKey(key);
+      } catch (error) {
+        failed.fail(error);
+        return;
+      }
+      if (!fresh) {
+        failed.failWith((words) => words.formatMessage({ id: 'error.RESOURCE_NOT_FOUND' }));
+        return;
+      }
+      setItem(fresh);
+      setDraft(draftOf(fresh));
+      setActive(tabKey(draftOf(fresh)[0]?.locale ?? ''));
+      setAttempted(false);
+      setServerErrors({});
+      setRefused(false);
+      setUnplaced([]);
+      setConflict(false);
+      onChanged();
+    }),
+  );
 
   // A reset deletes every language of the key, also what another administrator saved after this
   // editor opened, so it is checked like a save: the key is read again and must be the one opened.
-  const resetKey = async () => {
-    setFailure(null);
-    setRefused(false);
-    setConflict(false);
-    try {
-      if (!sameVersion(item, await readClientConfigKey(key))) {
-        setConflict(true);
-        return;
+  const resetKey = () =>
+    exclusive(async () => {
+      setResetting(true);
+      try {
+        failed.clear();
+        setRefused(false);
+        setUnplaced([]);
+        setConflict(false);
+        try {
+          if (!sameVersion(item, await readClientConfigKey(key))) {
+            setConflict(true);
+            return;
+          }
+          await resetClientConfig(key);
+        } catch (error) {
+          failed.fail(error);
+          return;
+        }
+        message.success(t('clientConfig.reset.done'));
+        onChanged();
+        onClose();
+      } finally {
+        setResetting(false);
       }
-      await resetClientConfig(key);
-    } catch (error) {
-      setFailure(describeFailure(intl, error).text);
-      return;
-    }
-    message.success(t('clientConfig.reset.done'));
-    onChanged();
-    onClose();
-  };
+    });
 
   const supported = (Array.isArray(meta.supportedLocales) ? meta.supportedLocales : [])
     .filter((tag): tag is string => typeof tag === 'string')
@@ -252,7 +277,7 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
       title={t('clientConfig.editor.title', { key })}
       destroyOnHidden
       mask={{ closable: false }}
-      onClose={pending ? undefined : onClose}
+      onClose={pending || resetting || reloading ? undefined : onClose}
       footer={
         editable ? (
           <Flex gap={8} align="center" wrap justify="space-between">
@@ -260,7 +285,7 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
               <Button
                 type="primary"
                 loading={pending}
-                disabled={pending || !changed}
+                disabled={pending || resetting || reloading || !changed}
                 onClick={() => save()}
               >
                 {t('clientConfig.editor.save')}
@@ -278,9 +303,14 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
                 </Typography.Text>
               )}
               <DangerConfirmButton
-                confirmText={t('clientConfig.reset.confirm', { key })}
+                confirmText={t(
+                  item.defaultValue !== null
+                    ? 'clientConfig.reset.confirm'
+                    : 'clientConfig.reset.confirmNoDefault',
+                  { key },
+                )}
                 onConfirm={resetKey}
-                disabled={item.configured !== true || pending}
+                disabled={item.configured !== true || pending || resetting || reloading}
               >
                 {t('clientConfig.reset.button')}
               </DangerConfirmButton>
@@ -340,7 +370,28 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
             type="error"
             showIcon
             title={failure}
-            description={refused ? t('clientConfig.editor.refused') : undefined}
+            description={
+              refused || unplaced.length > 0 ? (
+                <Flex vertical gap={4}>
+                  {refused ? <span>{t('clientConfig.editor.refused')}</span> : null}
+                  {unplaced.length > 0 ? (
+                    <ul
+                      style={{ margin: 0, paddingInlineStart: 20 }}
+                      data-testid="client-config-unplaced"
+                    >
+                      {unplaced.map((detail, i) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: the same refusal can come twice
+                        <li key={i} style={{ overflowWrap: 'anywhere' }}>
+                          {detail.ref === ''
+                            ? problemText(intl, detail.reason)
+                            : `${plainText(detail.ref)}: ${problemText(intl, detail.reason)}`}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </Flex>
+              ) : undefined
+            }
           />
         ) : null}
         {conflict ? (
@@ -421,7 +472,11 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
                             </Button>
                             {entry.locale === '' ? null : (
                               <Typography.Text type="secondary">
-                                {t('clientConfig.editor.removeHelp')}
+                                {t(
+                                  hasDefault || item.defaultValue !== null
+                                    ? 'clientConfig.editor.removeHelp'
+                                    : 'clientConfig.editor.removeHelpNone',
+                                )}
                               </Typography.Text>
                             )}
                           </Flex>
@@ -454,7 +509,13 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
                   {t('clientConfig.editor.addLanguage')}
                 </Button>
                 {languageProblem ? (
-                  <Typography.Text type="danger">{languageProblem}</Typography.Text>
+                  <Typography.Text type="danger">
+                    {t(
+                      languageProblem === 'DUPLICATE'
+                        ? 'clientConfig.editor.languageDuplicate'
+                        : 'clientConfig.editor.languageInvalid',
+                    )}
+                  </Typography.Text>
                 ) : null}
               </Flex>
             ) : null}

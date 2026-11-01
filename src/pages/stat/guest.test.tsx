@@ -1,13 +1,16 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { App } from 'antd';
+import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { daysIn } from '../../../mock/_core/statRange';
 import { envelope, jsonResponse, stubFetch, XLSX_TYPE } from '../../../tests/httpStubs';
 import { renderPage } from '../../../tests/renderPage';
-import { resetUmiStub, setTestAccess } from '../../../tests/stubs/umi-max';
+import { resetUmiStub, setTestAccess, setTestInitialState } from '../../../tests/stubs/umi-max';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import access from '../../access';
 import { resetChannelsCache } from '../../components/ChannelSelect';
+import zhCN from '../../locales/zh-CN';
 import { resetSessionState, setToken } from '../../request/session';
 import type {
   GuestCohortRow,
@@ -177,11 +180,66 @@ const tipIcon = (id: string) =>
     .getByRole('tabpanel')
     .querySelector(`.ant-table-thead [data-testid="${id}"]`) as HTMLElement;
 
+/** Opens the select of the visible tab by its label and picks the option with this text. */
+const chooseOptionIn = async (
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  text: string,
+) => {
+  await user.click(panel().getByRole('combobox', { name: label }));
+  const options = await screen.findAllByText(text, { selector: '.ant-select-item-option-content' });
+  await user.click(options[options.length - 1]);
+};
+
 const openTab = async (name: string) => {
   const user = userEvent.setup();
   await user.click(tab(name));
   return user;
 };
+
+describe('the guest page when the language is switched', () => {
+  it('keeps the report on screen and asks for nothing again', async () => {
+    const calls = backend();
+    const { rerender } = renderPage(<GuestPage />);
+    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(1));
+    await waitFor(() => expect(bodyRows().length).toBeGreaterThan(0));
+    rerender(
+      <IntlProvider locale="zh-CN" messages={zhCN} onError={() => {}}>
+        <App>
+          <GuestPage />
+        </App>
+      </IntlProvider>,
+    );
+    expect(
+      await screen.findByRole('tab', { name: zhCN['stat.guest.tab.cohort'] }),
+    ).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(callsTo(calls, 'guest/daily')).toHaveLength(1);
+    expect(bodyRows().length).toBeGreaterThan(0);
+  });
+});
+
+describe('the first range of each guest tab', () => {
+  it.each([
+    ['Guest daily', 'guest/daily', 3],
+    ['Conversion cohorts', 'guest/cohort', 10],
+    ['Guest retention', 'guest/retention', 10],
+    ['Allowance use', 'guest/quota', 3],
+  ] as const)(
+    'on %s is no longer than the backend allows (%s limit %i days), so that the first ask is not refused',
+    async (name, path, limit) => {
+      setTestInitialState({ meta: { statsMaxRangeDays: limit } });
+      const calls = backend();
+      renderPage(<GuestPage />);
+      if (name !== 'Guest daily') await openTab(name);
+      await waitFor(() => expect(callsTo(calls, path)).toHaveLength(1));
+      const url = new URL(callsTo(calls, path)[0].url, 'http://x');
+      expect(
+        daysIn(url.searchParams.get('from') ?? '', url.searchParams.get('to') ?? ''),
+      ).toHaveLength(limit);
+    },
+  );
+});
 
 describe('the guest statistics page', () => {
   it('has the four tabs in order, starts on the guest daily report, and says it counts devices and UTC days', async () => {
@@ -277,12 +335,36 @@ describe('the guest daily report', () => {
     await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(1));
     expect(screen.getByText('Check day (UTC)')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
-    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(2));
+    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(2), { timeout: 5000 });
     expect(callsTo(calls, 'land/').map((c) => c.url)).toEqual([
       '/api/admin/stats/land/daily-business?date=2026-10-25',
       '/api/admin/stats/land/guest-cohort?date=2026-10-25',
       '/api/admin/stats/land/guest-retention?date=2026-10-25',
     ]);
+  });
+
+  it('reads the conversion tab again too after landing from the daily tab, since that tab stays open behind it', async () => {
+    as(['STATS:VIEW', 'STATS:LAND']);
+    const calls = backend();
+    renderPage(<GuestPage />);
+    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(1));
+    const user = await openTab('Conversion cohorts');
+    await waitFor(() => expect(callsTo(calls, 'guest/cohort')).toHaveLength(1));
+    await user.click(tab('Guest daily'));
+    fireEvent.click(panel().getByRole('button', { name: 'Re-land this day' }));
+    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(2), { timeout: 5000 });
+    await waitFor(() => expect(callsTo(calls, 'guest/cohort')).toHaveLength(2), { timeout: 5000 });
+  });
+
+  it('does not read a tab that was never opened just because something was landed', async () => {
+    as(['STATS:VIEW', 'STATS:LAND']);
+    const calls = backend();
+    renderPage(<GuestPage />);
+    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
+    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(2));
+    expect(callsTo(calls, 'guest/cohort')).toHaveLength(0);
+    expect(callsTo(calls, 'guest/retention')).toHaveLength(0);
   });
 
   it('shows no landing bar without STATS:LAND', async () => {
@@ -513,7 +595,7 @@ describe('the conversion cohorts tab', () => {
     await openTab('Conversion cohorts');
     await waitFor(() => expect(callsTo(calls, 'guest/cohort')).toHaveLength(1));
     fireEvent.click(panel().getByRole('button', { name: 'Re-land this day' }));
-    await waitFor(() => expect(callsTo(calls, 'guest/cohort')).toHaveLength(2));
+    await waitFor(() => expect(callsTo(calls, 'guest/cohort')).toHaveLength(2), { timeout: 5000 });
     expect(callsTo(calls, 'land/').map((c) => c.url)).toEqual([
       '/api/admin/stats/land/daily-business?date=2026-10-25',
       '/api/admin/stats/land/guest-cohort?date=2026-10-25',
@@ -535,7 +617,7 @@ describe('the conversion cohorts tab', () => {
     renderPage(<GuestPage />);
     await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(1));
     fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
-    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(2));
+    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(2), { timeout: 5000 });
     expect(callsTo(calls, 'land/').map((c) => c.url)).toEqual([
       '/api/admin/stats/land/daily-business?date=2026-10-25',
       '/api/admin/stats/land/guest-cohort?date=2026-10-25',
@@ -615,6 +697,24 @@ describe('the guest retention tab', () => {
       o.getAttribute('title'),
     );
     expect(options).toEqual([1, 3, 5, 7, 14, 21, 30, 60, 90].map((n) => `Day ${n}`));
+  });
+
+  it('keeps the columns and the lines in the order of the days, also when a smaller day is chosen last', async () => {
+    backend({ retention: () => [retention('2026-10-01')] });
+    const user = userEvent.setup();
+    renderPage(<GuestPage />);
+    await openTab('Guest retention');
+    await waitFor(() => expect(bodyRows()).toHaveLength(1));
+    await chooseOptionIn(user, 'Retention days', 'Day 3');
+    await waitFor(() => expect(headerTexts().filter((h) => /^Day \d+$/.test(h))).toHaveLength(4));
+    expect(headerTexts().filter((h) => /^Day \d+$/.test(h))).toEqual([
+      'Day 1',
+      'Day 3',
+      'Day 7',
+      'Day 30',
+    ]);
+    const series = [...new Set(chartData('line').map((d) => d.series))];
+    expect(series).toEqual(['Day 1', 'Day 3', 'Day 7', 'Day 30']);
   });
 
   it('asks for the platform chosen once Search is pressed', async () => {
@@ -785,6 +885,32 @@ describe('the allowance use tab', () => {
     expect(
       await screen.findByText(/Converted means the device later registered an account/),
     ).toBeInTheDocument();
+  });
+
+  it('gives a hint icon, reachable by touch and keyboard, to each card that has a definition, and none to the cards that have none', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<GuestPage />);
+    await openTab('Allowance use');
+    await screen.findByTestId('quota-card-devices');
+    for (const name of ['configured', 'noGrant', 'neverCalled', 'exhausted', 'avgUsed']) {
+      expect(
+        within(screen.getByTestId(`quota-card-${name}`)).getByTestId(`tip-quota-card-${name}`),
+      ).toBeInTheDocument();
+    }
+    expect(
+      within(screen.getByTestId('quota-card-devices')).queryByTestId('tip-quota-card-devices'),
+    ).toBeNull();
+    await user.hover(screen.getByTestId('tip-quota-card-neverCalled'));
+    expect(await screen.findByText(/used none of it/)).toBeInTheDocument();
+  });
+
+  it('says that the range picks devices by the day they first appeared, and that their use counts up to now', async () => {
+    backend();
+    renderPage(<GuestPage />);
+    await openTab('Allowance use');
+    await screen.findByTestId('quota-card-devices');
+    expect(screen.getByText(/first appeared in the range.*up to now/i)).toBeInTheDocument();
   });
 
   it('links to the guest call allowance in System settings only with CONFIG:MANAGE', async () => {

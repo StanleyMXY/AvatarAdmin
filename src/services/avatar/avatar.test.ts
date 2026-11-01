@@ -15,6 +15,7 @@ import {
   getAccountAvatars,
   grantCosmetic,
   listActions,
+  listAllCosmetics,
   listCosmetics,
   listDeclarations,
   listDefaultAvatars,
@@ -54,6 +55,37 @@ describe('the catalogs', () => {
     expect(page).toEqual({ items: [{ id: '1' }], total: 41 });
     await listCosmetics({ page: 1, pageSize: 20 });
     expect(calls[1].url).toBe('/api/admin/cosmetics?page=1&pageSize=20');
+    expect(calls[0].init.cache).toBe('no-store'); // the previews are signed for a short time
+  });
+
+  it('reads every page of the catalog, 200 rows at a time, until it has the total', async () => {
+    const rows = Array.from({ length: 450 }, (_, n) => ({ id: String(n) }));
+    const calls = stubFetch(({ url }) => {
+      const page = Number(new URL(url, 'http://x').searchParams.get('page'));
+      return jsonResponse(
+        200,
+        envelope('200', { items: rows.slice((page - 1) * 200, page * 200), total: 450 }),
+      );
+    });
+    const all = await listAllCosmetics();
+    expect(all).toHaveLength(450);
+    expect(calls.map((c) => c.url)).toEqual([
+      '/api/admin/cosmetics?page=1&pageSize=200',
+      '/api/admin/cosmetics?page=2&pageSize=200',
+      '/api/admin/cosmetics?page=3&pageSize=200',
+    ]);
+  });
+
+  it('stops at an empty page even when the total says there is more, so a wrong total cannot loop', async () => {
+    const calls = stubFetch(({ url }) => {
+      const page = Number(new URL(url, 'http://x').searchParams.get('page'));
+      return jsonResponse(
+        200,
+        envelope('200', { items: page === 1 ? [{ id: 'a' }] : [], total: 999 }),
+      );
+    });
+    expect(await listAllCosmetics()).toEqual([{ id: 'a' }]);
+    expect(calls).toHaveLength(2);
   });
 
   it('cuts the page itself when the answer has no total (a list that is not paged)', async () => {
@@ -186,6 +218,7 @@ describe('default avatars', () => {
     const calls = answer({ items: [{ id: 'd1' }] });
     expect(await listDefaultAvatars()).toEqual({ items: [{ id: 'd1' }] });
     expect(calls[0].url).toBe('/api/admin/default-avatars');
+    expect(calls[0].init.cache).toBe('no-store'); // the rows carry addresses signed for a short time
   });
 
   it('creates with name, style and sourceUploadId only (no portraitAuthorized)', async () => {
@@ -216,6 +249,7 @@ describe('the account side (the user detail page)', () => {
     const calls = answer({ avatars: [], cosmetics: [] });
     expect(await getAccountAvatars('acc/1')).toEqual({ avatars: [], cosmetics: [] });
     expect(calls[0].url).toBe('/api/admin/accounts/acc%2F1/avatars');
+    expect(calls[0].init.cache).toBe('no-store'); // the previews show a person's face and are audited
   });
 
   it('grants a cosmetic with itemId and reason', async () => {

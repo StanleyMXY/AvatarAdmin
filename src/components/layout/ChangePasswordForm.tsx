@@ -6,6 +6,7 @@ import { changePassword } from '../../services/auth';
 import { describeFailure } from '../../session/describe';
 import { checkPasswordChange } from '../../session/passwordRules';
 import { useSubmitOnce } from '../../session/useSubmitOnce';
+import { detailReasons, messageReason, setFieldReasons } from '../../utils/fieldReasons';
 
 type Values = { oldPassword: string; newPassword: string; confirm: string };
 type Field = keyof Values;
@@ -48,9 +49,16 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
     },
   });
 
+  // The text of the error code, and for a rejected request the reasons the server gave, each in its
+  // own translation. The server's own sentence is never added: a known code is shown by its text.
   const alertText = (failure: unknown) => {
     const { error, text } = describeFailure(intl, failure);
-    return error.code === 'INVALID_REQUEST' && error.message ? `${text}: ${error.message}` : text;
+    if (error.code !== 'INVALID_REQUEST') return text;
+    const reasons = error.details
+      .map((detail) => `reason.${detail.reason}`)
+      .filter((id) => intl.messages[id])
+      .map((id) => t(id));
+    return reasons.length > 0 ? `${text} ${[...new Set(reasons)].join(' ')}` : text;
   };
 
   const submit = (values: Values) =>
@@ -60,18 +68,20 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
         await changePassword({ oldPassword: values.oldPassword, newPassword: values.newPassword });
         onDone();
       } catch (failure) {
-        const { error, fields } = describeFailure(intl, failure);
+        const { error } = describeFailure(intl, failure);
         if (error.code === 'ADMIN_INVALID_CREDENTIALS') {
-          form.setFields([{ name: 'oldPassword', errors: [t('auth.password.oldWrong')] }]);
+          setFieldReasons(form, intl, [messageReason('oldPassword', 'auth.password.oldWrong')]);
           return;
         }
-        const named = fields.filter((f) => f.ref === 'oldPassword' || f.ref === 'newPassword');
+        const named = detailReasons(intl, failure, (ref) =>
+          ref === 'oldPassword' || ref === 'newPassword' ? ref : undefined,
+        );
         if (named.length > 0) {
-          form.setFields(named.map((f) => ({ name: f.ref as Field, errors: [f.text] })));
+          setFieldReasons(form, intl, named);
           return;
         }
-        // The backend's own sentence is the only place the reason is spelled out for a rule the
-        // browser did not know (for example a minimum length it was not told).
+        // A rule the browser did not know (for example a minimum length it was not told): the
+        // bar says the input was refused, with the reasons that have a translation.
         setAlert({ failure });
       }
     });

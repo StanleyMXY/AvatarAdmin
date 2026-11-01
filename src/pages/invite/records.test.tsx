@@ -176,6 +176,14 @@ describe('the invite record page', { timeout: 30000 }, () => {
     expect(document.body.textContent).not.toMatch(/\[object|undefined|NaN/);
   });
 
+  it('lays an identifier that starts with an Arabic letter out from the left, so the domain is not read first', async () => {
+    answer([record({ id: '1', inviterLabel: 'ส***@h***.co.th', inviteeLabel: 'م***@y***.com' })]);
+    renderPage(<RecordsPage />);
+    const arabic = await screen.findByText('م***@y***.com');
+    expect(arabic.closest('button')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('ส***@h***.co.th').closest('button')).toHaveAttribute('dir', 'ltr');
+  });
+
   it('filters by the reward status and sends nothing for "all"', async () => {
     const calls = useMockBackend(inviteMock);
     const user = userEvent.setup();

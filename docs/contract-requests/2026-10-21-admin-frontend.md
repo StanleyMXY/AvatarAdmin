@@ -682,7 +682,7 @@
 - **行为：** 请求体可选加 `expectedUpdatedAt`：取 `GET /client-config` 里该键的 `updatedAt`（取各语言行里最近更新的那一行；库里没有行时为 `null`）。带了它，且与库里该键当前最近更新时间不同（含"传了时刻但库里没有行""传了 `null` 但库里已有行"），返回 409 `INVALID_STATE`，整个键什么都不改；不带它，行为和今天完全一样（向后兼容）。
 - **检查顺序（提议）：** 权限（403）→ 键已登记（404 `RESOURCE_NOT_FOUND`）→ 键不是只读（400，同现在）→ `expectedUpdatedAt` 比较（409 `INVALID_STATE`，`data` 里可带当前的 `updatedAt`）→ `values` 逐项校验（400 `INVALID_REQUEST`，`details` 同 26.3）→ 在一个事务里整体替换。
 - **错误：** 409 `INVALID_STATE`（已有的码）。
-- **测试：** 带的值与库里相同时成功；别人先保存后，用旧的 `expectedUpdatedAt` 保存得 409，且库里的值是别人保存的那一份；库里没有行时传 `null` 成功、传一个时刻得 409；库里已有行时传 `null` 得 409；不带该字段时保存成功（兼容）；409 之后没有任何语言值被改动。`POST …/reset` 要不要同样接受它，由改契约的人定。
+- **测试：** 带的值与库里相同时成功；别人先保存后，用旧的 `expectedUpdatedAt` 保存得 409，且库里的值是别人保存的那一份；库里没有行时传 `null` 成功、传一个时刻得 409；库里已有行时传 `null` 得 409；不带该字段时保存成功（兼容）；409 之后没有任何语言值被改动。`POST …/reset` 同样接受 `expectedUpdatedAt`，规则同保存（请求见 `2026-10-27-admin-frontend-concurrent-save.md` 第二节）。
 - **前端配合：** 页面现在在保存前重新读取这个键，和打开时的 `updatedAt`（没有就比各语言的值）比较，不一致就不保存，提示"已被他人修改"并给"重新载入"（见 `2026-10-27-admin-frontend-concurrent-save.md`）；读和写之间仍有时间窗，后端支持 `expectedUpdatedAt` 后页面把它放进请求体，409 走同一个提示。
 - **来源：** `notifications.md` 二.4。
 

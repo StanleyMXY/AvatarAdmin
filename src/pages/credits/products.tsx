@@ -2,24 +2,28 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { App, Button, Switch } from 'antd';
 import { useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type CreditProduct,
-  listCreditProducts,
+  listAllCreditProducts,
   updateCreditProduct,
 } from '../../services/credits';
-import { describeFailure } from '../../session/describe';
+import { failureLine } from '../../session/failureLine';
 import { formatCount } from '../../utils/ratio';
+import { assertPackUnchanged, PackChangedError } from './freshPack';
 import { ProductModal } from './ProductModal';
 
 /** The on-sale switch of one pack: one request per change, and the switch is back where it was when the backend refuses. */
 function SaleSwitch({ pack, onChanged }: { pack: CreditProduct; onChanged: () => void }) {
   const intl = useIntl();
   const { message } = App.useApp();
+  const t = (id: string) => intl.formatMessage({ id });
   const { run, pending } = useSingleFlight(async (enabled: boolean) => {
     try {
+      await assertPackUnchanged(pack);
       await updateCreditProduct(pack.id, {
         credits: pack.credits,
         enabled,
@@ -27,7 +31,9 @@ function SaleSwitch({ pack, onChanged }: { pack: CreditProduct; onChanged: () =>
         ...(pack.surfaces ? { surfaces: pack.surfaces } : {}),
       });
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      if (error instanceof PackChangedError)
+        message.warning(t('credits.products.changedMeanwhile'));
+      else message.error(failureLine(intl, error));
     }
     onChanged();
   });
@@ -83,7 +89,7 @@ export default function CreditProductsPage() {
       title: t('credits.common.actions'),
       search: false,
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) => (
         <Button type="link" size="small" onClick={() => setEditing(row)}>
           {t('credits.products.editButton')}
@@ -98,9 +104,9 @@ export default function CreditProductsPage() {
         rowKey="id"
         columns={columns}
         actionRef={actionRef}
-        // The list is not paged by the backend (a small table of settings): the page is cut here.
+        // A small table of settings: every pack is read (page after page when the backend pages it) and the page is cut here.
         request={async ({ page, pageSize }) => {
-          const { items } = await listCreditProducts();
+          const items = await listAllCreditProducts();
           return {
             items: items.slice((page - 1) * pageSize, page * pageSize),
             total: items.length,

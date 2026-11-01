@@ -2,12 +2,13 @@ import { useIntl } from '@umijs/max';
 import { Alert, Button, Card, Flex, Spin, Typography } from 'antd';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   getModerationContent,
   type ModerationContent,
   type ModerationRecord,
 } from '../../services/moderation';
-import { describeFailure } from '../../session/describe';
+import { describeFailure, failureCode } from '../../session/describe';
 
 type Phase = 'loading' | 'ready' | 'notStored' | 'failed';
 
@@ -83,8 +84,6 @@ export function ContentPanel({
   canReview: boolean;
 }) {
   const intl = useIntl();
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const blocked = record.status === 'BLOCKED';
@@ -92,38 +91,40 @@ export function ContentPanel({
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [content, setContent] = useState<ModerationContent | null>(null);
-  const [failure, setFailure] = useState('');
+  // The failed read itself (boxed): its words are made when drawn, so they follow the language.
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
+  const failure = failed === null ? '' : describeFailure(intl, failed.error).text;
   const [mediaFailed, setMediaFailed] = useState(false);
   const retried = useRef(false);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   const id = record.id;
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setPhase('loading');
     setMediaFailed(false);
     try {
       const answer = await getModerationContent(id);
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setContent(answer);
       setPhase('ready');
     } catch (error) {
-      if (mine !== counter.current) return;
-      const described = describeFailure(intlRef.current, error);
+      if (!isCurrent()) return;
       setContent(null);
-      setFailure(described.text);
-      setPhase(described.error.code === 'CONTENT_NOT_STORED' ? 'notStored' : 'failed');
+      setFailed({ error });
+      setPhase(failureCode(error) === 'CONTENT_NOT_STORED' ? 'notStored' : 'failed');
     }
-  }, [id]);
+  }, [id, begin]);
 
   useEffect(() => {
     if (!active) return undefined;
     retried.current = false;
     void load();
     return () => {
-      counter.current += 1;
+      // Another record, or the tab is left: the read still on its way belongs to nobody.
+      begin();
     };
-  }, [active, load]);
+  }, [active, load, begin]);
 
   const onMediaError = () => {
     if (!retried.current) {

@@ -11,7 +11,7 @@ const messages: Record<string, string> = {
   'analytics.summary.total': '{count} event names',
   'analytics.summary.empty': 'No events in this range',
   'analytics.summary.tip':
-    'Read live from the event log, so there is no landing bar. Triggers count every event; distinct accounts count each signed-in account once.',
+    'Read live from the event log, so there is no landing bar. Triggers count every event; distinct accounts count each account once.',
 
   'analytics.detail.accountId': 'Account ID',
   'analytics.detail.deviceId': 'Device ID',
@@ -19,7 +19,7 @@ const messages: Record<string, string> = {
   'analytics.detail.col.account': 'Account',
   'analytics.detail.col.device': 'Device',
   'analytics.detail.col.receivedAt': 'Received at',
-  'analytics.detail.col.clientTime': 'Client time',
+  'analytics.detail.col.clientTime': 'Client time (self-reported)',
   'analytics.detail.col.platform': 'Platform',
   'analytics.detail.col.appVersion': 'App version',
   'analytics.detail.col.country': 'Country',
@@ -73,7 +73,7 @@ const messages: Record<string, string> = {
   'analytics.funnel.help.days':
     'Distinct counts are not added up across days: for a range of several days, the result is the number of distinct accounts in the whole range.',
   'analytics.funnel.help.anonymous':
-    'Events without an account (before sign-up) are joined to the account that the same device signed in with.',
+    'Who is counted: the account of the event; when the event has none, the account of the events of the same device within the window; when there is still none, the device itself.',
 };
 
 export default messages;

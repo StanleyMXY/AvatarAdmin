@@ -1,13 +1,13 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Descriptions, Drawer, Flex, Skeleton, Typography } from 'antd';
 import { useCallback } from 'react';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getSession, type SessionDetail } from '../../services/sessions';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { AccountCell } from './AccountCell';
 import { devicePrefix, formatDuration, formatMinutes, isGuest, when } from './format';
 import { PlainValue } from './PlainValue';
-import { useStatRead } from './useStatRead';
 
 /** The text of a code the backend sends: its translation, or the code itself when there is none. */
 function labelOf(
@@ -26,7 +26,7 @@ function Details({ id }: { id: string }) {
   const t = (key: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id: key }, values);
   const fetcher = useCallback(() => getSession(id), [id]);
-  const { data, failure, reload } = useStatRead<SessionDetail>(fetcher);
+  const { data, failure, reload } = useLatestRead<SessionDetail>(fetcher);
 
   if (failure) {
     return (

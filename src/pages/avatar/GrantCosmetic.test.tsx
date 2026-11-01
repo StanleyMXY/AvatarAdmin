@@ -72,6 +72,35 @@ describe('giving a cosmetic to an account', { timeout: 60000 }, () => {
     );
   });
 
+  it('also lists an item that is past the first 200 of the catalog', async () => {
+    backend();
+    const real = globalThis.fetch;
+    const item = (n: number) => ({
+      id: `c${n}`,
+      key: `item_${n}`,
+      kind: 'OUTFIT',
+      names: { en: `Item ${n}` },
+      enabled: true,
+    });
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (!url.startsWith('/api/admin/cosmetics?')) return real(input, init);
+      const page = Number(new URL(url, 'http://x').searchParams.get('page'));
+      const items = page === 1 ? Array.from({ length: 200 }, (_, n) => item(n)) : [item(200)];
+      return jsonResponse(200, envelope('200', { items, total: 201 }));
+    });
+    const user = userEvent.setup();
+    mount();
+    const dialog = await openDialog(user);
+    await user.click(within(dialog).getByRole('combobox', { name: 'Item' }));
+    await user.type(within(dialog).getByRole('combobox', { name: 'Item' }), 'item_200');
+    expect(
+      (await screen.findAllByText(/item_200/, { selector: '.ant-select-item-option-content' }))
+        .length,
+    ).toBeGreaterThan(0);
+    vi.unstubAllGlobals();
+  });
+
   it('sends itemId and the trimmed reason, tells the caller, and closes', async () => {
     const calls = backend();
     const user = userEvent.setup();

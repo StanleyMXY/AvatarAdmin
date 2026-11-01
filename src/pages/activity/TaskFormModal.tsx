@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select } from 'antd';
 import { useMemo, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -12,9 +13,9 @@ import {
   updateTaskConfig,
 } from '../../services/activity';
 import { countCodePoints } from '../../utils/codePoints';
+import { failureToForm } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 
 type Values = {
   taskName: string;
@@ -63,7 +64,7 @@ export function TaskFormModal({ target, open, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [lockedByBackend, setLockedByBackend] = useState(false);
   const row = target === null || target === 'new' ? null : target;
   const locked = lockedByBackend || (row as { hasRecords?: unknown } | null)?.hasRecords === true;
@@ -96,7 +97,7 @@ export function TaskFormModal({ target, open, onClose, onSaved }: Props) {
   );
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     const type = values.taskType as TaskType;
     const body: TaskBody = {
       taskName: trimSpec(values.taskName),
@@ -117,7 +118,7 @@ export function TaskFormModal({ target, open, onClose, onSaved }: Props) {
         setLockedByBackend(true);
         form.setFieldsValue({ taskType: initial.taskType, targetValue: initial.targetValue });
       } else {
-        setFailure(result.text);
+        fail(error);
       }
       return;
     }

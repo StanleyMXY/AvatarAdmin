@@ -1,8 +1,9 @@
 import { Link, useAccess, useIntl, useLocation } from '@umijs/max';
 import { Alert, App, Button, Card, Descriptions, Flex, Space, Spin } from 'antd';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { ApiError } from '../../request/errors';
 import {
   decideModeration,
@@ -10,7 +11,7 @@ import {
   type ModerationDecision,
   type ModerationRecord,
 } from '../../services/moderation';
-import { describeFailure } from '../../session/describe';
+import { describeFailure, failureCode } from '../../session/describe';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
 import { ContentPanel } from './ContentPanel';
@@ -23,7 +24,7 @@ type Access = { canAccess: (code?: string) => boolean };
 type Load =
   | { phase: 'loading' }
   | { phase: 'ready'; record: ModerationRecord }
-  | { phase: 'failed'; notFound: boolean; text: string };
+  | { phase: 'failed'; notFound: boolean; error: unknown };
 
 /** The id in `/moderation/<id>`, or null when the path is not that. */
 export function recordIdFromPath(pathname: string): string | null {
@@ -53,33 +54,27 @@ export default function ModerationDetailPage() {
   const id = recordIdFromPath(pathname);
   const [state, setState] = useState<Load>({ phase: 'loading' });
   const [deciding, setDeciding] = useState<ModerationDecision | null>(null);
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
     if (id === null) return;
-    const mine = ++counter.current;
+    const isCurrent = begin();
     try {
       const record = await getModerationRecord(id);
-      if (mine === counter.current) setState({ phase: 'ready', record });
+      if (isCurrent()) setState({ phase: 'ready', record });
     } catch (error) {
-      if (mine !== counter.current) return;
-      const described = describeFailure(intlRef.current, error);
+      if (!isCurrent()) return;
       setState({
         phase: 'failed',
-        notFound: described.error.code === 'RESOURCE_NOT_FOUND',
-        text: described.text,
+        notFound: failureCode(error) === 'RESOURCE_NOT_FOUND',
+        error,
       });
     }
-  }, [id]);
+  }, [id, begin]);
 
   useEffect(() => {
     setState({ phase: 'loading' });
     void load();
-    return () => {
-      counter.current += 1;
-    };
   }, [load]);
 
   const back = <Link to="/moderation/queue">{t('moderation.detail.back')}</Link>;
@@ -102,7 +97,9 @@ export default function ModerationDetailPage() {
           title={
             state.notFound
               ? t('moderation.detail.notFound')
-              : t('moderation.detail.loadFailed', { message: state.text })
+              : t('moderation.detail.loadFailed', {
+                  message: describeFailure(intl, state.error).text,
+                })
           }
           action={
             state.notFound ? undefined : (

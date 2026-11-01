@@ -25,6 +25,19 @@ describe('StatusTag', () => {
     expect(screen.getByText('constructor')).toBeInTheDocument();
   });
 
+  it('does not take a label or a colour from the prototype of the options (a polluted Object.prototype)', () => {
+    const proto = Object.prototype as unknown as Record<string, unknown>;
+    proto.RISKY = { label: 'FROM PROTOTYPE', color: 'red' };
+    try {
+      render(<StatusTag status="RISKY" options={options} />);
+      expect(screen.getByText('RISKY')).toBeInTheDocument();
+      expect(screen.queryByText('FROM PROTOTYPE')).toBeNull();
+      expect(screen.getByText('RISKY').className).not.toContain('ant-tag-red');
+    } finally {
+      delete proto.RISKY;
+    }
+  });
+
   it('shows a dash for no status', () => {
     render(<StatusTag status={null} options={options} />);
     expect(screen.getByText('—')).toBeInTheDocument();

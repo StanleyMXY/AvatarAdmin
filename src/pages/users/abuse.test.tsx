@@ -290,6 +290,58 @@ describe('the accounts of a cluster', { timeout: 60000 }, () => {
     expect(screen.queryByText(/raw backend text/)).toBeNull();
   });
 
+  it('offers the ban only where the backend says in so many words that the account is free; a missing, null or text value is neither "No" nor a button', async () => {
+    const accounts = [
+      { accountId: 'free-1', paid: false },
+      { accountId: 'unknown-missing' },
+      { accountId: 'unknown-null', paid: null },
+      { accountId: 'unknown-text', paid: 'true' },
+    ];
+    stubFetch(async ({ url }) => {
+      if (url.startsWith('/api/admin/abuse/clusters/accounts')) {
+        return jsonResponse(
+          200,
+          envelope('200', {
+            items: accounts.map((account) => ({
+              createdAt: '2026-10-25T01:00:00Z',
+              status: 'ACTIVE',
+              registerMethod: 'PHONE',
+              ...account,
+            })),
+            total: accounts.length,
+          }),
+        );
+      }
+      return jsonResponse(
+        200,
+        envelope('200', {
+          items: [
+            {
+              key: 'abcdef0123456789'.repeat(4),
+              accounts: 4,
+              freeAccounts: 1,
+              paidAccounts: 0,
+              firstCreatedAt: '2026-10-24T01:00:00Z',
+              lastCreatedAt: '2026-10-25T01:00:00Z',
+            },
+          ],
+          total: 1,
+        }),
+      );
+    });
+    const user = userEvent.setup();
+    renderPage(<AbusePage />);
+    await expand(user, await clusterRow('abcdef0123456789'));
+    expect(within(await accountRow('free-1')).getByRole('button', { name: 'Ban' })).toBeEnabled();
+    expect(within(await accountRow('free-1')).getByText('No')).toBeInTheDocument();
+    for (const { accountId } of accounts.slice(1)) {
+      const row = await accountRow(accountId);
+      expect(within(row).queryByRole('button', { name: 'Ban' })).toBeNull();
+      expect(within(row).queryByText('No')).toBeNull();
+      expect(within(row).queryByText('Yes')).toBeNull();
+    }
+  });
+
   it('keeps ids of every language and 5000 characters without spaces inside the row', async () => {
     const ids = ['i'.repeat(5000), 'สวัสดีครับ'.repeat(20), 'مرحبا بك'.repeat(20), '😀'.repeat(60)];
     stubFetch(async ({ url }) => {

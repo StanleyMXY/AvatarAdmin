@@ -76,4 +76,10 @@ describe('likeness complaints', () => {
     });
     expect(calls[0].url).toBe('/api/admin/likeness-complaints/c1/evidence/0');
   });
+
+  it('never lets the browser answer a look at a piece of evidence from its cache (each look is audited)', async () => {
+    const calls = answer({ url: 'https://files.example/e0', mediaType: 'image/png' });
+    await getComplaintEvidence('c1', 0);
+    expect(calls[0].init.cache).toBe('no-store');
+  });
 });

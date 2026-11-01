@@ -128,6 +128,30 @@ describe('RowActions', () => {
     release();
   });
 
+  it('lets a menu action run again once it has finished, whether it worked or failed', async () => {
+    const user = userEvent.setup();
+    let fail = false;
+    const again = vi.fn(async () => {
+      if (fail) throw new Error('boom');
+    });
+    const actions: RowAction[] = [...make(3), { key: 'again', label: 'Again', onClick: again }];
+    renderPage(<RowActions actions={actions} />);
+    const choose = async () => {
+      await user.click(screen.getByRole('button', { name: 'More' }));
+      fireEvent.click(within(await screen.findByRole('menu')).getByText('Again'));
+    };
+    await choose();
+    await waitFor(() => expect(again).toHaveBeenCalledTimes(1));
+    await choose();
+    await waitFor(() => expect(again).toHaveBeenCalledTimes(2));
+    fail = true;
+    await choose();
+    await waitFor(() => expect(again).toHaveBeenCalledTimes(3));
+    fail = false;
+    await choose();
+    await waitFor(() => expect(again).toHaveBeenCalledTimes(4)); // not held for ever by the failure
+  });
+
   it('shows a dangerous action in the menu in red, and a disabled one as disabled and not callable', async () => {
     const user = userEvent.setup();
     const off = vi.fn();

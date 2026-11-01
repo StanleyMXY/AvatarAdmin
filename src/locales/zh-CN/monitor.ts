@@ -21,8 +21,6 @@ const messages: Record<string, string> = {
   'monitor.pipeline.costLink': '用量与费用不在这里，请看成本报表',
   'monitor.pipeline.costText': '用量与费用不在这里，请到成本报表查看。',
 
-  'monitor.alert.status': '状态',
-  'monitor.alert.type': '类型',
   'monitor.alert.status.OPEN': '未处理',
   'monitor.alert.status.RESOLVED': '已解决',
   'monitor.alert.col.type': '类型',
@@ -38,7 +36,6 @@ const messages: Record<string, string> = {
   'monitor.alert.closeConfirmLookPackage':
     '关闭这条告警会把这个驱动资源包的失败次数清零并重新排准备任务。确定关闭？',
   'monitor.alert.closed': '告警已关闭',
-  'monitor.alert.autoNote': '对象恢复正常后，后端会自动把告警置为已解决。',
 
   'monitor.alert.type.DELETION_FAILED': '账号删除失败',
   'monitor.alert.type.SUBSCRIPTION_UNACKED': '订阅未确认',

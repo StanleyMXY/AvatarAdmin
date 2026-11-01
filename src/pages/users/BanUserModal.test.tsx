@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { USER, usersState } from '../../../mock/_core/usersData';
 import * as usersMock from '../../../mock/users.mock';
@@ -13,6 +14,16 @@ import { openDialog, signIn } from './testSetup';
 
 beforeEach(() => signIn('support'));
 afterEach(() => vi.unstubAllGlobals());
+
+// What the detail page does: after a refusal it reads the account again and shows another button.
+function ReadsAgainPage() {
+  const [status, setStatus] = useState('ACTIVE');
+  return status === 'ACTIVE' ? (
+    <BanUserModal accountId={USER.negative} status={status} onDone={() => setStatus('BANNED')} />
+  ) : (
+    <span>unban instead</span>
+  );
+}
 
 const bans = (calls: { method: string; url: string }[]) =>
   calls.filter((c) => c.method === 'POST' && c.url.endsWith('/ban'));
@@ -151,6 +162,22 @@ describe('the ban dialog', { timeout: 30000 }, () => {
     ).toBeInTheDocument();
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(within(dialog).queryByText(/backend/)).toBeNull();
+  });
+
+  it('still says the state in words when the page reads the account again and the ban button, with its dialog, goes away', async () => {
+    useMockBackend(usersMock);
+    const account = usersState.users.find((u) => u.id === USER.negative);
+    if (account) account.status = 'BANNED';
+    const user = userEvent.setup();
+    renderPage(<ReadsAgainPage />);
+    const dialog = await open(user);
+    await user.click(within(dialog).getByRole('textbox'));
+    await user.paste('Spam');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await screen.findByText('unban instead');
+    expect(
+      await screen.findByText(`${enUS['error.INVALID_STATE']} The account is now: Banned.`),
+    ).toBeInTheDocument();
   });
 
   it('shows only the translated text of a known error code, never the backend message', async () => {

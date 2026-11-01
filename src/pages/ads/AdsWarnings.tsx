@@ -1,6 +1,7 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { Alert, Flex } from 'antd';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { type AdPlacement, listCreatives, listUnits, loadAllPages } from '../../services/ads';
 import { listConfig } from '../../services/config';
 
@@ -48,12 +49,12 @@ export function AdsWarnings({
   const access = useAccess() as unknown as { canAccess: (code?: string) => boolean };
   const canReadCreatives = access.canAccess('ADS:CREATIVE');
   const [found, setFound] = useState<Found | null>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` only asks for a new read of the settings
   useEffect(() => {
     if (placements === null) return;
-    const mine = ++counter.current;
+    const isCurrent = begin();
     void (async () => {
       let rows: { key: string; value: unknown }[] = [];
       try {
@@ -68,12 +69,13 @@ export function AdsWarnings({
       const forceClose = numberAt('ads.force_close_seconds');
       const notSkippable =
         forceClose === 0 && canReadCreatives ? await countNotSkippable(placements) : null;
-      if (mine === counter.current) {
+      if (isCurrent()) {
         setFound({ skipAfter: numberAt('ads.skip_after_seconds'), forceClose, notSkippable });
       }
     })();
     return () => {
-      counter.current += 1;
+      // Other placements or settings: the read still on its way belongs to nobody.
+      begin();
     };
   }, [placements, canReadCreatives, version]);
 

@@ -55,6 +55,33 @@ describe('the authenticator setup page', () => {
     expect(container.innerHTML).not.toContain('JBSWY3DPEHPK3PXP'); // the secret is only inside the drawing, not as text
   });
 
+  it('gives the key for typing by hand only when asked for ("Can\'t scan?"), as text a screen reader reads left to right, with a copy button', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPage(<Enroll />);
+    expect(screen.queryByText('JBSW Y3DP EHPK 3PXP')).toBeNull();
+    await user.click(screen.getByRole('button', { name: "Can't scan the code?" }));
+    const key = screen.getByText('JBSW Y3DP EHPK 3PXP');
+    expect(key.closest('[dir="ltr"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    expect(screen.getByText(/enter a setup key/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Hide the key' }));
+    expect(container.textContent).not.toContain('JBSW');
+  });
+
+  it('says it in Chinese too', async () => {
+    const user = userEvent.setup();
+    renderPage(<Enroll />, 'zh-CN');
+    await user.click(screen.getByRole('button', { name: '无法扫描二维码？' }));
+    expect(screen.getByText('JBSW Y3DP EHPK 3PXP')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '隐藏密钥' })).toBeInTheDocument();
+  });
+
+  it('offers no key when the address has no usable secret', () => {
+    setPendingEnroll({ enrollToken: 'e', otpauthUri: 'otpauth://totp/x?issuer=A' });
+    renderPage(<Enroll />);
+    expect(screen.queryByRole('button', { name: "Can't scan the code?" })).toBeNull();
+  });
+
   it('sends the token and the code, then signs in and goes on', async () => {
     const calls = stubFetch((call) =>
       call.url.endsWith('/totp/enroll')

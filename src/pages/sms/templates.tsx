@@ -2,9 +2,14 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
+import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   deleteTemplate,
   listTemplates,
@@ -13,16 +18,12 @@ import {
   type SmsTemplate,
   setTemplateEnabled,
 } from '../../services/sms';
+import { orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { isLastEnglishFallbackTemplate, isLastOtpTemplate } from './lastOtp';
-import { PagedTable } from './PagedTable';
-import { StatusSwitch } from './StatusSwitch';
 import { TemplateModal } from './TemplateModal';
 import { templateFailureText } from './templateFailure';
-import { orDash } from './texts';
 import { useLastOtpPrompt } from './useLastOtpPrompt';
-import { useLatestRead } from './useLatestRead';
-import { useServerPage } from './useServerPage';
 
 const NO_FILTERS: Record<string, never> = {};
 /** An enabled OTP row: when the backend refuses to delete or switch it off, the reason is the rule of contract 23.4, last or not (the page may not have known that it was the last). */
@@ -124,7 +125,7 @@ export default function TemplatesPage() {
       key: 'code',
       title: t('sms.templates.col.code'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{plainText(row.templateCode)}</span>
+        <EllipsisPopoverText text={plainText(row.templateCode)} lines={2} width={200} dir="ltr" />
       ),
     },
     {
@@ -158,14 +159,19 @@ export default function TemplatesPage() {
       key: 'providerTemplateId',
       title: t('sms.templates.col.providerTemplateId'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.providerTemplateId)}</span>
+        <EllipsisPopoverText
+          text={orDash(row.providerTemplateId)}
+          lines={2}
+          width={180}
+          dir="ltr"
+        />
       ),
     },
     {
       key: 'enabled',
       title: t('sms.templates.col.enabled'),
       render: (_, row) => (
-        <StatusSwitch
+        <EnabledSwitch
           checked={row.enabled === true}
           label={t('sms.templates.switchLabel', { code: plainText(row.templateCode) })}
           onToggle={async (next) => {
@@ -179,6 +185,7 @@ export default function TemplatesPage() {
       ),
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('sms.common.actions'),
       render: (_, row) => <RowActions actions={actionsOf(row)} />,

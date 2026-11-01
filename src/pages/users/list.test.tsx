@@ -219,6 +219,40 @@ describe('the user list', { timeout: 30000 }, () => {
     expect(await screen.findByRole('link', { name: 'odd' })).toBeInTheDocument();
   });
 
+  it('shows a dash, not an empty cell, for a creation time that is missing', async () => {
+    const base = {
+      email: null,
+      phone: null,
+      status: 'ACTIVE',
+      channelCode: null,
+      trafficType: 'PAID',
+      timezone: null,
+      conversationLanguage: null,
+    };
+    stubFetch(async () =>
+      jsonResponse(
+        200,
+        envelope('200', {
+          items: [
+            { ...base, id: 'no-time', createdAt: null },
+            { ...base, id: 'empty-time', createdAt: '' },
+          ],
+          total: 2,
+        }),
+      ),
+    );
+    renderPage(<UserListPage />);
+    const headers = [...document.querySelectorAll('.ant-table-thead th')].map(
+      (th) => th.textContent,
+    );
+    const column = headers.indexOf('Created at');
+    expect(column).toBeGreaterThan(-1);
+    for (const id of ['no-time', 'empty-time']) {
+      const row = await rowOf(id);
+      expect(row.querySelectorAll('td')[column].textContent).toBe('—');
+    }
+  });
+
   it('says what the refusal is when the administrator may not see the list', async () => {
     signIn('support', { codes: ['SUBSCRIPTION:VIEW'] });
     useMockBackend(usersMock);

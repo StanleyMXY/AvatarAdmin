@@ -166,7 +166,13 @@ export function ConfigRow({
         : problem;
 
   return (
-    <Flex vertical gap={6} style={{ padding: '12px 0' }} data-testid={`config-row-${spec.key}`}>
+    <Flex
+      vertical
+      gap={6}
+      style={{ padding: '12px 0' }}
+      id={`config-key-${spec.key}`}
+      data-testid={`config-row-${spec.key}`}
+    >
       <Flex gap={8} wrap align="center">
         <Typography.Text strong>{label}</Typography.Text>
         <Typography.Text type="secondary" code>

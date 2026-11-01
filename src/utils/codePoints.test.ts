@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countCodePoints, lengthWithin } from './codePoints';
+import { clipCodePoints, countCodePoints, lengthWithin } from './codePoints';
 
 describe('countCodePoints', () => {
   it('counts a code point outside the BMP once, not as two UTF-16 units', () => {
@@ -71,5 +71,22 @@ describe('lengthWithin', () => {
     expect(lengthWithin('ก็ก็ก', 1, 4)).toBe(false);
     expect(lengthWithin('لالا', 1, 4)).toBe(true);
     expect(lengthWithin('لالالا', 1, 4)).toBe(false);
+  });
+});
+
+describe('clipCodePoints', () => {
+  it('leaves a text that fits as it is, also at exactly the limit', () => {
+    expect(clipCodePoints('abc', 3)).toBe('abc');
+    expect(clipCodePoints('', 3)).toBe('');
+  });
+
+  it('cuts a longer text to the limit and adds an ellipsis', () => {
+    expect(clipCodePoints('abcdef', 3)).toBe('abc…');
+    expect(clipCodePoints('ก'.repeat(5000), 60)).toBe(`${'ก'.repeat(60)}…`);
+  });
+
+  it('counts code points, so an emoji is not cut in half', () => {
+    expect(clipCodePoints('😀😀😀😀', 2)).toBe('😀😀…');
+    expect(clipCodePoints('😀😀', 2)).toBe('😀😀');
   });
 });

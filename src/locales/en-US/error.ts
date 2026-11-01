@@ -44,7 +44,8 @@ const messages: Record<string, string> = {
   'error.PERMISSION_HAS_CHILDREN': 'This permission node still has children and cannot be deleted.',
   'error.CHECKIN_NOT_AVAILABLE': 'There is no active check-in campaign right now.',
   'error.TASK_NOT_CLAIMABLE': 'This task cannot be claimed now.',
-  'error.TASK_HAS_RECORDS': 'This task already has records. Disable it instead of deleting it.',
+  'error.TASK_HAS_RECORDS':
+    'This task already has records, so it cannot be deleted and its type and target cannot be changed. Disable it instead.',
   'error.CONTENT_NOT_STORED': 'The original content is no longer stored.',
   'error.PHONE_INVALID': 'The phone number is not valid.',
   'error.SMS_COUNTRY_NOT_SUPPORTED': 'The country of this number is not supported for SMS.',

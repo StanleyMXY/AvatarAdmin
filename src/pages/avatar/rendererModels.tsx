@@ -3,17 +3,17 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, Button } from 'antd';
 import { useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import {
   listRendererModels,
   type RendererModel,
   setRendererModelEnabled,
 } from '../../services/avatar';
+import { codeText } from '../../utils/displayText';
 import { formatBytes, formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
-import { EnabledSwitch } from './EnabledSwitch';
 import { RendererModelModal } from './RendererModelModal';
-import { codeText } from './texts';
 
 /** 渲染模型 (`RENDERER:MANAGE`): the model files the apps download to draw an avatar on the phone. They go to every build, with no scope. */
 export default function RendererModelsPage() {

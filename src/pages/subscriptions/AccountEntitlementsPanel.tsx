@@ -15,9 +15,12 @@ import {
   Typography,
 } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { RowActions } from '../../components/RowActions';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -32,6 +35,7 @@ import {
 } from '../../services/subscriptions';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { detailReasons, setFieldReasons } from '../../utils/fieldReasons';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
@@ -97,12 +101,10 @@ function GrantDialog({
         reason: trimSpec(values.reason),
       });
     } catch (error) {
-      const { fields } = describeFailure(intl, error);
-      const known = fields.filter((f) =>
-        ['entitlementKey', 'durationDays', 'reason'].includes(f.ref),
+      const known = detailReasons(intl, error, (ref) =>
+        ['entitlementKey', 'durationDays', 'reason'].includes(ref) ? ref : undefined,
       );
-      if (known.length > 0)
-        form.setFields(known.map((f) => ({ name: f.ref as keyof GrantForm, errors: [f.text] })));
+      if (known.length > 0) setFieldReasons(form, intl, known);
       else setFailure(error);
       return;
     }
@@ -189,19 +191,25 @@ export function AccountEntitlementsPanel({
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [data, setData] = useState<AccountEntitlements | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [granting, setGranting] = useState(false);
   const canGrant = access.canAccess('SUBSCRIPTION:GRANT');
   const when = (iso: string | null) => (iso ? formatInstant(iso, intl.locale) : DASH);
 
+  const begin = useLatestCall();
+
   const load = useCallback(async () => {
+    // Only the newest read counts: an answer for the account shown before must not replace this one.
+    const isCurrent = begin();
     try {
-      setData(await getAccountEntitlements(accountId));
-      setFailure(null);
+      const answer = await getAccountEntitlements(accountId);
+      if (!isCurrent()) return;
+      setData(answer);
+      clear();
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [accountId, intl]);
+  }, [accountId, begin, fail, clear]);
 
   useEffect(() => {
     setData(null);
@@ -349,6 +357,7 @@ export function AccountEntitlementsPanel({
                 render: (_, row) => row.subscriptionId ?? DASH,
               },
               {
+                ...ACTIONS_COLUMN,
                 title: t('subscriptions.list.actions'),
                 render: (_, row) => (
                   <RowActions

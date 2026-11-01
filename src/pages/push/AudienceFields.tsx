@@ -1,8 +1,8 @@
 import { useIntl } from '@umijs/max';
 import { Form, type FormInstance, Input, Select } from 'antd';
 import { AUDIENCES, PLATFORMS } from '../../services/push';
+import { codeText } from '../../utils/displayText';
 import { parseAccountIds } from './bodies';
-import { codeText } from './texts';
 
 type Props = {
   form: FormInstance;

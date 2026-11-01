@@ -49,6 +49,10 @@ const addStep = async (_user: ReturnType<typeof userEvent.setup>, name: string) 
   fireEvent.change(box, { target: { value: name } });
   fireEvent.keyDown(box, { key: 'Enter', keyCode: 13 });
   await waitFor(() => expect(stepTags()).toContain(name));
+  // The list stays open after a step is added, and in this DOM a second typed step is then not taken:
+  // closing it (as a person does by clicking away) lets the next one be typed.
+  fireEvent.keyDown(box, { key: 'Escape', keyCode: 27 });
+  fireEvent.blur(box);
 };
 let nextId = 900;
 /** A custom funnel in the mock backend's list, as if somebody had saved it. */
@@ -676,6 +680,129 @@ describe('the funnel page: what may be asked', { timeout: 40000 }, () => {
   });
 });
 
+describe('the funnel page: steps typed one after the other', { timeout: 40000 }, () => {
+  it('takes the steps in the order they are typed and asks with exactly those', async () => {
+    const { user, calls } = await openPage();
+    for (const name of ['app_open', 'register_completed', 'avatar_created']) {
+      await addStep(user, name);
+    }
+    expect(stepTags()).toEqual(['app_open', 'register_completed', 'avatar_created']);
+    await user.click(queryButton());
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    expect(lastFunnel(calls).searchParams.get('steps')).toBe(
+      'app_open,register_completed,avatar_created',
+    );
+  });
+
+  it('allows ten typed steps and refuses the eleventh', async () => {
+    const { user } = await openPage();
+    for (let i = 0; i < 10; i++) await addStep(user, `e${i}`);
+    expect(stepTags()).toHaveLength(10);
+    expect(queryButton()).toBeEnabled();
+    await addStep(user, 'e10');
+    expect(queryButton()).toBeDisabled();
+    expect(screen.getByText('A funnel needs 2 to 10 steps')).toBeInTheDocument();
+  });
+
+  it('refuses a typed step with a comma among steps typed before it, and asks nothing', async () => {
+    const { user, calls } = await openPage();
+    await addStep(user, 'a');
+    await addStep(user, 'b');
+    expect(queryButton()).toBeEnabled();
+    await addStep(user, 'x,y');
+    expect(queryButton()).toBeDisabled();
+    expect(screen.getByText('An event name cannot contain a comma')).toBeInTheDocument();
+    expect(funnelCalls(calls)).toHaveLength(0);
+  });
+});
+
+describe('the funnel page: a result belongs to the form it was asked with', {
+  timeout: 40000,
+}, () => {
+  const withResult = async () => {
+    seed('Mine', ['a', 'b'], 12);
+    const opened = await openPage();
+    await choose(opened.user, 'Mine');
+    await screen.findByTestId('funnel-result');
+    return opened;
+  };
+
+  it('takes the result away when a step is added, and shows what to do', async () => {
+    const { user } = await withResult();
+    await addStep(user, 'c');
+    await waitFor(() => expect(screen.queryByTestId('funnel-result')).toBeNull());
+    expect(screen.getByText('Choose the steps and press Query')).toBeInTheDocument();
+  });
+
+  it('takes the result away when the window changes', async () => {
+    await withResult();
+    fireEvent.change(windowBox(), { target: { value: '48' } });
+    fireEvent.blur(windowBox());
+    await waitFor(() => expect(screen.queryByTestId('funnel-result')).toBeNull());
+  });
+
+  it('shows a result again after Query, for the form as it is now', async () => {
+    const { user, calls } = await withResult();
+    await addStep(user, 'c');
+    await waitFor(() => expect(screen.queryByTestId('funnel-result')).toBeNull());
+    await user.click(queryButton());
+    await screen.findByTestId('funnel-result');
+    expect(lastFunnel(calls).searchParams.get('steps')).toBe('a,b,c');
+  });
+
+  it('keeps the result when nothing in the form changes (a save under a name does not)', async () => {
+    const { user } = await withResult();
+    await user.click(button(/Save as/) as HTMLElement);
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Name'), 'Copy');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByTestId('funnel-result')).toBeInTheDocument();
+  });
+
+  it('drops the answer of a query that is still on its way when the form changes', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    stubBackend({
+      funnels: [funnelRow('Mine', ['a', 'b'], 12)],
+      funnel: async (steps) => {
+        await gate;
+        return steps.map((eventName, i) => ({
+          eventName,
+          count: 10 - i,
+          conversionFromPrevious: i === 0 ? null : 0.9,
+        }));
+      },
+    });
+    renderPage(<FunnelPage />);
+    const user = userEvent.setup();
+    await choose(user, 'Mine');
+    await waitFor(() => expect(stepTags()).toEqual(['a', 'b']));
+    await addStep(user, 'c');
+    release();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(screen.queryByTestId('funnel-result')).toBeNull();
+  });
+});
+
+describe('the funnel page: the first range', { timeout: 40000 }, () => {
+  it('starts with the longest range the backend allows when that is shorter than 7 days', async () => {
+    signIn('support', { codes: MANAGE, meta: { analyticsLiveMaxRangeDays: 3 } });
+    const { user, calls } = await openPage();
+    await addStep(user, 'a');
+    await addStep(user, 'b');
+    await user.click(queryButton());
+    await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+    const url = lastFunnel(calls);
+    expect(
+      Date.parse(`${url.searchParams.get('to')}T00:00:00Z`) -
+        Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
+    ).toBe(2 * 86400000);
+  });
+});
+
 describe('the funnel page: the explanation', { timeout: 40000 }, () => {
   it('says that the same account has to do the steps in order inside the window, and that the distinct counts are not added over days', async () => {
     await openPage();
@@ -685,5 +812,8 @@ describe('the funnel page: the explanation', { timeout: 40000 }, () => {
     );
     expect(text).toContain('Distinct counts are not added up across days');
     expect(text).toContain('longest time allowed between two neighbouring steps');
+    // who is counted: what the contract says, in its three steps
+    expect(text).toContain('the account of the event');
+    expect(text).toContain('the device itself');
   });
 });

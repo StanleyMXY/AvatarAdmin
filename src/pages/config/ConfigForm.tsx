@@ -1,10 +1,10 @@
-import { useIntl } from '@umijs/max';
+import { useIntl, useLocation } from '@umijs/max';
 import { Alert, Button, Card, Flex, Spin, Typography } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PermissionCode } from '../../access/permissionCodes';
+import { useFailure } from '../../hooks/useFailure';
 import type { ApiError } from '../../request/errors';
 import { type ConfigItem, listConfig } from '../../services/config';
-import { describeFailure } from '../../session/describe';
 import { ConfigRow } from './ConfigRow';
 import { specOf } from './configSchema';
 import { refusalAlertText, refusalTexts } from './refusal';
@@ -16,11 +16,14 @@ type Props = {
   prefixes?: string[];
   /** Every key edited with this permission. The three filters are joined (a key matching any is shown). */
   editPermission?: PermissionCode;
+  /** Never these keys, whatever the three filters say (for a page that edits them itself). */
+  exclude?: string[];
   /** Called after a value was saved or reset, so a page can refresh what depends on it. */
   onChanged?: () => void;
 };
 
-const matches = (item: ConfigItem, { keys, prefixes, editPermission }: Props): boolean => {
+const matches = (item: ConfigItem, { keys, prefixes, editPermission, exclude }: Props): boolean => {
+  if (exclude?.includes(item.key)) return false;
   if (!keys && !prefixes && !editPermission) return true;
   return (
     Boolean(keys?.includes(item.key)) ||
@@ -63,7 +66,7 @@ function TopRefusals({ texts }: { texts: string[] }) {
 export function ConfigForm(props: Props) {
   const intl = useIntl();
   const [items, setItems] = useState<ConfigItem[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   // The last save or reset the backend refused: kept as the failure itself (not as translated
   // words) so the words follow the language, and shared by the rows so that a rule between two
   // keys is shown on both.
@@ -73,15 +76,31 @@ export function ConfigForm(props: Props) {
     try {
       const { items: rows } = await listConfig();
       setItems(rows);
-      setFailure(null);
+      clear();
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      fail(error);
     }
-  }, [intl]);
+  }, [fail, clear]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // `/config#<key>` (the link of a page that needs one setting) scrolls to that row once the rows
+  // are drawn; reading the rows again after a save does not scroll back.
+  const { hash } = useLocation();
+  const scrolledFor = useRef('');
+  useEffect(() => {
+    if (items === null || !hash || scrolledFor.current === hash) return;
+    scrolledFor.current = hash;
+    let key = hash.slice(1);
+    try {
+      key = decodeURIComponent(key);
+    } catch {
+      // not a valid escape: used as written
+    }
+    document.getElementById(`config-key-${key}`)?.scrollIntoView?.({ block: 'start' });
+  }, [items, hash]);
 
   if (failure) {
     return (

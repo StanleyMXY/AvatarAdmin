@@ -52,6 +52,40 @@ const answer = (items: AnalyticsEventRow[], total = items.length) =>
   );
 
 describe('the event detail page', { timeout: 30000 }, () => {
+  it('starts with the longest range the backend allows when that is shorter than 7 days', async () => {
+    signIn('support', { codes: VIEW, meta: { analyticsLiveMaxRangeDays: 2 } });
+    const calls = useMockBackend(analyticsMock);
+    renderPage(<DetailPage />);
+    await waitFor(() => expect(eventCalls(calls)).toHaveLength(1));
+    const url = lastEvents(calls);
+    expect(
+      Date.parse(`${url.searchParams.get('to')}T00:00:00Z`) -
+        Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
+    ).toBe(86400000);
+  });
+
+  it('writes in the header itself that the client time is self-reported, not only in a hint that a keyboard or a finger cannot open', async () => {
+    answer([event({})]);
+    renderPage(<DetailPage />);
+    await screen.findByText('app_open', { selector: 'td *, td' });
+    expect(
+      screen.getByRole('columnheader', { name: /Client time \(self-reported\)/ }),
+    ).toBeTruthy();
+  });
+
+  it('says on the IP header that the address is shown as the backend sends it', async () => {
+    answer([event({})]);
+    renderPage(<DetailPage />);
+    await screen.findByText('app_open', { selector: 'td *, td' });
+    const header = screen.getByRole('columnheader', { name: /^IP/ });
+    await userEvent.hover(header.querySelector('.anticon') as HTMLElement);
+    expect(
+      await screen.findByText(
+        'Shown as the backend sends it: masked unless you hold the permission to see whole IP addresses',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('asks for the last 7 UTC days by default, 20 rows a page, and says the days are UTC', async () => {
     const calls = useMockBackend(analyticsMock);
     renderPage(<DetailPage />);

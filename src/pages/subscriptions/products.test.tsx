@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetStore } from '../../../mock/_core/store';
 import { resetSubscriptionsStore, subscriptionsState } from '../../../mock/_core/subscriptionsData';
 import * as subscriptionsMock from '../../../mock/subscriptions.mock';
+import { holdRequests } from '../../../tests/heldRequests';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { signInAs, useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
@@ -154,6 +155,37 @@ describe('the sale switch', { timeout: 30000 }, () => {
     fireEvent.click(within(row).getByRole('switch'));
     expect(await screen.findByText(/permission/i)).toBeInTheDocument();
     await waitFor(async () => expect(within(await rowOf('p1')).getByRole('switch')).toBeChecked());
+  });
+
+  it('says which field and why when the backend refuses the switch with details', async () => {
+    stubFetch(async ({ init }) =>
+      (init.method ?? 'GET') === 'GET'
+        ? jsonResponse(
+            200,
+            envelope('200', {
+              items: [
+                {
+                  store: 'APPLE',
+                  productId: 'p1',
+                  entitlementKey: 'premium',
+                  enabled: false,
+                  sortOrder: 1,
+                  surfaces: [],
+                },
+              ],
+            }),
+          )
+        : jsonResponse(
+            400,
+            envelope('INVALID_REQUEST', {
+              details: [{ ref: 'entitlementKey', reason: 'OUT_OF_RANGE' }],
+            }),
+          ),
+    );
+    renderPage(<ProductsPage />);
+    const row = await rowOf('p1');
+    fireEvent.click(within(row).getByRole('switch'));
+    expect(await screen.findByText(/entitlementKey: /)).toBeInTheDocument();
   });
 
   it('does not send again when the token ended during the write', async () => {
@@ -356,6 +388,50 @@ describe('editing and adding a mapping', { timeout: 30000 }, () => {
     await waitFor(() => expect(writes(calls).length).toBeGreaterThan(0));
     await new Promise((r) => setTimeout(r, 100));
     expect(writes(calls)).toHaveLength(1);
+  });
+  it('sends one request while the save of the dialog is under way, however often Save is clicked then', async () => {
+    useMockBackend(subscriptionsMock);
+    const held = holdRequests((_, method) => method === 'PUT');
+    const user = userEvent.setup();
+    renderPage(<ProductsPage />);
+    const row = await rowOf('avatar_plus_monthly');
+    await user.click(within(row).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    const save = within(dialog).getByRole('button', { name: /Save/ });
+    fireEvent.click(save);
+    await waitFor(() => expect(held.started()).toBe(1));
+    fireEvent.click(save);
+    fireEvent.click(save);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(held.started()).toBe(1);
+    held.release();
+  });
+
+  it('shows the list the last read brought when the answer of an earlier read arrives late', async () => {
+    useMockBackend(subscriptionsMock);
+    // the 2nd read of the mappings (the one after the first switch) is held; the 3rd is not
+    const held = holdRequests(
+      (url, method) => method === 'GET' && url.endsWith('/subscription-products'),
+      2,
+    );
+    renderPage(<ProductsPage />);
+    const plus = await rowOf('avatar_plus_monthly');
+    expect(within(plus).getByRole('switch')).not.toBeChecked();
+    fireEvent.click(within(plus).getByRole('switch'));
+    await waitFor(() => expect(held.started()).toBe(2)); // the first reload is held
+    const premium = await rowOf('avatar.premium.monthly');
+    fireEvent.click(within(premium).getByRole('switch'));
+    await waitFor(() =>
+      expect(
+        subscriptionsState().products.find((p) => p.productId === 'avatar.premium.monthly')
+          ?.enabled,
+      ).toBe(false),
+    );
+    held.release();
+    await new Promise((r) => setTimeout(r, 150));
+    // both changes are on the screen: the held read, which knew only the first, did not win
+    expect(within(await rowOf('avatar_plus_monthly')).getByRole('switch')).toBeChecked();
+    expect(within(await rowOf('avatar.premium.monthly')).getByRole('switch')).not.toBeChecked();
   });
 });
 

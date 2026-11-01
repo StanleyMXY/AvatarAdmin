@@ -1,3 +1,6 @@
+/** What a UTM value may be (contract 10.4): anything else is left out of a link. */
+export const UTM_VALUE = /^[A-Za-z0-9._-]{1,64}$/;
+
 /** The address of the interface a landing page calls (contract 10.4, 1b): with the link root when it is known, else only the path. */
 export function landingAddress(base: string | null): string {
   return `POST ${base ?? ''}/api/attribution/click`;

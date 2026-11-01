@@ -16,13 +16,15 @@ export default function InviteCodesPage() {
       title: t('invite.codes.code'),
       dataIndex: 'code',
       search: false,
-      render: (_, row) => <EllipsisPopoverText text={plainText(row.code)} width={200} />,
+      render: (_, row) => <EllipsisPopoverText text={plainText(row.code)} width={200} dir="ltr" />,
     },
     {
       title: t('invite.codes.ownerAccountId'),
       dataIndex: 'ownerAccountId',
       search: false,
-      render: (_, row) => <EllipsisPopoverText text={plainText(row.ownerAccountId)} width={320} />,
+      render: (_, row) => (
+        <EllipsisPopoverText text={plainText(row.ownerAccountId)} width={320} dir="ltr" />
+      ),
     },
     {
       title: t('invite.codes.createdAt'),

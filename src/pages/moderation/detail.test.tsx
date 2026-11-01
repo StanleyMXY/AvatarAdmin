@@ -377,6 +377,19 @@ describe('deciding', { timeout: 30000 }, () => {
     expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
   });
 
+  it('sends nothing more when the confirm button is pressed again while the dialog is closing after the decision went through', async () => {
+    const user = userEvent.setup();
+    const calls = await open(RECORD_ID.persona);
+    const dialog = await openDialog(user, 'Approve');
+    const confirm = within(dialog).getByRole('button', { name: 'Confirm approval' });
+    await user.click(confirm);
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    await dialogsClosed();
+    fireEvent.click(confirm);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(writes(calls)).toHaveLength(1);
+  });
+
   it('approves with a note, trimmed with the contract set', async () => {
     const user = userEvent.setup();
     const calls = await open(RECORD_ID.persona);
@@ -394,6 +407,8 @@ describe('deciding', { timeout: 30000 }, () => {
     ['spaces', '   '],
     ['an ideographic space', WIDE_SPACE],
     ['a no-break space', String.fromCharCode(0xa0)],
+    ['a next-line character (U+0085)', String.fromCharCode(0x85)],
+    ['a unit separator (U+001F)', String.fromCharCode(0x1f)],
   ])('does not reject with a note that is %s, and sends nothing', async (_, note) => {
     const user = userEvent.setup();
     const calls = await open(RECORD_ID.persona);
@@ -470,7 +485,9 @@ describe('deciding', { timeout: 30000 }, () => {
     fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'mine' } });
     await user.click(within(dialog).getByRole('button', { name: 'Confirm approval' }));
     expect(
-      await within(dialog).findByText('The current state of the item does not allow this action.'),
+      await within(dialog).findByText(
+        'Someone else handled this record first. Its state now: Rejected.',
+      ),
     ).toBeInTheDocument();
     expect(within(dialog).getByRole('textbox')).toHaveValue('mine');
     await waitFor(() =>
@@ -479,6 +496,58 @@ describe('deciding', { timeout: 30000 }, () => {
       ).toHaveLength(2),
     );
     await screen.findByText('Rejected', { selector: '.ant-tag' });
+  });
+
+  it('says in the dialog what state the record is in now when someone else handled it, and does not let the decision be confirmed again', async () => {
+    const user = userEvent.setup();
+    const calls = await open(RECORD_ID.persona);
+    const record = moderationState.records.find((r) => r.id === RECORD_ID.persona);
+    if (record) record.status = 'REJECTED';
+    const dialog = await openDialog(user, 'Approve');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm approval' }));
+    expect(
+      await within(dialog).findByText(
+        'Someone else handled this record first. Its state now: Rejected.',
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(dialog).getByRole('button', { name: 'Confirm approval' })).toBeDisabled(),
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm approval' }));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(writes(calls)).toHaveLength(1);
+  });
+
+  it('falls back to the words of the code when a 409 does not say the state', async () => {
+    const user = userEvent.setup();
+    await open(RECORD_ID.persona, () =>
+      interceptFetch((_, init) =>
+        (init.method ?? 'GET') === 'POST'
+          ? jsonResponse(409, envelope('INVALID_STATE'))
+          : undefined,
+      ),
+    );
+    const dialog = await openDialog(user, 'Approve');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm approval' }));
+    expect(
+      await within(dialog).findByText('The current state of the item does not allow this action.'),
+    ).toBeInTheDocument();
+  });
+
+  it('says it in Chinese too', async () => {
+    const user = userEvent.setup();
+    openRecord(RECORD_ID.persona);
+    installMockBackend(moderationMock);
+    renderPage(<DetailPage />, 'zh-CN');
+    await screen.findByText('记录 ID');
+    const record = moderationState.records.find((r) => r.id === RECORD_ID.persona);
+    if (record) record.status = 'APPROVED';
+    await user.click(await screen.findByRole('button', { name: /^通\s?过$/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: '确认通过' }));
+    expect(
+      await within(dialog).findByText('这条记录已被别人先处理了，它现在的状态：已通过。'),
+    ).toBeInTheDocument();
   });
 
   it('shows the translated text of a 403 and keeps the dialog', async () => {

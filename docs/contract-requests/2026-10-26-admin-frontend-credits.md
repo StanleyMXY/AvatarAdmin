@@ -14,9 +14,14 @@
 2. `PUT` 的路径是 `PUT /credit-products/{id}`（用上面的 `id`），还是用 `store` 加 `productId` 定位？请求体里 `store`、`productId` 创建后能改吗？
 3. `POST` 的请求体是不是 `{store, productId, credits, enabled, sortOrder, surfaces}`；`(store, productId)` 重复时是 409 `DUPLICATE_RESOURCE`、`data.field` 是什么？`credits` 的取值范围（我们暂定正整数）？
 4. `PUT` 里没有出现的字段（尤其是 `surfaces`）是保持不变，还是按空数组（所有端）覆盖？
+5. `productId` 的长度上限是多少（商店各自的限制不同）？
+6. 两个管理员同时改同一个额度包时怎么办？建议：`GET /credit-products` 每行带 `updatedAt`（UTC 时刻），`PUT` 接受可选的 `expectedUpdatedAt`，与库里的 `updatedAt` 不同时返回 409 `INVALID_STATE`（`data` 带当前的 `updatedAt`），什么都不改；不带它时行为和今天一样。同一套做法见 `2026-10-27-admin-frontend-concurrent-save.md`。
 
 **暂定做法：**
 - 前端和假后端按 1 的形状，`PUT /credit-products/{id}`，请求体 `{credits, enabled, sortOrder}`；如果列表行里带 `surfaces`，`PUT` 原样带回它，避免被覆盖；`store`、`productId` 创建后只读。
+- 列表按契约 §17.4 开头的通则可能分页（`page`、`pageSize` 最大 200，响应带 `total`）：前端一页一页读到拿全，响应没有 `total` 且不满一页时就当作整张表（所以不分页的回复也能用）。
+- `productId` 的长度前端不拦，由后端的 400（`details` 里 `ref` 为 `productId`）显示在输入框下。
+- 同时修改：保存前（开关和编辑对话框）前端先重新读这个额度包，和列表上的 `credits`、`enabled`、`sortOrder`、`surfaces` 比，不一致就不发 `PUT`，提示"读取列表之后被别人改过"并重新读列表（同 `2026-10-27-admin-frontend-concurrent-save.md` 的做法）。读和写之间仍有时间窗，只有后端比较 `expectedUpdatedAt` 才能关上。
 - `POST` 请求体 `{store, productId, credits, enabled, sortOrder}`，不带 `surfaces`（空数组，所有端）；`store` 下拉只列 `APPLE`、`GOOGLE`。
 - 假后端：重复返回 409 `DUPLICATE_RESOURCE`，`data.field` 为 `productId`；`credits` 不是正整数返回 400 `INVALID_REQUEST`，`ref` 为 `credits`，原因 `OUT_OF_RANGE`。
 

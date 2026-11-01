@@ -70,6 +70,20 @@ describe('ApiError', () => {
     ]);
   });
 
+  it('drops an entry whose ref or reason is not text: a number is not a ref', () => {
+    const e = make({
+      data: {
+        details: [
+          { ref: 1, reason: 'TOO_LONG' },
+          { ref: '1', reason: 2 },
+          { ref: null, reason: 'TOO_LONG' },
+          { ref: '1', reason: 'TOO_LONG' },
+        ],
+      },
+    });
+    expect(e.details).toEqual([{ ref: '1', reason: 'TOO_LONG' }]);
+  });
+
   it('has no token or request data in its message', () => {
     expect(make().message).toBe('backend english');
   });
@@ -115,6 +129,41 @@ describe('describeError', () => {
   it('treats an empty translation as missing', () => {
     const empty = (key: string) => (key === 'error.INVALID_REQUEST' ? '' : t(key));
     expect(describeError(make(), empty).text).toContain('Something went wrong');
+  });
+
+  it('does not give several rows the same backend sentence: with more than one detail an unknown reason shows its own code', () => {
+    const e = make({
+      data: {
+        details: [
+          { ref: '0', reason: 'SOMETHING_NEW' },
+          { ref: '1', reason: 'ANOTHER_NEW' },
+          { ref: '2', reason: 'TOO_LONG' },
+        ],
+      },
+    });
+    expect(describeError(e, t).fields).toEqual([
+      { ref: '0', text: 'SOMETHING_NEW' },
+      { ref: '1', text: 'ANOTHER_NEW' },
+      { ref: '2', text: 'Too long' },
+    ]);
+  });
+
+  it('does not throw for something that is not an ApiError: a TypeError, an abort, a string, nothing', () => {
+    for (const odd of [
+      new TypeError('x is not a function'),
+      new DOMException('aborted', 'AbortError'),
+      'text',
+      null,
+      undefined,
+      {},
+    ]) {
+      expect(describeError(odd, t)).toEqual({ text: 'Something went wrong', fields: [] });
+    }
+  });
+
+  it('does not show the message of a foreign error: it may carry an address', () => {
+    const odd = new TypeError('Failed to fetch https://internal.example/api?token=abc');
+    expect(JSON.stringify(describeError(odd, t))).not.toContain('internal.example');
   });
 
   it('has no fields when there are no details', () => {

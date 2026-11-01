@@ -10,7 +10,7 @@ import { adminOf } from '../../../mock/_core/testing';
 import * as configMock from '../../../mock/config.mock';
 import { signInAs, useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
-import { resetUmiStub } from '../../../tests/stubs/umi-max';
+import { resetUmiStub, setTestLocation } from '../../../tests/stubs/umi-max';
 import zhCN from '../../locales/zh-CN';
 import { ConfigForm } from './ConfigForm';
 
@@ -60,6 +60,53 @@ describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
     expect(keys).toContain('auth.access_ttl_minutes');
     expect(keys).not.toContain('auth.refresh_ttl_days');
     expect(keys.filter((k) => k.startsWith('moderation.')).length).toBe(11);
+  });
+
+  it('scrolls to the row named by the address fragment', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    const scrolled: string[] = [];
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      scrolled.push(this.getAttribute('data-testid') ?? '');
+    });
+    setTestLocation({ pathname: '/config', hash: '#guest.call_minutes_total' });
+    renderPage(<ConfigForm keys={['guest.call_minutes_total', 'auth.access_ttl_minutes']} />);
+    await row('guest.call_minutes_total');
+    await waitFor(() => expect(scrolled).toEqual(['config-row-guest.call_minutes_total']));
+  });
+
+  it('scrolls nowhere for no fragment or for a fragment that is no key', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    const scrolled: string[] = [];
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      scrolled.push(this.getAttribute('data-testid') ?? '');
+    });
+    setTestLocation({ pathname: '/config', hash: '#no.such.key' });
+    renderPage(<ConfigForm keys={['guest.call_minutes_total']} />);
+    await row('guest.call_minutes_total');
+    await new Promise((r) => setTimeout(r, 100));
+    expect(scrolled).toEqual([]);
+  });
+
+  it('leaves out the keys it is told to exclude, also when the permission or a prefix would show them', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(
+      <ConfigForm
+        editPermission="MODERATION:CONFIG"
+        prefixes={['auth.']}
+        exclude={['moderation.text_rules', 'auth.access_ttl_minutes']}
+      />,
+    );
+    await row('moderation.block_score');
+    const keys = [...document.querySelectorAll('[data-testid^="config-row-"]')].map((e) =>
+      (e.getAttribute('data-testid') as string).replace('config-row-', ''),
+    );
+    expect(keys).not.toContain('moderation.text_rules');
+    expect(keys).not.toContain('auth.access_ttl_minutes');
+    expect(keys.filter((k) => k.startsWith('moderation.')).length).toBe(10);
+    expect(keys).toContain('auth.refresh_ttl_days');
   });
 
   it('shows only the keys of the permission when that is all the administrator has', async () => {

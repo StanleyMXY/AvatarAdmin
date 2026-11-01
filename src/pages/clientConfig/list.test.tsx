@@ -11,7 +11,7 @@ import enUS from '../../locales/en-US';
 import zhCN from '../../locales/zh-CN';
 import type { ClientConfigItem } from '../../services/clientConfig';
 import ClientConfigPage from './list';
-import { signIn } from './testSetup';
+import { signIn, writesOf } from './testSetup';
 
 vi.setConfig({ testTimeout: 30000 });
 
@@ -338,6 +338,3 @@ describe('the list after a save', () => {
     expect(writesOf(calls).length).toBe(2);
   });
 });
-
-const writesOf = <T extends { method: string }>(calls: T[]) =>
-  calls.filter((c) => c.method !== 'GET');

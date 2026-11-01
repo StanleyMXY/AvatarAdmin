@@ -1,7 +1,7 @@
-import { useIntl } from '@umijs/max';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { type ClientConfigItem, listClientConfig } from '../../services/clientConfig';
-import { describeFailure } from '../../session/describe';
 
 /**
  * The registered keys, read when the page opens and again on `reload`. The rows stay on the screen
@@ -10,35 +10,29 @@ import { describeFailure } from '../../session/describe';
  * backend's own words.
  */
 export function useItems() {
-  const intl = useIntl();
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
   const [items, setItems] = useState<ClientConfigItem[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [loading, setLoading] = useState(true);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const reload = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setLoading(true);
     try {
       const answer = await listClientConfig();
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setItems(answer);
-      setFailure(null);
+      clear();
     } catch (error) {
-      if (mine !== counter.current) return;
-      setFailure(describeFailure(intlRef.current, error).text);
+      if (!isCurrent()) return;
+      fail(error);
     } finally {
-      if (mine === counter.current) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, []);
+  }, [begin, clear, fail]);
 
   useEffect(() => {
     void reload();
-    return () => {
-      counter.current += 1;
-    };
   }, [reload]);
 
   return { items, failure, loading, reload: () => void reload() };

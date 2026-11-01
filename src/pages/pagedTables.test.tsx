@@ -2,11 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import type { ColumnsType } from 'antd/es/table';
 import { describe, expect, it, vi } from 'vitest';
 import { renderPage } from '../../tests/renderPage';
-import { PagedTable as AdsTable } from './ads/PagedTable';
-import { PagedTable as AppVersionsTable } from './appVersions/PagedTable';
-import { PagedTable as CampaignTable } from './campaign/PagedTable';
-import { PagedTable as NotificationsTable } from './notifications/PagedTable';
-import { PagedTable as SmsTable } from './sms/PagedTable';
+import { PagedTable as SharedTable } from '../components/PagedTable';
 import { PagedTable as SystemTable } from './system/PagedTable';
 import { ServerTable as UsersTable } from './users/ServerTable';
 
@@ -30,11 +26,7 @@ const state = (loading: boolean, rows: Row[] = []) => ({
 const spinning = () => document.querySelector('.ant-spin-spinning') !== null;
 
 describe.each([
-  ['ads', AdsTable],
-  ['appVersions', AppVersionsTable],
-  ['campaign', CampaignTable],
-  ['notifications', NotificationsTable],
-  ['sms', SmsTable],
+  ['shared (ads, application versions, notifications, SMS, campaign)', SharedTable],
 ] as const)('the %s table of a server-paged list', (_name, Table) => {
   it('shows the loading state while the page is read', () => {
     renderPage(

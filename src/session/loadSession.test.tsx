@@ -282,4 +282,19 @@ describe('readMeAgain', () => {
     });
     expect(await readMeAgain()).toBeUndefined();
   });
+
+  it('asks nothing when there is no token (a late 403 after signing out)', async () => {
+    const calls = stubFetch(() => jsonResponse(200, meBody()));
+    expect(await readMeAgain()).toBeUndefined();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('does not report the session as expired when a 403 arrives after signing out', async () => {
+    const onExpired = vi.fn();
+    setSessionHandlers({ onExpired, onForbidden: vi.fn() });
+    const calls = stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
+    expect(await readMeAgain()).toBeUndefined();
+    expect(calls).toHaveLength(0);
+    expect(onExpired).not.toHaveBeenCalled();
+  });
 });

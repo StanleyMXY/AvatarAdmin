@@ -1,9 +1,11 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLocale, history, resetUmiStub } from '../../../tests/stubs/umi-max';
+import { currentLocale, resetActiveLocaleForTests } from '../../locales/activeLocale';
 import { getToken, setToken } from '../../request/session';
-import { resetThemeModeForTests, THEME_STORAGE_KEY } from '../../theme/modes';
+import { contrastRatio } from '../../theme/contrast';
+import { getModeTokens, resetThemeModeForTests, THEME_STORAGE_KEY } from '../../theme/modes';
 import { HeaderDropdown } from './HeaderDropdown';
 import { LangSwitch } from './LangSwitch';
 import { signOut } from './signOut';
@@ -76,6 +78,22 @@ describe('LangSwitch', () => {
     expect(document.documentElement.lang).toBe('zh-CN');
   });
 
+  it('records the choice for the app even when the browser refuses to save it, so the drop-down and the requests agree with the page', async () => {
+    resetActiveLocaleForTests();
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+    render(wrap(<LangSwitch />));
+    fireEvent.mouseDown(screen.getByRole('combobox'));
+    fireEvent.click(
+      await screen.findByText('简体中文', { selector: '.ant-select-item-option-content' }),
+    );
+    expect(currentLocale()).toBe('zh-CN');
+    expect(document.documentElement.lang).toBe('zh-CN');
+    resetActiveLocaleForTests();
+    vi.restoreAllMocks();
+  });
+
   it('offers exactly the two interface languages, each in its own language', async () => {
     render(wrap(<LangSwitch />));
     fireEvent.mouseDown(screen.getByRole('combobox'));
@@ -136,11 +154,57 @@ describe('HeaderDropdown', () => {
     expect(await screen.findByRole('menu')).toBeInTheDocument();
   });
 
+  it('draws the letter of the avatar in the text colour of a primary button on the primary colour, readable (4.5:1) in every theme', () => {
+    for (const mode of ['dim', 'deep', 'light'] as const) {
+      localStorage.setItem(THEME_STORAGE_KEY, mode);
+      resetThemeModeForTests();
+      const { unmount } = render(
+        wrap(<HeaderDropdown username="ploy" onChangePassword={vi.fn()} onLogout={vi.fn()} />),
+      );
+      const tokens = getModeTokens(mode);
+      const avatar = screen.getByTestId('header-avatar');
+      expect(avatar).toHaveStyle({
+        color: tokens.colorTextOnPrimary,
+        backgroundColor: tokens.colorPrimary,
+      });
+      expect(contrastRatio(tokens.colorTextOnPrimary, tokens.colorPrimary)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+      unmount();
+    }
+    localStorage.clear();
+    resetThemeModeForTests();
+  });
+
   it('shows the user name next to the avatar', () => {
     render(
       wrap(<HeaderDropdown username="ploy" onChangePassword={() => {}} onLogout={() => {}} />),
     );
     expect(screen.getByText('ploy')).toBeInTheDocument();
+  });
+
+  it('leaves the user name out of the header on a phone-width window and keeps it as the name of the button, so that the avatar fits next to the switches', async () => {
+    const real = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(max-width: 575px)',
+      media: query,
+      onchange: null,
+      addListener() {},
+      removeListener() {},
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+    try {
+      render(
+        wrap(<HeaderDropdown username="ploy" onChangePassword={() => {}} onLogout={() => {}} />),
+      );
+      await waitFor(() => expect(screen.queryByText('ploy')).toBeNull());
+      expect(screen.getByRole('button', { name: 'ploy' })).toHaveAttribute('title', 'ploy');
+      expect(screen.getByTestId('header-avatar')).toBeInTheDocument();
+    } finally {
+      window.matchMedia = real;
+    }
   });
 });
 

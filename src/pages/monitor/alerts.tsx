@@ -2,6 +2,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Link, useAccess, useIntl } from '@umijs/max';
 import { App } from 'antd';
 import { useRef } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { RowActions } from '../../components/RowActions';
@@ -128,6 +129,7 @@ export default function AlertsPage() {
     ...(canClose
       ? [
           {
+            ...ACTIONS_COLUMN,
             title: t('monitor.alert.col.actions'),
             key: 'actions',
             search: false,

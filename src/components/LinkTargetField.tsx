@@ -19,8 +19,13 @@ const TYPES: readonly LinkType[] = ['NONE', 'SCREEN', 'URL'];
  * A rule for `Form.Item` around `LinkTargetField`: NONE needs nothing, SCREEN needs a screen of the
  * shared list, URL needs a link that passes the link rule (contract 1.7). The message is the
  * reason text of the problem, so the form cannot be submitted with a target the backend refuses.
+ * With `quietUrl` a bad address carries no message (the form still cannot be sent): for a form where
+ * the address box shows the reason itself, so that it is not written twice.
  */
-export function linkTargetRule(intl: { formatMessage: (d: { id: string }) => string }) {
+export function linkTargetRule(
+  intl: { formatMessage: (d: { id: string }) => string },
+  options: { quietUrl?: boolean } = {},
+) {
   return {
     validator: async (_: unknown, value: LinkTargetValue | undefined) => {
       const { linkType, linkTarget } = value ?? { linkType: 'NONE', linkTarget: '' };
@@ -29,7 +34,12 @@ export function linkTargetRule(intl: { formatMessage: (d: { id: string }) => str
       }
       if (linkType === 'URL') {
         const check = validateServerLink(linkTarget);
-        if (!check.ok) throw new Error(intl.formatMessage({ id: `reason.${check.reasonKey}` }));
+        // `quietUrl`: the address box beside it already says what is wrong, so the rule only blocks.
+        if (!check.ok) {
+          throw new Error(
+            options.quietUrl ? '' : intl.formatMessage({ id: `reason.${check.reasonKey}` }),
+          );
+        }
       }
     },
   };

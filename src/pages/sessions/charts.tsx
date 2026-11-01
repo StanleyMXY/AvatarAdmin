@@ -6,7 +6,7 @@ import {
   provisionalPoints,
   SOLID_MARKER,
 } from '../../components/stat/provisionalChart';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { formatPercent } from '../../utils/ratio';
 import { isProvisionalDay } from '../../utils/settledDay';
@@ -39,7 +39,7 @@ export function DayLineChart({
   const [mode] = useThemeMode();
   const theme = getChartTheme(mode);
   const single = new Set(data.map((d) => d.series)).size <= 1;
-  const axisText = { labelFill: theme.textColor, titleFill: theme.textColor };
+  const axisText = axisTextStyle(theme);
   // The solid marker stays on every day; the hollow one is drawn over the days that are not over.
   const hollow = today === undefined ? [] : provisionalPoints(data, today);
   return (
@@ -84,7 +84,7 @@ export function DayLineChart({
               items: [
                 {
                   channel: 'y',
-                  valueFormatter: (value: number) => formatPercent(value, intl.locale, 1),
+                  valueFormatter: (value: number) => formatPercent(value, intl.locale, 2),
                 },
               ],
             }
@@ -112,7 +112,7 @@ export function StackedDayChart({
   const intl = useIntl();
   const [mode] = useThemeMode();
   const theme = getChartTheme(mode);
-  const axisText = { labelFill: theme.textColor, titleFill: theme.textColor };
+  const axisText = axisTextStyle(theme);
   const rows =
     today === undefined
       ? data

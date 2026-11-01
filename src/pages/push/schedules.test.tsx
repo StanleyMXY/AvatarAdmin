@@ -84,6 +84,17 @@ describe('the periodic push page: the list', { timeout: 30000 }, () => {
     expect(within(off).getByText('—')).toBeInTheDocument(); // no next task for a schedule that is off
   });
 
+  it('says in the header that the next task time is shown in the time zone of this computer, and keeps the time of day in the zone it was set in', async () => {
+    backend();
+    renderPage(<SchedulesPage />);
+    const weekly = await rowOf(WEEKLY);
+    expect(
+      screen.getByRole('columnheader', { name: 'Next task (time zone of this computer)' }),
+    ).toBeInTheDocument();
+    // the time of day is the one that was typed, in its own zone: it is not moved to this computer's zone
+    expect(within(weekly).getByText('20:30 · Asia/Bangkok')).toBeInTheDocument();
+  });
+
   it('holds a title without spaces in the cell and survives text that is not text', async () => {
     stubFetch(() =>
       jsonResponse(

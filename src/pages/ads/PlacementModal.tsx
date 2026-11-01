@@ -1,11 +1,11 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, InputNumber, Modal, Typography } from 'antd';
-import { useState } from 'react';
+import { type FailureLines, useFailureView } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdPlacement, type PlacementPatch, updatePlacement } from '../../services/ads';
+import { failureToForm, failureWords } from '../../utils/failureToForm';
 import { DASH } from '../../utils/ratio';
-import { failureToForm } from './formFailure';
 import { dailyMax } from './placementRows';
 
 type Values = {
@@ -37,14 +37,14 @@ export function PlacementModal({ open, placement, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  const { view: failure, show, clear } = useFailureView<FailureLines>();
   const rewarded = placement?.adFormat === 'REWARDED';
   const cap = Form.useWatch('frequencyCap', form);
   const reward = Form.useWatch('rewardCredits', form);
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
     if (!placement) return;
-    setFailure(null);
+    clear();
     const patch: PlacementPatch = {};
     if (isWhole(values.frequencyCap) && values.frequencyCap !== placement.frequencyCap) {
       patch.frequencyCap = values.frequencyCap;
@@ -70,8 +70,11 @@ export function PlacementModal({ open, placement, onClose, onSaved }: Props) {
     try {
       await updatePlacement(String(placement.id), patch);
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS);
-      setFailure({ text: result.text, more: result.unplaced });
+      failureToForm(intl, form, error, FIELDS);
+      show((words) => {
+        const result = failureWords(words, error, FIELDS);
+        return { text: result.text, more: result.unplaced };
+      });
       return;
     }
     message.success(t('ads.common.saved'));
@@ -93,7 +96,7 @@ export function PlacementModal({ open, placement, onClose, onSaved }: Props) {
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}
@@ -194,7 +197,7 @@ export function PlacementModal({ open, placement, onClose, onSaved }: Props) {
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

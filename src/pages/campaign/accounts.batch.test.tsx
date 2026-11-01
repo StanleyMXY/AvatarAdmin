@@ -197,7 +197,7 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
     expect(screen.queryByText(/overwritten/)).not.toBeInTheDocument();
   });
 
-  it('lists each bad row with its line and the reason in words, imports nothing, and keeps the button off', async () => {
+  it('lists each bad row with its place in the array and the reason in words, imports nothing, and keeps the button off', async () => {
     const { calls, user } = await open();
     await putJson(
       jsonRows([
@@ -210,10 +210,10 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
     );
     const box = within(await dialog());
     expect(await box.findByText(/Nothing can be imported: 4 problems/)).toBeInTheDocument();
-    expect(box.getByText('Line 2: The cost is below 0.')).toBeInTheDocument();
-    expect(box.getByText('Line 3: There is no such day.')).toBeInTheDocument();
-    expect(box.getByText('Line 4: The cost is not a number.')).toBeInTheDocument();
-    expect(box.getByText('Line 5: The campaign ID is missing.')).toBeInTheDocument();
+    expect(box.getByText('Item 2: The cost is below 0.')).toBeInTheDocument();
+    expect(box.getByText('Item 3: There is no such day.')).toBeInTheDocument();
+    expect(box.getByText('Item 4: The cost is not a number.')).toBeInTheDocument();
+    expect(box.getByText('Item 5: The campaign ID is missing.')).toBeInTheDocument();
     expect(await importButton()).toBeDisabled();
     await user.click(await importButton());
     expect(writesOf(calls)).toHaveLength(0);
@@ -230,17 +230,17 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
     ).toBeInTheDocument();
     await putJson(jsonRows([row({ currency: 'EUR' })]));
     expect(
-      await within(await dialog()).findByText('Line 1: The currency is EUR, and costs are in USD.'),
+      await within(await dialog()).findByText('Item 1: The currency is EUR, and costs are in USD.'),
     ).toBeInTheDocument();
     expect(await importButton()).toBeDisabled();
   });
 
-  it('refuses the same campaign and day twice, naming the line of the first', async () => {
+  it('refuses the same campaign and day twice, naming the item of the first', async () => {
     await open();
     await putJson(jsonRows([row(), row({ statDate: '2026/09/01', amount: 9 })]));
     expect(
       await within(await dialog()).findByText(
-        'Line 2: The same campaign and day is on line 1 already.',
+        'Item 2: The same campaign and day is in item 1 already.',
       ),
     ).toBeInTheDocument();
   });
@@ -566,6 +566,6 @@ describe('the texts of the batch dialog', () => {
     fireEvent.change(within(await dialog()).getByLabelText('JSON 内容'), {
       target: { value: jsonRows([row(), row({ statDate: '2026-09-02', amount: -3 })]) },
     });
-    expect(await within(await dialog()).findByText('第 2 行：花费小于 0。')).toBeInTheDocument();
+    expect(await within(await dialog()).findByText('第 2 项：花费小于 0。')).toBeInTheDocument();
   });
 });

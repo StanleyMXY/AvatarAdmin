@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { envelope, flush, jsonResponse, stubFetch, textResponse } from '../../tests/httpStubs';
-import { apiRequest, setLocaleProvider } from './apiClient';
+import {
+  apiRequest,
+  buildQuery,
+  defaultLocaleProvider,
+  LOCALE_STORAGE_KEY,
+  resolveUrl,
+  setLocaleProvider,
+} from './apiClient';
 import { ApiError } from './errors';
 import { getToken, resetSessionState, setSessionHandlers, setToken } from './session';
 
@@ -53,6 +60,38 @@ describe('apiRequest: success', () => {
     );
   });
 
+  it('leaves the Authorization header out when the request is anonymous, whatever token is held, and does not take a 401 for the end of the session', async () => {
+    setToken('tok-123');
+    const calls = stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN', null, 'void')));
+    await expect(
+      apiRequest({ method: 'POST', url: '/auth/login', body: {}, anonymous: true }),
+    ).rejects.toMatchObject({ code: 'ADMIN_INVALID_TOKEN' });
+    expect(Object.keys(calls[0].init.headers).map((k) => k.toLowerCase())).not.toContain(
+      'authorization',
+    );
+    expect(onExpired).not.toHaveBeenCalled();
+    expect(getToken()).toBe('tok-123');
+  });
+
+  it('does not take a 401 of an anonymous request for the end of a session when no token is held either', async () => {
+    stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN', null, 'void')));
+    await expect(
+      apiRequest({ method: 'POST', url: '/auth/totp/enroll', body: {}, anonymous: true }),
+    ).rejects.toMatchObject({ code: 'ADMIN_INVALID_TOKEN' });
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it('has no second way to keep a 401 from ending the session: only `anonymous` does (a leftover `reportSession: false` is ignored)', async () => {
+    setToken('tok-123');
+    stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN', null, 'void')));
+    await expect(
+      // @ts-expect-error `reportSession` is not an option of apiRequest
+      apiRequest({ method: 'GET', url: '/me', reportSession: false }),
+    ).rejects.toMatchObject({ code: 'ADMIN_INVALID_TOKEN' });
+    expect(onExpired).toHaveBeenCalledTimes(1);
+    expect(getToken()).toBeNull();
+  });
+
   it('puts relative urls under /api/admin and leaves /api/... urls alone', async () => {
     const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
     await apiRequest({ method: 'GET', url: '/users/42/devices' });
@@ -71,11 +110,30 @@ describe('apiRequest: success', () => {
     expect(calls[1].init.body).toBeUndefined();
   });
 
+  it('sends no content type when there is no body: not on GET, not on a DELETE', async () => {
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+    await apiRequest({ method: 'GET', url: '/roles' });
+    await apiRequest({ method: 'DELETE', url: '/roles/1' });
+    for (const call of calls) {
+      expect(Object.keys(call.init.headers).map((k) => k.toLowerCase())).not.toContain(
+        'content-type',
+      );
+    }
+  });
+
   it('uses the method it was given (PUT, DELETE)', async () => {
     const calls = stubFetch(() => jsonResponse(200, envelope('200', null)));
     await apiRequest({ method: 'PUT', url: '/config/a.b', body: { value: 1 } });
     await apiRequest({ method: 'DELETE', url: '/config/a.b' });
     expect(calls.map((c) => c.init.method)).toEqual(['PUT', 'DELETE']);
+  });
+
+  it('leaves the cache mode of fetch alone, and passes the one a caller asks for', async () => {
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', null)));
+    await apiRequest({ method: 'GET', url: '/a' });
+    await apiRequest({ method: 'GET', url: '/b', cache: 'no-store' });
+    expect(calls[0].init.cache).toBeUndefined();
+    expect(calls[1].init.cache).toBe('no-store');
   });
 
   it('returns null data as null', async () => {
@@ -129,6 +187,195 @@ describe('apiRequest: query parameters', () => {
     await expect(apiRequest({ method: 'GET', url: '/x', params: { a: { b: 1 } } })).rejects.toThrow(
       TypeError,
     );
+  });
+});
+
+describe('the address of a request', () => {
+  it('refuses an address that is not a path starting with one slash, instead of asking somewhere else', () => {
+    for (const bad of [
+      'users',
+      '',
+      'https://evil.example/x',
+      '//evil.example/x',
+      '/\\evil.example/x',
+      ' /users',
+    ]) {
+      expect(() => resolveUrl(bad), bad).toThrow(TypeError);
+    }
+  });
+
+  it('refuses a fragment: it is never sent, so the query would land in it', () => {
+    expect(() => resolveUrl('/users#frag')).toThrow(TypeError);
+  });
+
+  it('keeps accepting the paths services write', () => {
+    expect(resolveUrl('/users')).toBe('/api/admin/users');
+    expect(resolveUrl('/users/42/devices')).toBe('/api/admin/users/42/devices');
+    expect(resolveUrl('/config/app.supported_locales')).toBe(
+      '/api/admin/config/app.supported_locales',
+    );
+    expect(resolveUrl('/api/admin/me')).toBe('/api/admin/me');
+    expect(resolveUrl('/users/%E0%B8%AA')).toBe('/api/admin/users/%E0%B8%AA');
+  });
+
+  it('joins the parameters to an address that already has a query with &, not a second ?', async () => {
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+    await apiRequest({ method: 'GET', url: '/users?status=A', params: { page: 2 } });
+    await apiRequest({ method: 'GET', url: '/users?status=A' });
+    await apiRequest({ method: 'GET', url: '/users?status=A', params: { page: undefined } });
+    expect(calls.map((c) => c.url)).toEqual([
+      '/api/admin/users?status=A&page=2',
+      '/api/admin/users?status=A',
+      '/api/admin/users?status=A',
+    ]);
+  });
+
+  it('does not send a request to a bad address, and says why', async () => {
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+    await expect(apiRequest({ method: 'GET', url: 'users' })).rejects.toThrow(TypeError);
+    expect(calls).toEqual([]);
+  });
+
+  describe('a body that cannot be written as JSON', () => {
+    const cyclic = () => {
+      const body: Record<string, unknown> = { name: 'ploy', password: 'hunter2-secret' };
+      body.self = body;
+      return body;
+    };
+    const cases: [string, () => unknown][] = [
+      ['an object that contains itself', cyclic],
+      ['a BigInt', () => ({ amount: 10n, note: 'ยอดเงิน' })],
+      [
+        'a toJSON that throws',
+        () => ({
+          toJSON() {
+            throw new Error('token=hunter2-secret');
+          },
+        }),
+      ],
+      ['a function (writes to nothing)', () => () => 1],
+      ['a symbol (writes to nothing)', () => Symbol('x')],
+    ];
+
+    it.each(cases)(
+      'stops with a TypeError that says so, and sends nothing, for %s',
+      async (_name, make) => {
+        setToken('tok');
+        const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+        const failure = await apiRequest({ method: 'POST', url: '/x', body: make() }).then(
+          () => null,
+          (e: unknown) => e,
+        );
+        expect(failure).toBeInstanceOf(TypeError);
+        expect(failure).not.toBeInstanceOf(ApiError);
+        const text = (failure as TypeError).message;
+        expect(text).toMatch(/JSON/);
+        expect(text).not.toMatch(/hunter2|network/i);
+        expect((failure as TypeError).cause).toBeUndefined();
+        expect(calls).toEqual([]);
+        expect(onExpired).not.toHaveBeenCalled();
+        expect(onForbidden).not.toHaveBeenCalled();
+      },
+    );
+
+    it('is not an outcome-unknown network error (the page must not say the write may have happened)', async () => {
+      stubFetch(() => jsonResponse(200, envelope('200', {})));
+      const failure = await apiRequest({ method: 'PUT', url: '/x', body: cyclic() }).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect((failure as { code?: string }).code).not.toBe('NETWORK_ERROR');
+      expect(failure).not.toBeInstanceOf(ApiError);
+    });
+
+    it('starts no timer for it', async () => {
+      vi.useFakeTimers();
+      try {
+        stubFetch(() => jsonResponse(200, envelope('200', {})));
+        await expect(apiRequest({ method: 'POST', url: '/x', body: cyclic() })).rejects.toThrow(
+          TypeError,
+        );
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('still writes an ordinary body, also with text of every language, null, and false', async () => {
+      const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+      const body = { a: 'ข้อความ', b: 'نص', c: 'teks', d: null, e: false, f: 0, g: '' };
+      await apiRequest({ method: 'POST', url: '/x', body });
+      await apiRequest({ method: 'POST', url: '/x', body: null });
+      await apiRequest({ method: 'POST', url: '/x', body: false });
+      expect(calls.map((c) => c.init.body)).toEqual([JSON.stringify(body), 'null', 'false']);
+    });
+  });
+});
+
+describe('query parameters at the edges', () => {
+  it('drops an empty array, and the empty elements of an array', () => {
+    expect(buildQuery({ a: [] })).toBe('');
+    expect(buildQuery({ a: [], b: 1 })).toBe('?b=1');
+    expect(buildQuery({ a: [1, undefined, null, ''] })).toBe('?a=1');
+    expect(buildQuery({ a: [undefined, null] })).toBe('');
+    expect(buildQuery({ a: ['x', 0, false] })).toBe('?a=x%2C0%2Cfalse');
+  });
+
+  it('refuses an object inside an array instead of sending [object Object]', () => {
+    expect(() => buildQuery({ a: [{ b: 1 }] })).toThrow(TypeError);
+    expect(() => buildQuery({ a: [[1, 2]] })).toThrow(TypeError);
+  });
+});
+
+describe('the language of a request when the shell did not set one', () => {
+  const asked = async () => {
+    setLocaleProvider(defaultLocaleProvider);
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+    await apiRequest({ method: 'GET', url: '/me' });
+    return calls[0].init.headers['Accept-Language'];
+  };
+  const browserLanguages = (languages: string[]) =>
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(languages);
+
+  it('reads the language the person chose, under the key of the Umi locale plugin', async () => {
+    expect(LOCALE_STORAGE_KEY).toBe('umi_locale');
+    localStorage.setItem('umi_locale', 'zh-CN');
+    browserLanguages(['en-US']);
+    expect(await asked()).toBe('zh-CN');
+    localStorage.setItem('umi_locale', 'en-US');
+    browserLanguages(['zh-CN']);
+    expect(await asked()).toBe('en-US');
+  });
+
+  it('goes by the browser when nothing was chosen: zh is Chinese, every other language is English', async () => {
+    browserLanguages(['zh-TW', 'en-US']);
+    expect(await asked()).toBe('zh-CN');
+    browserLanguages(['th-TH', 'zh-CN']);
+    expect(await asked()).toBe('en-US');
+    browserLanguages([]);
+    expect(await asked()).toBe('en-US');
+  });
+
+  it('ignores a stored value that is not one of the two interface languages', async () => {
+    localStorage.setItem('umi_locale', 'th-TH');
+    browserLanguages(['zh-CN']);
+    expect(await asked()).toBe('zh-CN');
+  });
+
+  it('still answers when the browser refuses access to its storage', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+    browserLanguages(['zh-CN']);
+    expect(await asked()).toBe('zh-CN');
+  });
+
+  it('uses the provider the shell set, whatever is stored', async () => {
+    localStorage.setItem('umi_locale', 'zh-CN');
+    setLocaleProvider(() => 'en-US');
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+    await apiRequest({ method: 'GET', url: '/me' });
+    expect(calls[0].init.headers['Accept-Language']).toBe('en-US');
   });
 });
 
@@ -238,6 +485,26 @@ describe('apiRequest: session signals', () => {
     expect(getToken()).toBe('new');
   });
 
+  it('a session handler that throws does not replace the error of the request', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    setSessionHandlers({
+      onExpired: () => {
+        throw new Error('handler bug');
+      },
+      onForbidden: () => {
+        throw new Error('handler bug');
+      },
+    });
+    setToken('old');
+    stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
+    expect((await caught(apiRequest({ method: 'GET', url: '/me' }))).code).toBe(
+      'ADMIN_INVALID_TOKEN',
+    );
+    stubFetch(() => jsonResponse(403, envelope('ADMIN_FORBIDDEN')));
+    expect((await caught(apiRequest({ method: 'GET', url: '/x' }))).code).toBe('ADMIN_FORBIDDEN');
+    expect(log).toHaveBeenCalledTimes(2);
+  });
+
   it('403 ADMIN_FORBIDDEN calls onForbidden, throws, and keeps the token', async () => {
     setToken('keep');
     stubFetch(() => jsonResponse(403, envelope('ADMIN_FORBIDDEN')));
@@ -295,6 +562,22 @@ describe('apiRequest: failures without a usable envelope', () => {
     const pending = apiRequest({ method: 'GET', url: '/x', signal: controller.signal });
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('an abort with a reason of its own (a string, a plain Error) is still an abort, not a network error', async () => {
+    for (const reason of ['page closed', new Error('unmounted')]) {
+      const controller = new AbortController();
+      stubFetch(
+        ({ init }) =>
+          new Promise<Response>((_resolve, rejectFetch) => {
+            // Some browsers and polyfills reject with whatever the abort carried.
+            init.signal?.addEventListener('abort', () => rejectFetch(reason));
+          }),
+      );
+      const pending = apiRequest({ method: 'GET', url: '/x', signal: controller.signal });
+      controller.abort(reason);
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    }
   });
 
   it('maps a body that is not JSON to INVALID_RESPONSE and keeps the status', async () => {

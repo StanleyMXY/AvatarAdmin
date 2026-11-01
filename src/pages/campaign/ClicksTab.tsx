@@ -1,10 +1,12 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { Button, Flex, Input, Select, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
 import { StatusTag } from '../../components/StatusTag';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
+import { type Kept, useKeptState } from '../../hooks/useKeptState';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AttributionClick,
   CLICK_STATUSES,
@@ -12,14 +14,12 @@ import {
   getClicks,
 } from '../../services/campaign';
 import { useAdminMeta } from '../../session/useSession';
+import { codeText, instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { lastNDaysUtc, utcDayRangeToInstants } from '../../utils/utcDay';
 import { CampaignSelect } from './CampaignSelect';
-import { PagedTable } from './PagedTable';
-import { codeText, instantText, orDash } from './texts';
 import type { CampaignList } from './useCampaigns';
-import { useServerPage } from './useServerPage';
 
 type Filter = {
   range: DayRange;
@@ -47,7 +47,7 @@ const ALL = '';
  * 点击明细 (`ATTRIBUTION:VIEW`): the clicks of the own attribution, newest first. The address is
  * shown exactly as the backend gave it: masked, unless the administrator holds `ANALYTICS:IP_VIEW`.
  */
-export function ClicksTab({ campaigns }: { campaigns: CampaignList }) {
+export function ClicksTab({ campaigns, kept }: { campaigns: CampaignList; kept: Kept }) {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
@@ -56,8 +56,8 @@ export function ClicksTab({ campaigns }: { campaigns: CampaignList }) {
   const mayReadAddress = access.canAccess('ANALYTICS:IP_VIEW');
   const days = meta.attributionClickRetentionDays;
 
-  const [draft, setDraft] = useState<Filter>(initialFilter);
-  const [applied, setApplied] = useState<Filter>(initialFilter);
+  const [draft, setDraft] = useKeptState<Filter>(kept, 'clicks.draft', initialFilter);
+  const [applied, setApplied] = useKeptState<Filter>(kept, 'clicks.applied', initialFilter);
 
   const { from, to } = utcDayRangeToInstants(applied.range.from, applied.range.to);
   const state = useServerPage(getClicks, {

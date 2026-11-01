@@ -33,7 +33,7 @@ const messages: Record<string, string> = {
   'complaints.evidence.file': 'File {n}',
   'complaints.evidence.notFound': 'The evidence does not exist.',
   'complaints.evidence.badAddress': 'The file address is not one that can be opened.',
-  'complaints.evidence.open': 'Open the file',
+  'complaints.evidence.unsupported': 'This kind of file cannot be viewed here.',
 
   'complaints.event.title': 'History',
   'complaints.event.time': 'Time',

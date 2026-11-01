@@ -6,15 +6,15 @@ import { useCallback, useMemo, useState } from 'react';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { fillMissingDays } from '../../services/stats/fillMissingDays';
 import { getDaily } from '../../services/stats/reports';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
-import { type CallDay, emptyCallDay, toCallDay } from './analyticsRows';
+import { brokenDays, type CallDay, emptyCallDay, toCallDay } from './analyticsRows';
 import { DayLineChart, type LinePoint } from './charts';
 import { formatDecimal } from './format';
-import { useStatRead } from './useStatRead';
 
 const METRICS = ['calls', 'callers', 'minutes', 'minutesPerCaller', 'callsPerCaller'] as const;
 type Metric = (typeof METRICS)[number];
@@ -46,7 +46,7 @@ export default function CallAnalyticsPage() {
     () => getDaily({ from: applied.from, to: applied.to, platform: 'ALL' }),
     [applied],
   );
-  const { data, failure, reload } = useStatRead(fetcher);
+  const { data, failure, reload } = useLatestRead(fetcher);
 
   const days = useMemo<CallDay[] | null>(
     () =>
@@ -57,6 +57,8 @@ export default function CallAnalyticsPage() {
         : null,
     [data],
   );
+
+  const broken = useMemo(() => (data ? brokenDays(data.items) : []), [data]);
 
   const chart = ((): LinePoint[] => {
     if (!days) return [];
@@ -136,6 +138,17 @@ export default function CallAnalyticsPage() {
         />
       ) : null}
       {days === null && !failure ? <Spin /> : null}
+      {days && broken.length > 0 ? (
+        <Alert
+          type="warning"
+          showIcon
+          data-testid="analytics-invalid-note"
+          title={t('sessions.analytics.invalidNote', {
+            days:
+              broken.slice(0, 5).join(', ') + (broken.length > 5 ? ` +${broken.length - 5}` : ''),
+          })}
+        />
+      ) : null}
       {days ? (
         <>
           <DayLineChart data={chart} yTitle={t('sessions.analytics.chart.y')} />

@@ -113,8 +113,14 @@ export type UsageCostRow = {
   inputTokens: number | null;
   cachedInputTokens: number | null;
   outputTokens: number | null;
-  quantity: number | null;
-  costAmount: number | null;
+  /**
+   * `quantity` and `costAmount` are money and amounts of a unit: the contract does not say whether
+   * the backend writes them as decimal text or as a JSON number (see the question file about the
+   * cost report), so a reader takes either and treats them as decimal text, never adds them as
+   * floats (`pages/cost/costRows.ts` does so with exact decimals).
+   */
+  quantity: string | number | null;
+  costAmount: string | number | null;
   unpricedRequests: number;
 };
 

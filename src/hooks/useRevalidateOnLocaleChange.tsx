@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Form, type FormInstance } from 'antd';
 import { useEffect, useRef } from 'react';
+import { rewriteFieldReasons } from '../utils/fieldReasons';
 
 /**
  * antd keeps the text of a message a form has already shown, so after the language is switched it
@@ -8,17 +9,25 @@ import { useEffect, useRef } from 'react';
  * switch, the fields that show a message right now: the form stays mounted, so nothing typed is
  * lost, and a field that shows no message is not marked.
  *
- * A message that the rules of its field no longer produce (it was put there with `setFields`, for
- * example a reason the server gave) is put back unchanged: only a rule can be written again.
+ * A reason put under a field by `setFieldReasons` (what the server refused, or a check the page made
+ * after the save) is written again in the new language, from the failure it came from, as long as
+ * the field still shows it as it was given; one the person has changed or cleared is forgotten. This
+ * is why a form that shows such reasons must hold this: it is the only place that knows the language
+ * was switched. Any other message that the rules of its field no longer produce is put back
+ * unchanged: only a rule can be written again.
  */
 export function useRevalidateOnLocaleChange(form: FormInstance) {
-  const { locale } = useIntl();
+  const intl = useIntl();
+  const { locale } = intl;
   const shown = useRef(locale);
 
   useEffect(() => {
     if (shown.current === locale) return;
     shown.current = locale;
-    const before = form.getFieldsError().filter((field) => field.errors.length > 0);
+    const given = rewriteFieldReasons(form, intl);
+    const before = form
+      .getFieldsError()
+      .filter((field) => field.errors.length > 0 && !given.has(field.name.join('.')));
     if (before.length === 0) return;
     form
       .validateFields(before.map((field) => field.name))
@@ -27,7 +36,7 @@ export function useRevalidateOnLocaleChange(form: FormInstance) {
         const passed = before.filter((field) => form.getFieldError(field.name).length === 0);
         if (passed.length > 0) form.setFields(passed.map(({ name, errors }) => ({ name, errors })));
       });
-  }, [locale, form]);
+  }, [locale, form, intl]);
 }
 
 /**

@@ -13,10 +13,15 @@ import {
   Typography,
 } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { FailureBar } from '../../components/FailureBar';
+import { UploadField } from '../../components/UploadField';
+import type { FailureLines } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import { ApiError } from '../../request/errors';
 import {
+  type ApkUpload as ApkUploadResult,
   type AppVersion,
   createAppVersion,
   updateAppVersion,
@@ -25,17 +30,20 @@ import {
 } from '../../services/appVersions';
 import type { ChannelPackage } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
+import { codeText } from '../../utils/displayText';
+import {
+  detailReason,
+  type FieldReason,
+  failureReason,
+  setFieldReasons,
+} from '../../utils/fieldReasons';
 import { formatBytes } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { isUploadIdRejection } from '../../utils/uploadErrors';
-import { ApkUpload } from './ApkUpload';
 import { ChangelogField } from './ChangelogField';
 import { distributionOf } from './distribution';
-import { FailureBar } from './FailureBar';
 import { validateStoreUrl } from './storeUrl';
-import { codeText } from './texts';
-import { useUploadSlot } from './uploadSlot';
 import { useActiveVersion } from './useActiveVersion';
 import {
   checkChangelog,
@@ -102,7 +110,9 @@ const numberOr = (value: unknown): number | null =>
 function uploadRefused(error: unknown, carriedNewUpload: boolean): boolean {
   if (!(error instanceof ApiError) || !isUploadIdRejection(error)) return false;
   if (error.httpStatus === 400) {
-    return error.details.length === 0 || error.details.some((d) => d.ref === 'apkUploadId');
+    // The contract does not promise `details` on a 400: without them nothing says the file is at
+    // fault, and a file of up to 100 MB is not thrown away on a guess.
+    return error.details.some((d) => d.ref === 'apkUploadId');
   }
   if (error.httpStatus === 409) {
     const status = (error.data as { status?: unknown } | null)?.status;
@@ -111,6 +121,26 @@ function uploadRefused(error: unknown, carriedNewUpload: boolean): boolean {
     return carriedNewUpload && !ofVersion;
   }
   return carriedNewUpload;
+}
+
+/** What the backend refused, sorted by where it goes: under a form field or in the bar. */
+function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknown) {
+  const described = describeFailure(intl, error);
+  const forForm: FieldReason[] = [];
+  const more: string[] = [];
+  for (const [index, detail] of described.fields.entries()) {
+    if ((FIELDS as readonly string[]).includes(detail.ref) && detail.ref !== 'apkUploadId') {
+      forForm.push(detailReason(intl, error, detail.ref, index));
+    } else more.push(detail.text);
+  }
+  // A duplicate names the field in `data.field`.
+  if (error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE') {
+    const field = (error.data as { field?: unknown } | null)?.field;
+    if (typeof field === 'string' && (FIELDS as readonly string[]).includes(field)) {
+      forForm.push(failureReason(field, error));
+    }
+  }
+  return { text: described.text, more, forForm };
 }
 
 /**
@@ -134,7 +164,9 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
     apkSizeBytes: number;
     apkSha256: string;
   }>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  // The save the backend refused, kept as the failure itself: its words are made when drawn.
+  const [refusal, setRefusal] = useState<{ error: unknown } | null>(null);
+  const failure: FailureLines | null = refusal === null ? null : splitRefusal(intl, refusal.error);
   const [rejected, setRejected] = useState(false);
   const [needFile, setNeedFile] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
@@ -176,9 +208,12 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
           apkSha256: plainText(version.apkSha256),
         }
       : null;
+  // What the upload answered is text by the contract; whatever it really is, it is drawn as text.
+  const fileUrlText = shownFile ? plainText(shownFile.apkUrl) : '';
+  const fileShaText = shownFile ? plainText(shownFile.apkSha256) : '';
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    setRefusal(null);
     setNeedFile(false);
     if (slot.busy) return;
     let apkUploadId: string | undefined;
@@ -201,27 +236,13 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
       if (editing) await updateAppVersion(plainText(version.id), fields);
       else await createAppVersion({ ...fields, channelCode: values.channelCode as string });
     } catch (error) {
-      const described = describeFailure(intl, error);
-      const forForm: { name: string; errors: string[] }[] = [];
-      const more: string[] = [];
-      for (const detail of described.fields) {
-        if ((FIELDS as readonly string[]).includes(detail.ref) && detail.ref !== 'apkUploadId') {
-          forForm.push({ name: detail.ref, errors: [detail.text] });
-        } else more.push(detail.text);
-      }
-      // A duplicate names the field in `data.field`.
-      if (error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE') {
-        const field = (error.data as { field?: unknown } | null)?.field;
-        if (typeof field === 'string' && (FIELDS as readonly string[]).includes(field)) {
-          forForm.push({ name: field, errors: [described.text] });
-        }
-      }
-      if (forForm.length > 0) (form as FormInstance).setFields(forForm);
+      const { forForm } = splitRefusal(intl, error);
+      setFieldReasons(form as FormInstance, intl, forForm);
       if (kind === 'DIRECT' && uploadRefused(error, slot.uploadId !== undefined)) {
         slot.reset();
         setRejected(true);
       }
-      setFailure({ text: described.text, more });
+      setRefusal({ error });
       return;
     }
     message.success(t('appVersions.saved'));
@@ -447,7 +468,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
                         label: t('appVersions.apk.url'),
                         children: (
                           <span dir="ltr" style={{ overflowWrap: 'anywhere' }}>
-                            {shownFile.apkUrl}
+                            {fileUrlText}
                           </span>
                         ),
                       },
@@ -467,7 +488,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
                             dir="ltr"
                             style={{ overflowWrap: 'anywhere', fontFamily: 'monospace' }}
                           >
-                            {shownFile.apkSha256}
+                            {fileShaText}
                           </span>
                         ),
                       },
@@ -480,7 +501,9 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
                   ) : null}
                 </Flex>
               ) : null}
-              <ApkUpload
+              <UploadField<ApkUploadResult>
+                kind="apk"
+                withFieldReasons
                 key={slot.version}
                 onBusyChange={slot.fieldProps.onBusyChange}
                 onUploaded={(result) => {
@@ -532,7 +555,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

@@ -14,15 +14,21 @@ export const hasToken = (result: LoginResult): result is { token: string; expire
 export function login(body: LoginBody): Promise<LoginResult> {
   const payload: LoginBody = { username: body.username, password: body.password };
   if (body.totp !== undefined && body.totp !== '') payload.totp = body.totp;
-  return apiRequest<LoginResult>({ method: 'POST', url: '/auth/login', body: payload });
+  // Anonymous: a token left from an earlier session is not sent to the sign-in.
+  return apiRequest<LoginResult>({
+    method: 'POST',
+    url: '/auth/login',
+    body: payload,
+    anonymous: true,
+  });
 }
 
 export function enrollTotp(body: {
   enrollToken: string;
   totp: string;
 }): Promise<{ token: string; expiresAt: string }> {
-  // The 401 of this call means the enrollment token is void, not that a session ended.
-  return apiRequest({ method: 'POST', url: '/auth/totp/enroll', body, reportSession: false });
+  // The enrollment token is in the body; the 401 of this call means it is void, not that a session ended.
+  return apiRequest({ method: 'POST', url: '/auth/totp/enroll', body, anonymous: true });
 }
 
 export function changePassword(body: { oldPassword: string; newPassword: string }): Promise<null> {

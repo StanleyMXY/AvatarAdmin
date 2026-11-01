@@ -1,16 +1,20 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Spin, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { ReasonModalForm } from '../../components/ReasonModalForm';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { ApiError } from '../../request/errors';
 import { listPrices, loadAllPages, type PriceBatch, retireBatch } from '../../services/cost';
+import { clipCodePoints } from '../../utils/codePoints';
 import { formatInstant } from '../../utils/format';
+import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { todayUtc } from '../../utils/utcDay';
+import { BatchSummary } from './BatchSummary';
 import { labelOf } from './labels';
 import { PriceLines } from './PriceLines';
-import { useLatestRead } from './useLatestRead';
 import { WrapText } from './WrapText';
 
 type Access = { canAccess: (code?: string) => boolean };
@@ -67,6 +71,9 @@ export function CurrentTab() {
   );
   const { data, failure, reload } = useLatestRead(fetcher);
   const [retiring, setRetiring] = useState<PriceBatch | null>(null);
+  // The summary stays while the dialog closes.
+  const retiringShown = useRef<PriceBatch | null>(null);
+  if (retiring) retiringShown.current = retiring;
   const groups = useMemo(() => (data ? groupBatches(data.items, todayUtc()) : []), [data]);
   const today = todayUtc();
 
@@ -135,11 +142,18 @@ export function CurrentTab() {
     {
       key: 'note',
       title: t('cost.current.col.reviewNote'),
-      render: (_, b) => <WrapText value={b.reviewNote} lines={4} />,
+      // A cell is as wide as its text unless told otherwise: a note of 500 characters would make a
+      // column of thousands of pixels.
+      render: (_, b) => (
+        <div style={{ maxWidth: 320 }}>
+          <WrapText value={b.reviewNote} lines={4} />
+        </div>
+      ),
     },
     ...(canPrice
       ? [
           {
+            ...ACTIONS_COLUMN,
             key: 'actions',
             title: t('cost.current.col.actions'),
             render: (_: unknown, b: PriceBatch) => (b.status === 'ACTIVE' ? withdraw(b) : null),
@@ -191,6 +205,7 @@ export function CurrentTab() {
     ...(canPrice
       ? [
           {
+            ...ACTIONS_COLUMN,
             key: 'actions',
             title: t('cost.current.col.actions'),
             render: (_: unknown, g: Group) => (g.current ? withdraw(g.current) : null),
@@ -261,7 +276,20 @@ export function CurrentTab() {
         open={retiring !== null}
         title={t('cost.current.retireTitle')}
         reasonLabel={t('cost.current.retireNote')}
-        hint={t('cost.current.retireHint')}
+        hint={
+          retiringShown.current ? (
+            <BatchSummary
+              summary={t('cost.current.retireSummary', {
+                model: clipCodePoints(plainText(retiringShown.current.model), 60),
+                currency: plainText(retiringShown.current.currency),
+                date: plainText(retiringShown.current.effectiveFrom),
+              })}
+              consequence={t('cost.current.retireHint')}
+            />
+          ) : (
+            t('cost.current.retireHint')
+          )
+        }
         onClose={() => setRetiring(null)}
         onSubmit={async (note) => {
           if (!retiring) return;

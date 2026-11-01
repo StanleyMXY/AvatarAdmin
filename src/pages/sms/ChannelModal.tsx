@@ -12,7 +12,7 @@ import {
   Switch,
   Typography,
 } from 'antd';
-import { useState } from 'react';
+import { type FailureLines, useFailureView } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -22,6 +22,7 @@ import {
   type SmsProvider,
   updateChannel,
 } from '../../services/sms';
+import { failureToForm, failureWords } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import {
@@ -32,7 +33,6 @@ import {
   credentialProblems,
   normalizeCountries,
 } from './channelRules';
-import { failureToForm } from './formFailure';
 import { type Coverage, keepsCoverage } from './lastOtp';
 import { guardedFailureText, type useLastOtpPrompt } from './useLastOtpPrompt';
 
@@ -107,7 +107,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  const { view: failure, show, clear } = useFailureView<FailureLines>();
   const editing = channel !== null;
   const providerCode = Form.useWatch('providerCode', form);
   const hosts = providers.find((p) => p.code === providerCode)?.allowedHosts ?? [];
@@ -119,7 +119,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
   }
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     let guarded = false;
     if (channel) {
       // Without the list of every channel the others are taken as not there: the question is asked.
@@ -142,8 +142,11 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
       if (channel) await updateChannel(plainText(channel.id), buildChannelBody(input, 'update'));
       else await createChannel(buildChannelBody(input, 'create'));
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS);
-      setFailure({ text: guardedFailureText(intl, error, guarded), more: result.unplaced });
+      failureToForm(intl, form, error, FIELDS, {}, { generalReason: true });
+      show((words) => ({
+        text: guardedFailureText(words, error, guarded),
+        more: failureWords(words, error, FIELDS, {}, { generalReason: true }).unplaced,
+      }));
       return;
     }
     message.success(t('sms.common.saved'));
@@ -368,7 +371,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
                 try {
                   parsed = JSON.parse(text);
                 } catch {
-                  throw new Error(t('sms.channels.extNotJson'));
+                  throw new Error(t('pages.json.invalid'));
                 }
                 if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
                   throw new Error(t('sms.channels.extNotObject'));
@@ -446,7 +449,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

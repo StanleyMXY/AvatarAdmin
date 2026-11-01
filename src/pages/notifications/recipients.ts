@@ -42,3 +42,16 @@ export function recipientsProblem(count: number, max: unknown): 'empty' | 'tooMa
   if (typeof max === 'number' && Number.isFinite(max) && max > 0 && count > max) return 'tooMany';
   return null;
 }
+
+/**
+ * An account id for a line that names it in a message: a character that cannot be seen (a zero
+ * width space, a byte order mark, a no-break or other space, a control or formatting character) is
+ * written as its code point, so that `00a1` and `00a1` plus an invisible character do not look the
+ * same.
+ */
+export function visibleId(id: string): string {
+  return id.replace(/[\p{Cc}\p{Cf}\p{Z}]/gu, (ch) => {
+    const hex = (ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0');
+    return `\u2039U+${hex}\u203A`;
+  });
+}

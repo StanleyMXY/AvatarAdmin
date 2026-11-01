@@ -4,8 +4,10 @@ import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ExportButton } from '../../components/ExportButton';
+import { PagedTable } from '../../components/PagedTable';
 import { StatusTag } from '../../components/StatusTag';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   DELIVERY_CHANNELS,
   DELIVERY_STATUSES,
@@ -16,12 +18,10 @@ import {
   SMS_RECORDS_EXPORT_URL,
   type SmsRecord,
 } from '../../services/sms';
+import { instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { lastNDaysUtc, utcDayRangeToInstants } from '../../utils/utcDay';
-import { PagedTable } from './PagedTable';
-import { instantText, orDash } from './texts';
-import { useServerPage } from './useServerPage';
 
 type Filters = {
   msgId: string;
@@ -133,7 +133,9 @@ export default function RecordsPage() {
     {
       key: 'msgId',
       title: t('sms.records.col.msgId'),
-      render: (_, row) => <span style={{ overflowWrap: 'anywhere' }}>{plainText(row.msgId)}</span>,
+      render: (_, row) => (
+        <EllipsisPopoverText text={plainText(row.msgId)} lines={2} width={180} dir="ltr" />
+      ),
     },
     {
       key: 'vendorMsgId',
@@ -142,7 +144,7 @@ export default function RecordsPage() {
         row.channel === 'PUSH' ? (
           dash
         ) : (
-          <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.vendorMsgId)}</span>
+          <EllipsisPopoverText text={orDash(row.vendorMsgId)} lines={2} width={180} dir="ltr" />
         ),
     },
     {
@@ -183,7 +185,7 @@ export default function RecordsPage() {
       key: 'channelCode',
       title: t('sms.records.col.channelCode'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.channelCode)}</span>
+        <EllipsisPopoverText text={orDash(row.channelCode)} lines={2} width={160} dir="ltr" />
       ),
     },
     {

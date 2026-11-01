@@ -1,0 +1,106 @@
+import { useIntl } from '@umijs/max';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DEFAULT_PAGE_SIZE } from '../components/PagedListTable';
+import type { Page } from '../request/errors';
+import { describeFailure } from '../session/describe';
+import { useLatestCall } from './useLatestCall';
+
+export type ServerPage<T> = {
+  rows: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  loading: boolean;
+  /** The words of the error code of the last read, in the current language, or null. */
+  failure: string | null;
+  setPaging: (page: number, pageSize: number) => void;
+  /** Reads again from page 1, also when the filters are the same as before (the Search button). */
+  search: () => void;
+  reload: () => void;
+};
+
+/**
+ * A list that the backend pages: reads the page for `filters` (the ones asked for with Search, a
+ * plain object) and starts again from page 1 when they change. When two reads overlap, the answer
+ * of the newest read is the one that is shown, whichever arrives first. With `backToLastPage`, a
+ * page past the end that comes back empty (its last row was deleted) while the list still has rows
+ * goes to the last page that has rows instead of showing "no data".
+ */
+export function useServerPage<T, F extends Record<string, unknown>>(
+  fetcher: (query: F & { page: number; pageSize: number }) => Promise<Page<T>>,
+  filters: F,
+  options: { backToLastPage?: boolean } = {},
+): ServerPage<T> {
+  const intl = useIntl();
+  const fetcherRef = useRef(fetcher);
+  fetcherRef.current = fetcher;
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  const backToLastPage = useRef(options.backToLastPage === true);
+  backToLastPage.current = options.backToLastPage === true;
+  const key = JSON.stringify(filters);
+
+  const [paging, setPagingState] = useState({ key, page: 1, pageSize: DEFAULT_PAGE_SIZE });
+  const page = paging.key === key ? paging.page : 1;
+  const { pageSize } = paging;
+  const [tick, setTick] = useState(0);
+  const [rows, setRows] = useState<T[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  // The failed read itself (boxed: a thrown value can be anything); its words are made when the
+  // list is drawn, so they follow the language.
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
+  const failure = useMemo(
+    () => (failed === null ? null : describeFailure(intl, failed.error).text),
+    [intl, failed],
+  );
+  const begin = useLatestCall();
+
+  // `key` stands for the filters: the effect runs when they change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: key, page, pageSize and tick are what a new read depends on
+  useEffect(() => {
+    const isCurrent = begin();
+    setLoading(true);
+    fetcherRef
+      .current({ ...filtersRef.current, page, pageSize })
+      .then((answer) => {
+        if (!isCurrent()) return;
+        setRows(answer.items);
+        setTotal(answer.total);
+        setFailed(null);
+        const last = Math.max(1, Math.ceil(answer.total / pageSize));
+        if (
+          backToLastPage.current &&
+          answer.items.length === 0 &&
+          answer.total > 0 &&
+          last < page
+        ) {
+          // The read of that page follows from the change of the page; it is still loading.
+          setPagingState({ key, page: last, pageSize });
+          return;
+        }
+        setLoading(false);
+      })
+      .catch((error) => {
+        if (!isCurrent()) return;
+        setRows([]);
+        setTotal(0);
+        setFailed({ error });
+        setLoading(false);
+      });
+  }, [key, page, pageSize, tick]);
+
+  const setPaging = useCallback(
+    (nextPage: number, nextSize: number) =>
+      setPagingState({ key, page: nextSize === pageSize ? nextPage : 1, pageSize: nextSize }),
+    [key, pageSize],
+  );
+  const reload = useCallback(() => setTick((n) => n + 1), []);
+  // Two updates in one event: the filters (when they changed) and this one make a single read.
+  const search = useCallback(() => {
+    setPagingState((before) => ({ ...before, page: 1 }));
+    setTick((n) => n + 1);
+  }, []);
+
+  return { rows, total, page, pageSize, loading, failure, setPaging, search, reload };
+}

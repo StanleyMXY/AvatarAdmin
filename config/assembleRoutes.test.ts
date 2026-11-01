@@ -195,6 +195,17 @@ describe('flattenPages', () => {
   });
 });
 
+describe('flattenPages: a redirect is not a page', () => {
+  it('skips a route that has a component and a redirect, as the router would send the visitor away', () => {
+    expect(
+      flattenPages([
+        { path: '/old', name: 'old', component: './old', redirect: '/new' },
+        page('/new'),
+      ]),
+    ).toEqual([{ path: '/new', access: null }]);
+  });
+});
+
 describe('problemsIn', () => {
   it('finds nothing wrong in a good table', () => {
     expect(

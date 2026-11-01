@@ -569,6 +569,21 @@ describe('sending', () => {
     expect(sends(calls).length).toBe(1);
   });
 
+  it('writes an invisible character in a bad account id as its code point, so that the line does not look like the account that was meant', async () => {
+    useMockBackend({ default: notificationsMock });
+    const user = userEvent.setup();
+    renderPage(<NotificationsPage />);
+    const dialog = await openDialog(user);
+    const ghost = `${String.fromCharCode(0xfeff)}ghost-${String.fromCharCode(0x200b)}1`;
+    fill(dialog, [USER.rich, ghost]);
+    await user.click(submit(dialog));
+    expect(
+      await within(dialog).findByText(
+        'Account \u2039U+FEFF\u203Aghost-\u2039U+200B\u203A1: The account does not exist.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('lists each bad account with its reason, says nothing was sent, and keeps what was typed', async () => {
     const calls = useMockBackend({ default: notificationsMock });
     const user = userEvent.setup();

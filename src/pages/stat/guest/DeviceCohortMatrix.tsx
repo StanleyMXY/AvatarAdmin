@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Table, theme } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo } from 'react';
+import { cellTint } from '../../../components/stat/cellTint';
 import { DASH, formatCount, formatPercent, safeRatio } from '../../../utils/ratio';
 
 export type DeviceCohortRow = {
@@ -23,14 +24,6 @@ type Props = {
   /** Conversion (cumulative) matrix: from the second column on, each cell also shows how many devices were added since the one before. */
   withDelta?: boolean;
 };
-
-/** A colour as `#rrggbb` with an opacity, or null when the colour is written another way. */
-function withOpacity(color: string, opacity: number): string | null {
-  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
-  if (!match) return null;
-  const [r, g, b] = match.slice(1).map((part) => Number.parseInt(part, 16));
-  return `rgba(${r}, ${g}, ${b}, ${opacity.toFixed(2)})`;
-}
 
 const cellOf = (row: DeviceCohortRow, day: number): number | null => {
   const value = (row as unknown as Record<string, unknown>)[`d${day}`];
@@ -69,10 +62,8 @@ export function DeviceCohortMatrix({
           key: `d${day}`,
           align: 'end' as const,
           onCell: (row: DeviceCohortRow) => {
-            const ratio = ratioOf(row);
-            if (ratio === null || ratio <= 0) return {};
-            const tint = withOpacity(token.colorSuccess, 0.1 + 0.5 * Math.min(ratio, 1));
-            return tint ? { style: { backgroundColor: tint } } : {};
+            const tint = cellTint(token.colorSuccess, ratioOf(row));
+            return tint ? { style: tint } : {};
           },
           render: (_: unknown, row: DeviceCohortRow) => {
             const count = cellOf(row, day);

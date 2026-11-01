@@ -2,22 +2,23 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal, Select, Switch } from 'antd';
 import { useState } from 'react';
 import type { LinkTargetValue } from '../../components/LinkTargetField';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import {
   createTemplate,
   type PushTemplate,
   RECALL_REASONS,
   updateTemplate,
 } from '../../services/push';
+import { codeText } from '../../utils/displayText';
+import { failureToForm } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { contentFields } from './bodies';
 import { ContentFields } from './ContentFields';
-import { failureToForm } from './formFailure';
 import { templateFailureText } from './recallRule';
-import { codeText } from './texts';
-import { useUploadSlot } from './uploadSlot';
 
 type Values = {
   triggerReason: string;
@@ -55,13 +56,13 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, failWith, clear } = useFailure();
   const [rejected, setRejected] = useState(false);
   const picture = useUploadSlot();
   const editing = template !== null;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     if (rejected && !picture.uploadId) return;
     const fields = {
       ...contentFields(values, picture.uploadId),
@@ -83,7 +84,7 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
         picture.reset();
         setRejected(true);
       }
-      setFailure(templateFailureText(intl, error));
+      failWith((words) => templateFailureText(words, error));
       return;
     }
     message.success(t('push.templates.saved'));
@@ -105,7 +106,7 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
       afterClose={() => {
         form.resetFields();
         picture.reset();
-        setFailure(null);
+        clear();
         setRejected(false);
       }}
       okText={t('pages.common.submit')}

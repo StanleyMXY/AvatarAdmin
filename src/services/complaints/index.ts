@@ -117,4 +117,10 @@ export const removeComplaintAvatars = (id: string, assetIds: string[]): Promise<
  * each time the file is shown and never kept.
  */
 export const getComplaintEvidence = (id: string, index: number): Promise<ComplaintEvidence> =>
-  apiRequest({ method: 'GET', url: `/likeness-complaints/${enc(id)}/evidence/${index}` });
+  apiRequest({
+    method: 'GET',
+    url: `/likeness-complaints/${enc(id)}/evidence/${index}`,
+    // Every look is written to the audit log and the address is signed for a short time, so an
+    // answer kept by the browser must never stand in for a request to the backend.
+    cache: 'no-store',
+  });

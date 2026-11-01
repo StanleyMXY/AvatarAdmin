@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Select, Spin, Table, Tabs } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
@@ -12,17 +12,17 @@ import { ReportHelper } from '../../components/stat/ReportHelper';
 import { RetentionMatrix } from '../../components/stat/RetentionMatrix';
 import { RetentionTrendChart } from '../../components/stat/RetentionTrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { getReactivation, getRetention } from '../../services/stats/reports';
 import {
   RETENTION_DAYS,
   type ReactivationRow,
   type RetentionRow,
 } from '../../services/stats/types';
-import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount, formatPercent, safeRatio } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
-import { CheckDayLandBar } from './CheckDayLandBar';
+import { defaultRange } from '../analytics/defaultRange';
 import { ReactivationCharts } from './ReactivationCharts';
 
 type TabKey = 'active' | 'call' | 'reactivation';
@@ -31,7 +31,12 @@ type Silence = 7 | 14 | 30;
 
 const DEFAULT_DAYS = [1, 7, 30];
 const SILENCE_DAYS: Silence[] = [7, 14, 30];
-const initialFilter = (): Filter => ({ range: lastNDaysUtc(30), platform: 'ALL', channel: 'ALL' });
+// The first range is 30 days, or fewer when the backend allows fewer, so that the first ask is not refused.
+const initialFilter = (maxDays: number | null | undefined): Filter => ({
+  range: defaultRange(maxDays, 30),
+  platform: 'ALL',
+  channel: 'ALL',
+});
 
 /**
  * 留存报表 (`STATS:VIEW`): account retention by sign-up day (active and call) and reactivation of
@@ -44,25 +49,25 @@ export default function RetentionReportPage() {
   const meta = useAdminMeta();
   const [tab, setTab] = useState<TabKey>('active');
   // What is being edited, and what was asked for with Search (the report and the export).
-  const [draft, setDraft] = useState<Filter>(initialFilter);
-  const [applied, setApplied] = useState<Filter>(initialFilter);
+  const [draft, setDraft] = useState<Filter>(() => initialFilter(meta.statsMaxRangeDays));
+  const [applied, setApplied] = useState<Filter>(draft);
   const [days, setDays] = useState<number[]>(DEFAULT_DAYS);
   const [silenceDays, setSilenceDays] = useState<Silence>(7);
   const [retention, setRetention] = useState<RetentionRow[] | null>(null);
   const [reactivation, setReactivation] = useState<ReactivationRow[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const { text: failure, fail, clear } = useFailure();
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setRetention(null);
     setReactivation(null);
-    setFailure(null);
+    clear();
     const { from, to } = applied.range;
     try {
       if (tab === 'reactivation') {
         const { items } = await getReactivation({ from, to, silenceDays });
-        if (mine === counter.current) setReactivation(items);
+        if (isCurrent()) setReactivation(items);
       } else {
         const { items } = await getRetention({
           from,
@@ -71,12 +76,12 @@ export default function RetentionReportPage() {
           platform: applied.platform,
           channel: applied.channel,
         });
-        if (mine === counter.current) setRetention(items);
+        if (isCurrent()) setRetention(items);
       }
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [tab, applied, silenceDays, intl]);
+  }, [tab, applied, silenceDays, begin, fail, clear]);
 
   useEffect(() => {
     void load();
@@ -206,13 +211,14 @@ export default function RetentionReportPage() {
       {tab === 'reactivation' ? (
         <LandBar name="reactivation" onLanded={() => void load()} />
       ) : (
-        <CheckDayLandBar name="retention" onLanded={() => void load()} />
+        <LandBar
+          name="retention"
+          onLanded={() => void load()}
+          dateLabelId="stat.retention.land.date"
+          hintId="stat.retention.land.hint"
+        />
       )}
-      {/* the key draws the panel again on a tab of the other report: it reads its own closed state */}
-      <ReportHelper
-        key={tab === 'reactivation' ? 'reactivation' : 'retention'}
-        pageKey={tab === 'reactivation' ? 'reactivation' : 'retention'}
-      />
+      <ReportHelper pageKey={tab === 'reactivation' ? 'reactivation' : 'retention'} />
       {failure ? (
         <Alert
           type="error"

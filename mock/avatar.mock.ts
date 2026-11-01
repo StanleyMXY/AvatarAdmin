@@ -21,6 +21,7 @@ import {
 import { bodyOf, invalidRequest, MockHttpError, type MockReq, ok, toUmiFile } from './_core/http';
 import { paginateQuery } from './_core/paginate';
 import { text } from './_core/statRange';
+import { writeAudit } from './_core/systemData';
 
 type Detail = { ref: string; reason: string };
 
@@ -634,6 +635,11 @@ export default {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       // The newest avatar is the one the account uses.
       .map((a, index) => ({ ...a, isCurrent: index === 0 }));
+    // Looking at an account's avatars is audited, one row for each avatar shown (spec section 12,
+    // "every view leaves an audit row"; the sample row of the audit page has the same shape).
+    for (const avatar of avatars) {
+      writeAudit(req.admin, 'USER_VIEW_AVATAR', 'AVATAR_ASSET', avatar.assetId, null);
+    }
     return ok({ avatars, cosmetics: structuredClone(avatarState.accountCosmetics.get(id) ?? []) });
   }),
 

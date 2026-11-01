@@ -1,5 +1,14 @@
+import { configure } from '@testing-library/dom';
 import '@testing-library/jest-dom/vitest';
 import { beforeEach } from 'vitest';
+
+// How long `findBy`, `waitFor` and `waitForElementToBeRemoved` wait by default, for every test. The
+// library's own default is one second; the page tests draw big tables, dialogs and drawers, and the
+// machine is often busy with other test files, so one second failed a different test on each run.
+// Eight seconds is the longest any module asked for (avatar, credits, users, memory, monitor,
+// support, subscriptions each had their own copy of it). A test that wants to see a wait run out
+// passes a shorter time itself (`waitFor(..., { timeout })`, or `configure` for the one test).
+configure({ asyncUtilTimeout: 8000 });
 
 // antd and ProTable read these browser APIs; happy-dom does not provide them.
 if (!window.matchMedia) {

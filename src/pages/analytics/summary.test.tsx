@@ -45,6 +45,24 @@ describe('the event summary page', { timeout: 30000 }, () => {
     expect(screen.getByText(/UTC days/)).toBeInTheDocument();
   });
 
+  it('starts with the longest range the backend allows when that is shorter than 7 days, so the first ask is not refused', async () => {
+    signIn('support', { codes: VIEW, meta: { analyticsLiveMaxRangeDays: 3 } });
+    const calls = useMockBackend(analyticsMock);
+    renderPage(<SummaryPage />);
+    await waitFor(() => expect(summaryCalls(calls)).toHaveLength(1));
+    const url = lastUrl(calls);
+    expect(
+      Date.parse(`${url.searchParams.get('to')}T00:00:00Z`) -
+        Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
+    ).toBe(2 * 86400000);
+  });
+
+  it('says nothing about signed-in accounts in the hint: the backend counts distinct accounts, and the page does not say who they are', async () => {
+    renderPage(<SummaryPage />);
+    expect(await screen.findByText(/Read live from the event log/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/signed-in/);
+  });
+
   it('uses the UTC date, not the local one, in Singapore between 00:00 and 08:00', async () => {
     await withTimeZone('Asia/Singapore', async () => {
       vi.useFakeTimers({ toFake: ['Date'] });

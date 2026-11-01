@@ -32,7 +32,6 @@ const messages: Record<string, string> = {
   'support.context.locale': '语言',
   'support.context.recentErrors': '最近的错误',
   'support.context.none': '没有上报',
-  'support.note': '这里只能查看和重新转发；回复用户在第三方客服工具里做。',
 };
 
 export default messages;

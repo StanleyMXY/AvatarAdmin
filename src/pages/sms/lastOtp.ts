@@ -3,6 +3,8 @@
 // exist (contract 23.4); the page asks first. The backend has the last word: these functions only
 // decide whether to ask.
 
+import { trimSpec } from '../../utils/trimSpec';
+
 export type Coverage = {
   id: string;
   enabled: boolean;
@@ -21,7 +23,7 @@ function coveredBy(countries: unknown, isTarget: boolean): Covered {
   return new Set(
     countries
       .filter((c): c is string => typeof c === 'string')
-      .map((c) => c.trim().toUpperCase())
+      .map((c) => trimSpec(c).toUpperCase())
       .filter((c) => c !== ''),
   );
 }
@@ -92,8 +94,8 @@ function servesEveryCountryInEnglish(t: {
   locale?: unknown;
   country?: unknown;
 }): boolean {
-  const locale = typeof t.locale === 'string' ? t.locale.trim().toLowerCase() : '';
-  const country = typeof t.country === 'string' ? t.country.trim() : '';
+  const locale = typeof t.locale === 'string' ? trimSpec(t.locale).toLowerCase() : '';
+  const country = typeof t.country === 'string' ? trimSpec(t.country) : '';
   return isOtpOn(t) && locale === 'en' && country === '';
 }
 

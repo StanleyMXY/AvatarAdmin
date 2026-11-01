@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import type { FormInstance } from 'antd';
 import { Alert, App, Descriptions, Form, Input, Modal, Select } from 'antd';
 import { useState } from 'react';
+import type { FailureLines } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
@@ -12,9 +13,15 @@ import {
   updateChannelPackage,
 } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
+import { codeText } from '../../utils/displayText';
+import {
+  detailReason,
+  type FieldReason,
+  failureReason,
+  setFieldReasons,
+} from '../../utils/fieldReasons';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { codeText } from '../appVersions/texts';
 import { checkChannelCode, checkPackageName, distributionsFor } from './channelRules';
 
 type Values = {
@@ -36,6 +43,26 @@ type Props = {
 
 const FIELDS = ['code', 'name', 'platform', 'distribution', 'packageName'] as const;
 
+/** What the backend refused, sorted by where it goes: under a form field or in the bar. */
+function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknown) {
+  const described = describeFailure(intl, error);
+  const forForm: FieldReason[] = [];
+  const more: string[] = [];
+  for (const [index, detail] of described.fields.entries()) {
+    if ((FIELDS as readonly string[]).includes(detail.ref)) {
+      forForm.push(detailReason(intl, error, detail.ref, index));
+    } else more.push(detail.text);
+  }
+  // A duplicate names the field in `data.field`.
+  if (error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE') {
+    const field = (error.data as { field?: unknown } | null)?.field;
+    if (typeof field === 'string' && (FIELDS as readonly string[]).includes(field)) {
+      forForm.push(failureReason(field, error));
+    }
+  }
+  return { text: described.text, more, forForm };
+}
+
 /**
  * New channel package, or edit one. The code, the platform and the distribution are written once:
  * an edit shows them as text and changes only the name and the package name (the enabled state is
@@ -47,13 +74,15 @@ export function ChannelModal({ channel, existing, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  // The save the backend refused, kept as the failure itself: its words are made when drawn.
+  const [refusal, setRefusal] = useState<{ error: unknown } | null>(null);
+  const failure: FailureLines | null = refusal === null ? null : splitRefusal(intl, refusal.error);
   const editing = channel !== null;
   const platform = Form.useWatch('platform', form);
   const allowed = distributionsFor(platform);
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    setRefusal(null);
     const name = trimSpec(values.name ?? '');
     const packageName = trimSpec(values.packageName ?? '');
     try {
@@ -73,23 +102,9 @@ export function ChannelModal({ channel, existing, onClose, onSaved }: Props) {
         });
       }
     } catch (error) {
-      const described = describeFailure(intl, error);
-      const forForm: { name: string; errors: string[] }[] = [];
-      const more: string[] = [];
-      for (const detail of described.fields) {
-        if ((FIELDS as readonly string[]).includes(detail.ref)) {
-          forForm.push({ name: detail.ref, errors: [detail.text] });
-        } else more.push(detail.text);
-      }
-      // A duplicate names the field in `data.field`.
-      if (error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE') {
-        const field = (error.data as { field?: unknown } | null)?.field;
-        if (typeof field === 'string' && (FIELDS as readonly string[]).includes(field)) {
-          forForm.push({ name: field, errors: [described.text] });
-        }
-      }
-      if (forForm.length > 0) (form as FormInstance).setFields(forForm);
-      setFailure({ text: described.text, more });
+      const { forForm } = splitRefusal(intl, error);
+      setFieldReasons(form as FormInstance, intl, forForm);
+      setRefusal({ error });
       return;
     }
     message.success(
@@ -248,7 +263,7 @@ export function ChannelModal({ channel, existing, onClose, onSaved }: Props) {
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

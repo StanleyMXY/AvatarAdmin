@@ -106,7 +106,11 @@ export function OverviewTab({ user }: { user: UserDetail }) {
           t('users.overview.companionName'),
           <Cell value={user.companionName} />,
         ),
-        item('persona', t('users.overview.persona'), <Cell value={user.personaModerationStatus} />),
+        item(
+          'persona',
+          t('users.overview.persona'),
+          labelOf(intl, 'users.persona', user.personaModerationStatus),
+        ),
         item(
           'avatarAsset',
           t('users.overview.avatarAsset'),

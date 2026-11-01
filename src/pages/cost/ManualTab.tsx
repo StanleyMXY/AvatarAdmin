@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Button, DatePicker, Flex, Input, Select, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
+import { type Kept, useKeptState } from '../../hooks/useKeptState';
 import { listConfig } from '../../services/config';
 import {
   createPrice,
@@ -37,6 +38,8 @@ type Props = {
   allowedCurrencies: string[] | null | undefined;
   /** Called after a batch was saved. */
   onSaved: () => void;
+  /** The form is drawn again each time the tab is opened; what was typed is kept here until it is saved. */
+  kept: Kept;
 };
 
 /**
@@ -45,22 +48,22 @@ type Props = {
  * the type decides. Prices are sent as the text typed, never as numbers. Saving says what it does
  * first; a saved batch is never edited, a new one is entered instead.
  */
-export function ManualTab({ allowedCurrencies, onSaved }: Props) {
+export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const { message } = App.useApp();
   const listKnown = Array.isArray(allowedCurrencies);
 
-  const [resourceType, setResourceType] = useState<string>('LLM');
-  const [provider, setProvider] = useState('');
-  const [model, setModel] = useState('');
-  const [date, setDate] = useState(() => todayUtc());
-  const [currency, setCurrency] = useState<string | undefined>(() =>
+  const [resourceType, setResourceType] = useKeptState<string>(kept, 'manual.resourceType', 'LLM');
+  const [provider, setProvider] = useKeptState(kept, 'manual.provider', '');
+  const [model, setModel] = useKeptState(kept, 'manual.model', '');
+  const [date, setDate] = useKeptState(kept, 'manual.date', () => todayUtc());
+  const [currency, setCurrency] = useKeptState<string | undefined>(kept, 'manual.currency', () =>
     listKnown ? allowedCurrencies[0] : undefined,
   );
-  const [unitPrice, setUnitPrice] = useState('');
-  const [bands, setBands] = useState<BandDraft[]>([FIRST_BAND]);
+  const [unitPrice, setUnitPrice] = useKeptState(kept, 'manual.unitPrice', '');
+  const [bands, setBands] = useKeptState<BandDraft[]>(kept, 'manual.bands', [FIRST_BAND]);
   const [attempted, setAttempted] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [maxBands, setMaxBands] = useState<number | null>(null);
@@ -83,7 +86,7 @@ export function ManualTab({ allowedCurrencies, onSaved }: Props) {
   // If the list of currencies arrives after the form was drawn, start with its first one.
   useEffect(() => {
     if (listKnown && currency === undefined) setCurrency(allowedCurrencies[0]);
-  }, [listKnown, allowedCurrencies, currency]);
+  }, [listKnown, allowedCurrencies, currency, setCurrency]);
 
   const llm = resourceType === 'LLM';
   const unit = UNIT_OF[resourceType as keyof typeof UNIT_OF];

@@ -7,11 +7,14 @@
 
 1. **`/push/templates/{id}` 的 `{id}` 是什么？** 契约写"`GET/POST/PUT/DELETE /push/templates`（按 `triggerReason`+`locale`）"。是路径里用实体 `id`，还是用 `(triggerReason, locale)` 定位？**暂定：** 用 `id`；`POST` 的请求体带 `triggerReason`、`locale`，`PUT` 的请求体不带这两项（它们是模板的键，建好后不改）。
 2. **`GET /push/templates` 是否分页、有无筛选？** **暂定：** 分页的 `{items,total}`，没有筛选；完整性矩阵需要全部模板，前端用 `pageSize=200` 一页页读到取够 `total`。
+   **现状（2026-11-01）：** 后端 2026-10-29 清单 a14 写的响应是 `{items, missingLocales}`，没有 `total`，也没有写分页。前端现在读 `missingLocales`；有数字 `total` 时读到取够为止，没有时读到空页为止（代码：`src/services/push/index.ts` 的 `listAllTemplates`）；假后端仍带 `total`。请后端确认 `total` 是否保留。
 3. **请求体字段。** 暂定：`{triggerReason, locale, title, body, linkType, linkTarget, enabled, imageUploadId?}`（`PUT` 没有前两项）。图片的字段名契约没写，暂定 `imageUploadId`（同形象目录的 `previewUploadId` 命名规则）。`linkType` 为 `NONE` 时 `linkTarget` 传空字符串，是否也接受 `null`？
 4. **怎样去掉模板、周期推送上已有的图片？** 契约只写了"换图"。**暂定：** 前端不提供去掉图片，`PUT` 不带 `imageUploadId` 表示图片不变。
 5. **标题和正文的长度上限。** 契约 §17.4 通则第 4 条列了"通知标题和正文、任务说明"等，没有写推送的标题和正文。**暂定：** 前端只检查去掉首尾空白后不为空，长度交给后端（假后端按标题 200、正文 1000 个码点拒绝，仅为演示失败的显示）。请给出真实上限，前端再加计数。
-6. **启用时缺语言的拒绝是什么错误？** 契约 §8.4 写"保存时校验"。**暂定：** 400 `INVALID_REQUEST`，`data.details` 为 `[{"ref":"enabled","reason":"OUT_OF_RANGE"}]`。如果是别的码或有专用的原因码，前端要补对应文字。前端在启用前已经按 `GET /meta` 的 `supportedLocales` 提示缺哪几种语言，但最终以后端为准。
+6. **启用时缺语言的拒绝是什么错误？** 契约 §8.4 写"保存时校验"。**暂定（已过时，见下面的现状）：** 400 `INVALID_REQUEST`，`data.details` 为 `[{"ref":"enabled","reason":"OUT_OF_RANGE"}]`。如果是别的码或有专用的原因码，前端要补对应文字。前端在启用前已经按 `GET /meta` 的 `supportedLocales` 提示缺哪几种语言，但最终以后端为准。
+   **现状（2026-11-01）：** 后端 2026-10-29 清单 a5、e1 已回答，并把规则改成只要求默认语言（`push.default_locale`）有启用的模板，不再要求每种语言都有。违反时答 400 `INVALID_REQUEST`，`data` 是 `{defaultLocale, reason}`，没有上面那种 `details`。前端现在显示一句按码翻译的文字；三种情形要分开说，需要后端在 `data` 里加 `case`，见 `2026-10-31-admin-frontend-push-default-language-case.md`。保存 `app.supported_locales` 不再因召回模板被拒。
 7. **删除一条已启用的模板**会让该语言缺模板。后端是拒绝、允许，还是同时把该触发原因停用？**暂定：** 前端行内确认后发 `DELETE`，按后端的回答显示。
+   **现状（2026-11-01）：** 已回答（清单 a5、e1）：非默认语言的模板随时可以删；默认语言那条在同一触发原因下还有别的语言启用时，`DELETE` 被拒，400 `INVALID_REQUEST`，`data` 为 `{defaultLocale, reason}`。前端按这个形状显示按码翻译的文字。
 8. **同一 `(triggerReason, locale)` 再 `POST`** 是 409 `DUPLICATE_RESOURCE`（`data.field` 是什么）还是覆盖？**暂定：** 前端在发之前就拦住（页面已读到该组合时提示改那一条），后端按 409 `DUPLICATE_RESOURCE` 处理。
 
 ## 二、手动任务
@@ -39,3 +42,4 @@
 ## 六、推送效果的触发原因值
 
 `GET /stats/push` 的 `triggerReason` 在契约里是 `daily_recall`、`streak_at_risk`、`admin`、`system_event`（`PushRecord.triggerReason`）。仓库共用的假后端（`mock/_core/statRange.ts` 的 `TRIGGERS`）写的是 `recall`、`announcement`、`notification`、`activity`、`admin`，这是推送的 `data.type`，不是触发原因；用契约的值筛选会得到 400。这是假后端的错误，不是契约的问题，在任务 22 的报告里作为"需要改共享文件"列出。
+**现状（2026-11-01）：** 假后端的 `TRIGGERS` 已改成契约的四个值（`mock/_core/statRange.ts`），这一节不再需要处理。

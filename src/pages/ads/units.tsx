@@ -2,9 +2,13 @@ import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Flex, Input, Select, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AdUnit,
   deleteUnit,
@@ -18,17 +22,14 @@ import {
   type UnitStatus,
 } from '../../services/ads';
 import { describeFailure } from '../../session/describe';
+import { countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { Checklist } from './Checklist';
-import { PagedTable } from './PagedTable';
 import { Picker } from './Picker';
 import { summarizeTargeting } from './targeting';
-import { countText } from './texts';
 import { UnitModal } from './UnitModal';
 import { useOptions } from './useOptions';
-import { useRead } from './useRead';
-import { useServerPage } from './useServerPage';
 
 type Filters = { campaignId: string; placementId: string; status: string; name: string };
 const NO_FILTERS: Filters = { campaignId: '', placementId: '', status: '', name: '' };
@@ -60,7 +61,7 @@ export default function UnitsPage() {
     loadAllPages((page, pageSize) => listCampaigns({ page, pageSize })),
   );
   const placements = useOptions(listPlacements);
-  const meta = useRead(getAdsMeta);
+  const meta = useLatestRead(getAdsMeta, { keepWhileReading: true });
 
   const state = useServerPage<AdUnit, Filters>(
     (query) =>
@@ -97,12 +98,18 @@ export default function UnitsPage() {
     UNIT_STATUSES.map((s) => [s, { label: t(`ads.status.unit.${s}`), color: STATUS_COLOR[s] }]),
   );
 
-  const act = (change: () => Promise<unknown>) => async () => {
+  const act = (change: () => Promise<unknown>, refusedBy?: string) => async () => {
     try {
       await change();
       message.success(t('ads.common.saved'));
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      const failed = describeFailure(intl, error);
+      // A 409 on the delete of a draft unit can only be the creatives it still has (contract 22.3).
+      message.error(
+        refusedBy && failed.error.code === 'INVALID_STATE'
+          ? t(refusedBy, { reason: failed.text })
+          : failed.text,
+      );
     }
     state.reload();
   };
@@ -143,7 +150,7 @@ export default function UnitsPage() {
         key: 'delete',
         label: t('ads.common.delete'),
         confirmText: t('ads.units.deleteAsk'),
-        onClick: act(() => deleteUnit(id)),
+        onClick: act(() => deleteUnit(id), 'ads.units.deleteRefused'),
       });
     }
     return actions;
@@ -203,6 +210,7 @@ export default function UnitsPage() {
       ),
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('ads.common.actions'),
       render: (_, row) => <RowActions actions={actionsOf(row)} />,

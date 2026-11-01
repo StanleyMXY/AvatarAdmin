@@ -70,6 +70,41 @@ describe('DateRangeUtc', () => {
     });
   });
 
+  it('for days that are the users local days offers only the ranges that name no UTC day', async () => {
+    renderPage(
+      <DateRangeUtc
+        value={{ from: '2026-10-14', to: '2026-10-20' }}
+        onChange={() => {}}
+        localDays
+      />,
+    );
+    open();
+    expect(await screen.findByText('Last 7 days')).toBeInTheDocument();
+    expect(screen.getByText('Last 30 days')).toBeInTheDocument();
+    expect(screen.queryByText('Today (UTC)')).toBeNull();
+    expect(screen.queryByText('Yesterday (UTC)')).toBeNull();
+  });
+
+  it('still sends a picked day exactly as picked when the days are local days', async () => {
+    await withTimeZone('Pacific/Kiritimati', async () => {
+      const onChange = vi.fn();
+      renderPage(
+        <DateRangeUtc
+          value={{ from: '2026-10-14', to: '2026-10-20' }}
+          onChange={onChange}
+          localDays
+        />,
+      );
+      open();
+      await waitFor(() => expect(cell('2026-10-19')).not.toBeNull());
+      fireEvent.click(cell('2026-10-19'));
+      fireEvent.click(cell('2026-10-19'));
+      await waitFor(() =>
+        expect(onChange).toHaveBeenCalledWith({ from: '2026-10-19', to: '2026-10-19' }),
+      );
+    });
+  });
+
   it('sends the UTC yesterday, the 20th, for "Yesterday"', async () => {
     await withTimeZone('Asia/Singapore', async () => {
       const onChange = vi.fn();

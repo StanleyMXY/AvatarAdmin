@@ -77,7 +77,7 @@ describe('the authenticator setup does not end the session', () => {
     stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN')));
     await apiRequest({ method: 'GET', url: '/me' }).catch(() => {});
     expect(onExpired).toHaveBeenCalledTimes(1);
-    await apiRequest({ method: 'GET', url: '/me', reportSession: false }).catch(() => {});
+    await apiRequest({ method: 'GET', url: '/me', anonymous: true }).catch(() => {});
     expect(onExpired).toHaveBeenCalledTimes(1);
   });
 

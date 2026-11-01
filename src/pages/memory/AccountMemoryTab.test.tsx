@@ -1,8 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MEMORY_ACCOUNT_IDS, memoryStore } from '../../../mock/_core/memoryData';
 import * as memoryMock from '../../../mock/memory.mock';
+import { holdRequests } from '../../../tests/heldRequests';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
@@ -24,6 +26,36 @@ const chooseModel = async (user: ReturnType<typeof userEvent.setup>, name: strin
   const options = await screen.findAllByText(name, { selector: '.ant-select-item-option-content' });
   await user.click(options[options.length - 1]);
 };
+
+function Switcher() {
+  const [id, setId] = useState<string>(MEMORY_ACCOUNT_IDS.active);
+  return (
+    <>
+      <button type="button" onClick={() => setId(MEMORY_ACCOUNT_IDS.failedSync)}>
+        other account
+      </button>
+      <AccountMemoryTab accountId={id} accountStatus="ACTIVE" />
+    </>
+  );
+}
+
+describe('switching to another account', { timeout: 30000 }, () => {
+  it('shows the memory of the account now shown when the answer for the account shown before arrives late', async () => {
+    useMockBackend(memoryMock);
+    const held = holdRequests((url) =>
+      url.endsWith(`/accounts/${MEMORY_ACCOUNT_IDS.active}/memory`),
+    );
+    renderPage(<Switcher />);
+    await waitFor(() => expect(held.started()).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: 'other account' }));
+    expect(await screen.findByText('Sync failed')).toBeInTheDocument();
+    held.release();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    // the late answer is the one of the first account: it must not replace the account on the screen
+    expect(screen.getByText('Sync failed')).toBeInTheDocument();
+    expect(screen.getByText(/tier premium not found/)).toBeInTheDocument();
+  });
+});
 
 describe('what the tab shows', { timeout: 30000 }, () => {
   it('shows the tier, how it is synced, when, and the history of model assignments with the name of the administrator', async () => {

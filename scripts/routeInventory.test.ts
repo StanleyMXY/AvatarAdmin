@@ -113,6 +113,12 @@ describe('compareRoutes', () => {
     expect(result.extra).toEqual(['/d']);
   });
 
+  it('does not call a route that is missing a different access as well', () => {
+    const result = compareRoutes(spec, [{ path: '/a', access: 'USER:VIEW' }]);
+    expect(result.missing).toEqual(['/b', '/c']);
+    expect(result.accessMismatch).toEqual([]);
+  });
+
   it('reports a different access, also when one side has none', () => {
     const result = compareRoutes(spec, [
       { path: '/a', access: 'USER:BAN' },
@@ -129,6 +135,25 @@ describe('compareRoutes', () => {
   it('can be limited to paths starting with a prefix, for one module', () => {
     const result = compareRoutes(spec, [{ path: '/a', access: 'USER:VIEW' }], { prefixes: ['/a'] });
     expect(result).toEqual({ missing: [], extra: [], accessMismatch: [] });
+  });
+
+  it('applies the prefix to the routes as well: a route of another module is not "extra", and its access is not compared', () => {
+    const result = compareRoutes(
+      spec,
+      [
+        { path: '/a', access: 'USER:VIEW' },
+        { path: '/other', access: null },
+        { path: '/c', access: 'ANYTHING:ELSE' },
+      ],
+      { prefixes: ['/a'] },
+    );
+    expect(result).toEqual({ missing: [], extra: [], accessMismatch: [] });
+  });
+
+  it('takes several prefixes, and a path must start with one of them', () => {
+    const result = compareRoutes(spec, [], { prefixes: ['/a', '/c'] });
+    expect(result.missing).toEqual(['/a', '/c']);
+    expect(compareRoutes(spec, [], { prefixes: ['/ab'] }).missing).toEqual([]);
   });
 });
 

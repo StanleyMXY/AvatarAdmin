@@ -99,6 +99,18 @@ describe('the list of e-mail templates', () => {
     );
   });
 
+  it('keeps the Actions column at the right edge, and does not let the description of a template stretch the table', async () => {
+    await load();
+    const header = [...document.querySelectorAll('.ant-table-thead th')].find(
+      (th) => th.textContent === 'Actions',
+    );
+    expect(header?.className).toContain('ant-table-cell-fix-end');
+    const description = document.querySelector('[data-kind="description"]') as HTMLElement;
+    // A text that cannot wrap makes the table as wide as its longest sentence.
+    expect(description.style.maxWidth).toBe('320px');
+    expect(description.style.whiteSpace).toBe('normal');
+  });
+
   it('describes the sixth template, the notice that a sign-in method was added, in the words of the language', async () => {
     await load();
     expect(cellsOf(await rowOf('LOGIN_METHOD_ADDED'))[0]).toContain(
@@ -442,6 +454,45 @@ describe('the subject', () => {
 });
 
 describe('saving', () => {
+  it('sends the body without the blanks and lines around it, like the subject', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'REGISTER_CODE');
+    setText(form.getByRole('textbox', { name: 'Body' }), '\n  Tu código es {code}  \n');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { body: string }).body).toBe('Tu código es {code}');
+  });
+
+  it('lists a refusal that the form cannot place once, however many details say it, and with no warning about repeated keys', async () => {
+    const complaints: string[] = [];
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation((...args) => {
+      complaints.push(args.map(String).join(' '));
+    });
+    backend();
+    overrideFetch(async ({ method }) =>
+      method === 'PUT'
+        ? jsonAnswer(400, 'INVALID_REQUEST', {
+            details: [
+              { ref: 'one', reason: 'NO_TEXT_FOR_THIS_1' },
+              { ref: 'two', reason: 'NO_TEXT_FOR_THIS_2' },
+              { ref: 'three', reason: 'NO_TEXT_FOR_THIS_3' },
+            ],
+          })
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<EmailTemplatesPage />);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    const form = await openEdit(user, 'REGISTER_CODE');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(document.querySelector('.ant-modal .ant-alert')).not.toBeNull());
+    await waitFor(() =>
+      expect(document.querySelectorAll('.ant-modal .ant-alert li')).toHaveLength(1),
+    );
+    expect(complaints.filter((line) => /same key|unique "key"/i.test(line))).toEqual([]);
+    errorSpy.mockRestore();
+  });
+
   it('shows the words of the code, and not the backend message, when the backend refuses, and keeps the dialog open', async () => {
     backend();
     overrideFetch(async ({ method }) =>
@@ -520,6 +571,15 @@ describe('saving', () => {
     );
   });
 
+  it('keeps a template code of 5000 letters without a space inside its column', async () => {
+    backend();
+    answerWith((items) => [{ ...items[0], templateCode: 'K'.repeat(5000) }, ...items.slice(1)]);
+    renderPage(<EmailTemplatesPage />);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    const long = screen.getByText('K'.repeat(5000));
+    expect((long.closest('button') as HTMLElement).style.overflowWrap).toBe('anywhere');
+  });
+
   it('lays out a subject and a body of 5000 letters without a space', async () => {
     const { user } = await load();
     const form = await openEdit(user, 'LIKENESS_COMPLAINT_RECEIVED');
@@ -576,6 +636,32 @@ describe('restoring the default', () => {
       ).toBe('Default'),
     );
     expect(cellsOf(await rowOf('PASSWORD_RESET'))[1]).toBe(defaults('PASSWORD_RESET').subject);
+  });
+
+  it('keeps Submit and Cancel off while the default is being brought back, so that no second write can follow it, and closes when it is done', async () => {
+    emailState.rows.set('REGISTER_CODE', {
+      subject: 'Mine',
+      body: 'Mine {code}',
+      updatedBy: '1',
+      updatedAt: '2026-10-25T08:00:00Z',
+    });
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'REGISTER_CODE');
+    await user.click(form.getByRole('button', { name: 'Restore default' }));
+    const ok = await screen.findByRole('button', { name: 'OK' });
+    const gate = holdWrites();
+    fireEvent.click(ok);
+    await waitFor(() => expect(gate.started()).toBe(1));
+    expect(form.getByRole('button', { name: 'Submit' })).toBeDisabled();
+    expect(form.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    fireEvent.click(form.getByRole('button', { name: 'Submit' }));
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' });
+    await settled();
+    expect(gate.started()).toBe(1);
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+    gate.release();
+    await dialogsClosed();
+    expect(writesOf(calls).map((c) => c.method)).toEqual(['POST']);
   });
 
   it('shows the words of the code when the backend refuses', async () => {

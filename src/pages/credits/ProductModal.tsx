@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
-import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -9,9 +9,10 @@ import {
   createCreditProduct,
   updateCreditProduct,
 } from '../../services/credits';
-import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { detailReasons, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
+import { assertPackUnchanged, PackChangedError } from './freshPack';
 
 type Values = {
   store: string;
@@ -30,7 +31,6 @@ type Props = {
 };
 
 const FIELDS = ['store', 'productId', 'credits', 'sortOrder', 'enabled'] as const;
-const PRODUCT_ID_MAX = 200;
 
 /** New or edit credit pack. The store and the product id identify a pack: they are fixed once it exists. */
 export function ProductModal({ open, pack, onClose, onSaved }: Props) {
@@ -39,13 +39,14 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const editing = pack !== null;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     try {
       if (pack) {
+        await assertPackUnchanged(pack);
         await updateCreditProduct(pack.id, {
           credits: values.credits as number,
           enabled: values.enabled,
@@ -63,12 +64,21 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
         });
       }
     } catch (error) {
-      const { text, fields } = describeFailure(intl, error);
-      const mine = fields.filter((f) => (FIELDS as readonly string[]).includes(f.ref));
-      if (mine.length > 0) {
-        form.setFields(mine.map((f) => ({ name: f.ref as keyof Values, errors: [f.text] })));
+      if (error instanceof PackChangedError) {
+        // Nothing was sent: the list is read again and the dialog closes, the person looks at the new values.
+        message.warning(t('credits.products.changedMeanwhile'));
+        onSaved();
+        onClose();
+        return;
       }
-      setFailure(text);
+      setFieldReasons(
+        form,
+        intl,
+        detailReasons(intl, error, (ref) =>
+          (FIELDS as readonly string[]).includes(ref) ? ref : undefined,
+        ),
+      );
+      fail(error);
       return;
     }
     message.success(t('credits.products.saved'));
@@ -92,7 +102,7 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}
@@ -133,10 +143,9 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
           rules={[
             {
               validator: async (_, value: string | undefined) => {
-                const length = countCodePoints(trimSpec(value ?? ''));
-                if (length === 0) throw new Error(t('credits.products.productIdRequired'));
-                if (length > PRODUCT_ID_MAX) {
-                  throw new Error(t('pages.common.reasonLength', { min: 1, max: PRODUCT_ID_MAX }));
+                // The length limit is the backend's: it answers a too long id on this field.
+                if (countCodePoints(trimSpec(value ?? '')) === 0) {
+                  throw new Error(t('credits.products.productIdRequired'));
                 }
               },
             },

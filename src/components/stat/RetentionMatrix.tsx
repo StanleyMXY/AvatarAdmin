@@ -4,20 +4,13 @@ import type { ColumnsType } from 'antd/es/table';
 import { useMemo } from 'react';
 import type { RetentionRow } from '../../services/stats/types';
 import { DASH, formatCount, formatPercent, safeRatio } from '../../utils/ratio';
+import { cellTint } from './cellTint';
 
 type Props = {
   rows: RetentionRow[];
   /** The days to show (a subset of 1, 3, 5, 7, 14, 21, 30, 60, 90). */
   days: number[];
 };
-
-/** A colour as `#rrggbb` with an opacity, or null when the colour is written another way. */
-function withOpacity(color: string, opacity: number): string | null {
-  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
-  if (!match) return null;
-  const [r, g, b] = match.slice(1).map((part) => Number.parseInt(part, 16));
-  return `rgba(${r}, ${g}, ${b}, ${opacity.toFixed(2)})`;
-}
 
 const cellOf = (row: RetentionRow, day: number): number | null => {
   const value = (row as unknown as Record<string, unknown>)[`d${day}`];
@@ -52,10 +45,8 @@ export function RetentionMatrix({ rows, days }: Props) {
         key: `d${day}`,
         align: 'end' as const,
         onCell: (row: RetentionRow) => {
-          const ratio = safeRatio(cellOf(row, day), row.cohortSize);
-          if (ratio === null || ratio <= 0) return {};
-          const tint = withOpacity(token.colorSuccess, 0.1 + 0.5 * Math.min(ratio, 1));
-          return tint ? { style: { backgroundColor: tint } } : {};
+          const tint = cellTint(token.colorSuccess, safeRatio(cellOf(row, day), row.cohortSize));
+          return tint ? { style: tint } : {};
         },
         render: (_: unknown, row: RetentionRow) => {
           const count = cellOf(row, day);

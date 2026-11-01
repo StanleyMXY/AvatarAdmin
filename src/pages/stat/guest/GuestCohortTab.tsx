@@ -2,33 +2,39 @@ import { Column, Pie } from '@ant-design/plots';
 import { useIntl } from '@umijs/max';
 import { Button, Flex, Typography } from 'antd';
 import { useCallback, useMemo, useState } from 'react';
+import { ReadState } from '../../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../../components/stat/DateRangeUtc';
+import { useLatestRead } from '../../../hooks/useLatestRead';
 import { getGuestCohort } from '../../../services/stats/reports';
 import { GUEST_COHORT_DAYS } from '../../../services/stats/types';
 import { useAdminMeta } from '../../../session/useSession';
-import { getChartTheme } from '../../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../../theme/chartTheme';
 import { useThemeMode } from '../../../theme/modes';
-import { lastNDaysUtc } from '../../../utils/utcDay';
+import { defaultRange } from '../../analytics/defaultRange';
 import { buildConversionDistribution, buildConversionStack } from './conversion';
 import { DeviceCohortMatrix } from './DeviceCohortMatrix';
 import { GuestLandBar } from './GuestLandBar';
-import { ReportState } from './ReportState';
-import { useReport } from './useReport';
 
 /**
  * 转化进度队列: for the devices that first appeared on a day, how many have converted by D0, D1 ...
  * D30 (cumulative), how long they took (ring), and the same per cohort day (stacked columns). A
  * column that is not due yet is a dash and is not counted anywhere.
  */
-export function GuestCohortTab() {
+export function GuestCohortTab({
+  landedTick,
+  onLanded,
+}: {
+  landedTick: number;
+  onLanded: () => void;
+}) {
   const intl = useIntl();
   const meta = useAdminMeta();
   const [mode] = useThemeMode();
   const theme = getChartTheme(mode);
-  const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(30));
+  const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 30));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getGuestCohort(applied), [applied]);
-  const { data, failure, reload } = useReport(fetcher);
+  const { data, failure, reload } = useLatestRead(fetcher, { refreshKey: landedTick });
   const t = (id: string) => intl.formatMessage({ id });
 
   const ring = useMemo(
@@ -61,8 +67,8 @@ export function GuestCohortTab() {
         </Button>
       </Flex>
 
-      <GuestLandBar onLanded={reload} />
-      <ReportState failure={failure} loading={data === null} onRetry={reload} />
+      <GuestLandBar onLanded={onLanded} />
+      <ReadState failure={failure} loading={data === null} onRetry={reload} />
       {data ? (
         <>
           <Typography.Text type="secondary">{t('stat.guest.cohort.note')}</Typography.Text>
@@ -108,8 +114,8 @@ export function GuestCohortTab() {
                 theme={theme.g2Theme}
                 scale={{ color: { range: theme.palette } }}
                 axis={{
-                  x: { labelFill: theme.textColor },
-                  y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+                  x: { ...axisTextStyle(theme) },
+                  y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
                 }}
                 height={300}
               />

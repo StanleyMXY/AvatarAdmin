@@ -19,13 +19,14 @@ export function isBuiltinNode(node: Pick<PermissionNode, 'code' | 'builtin'>): b
 }
 
 /**
- * Whether a role may be given this node. Only a code of the real permission list may: the system
- * nodes. A custom node may not (it has no effect on any endpoint, so giving it to a role grants
- * nothing), and neither may a built-in node whose code the application does not have in its list:
- * nothing would check it.
+ * Whether a role may be given this node: the system nodes of the tree (built in, or a code of the
+ * real permission list), not a custom node (it has no effect on any endpoint, so giving it to a
+ * role grants nothing). A built-in node the application does not know yet (the backend published
+ * it first) can be kept and chosen like the others: the backend is the one that says what a code
+ * means, and a role that holds it must not lose it for being saved from here.
  */
-export function isSelectable(node: Pick<PermissionNode, 'code'>): boolean {
-  return REAL_CODES.has(node.code);
+export function isSelectable(node: Pick<PermissionNode, 'code' | 'builtin'>): boolean {
+  return isBuiltinNode(node);
 }
 
 const usable = (name: unknown): name is string => typeof name === 'string' && trimSpec(name) !== '';
@@ -68,7 +69,12 @@ const bySortThenCode = (byCode: Map<string, PermissionNode>) => (a: string, b: s
  */
 export function buildIndex(nodes: readonly PermissionNode[]): TreeIndex {
   const byCode = new Map<string, PermissionNode>();
-  for (const node of nodes) if (!byCode.has(node.code)) byCode.set(node.code, node);
+  // A node without a code that is text cannot be named by a role or by a child: it is left out
+  // (the backend promises a code on every node; this keeps a wrong answer from breaking the dialog).
+  for (const node of nodes) {
+    const code: unknown = node?.code;
+    if (typeof code === 'string' && code !== '' && !byCode.has(code)) byCode.set(code, node);
+  }
   const rawParent = (code: string): string | null => {
     const parent = (byCode.get(code) as PermissionNode).parent;
     return typeof parent === 'string' && byCode.has(parent) ? parent : null;
@@ -224,12 +230,11 @@ export function parentCandidates(nodes: readonly PermissionNode[], code: string)
  * plain text, in the order the role has them (what the backend sends is not trusted to be text).
  * The backend refuses to save a role that has any of them, so the dialog says so beforehand.
  * `held` is null for a super administrator, who holds everything, and when it is not known.
+ * A role row without a list of codes (the contract promises one; a row that came without it is
+ * not trusted) has none.
  */
-export function codesNotHeld(
-  roleCodes: readonly unknown[],
-  held: ReadonlySet<string> | null,
-): string[] {
-  if (held === null) return [];
+export function codesNotHeld(roleCodes: unknown, held: ReadonlySet<string> | null): string[] {
+  if (held === null || !Array.isArray(roleCodes)) return [];
   const seen = new Set<string>();
   for (const raw of roleCodes) {
     const code = plainText(raw);

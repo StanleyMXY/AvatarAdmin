@@ -1,16 +1,21 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { App } from 'antd';
+import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dailyRow } from '../../../mock/_core/statData';
 import { daysIn } from '../../../mock/_core/statRange';
 import { envelope, jsonResponse, stubFetch, XLSX_TYPE } from '../../../tests/httpStubs';
 import { renderPage } from '../../../tests/renderPage';
-import { resetUmiStub, setTestAccess } from '../../../tests/stubs/umi-max';
+import { resetUmiStub, setTestAccess, setTestInitialState } from '../../../tests/stubs/umi-max';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import access from '../../access';
 import { resetChannelsCache } from '../../components/ChannelSelect';
+import enUS from '../../locales/en-US';
+import zhCN from '../../locales/zh-CN';
 import { resetSessionState, setToken } from '../../request/session';
 import type { StatDailyRow } from '../../services/stats/types';
+import { resetThemeModeForTests, setThemeMode } from '../../theme/modes';
 import DailyPage from './daily';
 
 const NOW = '2026-10-26T20:00:00Z';
@@ -137,6 +142,46 @@ describe('the daily report: the page', () => {
     expect(await screen.findByTestId('chart-line')).toBeInTheDocument();
   });
 
+  it('starts with the longest range the backend allows when that is shorter than seven days, so the first ask is not refused', async () => {
+    setTestInitialState({ meta: { statsMaxRangeDays: 3 } });
+    const calls = backend();
+    renderPage(<DailyPage />);
+    await waitFor(() => expect(dailyCalls(calls)).toHaveLength(1));
+    expect(dailyCalls(calls)[0].url).toBe(
+      '/api/admin/stats/daily?from=2026-10-24&to=2026-10-26&platform=ALL&channel=ALL',
+    );
+  });
+
+  it('passes the longest range the backend allows to the date picker: a longer range is refused with a message', async () => {
+    setTestInitialState({ meta: { statsMaxRangeDays: 10 } });
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<DailyPage />);
+    await waitFor(() => expect(dailyCalls(calls)).toHaveLength(1));
+    await user.click(document.querySelector('.ant-picker-range input') as HTMLElement);
+    await user.click(await screen.findByText('Last 30 days'));
+    expect(await screen.findByText(/At most 10 days at a time/)).toBeInTheDocument();
+  });
+
+  it('keeps what it shows and asks nothing again when the language is switched, and writes the page in the new language', async () => {
+    const calls = backend();
+    const { rerender } = renderPage(<DailyPage />);
+    await waitFor(() => expect(dailyCalls(calls)).toHaveLength(1));
+    await screen.findByTestId('chart-line');
+    rerender(
+      <IntlProvider locale="zh-CN" messages={zhCN} onError={() => {}}>
+        <App>
+          <DailyPage />
+        </App>
+      </IntlProvider>,
+    );
+    expect(await screen.findByRole('tab', { name: '数据明细' })).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(dailyCalls(calls)).toHaveLength(1);
+    expect(screen.getByTestId('chart-line')).toBeInTheDocument(); // not cleared to a spinner
+    expect(enUS['stat.daily.tab.detail']).toBe('Data detail');
+  });
+
   it('reads the UTC day even where the local date is already the next day', async () => {
     await withTimeZone('Pacific/Auckland', async () => {
       const calls = backend();
@@ -202,6 +247,56 @@ describe('the daily report: the trend chart', () => {
     fireEvent.click(tag.querySelector('.ant-select-selection-item-remove') as HTMLElement);
     await waitFor(() => expect(seriesOf()).not.toContain('DAU'));
     expect(seriesOf()).toContain('Calls connected');
+  });
+
+  it('draws minutes per caller with one decimal, as the table shows it, not with the long fraction of the division', async () => {
+    backend({
+      rows: () => [full({ statDate: '2026-10-25', callSecondsTotal: 12300, accountsWithCall: 3 })],
+    });
+    const user = userEvent.setup();
+    renderPage(<DailyPage />);
+    await waitFor(() => expect(seriesOf()).toEqual(['DAU', 'New accounts']));
+    await user.click(screen.getByRole('combobox', { name: 'Metrics' }));
+    await waitFor(() => expect(optionOf('Minutes per caller')).toBeDefined());
+    await user.click(optionOf('Minutes per caller') as HTMLElement);
+    await waitFor(() => expect(seriesOf()).toContain('Minutes per caller'));
+    const values = chartData()
+      .filter((d) => d.series === 'Minutes per caller' && d.value !== 0)
+      .map((d) => d.value);
+    expect(values).toEqual([68.3]);
+  });
+
+  it('draws the chart in the theme of the mode, with one line and one colour for each chosen metric, and follows a change of the mode', async () => {
+    resetThemeModeForTests();
+    backend();
+    renderPage(<DailyPage />);
+    const config = () =>
+      JSON.parse(screen.getByTestId('chart-line').getAttribute('data-config') ?? '{}');
+    await waitFor(() => expect(seriesOf()).toEqual(['DAU', 'New accounts']));
+    expect(config().theme).toBe('classicDark');
+    expect(config().colorField).toBe('series');
+    expect(config().scale.color.range.length).toBeGreaterThanOrEqual(2);
+    expect(config().axis.x.labelFill).toBe(config().axis.y.labelFill);
+    const dark = config().axis.y.labelFill;
+    act(() => setThemeMode('light'));
+    expect(config().theme).toBe('classic');
+    expect(config().axis.y.labelFill).not.toBe(dark);
+    resetThemeModeForTests();
+  });
+
+  it('keeps the days of the chart to the range that was searched, not the one that is only being edited', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<DailyPage />);
+    await waitFor(() => expect(seriesOf()).toEqual(['DAU', 'New accounts']));
+    const days = () => [...new Set(chartData().map((d) => d.statDate))];
+    expect(days()).toHaveLength(7);
+    await user.click(document.querySelector('.ant-picker-range input') as HTMLElement);
+    await user.click(await screen.findByText('Last 30 days'));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(days()).toHaveLength(7); // Search was not pressed
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(days()).toHaveLength(30));
   });
 
   it('puts every day of the range on the chart, 0 for a day the backend sent no row for', async () => {
@@ -299,6 +394,33 @@ describe('the daily report: the value of today is provisional', () => {
     const firstCell = tagged[0].querySelector('td')?.textContent ?? '';
     expect(firstCell).toContain(TODAY);
     expect(firstCell).toContain('Provisional');
+  });
+
+  it('keeps the mark on the day that was today when the data was read, after midnight passes while the page stays open and nothing is read again', async () => {
+    vi.setSystemTime(new Date('2026-10-25T23:58:00Z'));
+    backend({
+      rows: (q) =>
+        daysIn(q.get('from') ?? '', q.get('to') ?? '').map(
+          (day) => dailyRow(day, 'ALL', 'ALL', '2026-10-25') as unknown as StatDailyRow,
+        ),
+    });
+    const user = userEvent.setup();
+    renderPage(<DailyPage />);
+    await openDetail(user);
+    await waitFor(() => expect(bodyRows()).toHaveLength(7));
+    const taggedDates = () =>
+      [...bodyRows()]
+        .filter((row) => within(row as HTMLElement).queryByTestId('provisional-row'))
+        .map((row) => row.querySelector('td')?.textContent ?? '');
+    expect(taggedDates()).toHaveLength(1);
+    expect(taggedDates()[0]).toContain('2026-10-25');
+    // midnight (UTC) passes; the page is drawn again (another tab and back), nothing is read again
+    vi.setSystemTime(new Date('2026-10-26T00:02:00Z'));
+    await user.click(await screen.findByRole('tab', { name: 'Trend chart' }));
+    await openDetail(user);
+    await waitFor(() => expect(bodyRows()).toHaveLength(7));
+    expect(taggedDates()).toHaveLength(1);
+    expect(taggedDates()[0]).toContain('2026-10-25');
   });
 
   it('writes the mark in Chinese when the language is Chinese', async () => {
@@ -469,6 +591,22 @@ describe('the daily report: the detail table', () => {
     );
     expect(
       await screen.findByText(/accounts only.*guest calls have their own column/i),
+    ).toBeInTheDocument();
+  });
+
+  it('says in the hint of the active subscriptions that a channel package shows a dash, so that a dash is not read as a missing snapshot', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<DailyPage />);
+    await openDetail(user);
+    await waitFor(() => expect(bodyRows()).toHaveLength(7));
+    await user.hover(
+      document.querySelector(
+        '.ant-table-thead [data-testid="tip-activeSubscriptions"]',
+      ) as HTMLElement,
+    );
+    expect(
+      await screen.findByText(/for a channel package.*always a dash.*not a missing snapshot/i),
     ).toBeInTheDocument();
   });
 

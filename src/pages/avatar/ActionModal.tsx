@@ -2,8 +2,10 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Flex, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
 import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import {
   type ActionItem,
   AVATAR_STYLES,
@@ -14,16 +16,14 @@ import {
   type TriggerableBy,
   updateAction,
 } from '../../services/avatar';
+import { codeText } from '../../utils/displayText';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
 import { SPEC_MAX, specRule } from './CosmeticModal';
-import { failureToForm } from './formFailure';
 import { LocalizedTextsField } from './LocalizedTextsField';
 import { cleanTexts, type Texts } from './localized';
 import { SurfacesPicker } from './SurfacesPicker';
 import { Thumb } from './Thumb';
-import { codeText } from './texts';
-import { UploadBox } from './UploadBox';
-import { useUploadSlot } from './uploadSlot';
 
 type Values = {
   key: string;
@@ -68,16 +68,17 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
+  // The language-file key of the problem, not its words: the words are made when drawn.
   const [iconProblem, setIconProblem] = useState<string | null>(null);
   const icon = useUploadSlot();
   const editing = action !== null;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     setIconProblem(null);
     if (!editing && !icon.uploadId) {
-      setIconProblem(t('avatar.icon.required'));
+      setIconProblem('avatar.icon.required');
       return;
     }
     const fields = {
@@ -100,9 +101,9 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
       const result = failureToForm(intl, form, error, FIELDS);
       if (result.uploadRejected) {
         icon.reset();
-        setIconProblem(t('avatar.icon.rejected'));
+        setIconProblem('avatar.icon.rejected');
       }
-      setFailure(result.text);
+      fail(error);
       return;
     }
     message.success(t('avatar.actions.saved'));
@@ -121,7 +122,7 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
       afterClose={() => {
         form.resetFields();
         icon.reset();
-        setFailure(null);
+        clear();
         setIconProblem(null);
       }}
       okText={t('pages.common.submit')}
@@ -181,15 +182,13 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
         <Form.Item label={t('avatar.col.icon')}>
           <Flex vertical gap={8}>
             {action ? <Thumb url={action.iconUrl} alt={action.key} size={64} /> : null}
-            <UploadBox>
-              <UploadField<{ uploadId: string }>
-                kind="catalogImage"
-                onBusyChange={icon.fieldProps.onBusyChange}
-                onUploaded={icon.fieldProps.onUploaded}
-                onCleared={icon.fieldProps.onCleared}
-              />
-            </UploadBox>
-            {iconProblem ? <Alert type="error" title={iconProblem} showIcon /> : null}
+            <UploadField<{ uploadId: string }>
+              kind="catalogImage"
+              onBusyChange={icon.fieldProps.onBusyChange}
+              onUploaded={icon.fieldProps.onUploaded}
+              onCleared={icon.fieldProps.onCleared}
+            />
+            {iconProblem ? <Alert type="error" title={t(iconProblem)} showIcon /> : null}
           </Flex>
         </Form.Item>
         <Form.Item

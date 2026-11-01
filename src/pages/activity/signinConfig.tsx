@@ -2,6 +2,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Flex, Typography } from 'antd';
 import { useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
@@ -15,11 +16,12 @@ import {
   setCheckinActivityStatus,
 } from '../../services/activity';
 import { describeFailure } from '../../session/describe';
+import { instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { ActivityFormModal } from './ActivityFormModal';
 import { ActivityViewModal } from './ActivityViewModal';
-import { instantText, lifecycleOptions } from './texts';
+import { lifecycleOptions } from './texts';
 import { useOverlapFlow } from './useOverlapFlow';
 
 type Filters = { name?: string; lifecycleStatus?: LifecycleStatus };
@@ -167,7 +169,7 @@ export default function SigninConfigPage() {
     {
       title: t('activity.signin.col.actions'),
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) => <RowActions actions={actionsOf(row)} />,
     },
   ];

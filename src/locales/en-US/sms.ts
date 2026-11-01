@@ -112,7 +112,6 @@ const messages: Record<string, string> = {
   'sms.channels.apiUrl.NOT_HTTPS': 'The address must start with https://',
   'sms.channels.apiUrl.HAS_USER_INFO': 'The address must not contain a user name or a password',
   'sms.channels.apiUrl.HOST_NOT_ALLOWED': 'This provider only allows these hosts: {hosts}',
-  'sms.channels.extNotJson': 'The extension is not valid JSON',
   'sms.channels.extNotObject': 'The extension must be a JSON object',
   'sms.channels.countriesInvalid': 'Country codes are two letters, for example TH',
   'sms.channels.typeRequired': 'Choose a type',

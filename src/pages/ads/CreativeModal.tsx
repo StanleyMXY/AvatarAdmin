@@ -16,8 +16,11 @@ import {
 } from 'antd';
 import { useState } from 'react';
 import { linkRule } from '../../components/LinkInput';
+import { UploadField } from '../../components/UploadField';
+import type { FailureLines } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import { ApiError } from '../../request/errors';
 import {
   type AdCreative,
@@ -33,18 +36,16 @@ import {
 } from '../../services/ads';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { detailReason, type FieldReason, setFieldReasons } from '../../utils/fieldReasons';
 import { formatBytes } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { SCREEN_TARGETS } from '../../utils/screenTargets';
 import { trimSpec } from '../../utils/trimSpec';
 import { isUploadIdRejection } from '../../utils/uploadErrors';
-import { AdMediaUpload } from './AdMediaUpload';
-import { checkMediaSpec } from './mediaSpec';
+import { bytesProblemTexts, checkMediaSpec } from './mediaSpec';
 import { Picker } from './Picker';
 import { Thumb } from './Thumb';
-import { UploadBox } from './UploadBox';
-import { useUploadSlot } from './uploadSlot';
 import type { OptionsStatus } from './useOptions';
 
 type Values = {
@@ -97,6 +98,19 @@ const DEEP_LINK_MAX = 2048;
  * file does not fit (400 about `uploadId`), or it is not there (404). A 400 that is only about other
  * fields is not this: the file is still good.
  */
+/** What the backend refused, sorted by where it goes: under a form field or in the bar. */
+function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknown) {
+  const { text, fields } = describeFailure(intl, error);
+  const forForm: FieldReason[] = [];
+  const more: string[] = [];
+  for (const [index, detail] of fields.entries()) {
+    if ((FIELDS as readonly string[]).includes(detail.ref)) {
+      forForm.push(detailReason(intl, error, detail.ref, index));
+    } else more.push(detail.text);
+  }
+  return { text, more, forForm };
+}
+
 function uploadRefused(error: unknown): boolean {
   if (!isUploadIdRejection(error)) return false;
   if (error instanceof ApiError && error.httpStatus === 400) {
@@ -147,7 +161,9 @@ export function CreativeModal({
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
   const slot = useUploadSlot<MediaUpload>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  // The save the backend refused, kept as the failure itself: its words are made when drawn.
+  const [refusal, setRefusal] = useState<{ error: unknown } | null>(null);
+  const failure: FailureLines | null = refusal === null ? null : splitRefusal(intl, refusal.error);
   const [rejected, setRejected] = useState(false);
   const [needFile, setNeedFile] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
@@ -197,7 +213,7 @@ export function CreativeModal({
     : [];
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    setRefusal(null);
     setNeedFile(false);
     if (!editing && !slot.uploadId) {
       setNeedFile(true);
@@ -231,20 +247,13 @@ export function CreativeModal({
             uploadId: slot.uploadId as string,
           });
     } catch (error) {
-      const { text, fields: details } = describeFailure(intl, error);
-      const forForm: { name: string; errors: string[] }[] = [];
-      const more: string[] = [];
-      for (const detail of details) {
-        if ((FIELDS as readonly string[]).includes(detail.ref)) {
-          forForm.push({ name: detail.ref, errors: [detail.text] });
-        } else more.push(detail.text);
-      }
-      if (forForm.length > 0) (form as FormInstance).setFields(forForm);
+      const { forForm } = splitRefusal(intl, error);
+      setFieldReasons(form as FormInstance, intl, forForm);
       if (uploadRefused(error)) {
         slot.reset();
         setRejected(true);
       }
-      setFailure({ text, more });
+      setRefusal({ error });
       return;
     }
     message.success(t('ads.common.saved'));
@@ -352,12 +361,7 @@ export function CreativeModal({
                 <li key={p.code}>
                   {t(`ads.creatives.spec.${p.code}`, {
                     ...p.values,
-                    ...(p.code === 'bytes'
-                      ? {
-                          actual: formatBytes(p.values.actual as number, intl.locale),
-                          wanted: formatBytes(p.values.wanted as number, intl.locale),
-                        }
-                      : {}),
+                    ...(p.code === 'bytes' ? bytesProblemTexts(p.values, intl.locale) : {}),
                   })}
                 </li>
               ))}
@@ -386,7 +390,7 @@ export function CreativeModal({
       afterClose={() => {
         form.resetFields();
         slot.reset();
-        setFailure(null);
+        setRefusal(null);
         setRejected(false);
         setNeedFile(false);
         setUnavailable(false);
@@ -460,26 +464,26 @@ export function CreativeModal({
           <Flex vertical gap={8}>
             {mediaBlock}
             {specBlock}
-            <UploadBox>
-              <AdMediaUpload
-                key={slot.version}
-                onBusyChange={slot.fieldProps.onBusyChange}
-                onUploaded={(result) => {
-                  slot.fieldProps.onUploaded(result);
-                  setRejected(false);
-                  setNeedFile(false);
-                }}
-                onCleared={slot.fieldProps.onCleared}
-                onStart={() => setUnavailable(false)}
-                onFailed={(error) => {
-                  if (error instanceof ApiError && error.code === 'DEPENDENCY_UNAVAILABLE') {
-                    setUnavailable(true);
-                    return true;
-                  }
-                  return false;
-                }}
-              />
-            </UploadBox>
+            <UploadField<MediaUpload>
+              kind="adMedia"
+              showPreview={false}
+              key={slot.version}
+              onBusyChange={slot.fieldProps.onBusyChange}
+              onUploaded={(result) => {
+                slot.fieldProps.onUploaded(result);
+                setRejected(false);
+                setNeedFile(false);
+              }}
+              onCleared={slot.fieldProps.onCleared}
+              onStart={() => setUnavailable(false)}
+              onFailed={(error) => {
+                if (error instanceof ApiError && error.code === 'DEPENDENCY_UNAVAILABLE') {
+                  setUnavailable(true);
+                  return true;
+                }
+                return false;
+              }}
+            />
             {slot.busy ? (
               <Alert type="info" showIcon title={t('ads.creatives.uploadWait')} />
             ) : null}
@@ -683,7 +687,7 @@ export function CreativeModal({
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

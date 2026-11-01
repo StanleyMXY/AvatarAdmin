@@ -44,6 +44,7 @@ const messages: Record<string, string> = {
   'clientConfig.editor.languageDuplicate': '这种语言已经添加',
   'clientConfig.editor.removeLanguage': '移除这种语言的值',
   'clientConfig.editor.removeHelp': '保存后，这种语言改用默认值。',
+  'clientConfig.editor.removeHelpNone': '保存后，这种语言没有值。',
   'clientConfig.editor.valueLabel': '值（{language}）',
   'clientConfig.editor.valueOn': '开',
   'clientConfig.editor.valueOff': '关',
@@ -66,6 +67,7 @@ const messages: Record<string, string> = {
   // ---- reset ----
   'clientConfig.reset.button': '重置',
   'clientConfig.reset.confirm': '删除“{key}”全部语言的值？客户端会回到默认。',
+  'clientConfig.reset.confirmNoDefault': '删除“{key}”全部语言的值？之后这个键未配置，没有值。',
   'clientConfig.reset.done': '已重置',
   'clientConfig.reset.nothing': '这个键没有配置，没有可重置的值。',
 

@@ -1,11 +1,10 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Flex, Form, Input, InputNumber, Modal } from 'antd';
-import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
-import { ApiError } from '../../request/errors';
 import { MEMORY_NAME_PATTERN, registerEmbeddingModel } from '../../services/memory';
-import { describeFailure } from '../../session/describe';
+import { detailReasons, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
 
 type Values = { modelName?: string; teiBaseUrl?: string; dimensions?: number | null };
@@ -26,16 +25,6 @@ const addressProblem = (text: string): boolean => {
   }
 };
 
-/**
- * What a 409 MEMORY_MODEL_CONFLICT says: the sentence of the memory service (`data.detail`) as it
- * is, because it names the dimensions the model was registered with.
- */
-const conflictDetail = (error: unknown): string | null => {
-  if (!(error instanceof ApiError) || error.code !== 'MEMORY_MODEL_CONFLICT') return null;
-  const detail = (error.data as { detail?: unknown } | null)?.detail;
-  return typeof detail === 'string' && detail !== '' ? detail : null;
-};
-
 /** Registers an embedding model. The TEI container has to be running first, which the dialog says. */
 export function ModelForm({ open, onClose, onSaved }: Props) {
   const intl = useIntl();
@@ -43,10 +32,10 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
 
   const send = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     const name = trimSpec(values.modelName ?? '');
     try {
       await registerEmbeddingModel(name, {
@@ -54,20 +43,14 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
         dimensions: values.dimensions as number,
       });
     } catch (error) {
-      const detail = conflictDetail(error);
-      if (detail !== null) {
-        setFailure(detail);
-        return;
-      }
-      const { text, fields } = describeFailure(intl, error);
       const byRef: Record<string, string> = { name: 'modelName' };
-      const placed = fields.filter((f) => ['name', 'teiBaseUrl', 'dimensions'].includes(f.ref));
+      const placed = detailReasons(intl, error, (ref) =>
+        ['name', 'teiBaseUrl', 'dimensions'].includes(ref) ? (byRef[ref] ?? ref) : undefined,
+      );
       if (placed.length > 0) {
-        form.setFields(
-          placed.map((f) => ({ name: (byRef[f.ref] ?? f.ref) as keyof Values, errors: [f.text] })),
-        );
+        setFieldReasons(form, intl, placed);
       } else {
-        setFailure(text);
+        fail(error);
       }
       return;
     }
@@ -83,7 +66,7 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
       mask={{ closable: false }}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       onCancel={send.pending ? undefined : onClose}
       okText={t('memory.model.submit')}

@@ -34,7 +34,7 @@ npm run build     # max build，产物在 dist/
 `dist/` 里的脚本和样式文件名带内容哈希（例如 `umi.adf3beea.js`、`p__users__list.61538c69.async.js`），内容变了文件名就变，所以可以长期缓存。三个例外：
 
 - `index.html`：不带哈希，它指向当前版本的脚本，**不能缓存**（`no-cache`），否则发布后用户拿着旧入口，找不到已被清掉的旧文件。
-- `logo.svg` 和 `public/` 下的其他文件：不带哈希，用短缓存或让浏览器每次校验。
+- `logo.svg` 和 `public/` 下的其他文件：不带哈希，用短缓存或让浏览器每次校验。其中 `preload-theme.js` 在 `index.html` 的 `<head>` 里引用、在页面绘制之前运行（先把保存的主题底色铺好，避免打开时闪一下别的颜色）：它和 `index.html` 一起发布；下面的 nginx 示例里它落在最后一个 `location /`，响应带 `no-cache`；它是同域脚本，所以后面的内容安全策略 `script-src 'self'` 允许它。
 - 发布时先上传带哈希的新文件，最后再换 `index.html`；旧的哈希文件至少保留一段时间（正在使用的页面还会按需加载旧的分块），之后再清理。
 
 ## nginx 示例

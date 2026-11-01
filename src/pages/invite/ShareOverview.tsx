@@ -54,6 +54,7 @@ export function ShareOverview({ rows, from, to }: Props) {
       <Typography.Text type="secondary">{t('invite.share.uvNote')}</Typography.Text>
       <Card size="small" title={t('invite.share.dailyShares')} data-testid="invite-share-trend">
         <TrendChart
+          wholeNumbers
           rows={rows.map((row) => ({ statDate: row.statDate, sharePv: count(row.sharePv) }))}
           xField="statDate"
           from={from}

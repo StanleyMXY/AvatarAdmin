@@ -2,9 +2,11 @@ import { useAccess, useIntl } from '@umijs/max';
 import type { TableColumnsType } from 'antd';
 import { Alert, App, Button, Flex, Tag, Typography } from 'antd';
 import { useCallback, useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import {
   type AdminUser,
   deleteAdmin,
@@ -14,14 +16,14 @@ import {
   setAdminStatus,
 } from '../../services/system';
 import { useSession } from '../../session/useSession';
+import { instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { AdminFormModal } from './AdminFormModal';
 import { isClosedTo, type RowProtection, rowProtection } from './adminRules';
 import { PagedTable } from './PagedTable';
 import { ResetPasswordModal } from './ResetPasswordModal';
-import { instantText, protectedFailureText } from './texts';
-import { useRead } from './useRead';
+import { protectedFailureText } from './texts';
 
 type Dialog =
   | { kind: 'create' }
@@ -54,8 +56,8 @@ export default function AdminsPage() {
   const reloadRef = useRef<(() => void) | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   // Every administrator, for "the last enabled super administrator" (the table shows one page only).
-  const everyone = useRead(loadAllAdmins);
-  const all = everyone.state.data?.filter(isRecord) ?? null;
+  const everyone = useLatestRead(loadAllAdmins, { keepWhileReading: true });
+  const all = everyone.data?.filter(isRecord) ?? null;
   const refresh = () => {
     reloadRef.current?.();
     everyone.reload();
@@ -79,8 +81,15 @@ export default function AdminsPage() {
     if (!canManage || isClosedTo(row, me)) return [];
     const { own, lastSuper } = protectionOf(row);
     return [
-      ...(own ? [t('system.admins.ownNote')] : []),
-      ...(own ? [t('system.admins.ownDisableReason')] : []),
+      // The two sentences about the own account in one line: a row of five lines is hard to read.
+      ...(own
+        ? [
+            t('system.admins.ownReasons', {
+              note: t('system.admins.ownNote'),
+              disable: t('system.admins.ownDisableReason'),
+            }),
+          ]
+        : []),
       ...(lastSuper ? [t('system.admins.lastSuperReason')] : []),
       ...(own ? [t('system.admins.ownResetPasswordReason')] : []),
       ...(own ? [t('system.admins.ownResetTotpReason')] : []),
@@ -213,11 +222,19 @@ export default function AdminsPage() {
     ...(canManage
       ? [
           {
+            ...ACTIONS_COLUMN,
             title: t('system.admins.col.actions'),
             key: 'actions',
-            fixed: 'right' as const,
             render: (_: unknown, row: AdminUser) => {
               const reasons = reasonsOf(row);
+              // The row of a super administrator has no action for anyone else: say why, in place of buttons.
+              if (isClosedTo(row, me)) {
+                return (
+                  <Typography.Text type="secondary" style={{ fontSize: 12, maxWidth: 260 }}>
+                    {t('system.admins.closedNote')}
+                  </Typography.Text>
+                );
+              }
               return (
                 <Flex vertical gap={4} style={{ maxWidth: 260 }}>
                   <RowActions actions={actionsOf(row)} />

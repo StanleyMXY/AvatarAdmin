@@ -1,6 +1,6 @@
 import { ApiError } from '../../request/errors';
 import { describeFailure } from '../../session/describe';
-import { codeText, type Translator } from './texts';
+import { codeText, type Translator } from '../../utils/displayText';
 
 /**
  * The text for a refused action on a default avatar: a 409 INVALID_STATE says which state the

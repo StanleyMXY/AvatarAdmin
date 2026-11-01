@@ -7,11 +7,13 @@ import {
   settleGenerations,
 } from './_core/avatarData';
 import { issueToken, resetStore } from './_core/store';
+import { resetSystemStore, systemState } from './_core/systemData';
 import { adminOf, bearer, call } from './_core/testing';
 import avatar from './avatar.mock';
 
 beforeEach(() => {
   resetStore();
+  resetSystemStore();
   resetAvatarStore();
 });
 
@@ -543,6 +545,22 @@ describe("an account's avatars and the grant of a cosmetic", () => {
       avatars: [],
       cosmetics: [],
     });
+  });
+
+  it('writes an audit row for each avatar of the account that a read shows, in the name of the reader, and none for a read that shows no avatar or is refused', async () => {
+    const rows = () => systemState.audit.filter((row) => row.action === 'USER_VIEW_AVATAR');
+    const before = rows().length;
+    const read = await get(ACCOUNT_AVATARS, 'support', {}, { id: ACCOUNT.rich });
+    const shown = read.body.data.avatars.map((a: { assetId: string }) => a.assetId);
+    expect(shown.length).toBeGreaterThan(0);
+    const added = rows().slice(0, rows().length - before);
+    expect(added.map((row) => row.targetId).sort()).toEqual([...shown].sort());
+    expect(added.every((row) => row.adminUsername === 'support')).toBe(true);
+    expect(added.every((row) => row.targetType === 'AVATAR_ASSET')).toBe(true);
+    const sizeAfterRead = systemState.audit.length;
+    await get(ACCOUNT_AVATARS, 'root', {}, { id: ACCOUNT.empty });
+    expect((await get(ACCOUNT_AVATARS, 'finance', {}, { id: ACCOUNT.rich })).status).toBe(403);
+    expect(systemState.audit.length).toBe(sizeAfterRead);
   });
 
   it('grants a cosmetic with a reason, once, and then the account owns it with source ADMIN_GRANT', async () => {

@@ -2,22 +2,23 @@ import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Select, Spin, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { TRIGGER_REASONS } from '../../services/push';
 import { getPushStats } from '../../services/stats/reports';
 import type { PushStatRow } from '../../services/stats/types';
-import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { codeText, countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH, formatPercent } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
 import { openRate, sumByDay } from './pushStats';
-import { codeText, countText } from './texts';
 
 type Filter = { range: DayRange; reason: string };
 
@@ -55,24 +56,24 @@ export default function PushStatsPage() {
   const [draft, setDraft] = useState<Filter>(initialFilter);
   const [applied, setApplied] = useState<Filter>(initialFilter);
   const [rows, setRows] = useState<PushStatRow[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const { text: failure, fail, clear } = useFailure();
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setRows(null);
-    setFailure(null);
+    clear();
     try {
       const { items } = await getPushStats({
         from: applied.range.from,
         to: applied.range.to,
         triggerReason: applied.reason === ALL ? undefined : applied.reason,
       });
-      if (mine === counter.current) setRows(items);
+      if (isCurrent()) setRows(items);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [applied, intl]);
+  }, [applied, begin, fail, clear]);
 
   useEffect(() => {
     void load();
@@ -194,9 +195,7 @@ export default function PushStatsPage() {
           />
           <Table<PushStatRow & { __key: string }>
             size="small"
-            rowKey={(row, index) =>
-              `${plainText(row.statDate)}|${plainText(row.triggerReason)}|${index}`
-            }
+            rowKey="__key"
             columns={columns}
             dataSource={rows.map((r, i) => ({
               ...r,

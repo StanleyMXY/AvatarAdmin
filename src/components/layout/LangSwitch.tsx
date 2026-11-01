@@ -1,6 +1,7 @@
-import { getLocale, setLocale, useIntl } from '@umijs/max';
+import { getLocale, useIntl } from '@umijs/max';
 import { Select } from 'antd';
-import { markPageLanguage } from '../../locales/initLocale';
+import { switchLocale } from '../../locales/initLocale';
+import type { AppLocale } from '../../utils/resolveLocale';
 
 /** The two interface languages, each named in its own language. */
 export function LangSwitch() {
@@ -11,10 +12,7 @@ export function LangSwitch() {
       variant="borderless"
       aria-label={intl.formatMessage({ id: 'pages.lang.label' })}
       value={getLocale()}
-      onChange={(locale: string) => {
-        setLocale(locale, false);
-        markPageLanguage(locale);
-      }}
+      onChange={(locale: AppLocale) => switchLocale(locale)}
       options={[
         { value: 'zh-CN', label: intl.formatMessage({ id: 'pages.lang.zhCN' }) },
         { value: 'en-US', label: intl.formatMessage({ id: 'pages.lang.enUS' }) },

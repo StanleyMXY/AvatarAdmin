@@ -100,6 +100,7 @@ export function ShareChannelsTab({ rows, from, to, channel, onChannel }: Props) 
           <Empty description={t('invite.share.noShares')} />
         ) : (
           <TrendChart
+            wholeNumbers
             rows={lineRows}
             xField="statDate"
             from={from}
@@ -126,7 +127,7 @@ export function ShareChannelsTab({ rows, from, to, channel, onChannel }: Props) 
                 title: t('invite.share.col.channel'),
                 dataIndex: 'shareChannel',
                 render: (value: unknown) => (
-                  <EllipsisPopoverText text={plainText(value)} width={260} />
+                  <EllipsisPopoverText text={plainText(value)} width={260} dir="ltr" />
                 ),
               },
               {

@@ -267,6 +267,24 @@ describe('the cosmetic catalog page: new item', { timeout: 60000 }, () => {
     expect(writesOf(calls)).toHaveLength(0);
   });
 
+  it('does not send the picture uploaded before when a new file was chosen and stopped before its upload', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New item' }));
+    const dialog = await screen.findByRole('dialog');
+    fillBasics(dialog);
+    choose(png('first.png'));
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    await within(dialog).findByText(/Uploaded|first\.png/);
+    // The person picks another file; it is too big and never reaches the server.
+    choose(fileOf(pngBytes(100, 100), 'big.png', 2 * 1024 * 1024 + 1));
+    expect(await screen.findByText(/The file is too large: limit 2 MB/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(await within(dialog).findByText('Upload a preview picture first.')).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
   it('asks for a key, a name in some language and a generation text', async () => {
     const calls = backend();
     const user = userEvent.setup();

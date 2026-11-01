@@ -43,7 +43,7 @@ const messages: Record<string, string> = {
   'stat.daily.col.newSubscriptions': '新订阅',
   'stat.daily.col.activeSubscriptions': '有效订阅',
   'stat.daily.col.activeSubscriptions.tip':
-    '当天结束时的有效订阅数（日末快照，只算正式环境）。当天和没有快照的日子显示“—”；标“回填”的值用当前状态近似得出。',
+    '当天结束时的有效订阅数（日末快照，只算正式环境）。当天和没有快照的日子显示“—”；标“回填”的值用当前状态近似得出。选了渠道包时这一列一律显示“—”（快照没有渠道维度），不是快照缺失。',
   'stat.daily.col.creditPurchases': '额度购买次数',
   'stat.daily.col.creditsSpent': '额度消耗',
   'stat.daily.col.guestSessionsConnected': '游客通话次数',
@@ -93,6 +93,7 @@ const messages: Record<string, string> = {
   'dashboard.card.loadFailed': '加载失败：{message}',
   'dashboard.change.vsYesterday': '较昨日',
   'dashboard.change.vs7Days': '较 7 天前',
+  'dashboard.trend.partialFailed': '有些指标没有读到，图里没画：{metrics}。{message}',
   'dashboard.trend.title': '趋势',
   'dashboard.trend.metrics': '指标',
   'dashboard.trend.lastWeek': '{metric}（上周同期）',

@@ -11,6 +11,12 @@ type Props = {
   onChange: (value: DayRange) => void;
   /** The longest range the backend accepts, in days (from `GET /meta`); without it nothing is limited here. */
   maxDays?: number;
+  /**
+   * The days are the users' local days, not UTC days (a report whose summary is cut at each user's
+   * local midnight). The two presets that name a UTC day, "Today (UTC)" and "Yesterday (UTC)", are
+   * then left out; what is picked is still sent exactly as picked.
+   */
+  localDays?: boolean;
 };
 
 // A calendar day written `YYYY-MM-DD` becomes the picker's date with the same calendar fields.
@@ -21,7 +27,7 @@ const asPickerDate = (day: string) => dayjs(`${day}T00:00:00`);
  * the presets are computed in UTC ("today" is the UTC day, which can be yesterday where the person
  * is). A range longer than `maxDays` is refused with a message and `onChange` is not called.
  */
-export function DateRangeUtc({ value, onChange, maxDays }: Props) {
+export function DateRangeUtc({ value, onChange, maxDays, localDays }: Props) {
   const intl = useIntl();
   const { message } = App.useApp();
   const t = (id: string, values?: Record<string, string | number>) =>
@@ -54,8 +60,12 @@ export function DateRangeUtc({ value, onChange, maxDays }: Props) {
         allowClear={false}
         value={[asPickerDate(value.from), asPickerDate(value.to)]}
         presets={[
-          preset(t('stat.common.today'), { from: todayUtc(), to: todayUtc() }),
-          preset(t('stat.common.yesterday'), { from: yesterdayUtc(), to: yesterdayUtc() }),
+          ...(localDays
+            ? []
+            : [
+                preset(t('stat.common.today'), { from: todayUtc(), to: todayUtc() }),
+                preset(t('stat.common.yesterday'), { from: yesterdayUtc(), to: yesterdayUtc() }),
+              ]),
           preset(t('stat.common.last7'), lastNDaysUtc(7)),
           preset(t('stat.common.last30'), lastNDaysUtc(30)),
         ]}

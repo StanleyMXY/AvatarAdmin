@@ -33,8 +33,6 @@ const messages: Record<string, string> = {
   'support.context.locale': 'Language',
   'support.context.recentErrors': 'Recent errors',
   'support.context.none': 'Not sent',
-  'support.note':
-    'This page only shows feedback and forwards it again; replies to users are made in the support tool.',
 };
 
 export default messages;

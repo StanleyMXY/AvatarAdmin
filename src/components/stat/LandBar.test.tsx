@@ -46,6 +46,26 @@ describe('LandBar', () => {
     });
   });
 
+  it('can name the day and add a hint in its own words, for a summary whose days are not UTC days', () => {
+    renderPage(
+      <LandBar
+        name="daily-event"
+        onLanded={() => {}}
+        dateLabelId="activity.stats.land.date"
+        hintId="activity.stats.land.hint"
+      />,
+    );
+    expect(screen.getByText('Date (local day of the users)')).toBeInTheDocument();
+    expect(screen.getByText('Recomputes the summary of the chosen local day.')).toBeInTheDocument();
+    expect(screen.queryByText('Date (UTC)')).toBeNull();
+  });
+
+  it('says UTC and no hint when it is given no words of its own', () => {
+    renderPage(<LandBar name="daily-event" onLanded={() => {}} />);
+    expect(screen.getByText('Date (UTC)')).toBeInTheDocument();
+    expect(screen.queryByText('Recomputes the summary of the chosen local day.')).toBeNull();
+  });
+
   it('posts the name and the day, then tells the page', async () => {
     const calls = stubFetch(() => jsonResponse(200, envelope('200', null)));
     const onLanded = vi.fn();
@@ -55,6 +75,24 @@ describe('LandBar', () => {
     expect(calls[0].url).toBe('/api/admin/stats/land/session-quality?date=2026-10-20');
     expect(calls[0].init.method).toBe('POST');
     expect(await screen.findByText('Re-landed 2026-10-20')).toBeInTheDocument();
+  });
+
+  it('adds that the table of the reasons for no ad was not recomputed when the backend says so, and says nothing more otherwise', async () => {
+    stubFetch(() => jsonResponse(200, envelope('200', { nofillSkipped: true })));
+    renderPage(<LandBar name="ad-daily" onLanded={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
+    expect(await screen.findByText('Re-landed 2026-10-20')).toBeInTheDocument();
+    expect(
+      await screen.findByText(/The table of the reasons for no ad was not recomputed for this day/),
+    ).toBeInTheDocument();
+  });
+
+  it('does not add it when the table was recomputed', async () => {
+    stubFetch(() => jsonResponse(200, envelope('200', { nofillSkipped: false })));
+    renderPage(<LandBar name="ad-daily" onLanded={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
+    expect(await screen.findByText('Re-landed 2026-10-20')).toBeInTheDocument();
+    expect(screen.queryByText(/was not recomputed for this day/)).toBeNull();
   });
 
   it('runs several names one after the other and stops at the first failure', async () => {
@@ -83,6 +121,27 @@ describe('LandBar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
     await waitFor(() => expect(calls).toHaveLength(2));
     await waitFor(() => expect(onLanded).toHaveBeenCalledTimes(1));
+  });
+
+  it('says which names were re-landed and where it stopped, with the words of the error code', async () => {
+    stubFetch((call) =>
+      call.url.includes('daily-business')
+        ? jsonResponse(500, envelope('INTERNAL_ERROR', null, 'raw backend words'))
+        : jsonResponse(200, envelope('200', null)),
+    );
+    renderPage(<LandBar name={['daily-event', 'daily-business']} onLanded={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
+    const text = await screen.findByText(/Stopped at daily-business/);
+    expect(text.textContent).toMatch(/Re-landed: daily-event\./);
+    expect(text.textContent).not.toContain('raw backend words');
+  });
+
+  it('shows only the words of the error code when the first name failed, with nothing re-landed before it', async () => {
+    stubFetch(() => jsonResponse(500, envelope('INTERNAL_ERROR')));
+    renderPage(<LandBar name={['daily-event', 'daily-business']} onLanded={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
+    expect(await screen.findByText('Server error. Please try again later.')).toBeInTheDocument();
+    expect(screen.queryByText(/Stopped at/)).toBeNull();
   });
 
   it('runs both names in order when all succeed', async () => {

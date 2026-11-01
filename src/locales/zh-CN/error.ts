@@ -43,7 +43,7 @@ const messages: Record<string, string> = {
   'error.PERMISSION_HAS_CHILDREN': '该权限节点下还有子节点，不能删除',
   'error.CHECKIN_NOT_AVAILABLE': '现在没有生效的签到活动',
   'error.TASK_NOT_CLAIMABLE': '这个任务现在不能领取',
-  'error.TASK_HAS_RECORDS': '该任务已有任务记录，不能删除，只能停用',
+  'error.TASK_HAS_RECORDS': '该任务已有任务记录，不能删除，也不能改类型和目标值，只能停用',
   'error.CONTENT_NOT_STORED': '原文已不存在',
   'error.PHONE_INVALID': '手机号无效',
   'error.SMS_COUNTRY_NOT_SUPPORTED': '不支持该号码所在的国家',

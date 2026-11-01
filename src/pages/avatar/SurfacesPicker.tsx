@@ -1,11 +1,11 @@
 import { useIntl } from '@umijs/max';
 import { Flex, Select, Typography } from 'antd';
 import { useEffect, useState } from 'react';
-import { loadChannels } from '../../components/ChannelSelect';
+import { loadChannels, resetChannelsCache } from '../../components/ChannelSelect';
 import { PLATFORMS, type Platform, type Surface } from '../../services/avatar';
 import type { ChannelRow } from '../../services/channels/getChannels';
+import { codeText } from '../../utils/displayText';
 import { ALL_CHANNELS, applyChange, toSelections, toSurfaces } from './surfaces';
-import { codeText } from './texts';
 
 type Props = {
   /** The stored list (contract 3.7). An empty list means every end. */
@@ -26,6 +26,9 @@ export function SurfacesPicker({ value, onChange, disabled }: Props) {
   const [channels, setChannels] = useState<ChannelRow[]>([]);
   useEffect(() => {
     let live = true;
+    // The picker sits in a dialog that is opened now and then: a channel package added since the
+    // last time must be there, so the shared list is read again each time the picker appears.
+    resetChannelsCache();
     void loadChannels().then((rows) => {
       if (live) setChannels(rows);
     });

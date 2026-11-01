@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Spin, Typography } from 'antd';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { ApiError } from '../../request/errors';
 import { type ComplaintEvidence, getComplaintEvidence } from '../../services/complaints';
 import { describeFailure } from '../../session/describe';
@@ -8,7 +9,7 @@ import { describeFailure } from '../../session/describe';
 type Shown =
   | { index: number; state: 'loading' }
   | { index: number; state: 'ready'; evidence: ComplaintEvidence }
-  | { index: number; state: 'failed'; text: string };
+  | { index: number; state: 'failed'; error: unknown };
 
 /** A signed address is a plain http(s) address; anything else (a script address, for one) is not opened. */
 export function isOpenableAddress(url: unknown): url is string {
@@ -21,7 +22,7 @@ export function isOpenableAddress(url: unknown): url is string {
   }
 }
 
-/** The file by its media type: a picture, a PDF, a video or a sound in its own player; anything else as a link. */
+/** The file by its media type: a picture, a PDF, a video or a sound in its own player; any other type is not shown (no link to its address). */
 function EvidenceFile({ evidence, label }: { evidence: ComplaintEvidence; label: string }) {
   const intl = useIntl();
   if (!isOpenableAddress(evidence.url)) {
@@ -56,10 +57,14 @@ function EvidenceFile({ evidence, label }: { evidence: ComplaintEvidence; label:
     // biome-ignore lint/a11y/useMediaCaption: evidence files have no captions
     return <audio src={evidence.url} controls />;
   }
+  // No player for this type: the address is not offered as a link, because a link can be copied
+  // and opened apart, and this address is the signed address of a person's file.
   return (
-    <a href={evidence.url} target="_blank" rel="noopener noreferrer">
-      {intl.formatMessage({ id: 'complaints.evidence.open' })}
-    </a>
+    <Alert
+      type="info"
+      showIcon
+      title={intl.formatMessage({ id: 'complaints.evidence.unsupported' })}
+    />
   );
 }
 
@@ -74,21 +79,17 @@ export function EvidenceViewer({ complaintId, count }: { complaintId: string; co
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [shown, setShown] = useState<Shown | null>(null);
-  const latest = useRef(0);
+  const begin = useLatestCall();
 
   const open = async (index: number) => {
-    const mine = ++latest.current;
+    const isCurrent = begin();
     setShown({ index, state: 'loading' });
     try {
       const evidence = await getComplaintEvidence(complaintId, index);
-      if (mine === latest.current) setShown({ index, state: 'ready', evidence });
+      if (isCurrent()) setShown({ index, state: 'ready', evidence });
     } catch (error) {
-      if (mine !== latest.current) return;
-      const text =
-        error instanceof ApiError && error.code === 'RESOURCE_NOT_FOUND'
-          ? t('complaints.evidence.notFound')
-          : describeFailure(intl, error).text;
-      setShown({ index, state: 'failed', text });
+      if (!isCurrent()) return;
+      setShown({ index, state: 'failed', error });
     }
   };
 
@@ -111,7 +112,17 @@ export function EvidenceViewer({ complaintId, count }: { complaintId: string; co
         ))}
       </Flex>
       {shown?.state === 'loading' ? <Spin /> : null}
-      {shown?.state === 'failed' ? <Alert type="error" showIcon title={shown.text} /> : null}
+      {shown?.state === 'failed' ? (
+        <Alert
+          type="error"
+          showIcon
+          title={
+            shown.error instanceof ApiError && shown.error.code === 'RESOURCE_NOT_FOUND'
+              ? t('complaints.evidence.notFound')
+              : describeFailure(intl, shown.error).text
+          }
+        />
+      ) : null}
       {shown?.state === 'ready' ? (
         <EvidenceFile
           evidence={shown.evidence}

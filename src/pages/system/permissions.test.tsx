@@ -130,6 +130,17 @@ describe('the page of the permission tree', () => {
     expect(keys.indexOf('USER:BAN')).toBeGreaterThan(keys.indexOf('USER:VIEW'));
   });
 
+  it('pins the actions column to the right edge, header and cells, while the other columns scroll', async () => {
+    await load();
+    const header = [...document.querySelectorAll('.ant-table-thead th')].find(
+      (th) => th.textContent === 'Actions',
+    );
+    expect(header?.className).toContain('ant-table-cell-fix-end');
+    const cells = (await rowOf('USER:VIEW')).querySelectorAll('td');
+    expect(cells[cells.length - 1].className).toContain('ant-table-cell-fix-end');
+    expect(cells[0].className).not.toContain('ant-table-cell-fix-end');
+  });
+
   it('names the nodes by the interface language, then the other language, then the code', async () => {
     custom('CUSTOM:ZH_ONLY', null, { nameEn: null, nameZh: '只有中文' });
     custom('CUSTOM:EN_ONLY', null, { nameZh: '', nameEn: 'English only' });
@@ -158,6 +169,13 @@ describe('the page of the permission tree', () => {
     const long = within(await rowOf('CUSTOM:LONG')).getByText('W'.repeat(5000), {
       selector: 'button',
     });
+    expect(long.style.overflowWrap).toBe('anywhere');
+  });
+
+  it('keeps a permission code of 5000 characters without a space inside its column', async () => {
+    custom('K'.repeat(5000), null, { nameEn: 'Long code', nameZh: 'a' });
+    await load();
+    const long = screen.getByText('K'.repeat(5000), { selector: 'button' });
     expect(long.style.overflowWrap).toBe('anywhere');
   });
 
@@ -516,6 +534,19 @@ describe('a new node', () => {
     expect(await box.findByText('A node with this code exists already.')).toBeInTheDocument();
     expect(writesOf(calls)).toHaveLength(0);
   });
+
+  it.each(['.', '..', '.hidden', 'trailing.'])(
+    'refuses the code %j (a dot at the start or the end), before anything is sent',
+    async (code) => {
+      const { user, calls } = await load();
+      const box = await openNew(user);
+      await fill(user, box, { code });
+      await user.click(save(box));
+      expect(await box.findByText('The code cannot start or end with a dot.')).toBeInTheDocument();
+      expect(writesOf(calls)).toHaveLength(0);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    },
+  );
 
   it('puts the duplicate the backend finds under the code field, as the text of the code', async () => {
     const { user } = await load();

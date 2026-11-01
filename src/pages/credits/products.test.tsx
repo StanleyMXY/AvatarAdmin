@@ -248,6 +248,113 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     );
   });
 
+  it('keeps the title and the fixed fields of the edit dialog while it fades out, instead of turning into the new-pack dialog (the dialog library keeps the content of a closing dialog as it was)', async () => {
+    useMockBackend(creditsMock);
+    const user = userEvent.setup();
+    renderPage(<ProductsPage />);
+    const pack = creditsState.products[0];
+    await user.click(
+      within(await rowOf(pack.productId, pack.store)).getByRole('button', { name: 'Edit' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    // the dialog is closing (happy-dom never ends the animation, so it stays in the page)
+    expect(screen.queryByText('New credit pack', { selector: '.ant-modal-title' })).toBeNull();
+    expect(
+      screen.getByText('Edit credit pack', { selector: '.ant-modal-title' }),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Product ID')).toBeDisabled();
+  });
+
+  it('shows every pack when the backend pages the list: the page after the first is asked for too', async () => {
+    const rows = Array.from({ length: 250 }, (_, n) => ({
+      id: String(n + 1),
+      store: 'APPLE',
+      productId: `pack_${n + 1}`,
+      credits: 10 + n,
+      enabled: true,
+      sortOrder: n,
+    }));
+    const calls = stubFetch(async ({ url }) => {
+      const page = Number(new URL(url, 'http://x').searchParams.get('page') ?? '1');
+      return jsonResponse(
+        200,
+        envelope('200', { items: rows.slice((page - 1) * 200, page * 200), total: 250 }),
+      );
+    });
+    renderPage(<ProductsPage />);
+    await screen.findByText('pack_1');
+    expect(calls.map((c) => c.url)).toEqual([
+      '/api/admin/credit-products?page=1&pageSize=200',
+      '/api/admin/credit-products?page=2&pageSize=200',
+    ]);
+    // 250 packs at 20 a page: 13 pages, so the packs after the first 200 are there
+    expect(screen.getByRole('listitem', { name: '13' })).toBeInTheDocument();
+  });
+
+  it('does not turn a pack on or off from a list that someone else has changed since, and reads the list again', async () => {
+    const calls = useMockBackend(creditsMock);
+    renderPage(<ProductsPage />);
+    const pack = creditsState.products[0];
+    const row = await rowOf(pack.productId, pack.store);
+    // another administrator changes the credits of this pack after the list was read
+    pack.credits += 100;
+    fireEvent.click(within(row).getByRole('switch'));
+    expect(
+      await screen.findByText(/changed by someone else since the list was read/),
+    ).toBeInTheDocument();
+    expect(writes(calls)).toHaveLength(0);
+    // the list is read again: the new number is on the screen, the switch is where it was
+    expect(
+      within(await rowOf(pack.productId, pack.store)).getByText(
+        new Intl.NumberFormat('en-US').format(pack.credits),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('does not save the dialog from a list that someone else has changed since, and reads the list again', async () => {
+    const calls = useMockBackend(creditsMock);
+    const user = userEvent.setup();
+    renderPage(<ProductsPage />);
+    const pack = creditsState.products[0];
+    await user.click(
+      within(await rowOf(pack.productId, pack.store)).getByRole('button', { name: 'Edit' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    pack.sortOrder += 7;
+    fireEvent.change(within(dialog).getByLabelText('Credits'), { target: { value: '4321' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await screen.findByText(/changed by someone else since the list was read/),
+    ).toBeInTheDocument();
+    expect(writes(calls)).toHaveLength(0);
+    expect(pack.credits).not.toBe(4321);
+  });
+
+  it("sends a product id of any length and shows the length the backend refuses beside the field (the limit is the backend's, not a guess)", async () => {
+    useMockBackend(creditsMock);
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? jsonResponse(
+            400,
+            envelope('INVALID_REQUEST', { details: [{ ref: 'productId', reason: 'TOO_LONG' }] }),
+          )
+        : real(input, init),
+    );
+    const user = userEvent.setup();
+    renderPage(<ProductsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New credit pack' }));
+    const dialog = await screen.findByRole('dialog');
+    await chooseOption(user, 'Store', 'APPLE', dialog);
+    fireEvent.change(within(dialog).getByLabelText('Product ID'), {
+      target: { value: 'p'.repeat(300) },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Credits'), { target: { value: '10' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(await within(dialog).findByText('The value is too long.')).toBeInTheDocument();
+  });
+
   it('keeps a product id of 5000 characters without spaces inside its cell, and text of every language', async () => {
     const long = 'x'.repeat(5000);
     const rows = [

@@ -16,8 +16,11 @@ import {
   Typography,
 } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
@@ -33,6 +36,7 @@ import {
 } from '../../services/subscriptions';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { detailReasons, messageReason, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
 import { FailureAlert } from './FailureAlert';
 import { FeatureValueEditor } from './FeatureValueEditor';
@@ -65,8 +69,20 @@ function FeaturesDrawer({
     intl.formatMessage({ id }, values);
   const initial = valuesOf(def);
   const [draft, setDraft] = useState<Record<string, FeatureValue>>(initial);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  // What is wrong with a value, by gate key: the reason checked here (a reason code) or the reason
+  // the backend gave (read from `failure` when drawn, not kept as words), until that value is edited.
+  const [problems, setProblems] = useState<Record<string, string>>({});
+  const [edited, setEdited] = useState<string[]>([]);
   const [failure, setFailure] = useState<unknown>(null);
+  const serverFields = failure ? describeFailure(intl, failure).fields : [];
+  const errors: Record<string, string> = {
+    ...Object.fromEntries(
+      serverFields.filter((f) => !edited.includes(f.ref)).map((f) => [f.ref, f.text]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(problems).map(([key, code]) => [key, t(`reason.${code}`)]),
+    ),
+  };
 
   const rows = def.features
     .map((f) => gates.find((g) => g.key === f.featureKey))
@@ -75,13 +91,14 @@ function FeaturesDrawer({
   const { run, pending } = useSingleFlight(async () => {
     setFailure(null);
     const changed = rows.filter((g) => !sameValue(draft[g.key], initial[g.key]));
+    setEdited([]);
     const found: Record<string, string> = {};
     for (const g of changed) {
       const value = draft[g.key];
       const problem = value?.mode === 'VALUE' ? valueProblem(g.kind, value.value) : null;
-      if (problem) found[g.key] = t(`reason.${problem}`);
+      if (problem) found[g.key] = problem;
     }
-    setErrors(found);
+    setProblems(found);
     if (Object.keys(found).length > 0) return;
     if (changed.length === 0) {
       message.info(t('subscriptions.nothingChanged'));
@@ -93,8 +110,7 @@ function FeaturesDrawer({
         changed.map((g) => ({ featureKey: g.key, value: draft[g.key] ?? { mode: 'UNSET' } })),
       );
     } catch (error) {
-      const { fields } = describeFailure(intl, error);
-      setErrors(Object.fromEntries(fields.map((f) => [f.ref, f.text])));
+      setProblems({});
       setFailure(error);
       return;
     }
@@ -108,7 +124,12 @@ function FeaturesDrawer({
       size={760}
       destroyOnHidden
       onClose={onClose}
-      title={t('subscriptions.entitlements.featuresTitle', { name: def.name })}
+      title={
+        // the name is typed by an operator and can be one long word: it wraps instead of widening the drawer
+        <span style={{ overflowWrap: 'anywhere' }}>
+          {t('subscriptions.entitlements.featuresTitle', { name: def.name })}
+        </span>
+      }
       footer={
         <Can code="SUBSCRIPTION:CONFIG">
           <Button type="primary" loading={pending} disabled={pending} onClick={() => void run()}>
@@ -142,10 +163,11 @@ function FeaturesDrawer({
               label={gate.key}
               onChange={(next) => {
                 setDraft((previous) => ({ ...previous, [gate.key]: next }));
-                setErrors((previous) => {
+                setProblems((previous) => {
                   const { [gate.key]: _gone, ...rest } = previous;
                   return rest;
                 });
+                setEdited((previous) => [...previous, gate.key]);
               }}
             />
             {errors[gate.key] ? (
@@ -159,6 +181,7 @@ function FeaturesDrawer({
 }
 
 type DefForm = { key: string; name: string; priority: number | null };
+const DEF_FIELDS: (keyof DefForm)[] = ['key', 'name', 'priority'];
 
 /** The dialog that creates an entitlement, or changes the name and the priority of one (the key stays). */
 function DefDialog({
@@ -192,17 +215,18 @@ function DefDialog({
       if (def) await updateEntitlementDef(def.key, input);
       else await createEntitlementDef({ key: trimSpec(values.key), ...input });
     } catch (error) {
-      const { fields } = describeFailure(intl, error);
+      const known = (name: unknown): name is keyof DefForm => DEF_FIELDS.includes(name as never);
       const duplicate =
         error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE'
           ? (error.data as { field?: unknown } | null)?.field
           : undefined;
-      if (typeof duplicate === 'string') {
-        form.setFields([
-          { name: duplicate as keyof DefForm, errors: [t('error.DUPLICATE_RESOURCE')] },
-        ]);
+      const fields = detailReasons(intl, error, (ref) => (known(ref) ? ref : undefined));
+      // A refusal is put beside the field of the form it names; one that names anything else is
+      // shown above the form, so that it is never swallowed.
+      if (known(duplicate)) {
+        setFieldReasons(form, intl, [messageReason(duplicate, 'error.DUPLICATE_RESOURCE')]);
       } else if (fields.length > 0) {
-        form.setFields(fields.map((f) => ({ name: f.ref as keyof DefForm, errors: [f.text] })));
+        setFieldReasons(form, intl, fields);
       } else {
         setFailure(error);
       }
@@ -275,21 +299,26 @@ export default function EntitlementsPage() {
     intl.formatMessage({ id }, values);
   const [defs, setDefs] = useState<EntitlementDef[] | null>(null);
   const [gates, setGates] = useState<FeatureGate[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [features, setFeatures] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ def: EntitlementDef | null } | null>(null);
   const canConfig = access.canAccess('SUBSCRIPTION:CONFIG');
 
+  const begin = useLatestCall();
+
   const load = useCallback(async () => {
+    // Only the newest read counts: after two quick changes the first reload may arrive last.
+    const isCurrent = begin();
     try {
       const [defList, gateList] = await Promise.all([listEntitlementDefs(), listFeatureGates()]);
+      if (!isCurrent()) return;
       setDefs(defList.items);
       setGates(gateList.items);
-      setFailure(null);
+      clear();
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [intl]);
+  }, [begin, fail, clear]);
 
   useEffect(() => {
     void load();
@@ -341,6 +370,7 @@ export default function EntitlementsPage() {
           },
           { title: t('subscriptions.entitlements.priority'), dataIndex: 'priority' },
           {
+            ...ACTIONS_COLUMN,
             title: t('subscriptions.list.actions'),
             render: (_, def) => (
               <Space size={0}>

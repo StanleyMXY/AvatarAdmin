@@ -1,27 +1,28 @@
 import { useIntl } from '@umijs/max';
 import { Button, Flex, Spin, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ExportButton } from '../../components/ExportButton';
+import { FailureBar } from '../../components/FailureBar';
+import { HeaderTip } from '../../components/HeaderTip';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
 import { ReportHelper } from '../../components/stat/ReportHelper';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestCall } from '../../hooks/useLatestCall';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getPerformance, type PerformanceRow, readCostSettings } from '../../services/campaign';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { countText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
 import { CampaignSelect } from './CampaignSelect';
-import { FailureBar } from './FailureBar';
 import { moneyText, numberOf, rateText, shareText, unitCostText } from './figures';
-import { HeaderTip } from './HeaderTip';
-import { countText, orDash } from './texts';
 import { useCampaigns } from './useCampaigns';
-import { useRead } from './useRead';
 
 type Filter = { range: DayRange; campaignId: string | undefined };
 type Row = PerformanceRow & { rowKey: string; unattributed?: boolean };
@@ -44,7 +45,7 @@ export default function CampaignStatsPage() {
   const meta = useAdminMeta();
   const campaigns = useCampaigns();
   // The currency of every cost; an administrator who may not read the setting gets no currency in the heads.
-  const settings = useRead(readCostSettings);
+  const settings = useLatestRead(readCostSettings);
   const currency = settings.data?.currency ?? null;
 
   // What is being edited, and what was asked for with Search (the reports, the chart and the export).
@@ -52,17 +53,16 @@ export default function CampaignStatsPage() {
   const [applied, setApplied] = useState<Filter>(initialFilter);
   const [campaignRows, setCampaignRows] = useState<PerformanceRow[] | null>(null);
   const [dayRows, setDayRows] = useState<PerformanceRow[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  // What the backend refused about the dates, by field (`from`, `to`): shown next to the dates.
-  const [rangeRefusals, setRangeRefusals] = useState<string[]>([]);
-  const counter = useRef(0);
+  // The failed read itself (boxed: a thrown value can be anything); its words, and what the backend
+  // refused about the dates, are made when the page is drawn, so they follow the language.
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setCampaignRows(null);
     setDayRows(null);
-    setFailure(null);
-    setRangeRefusals([]);
+    setFailed(null);
     const query = {
       from: applied.range.from,
       to: applied.range.to,
@@ -73,34 +73,32 @@ export default function CampaignStatsPage() {
         getPerformance({ ...query, groupBy: 'campaign' }),
         getPerformance({ ...query, groupBy: 'day' }),
       ]);
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setCampaignRows(byCampaign.items);
       setDayRows(byDay.items);
     } catch (error) {
-      if (mine === counter.current) {
-        const described = describeFailure(intl, error);
-        setFailure(described.text);
-        // A range error names `from` or `to` (the same for every statistics page): say which
-        // date, with the words of the reason and of the field.
-        setRangeRefusals(
-          described.fields.flatMap((field) =>
-            field.ref === 'from' || field.ref === 'to'
-              ? [
-                  intl.formatMessage(
-                    { id: 'campaign.stats.range.line' },
-                    {
-                      field: intl.formatMessage({ id: `campaign.stats.range.${field.ref}` }),
-                      reason: field.text,
-                      hint: intl.formatMessage({ id: `campaign.stats.range.${field.ref}.hint` }),
-                    },
-                  ),
-                ]
-              : [],
-          ),
-        );
-      }
+      if (isCurrent()) setFailed({ error });
     }
-  }, [applied, intl]);
+  }, [applied, begin]);
+
+  const described = failed === null ? null : describeFailure(intl, failed.error);
+  const failure = described === null ? null : described.text;
+  // A range error names `from` or `to` (the same for every statistics page): say which date, with
+  // the words of the reason and of the field.
+  const rangeRefusals = (described?.fields ?? []).flatMap((field) =>
+    field.ref === 'from' || field.ref === 'to'
+      ? [
+          intl.formatMessage(
+            { id: 'campaign.stats.range.line' },
+            {
+              field: intl.formatMessage({ id: `campaign.stats.range.${field.ref}` }),
+              reason: field.text,
+              hint: intl.formatMessage({ id: `campaign.stats.range.${field.ref}.hint` }),
+            },
+          ),
+        ]
+      : [],
+  );
 
   useEffect(() => {
     void load();
@@ -194,13 +192,15 @@ export default function CampaignStatsPage() {
               <span data-testid="unattributed-count">
                 {countText(locale, row.unattributedInstalls)}
               </span>
-              <Typography.Text
-                type="secondary"
-                data-testid="unattributed-share"
-                style={{ maxWidth: 220, textAlign: 'end' }}
-              >
-                {t('campaign.stats.unattributed.share', { share })}
-              </Typography.Text>
+              <Tooltip title={t('campaign.stats.unattributed.share', { share })}>
+                <Typography.Text
+                  type="secondary"
+                  data-testid="unattributed-share"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  {t('campaign.stats.unattributed.shareShort', { share })}
+                </Typography.Text>
+              </Tooltip>
             </Flex>
           ) : (
             countText(locale, row.installs)

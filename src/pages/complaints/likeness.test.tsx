@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { avatarState } from '../../../mock/_core/avatarData';
 import { resetConfigStore } from '../../../mock/_core/configStore';
 import complaintsMock from '../../../mock/complaints.mock';
@@ -11,6 +11,7 @@ import { renderPage } from '../../../tests/renderPage';
 import { history, setTestAccess } from '../../../tests/stubs/umi-max';
 import access from '../../access';
 import { signIn, writesOf } from '../avatar/testSetup';
+import { cleanAssetIds } from './ComplaintDrawer';
 import LikenessComplaintsPage from './likeness';
 
 const backend = () => useMockBackend({ default: complaintsMock }, configMock);
@@ -240,8 +241,59 @@ describe('the complaint drawer: evidence', { timeout: 60000 }, () => {
     expect(reads()[2].url).toBe(`/api/admin/likeness-complaints/${id}/evidence/1`);
   });
 
+  it('keeps the file that was clicked last when the answer for an earlier click arrives late', async () => {
+    backend();
+    const real = globalThis.fetch;
+    let releaseFirst: () => void = () => {};
+    const firstHeld = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/evidence/0')) {
+        await firstHeld;
+        return jsonResponse(
+          200,
+          envelope('200', { url: 'https://files.example.org/first.png', mediaType: 'image/png' }),
+        );
+      }
+      return real(input, init);
+    });
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    const drawer = await openDrawer(user, 4);
+    await user.click(await within(drawer).findByRole('button', { name: 'File 1' }));
+    await user.click(within(drawer).getByRole('button', { name: 'File 2' }));
+    await within(drawer).findByAltText('File 2');
+    releaseFirst();
+    // let the held answer be handled
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(within(drawer).getByAltText('File 2')).toBeInTheDocument();
+    expect(within(drawer).queryByAltText('File 1')).not.toBeInTheDocument();
+  });
+
   it('shows a picture as a picture and a PDF in a frame, by the media type', async () => {
     backend();
+    // The frame loads its address like any request; answer it here so that nothing goes to a server that is not there.
+    const browserSettings = (
+      window as unknown as {
+        happyDOM: {
+          settings: {
+            fetch: {
+              interceptor: {
+                beforeAsyncRequest?: () => Promise<Response | undefined>;
+              } | null;
+            };
+          };
+        };
+      }
+    ).happyDOM.settings.fetch;
+    const before = browserSettings.interceptor;
+    browserSettings.interceptor = {
+      beforeAsyncRequest: async () => new Response('%PDF-1.4', { status: 200 }),
+    };
+    onTestFinished(() => {
+      browserSettings.interceptor = before;
+    });
     const user = userEvent.setup();
     renderPage(<LikenessComplaintsPage />);
     const drawer = await openDrawer(user, 4);
@@ -276,7 +328,7 @@ describe('the complaint drawer: evidence', { timeout: 60000 }, () => {
     expect(drawer.querySelector(tag)?.hasAttribute('controls')).toBe(true);
   });
 
-  it('offers a link that opens apart for a type it has no player for, and refuses an address that is not http or https', async () => {
+  it('gives no link and no address for a type it has no player for, and refuses an address that is not http or https', async () => {
     backend();
     const real = globalThis.fetch;
     let next = { url: 'https://files.example.org/e.bin', mediaType: 'application/octet-stream' };
@@ -289,9 +341,13 @@ describe('the complaint drawer: evidence', { timeout: 60000 }, () => {
     renderPage(<LikenessComplaintsPage />);
     const drawer = await openDrawer(user, 4);
     await user.click(await within(drawer).findByRole('button', { name: 'File 1' }));
-    const link = await within(drawer).findByRole('link', { name: 'Open the file' });
-    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
-    expect(link.getAttribute('target')).toBe('_blank');
+    expect(
+      await within(drawer).findByText('This kind of file cannot be viewed here.'),
+    ).toBeInTheDocument();
+    // The signed address of a person's file is not put into a link that can be copied or opened apart.
+    expect(drawer.querySelector('a[href*="files.example.org"]')).toBeNull();
+    expect(drawer.querySelector('[src*="files.example.org"]')).toBeNull();
+    expect(drawer.textContent).not.toContain('files.example.org');
     next = { url: 'javascript:alert(1)', mediaType: 'image/png' };
     await user.click(within(drawer).getByRole('button', { name: 'File 2' }));
     expect(
@@ -608,7 +664,7 @@ describe('the complaint drawer: removing avatars', { timeout: 60000 }, () => {
     expect(writesOf(calls)).toHaveLength(0);
   });
 
-  it('sends the IDs (several allowed, trimmed, once each), then the complaint shows as closed with the IDs listed and no more buttons', async () => {
+  it('sends the IDs (several allowed), then the complaint shows as closed with the IDs listed and no more buttons', async () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<LikenessComplaintsPage />);
@@ -681,5 +737,16 @@ describe('the parameters of the complaint page', { timeout: 30000 }, () => {
     await rowOf(1);
     expect(screen.queryByText('Parameters')).not.toBeInTheDocument();
     expect(document.querySelectorAll('[data-testid^="config-row-"]')).toHaveLength(0);
+  });
+});
+
+describe('the ids typed for a removal', () => {
+  it('are trimmed, empty ones are dropped, and each is sent once, in the order first typed', () => {
+    expect(cleanAssetIds([' asset-1 ', 'asset-2', 'asset-1', '', '   ', 'asset-2\t'])).toEqual([
+      'asset-1',
+      'asset-2',
+    ]);
+    expect(cleanAssetIds([])).toEqual([]);
+    expect(cleanAssetIds(['  '])).toEqual([]);
   });
 });

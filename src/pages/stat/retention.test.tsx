@@ -1,14 +1,17 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { App } from 'antd';
+import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { retentionRow } from '../../../mock/_core/statData';
 import { daysIn } from '../../../mock/_core/statRange';
 import { envelope, jsonResponse, stubFetch, XLSX_TYPE } from '../../../tests/httpStubs';
 import { renderPage } from '../../../tests/renderPage';
-import { resetUmiStub, setTestAccess } from '../../../tests/stubs/umi-max';
+import { resetUmiStub, setTestAccess, setTestInitialState } from '../../../tests/stubs/umi-max';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import access from '../../access';
 import { resetChannelsCache } from '../../components/ChannelSelect';
+import zhCN from '../../locales/zh-CN';
 import { resetSessionState, setToken } from '../../request/session';
 import type { ReactivationRow, RetentionRow } from '../../services/stats/types';
 import RetentionPage from './retention';
@@ -140,6 +143,47 @@ describe('the retention report: the page', () => {
     expect(callsTo(calls, 'retention')[1].url).toBe(
       '/api/admin/stats/retention?from=2026-09-27&to=2026-10-26&type=CALL&platform=ALL&channel=ALL',
     );
+  });
+
+  it('keeps what it shows and asks nothing again when the language is switched', async () => {
+    const calls = backend();
+    const { rerender } = renderPage(<RetentionPage />);
+    await waitFor(() => expect(callsTo(calls, 'retention')).toHaveLength(1));
+    await screen.findAllByTestId(/^cell-/);
+    rerender(
+      <IntlProvider locale="zh-CN" messages={zhCN} onError={() => {}}>
+        <App>
+          <RetentionPage />
+        </App>
+      </IntlProvider>,
+    );
+    expect(
+      await screen.findByRole('tab', { name: zhCN['stat.retention.tab.call'] }),
+    ).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(callsTo(calls, 'retention')).toHaveLength(1);
+    expect(screen.getAllByTestId(/^cell-/).length).toBeGreaterThan(0);
+  });
+
+  it('starts with the longest range the backend allows when that is shorter than 30 days, so the first ask is not refused', async () => {
+    setTestInitialState({ meta: { statsMaxRangeDays: 10 } });
+    const calls = backend();
+    renderPage(<RetentionPage />);
+    await waitFor(() => expect(callsTo(calls, 'retention')).toHaveLength(1));
+    const url = new URL(callsTo(calls, 'retention')[0].url, 'http://x');
+    expect(url.searchParams.get('from')).toBe('2026-10-17');
+    expect(url.searchParams.get('to')).toBe('2026-10-26');
+  });
+
+  it('passes the longest range the backend allows to the date picker: a longer range is refused with a message', async () => {
+    setTestInitialState({ meta: { statsMaxRangeDays: 10 } });
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<RetentionPage />);
+    await waitFor(() => expect(callsTo(calls, 'retention')).toHaveLength(1));
+    await user.click(document.querySelector('.ant-picker-range input') as HTMLElement);
+    await user.click(await screen.findByText('Last 30 days'));
+    expect(await screen.findByText('At most 10 days at a time')).toBeInTheDocument();
   });
 
   it('reads UTC days even where the local date is already the next day', async () => {
@@ -451,14 +495,30 @@ describe('the retention report: the "how to read this report" panel', () => {
     await user.click(tab('Reactivation'));
     expect(screen.getByText('How to read this report')).toBeInTheDocument();
     expect(screen.getByText(/Silent users are accounts registered before/)).toBeInTheDocument();
-    // the other way round: closing this one leaves the retention panel as it was
-    await user.click(
-      within(
-        screen.getByText('How to read this report').closest('.ant-alert') as HTMLElement,
-      ).getByRole('button', { name: /close/i }),
-    );
+  });
+
+  it('keeps the panel of the reactivation tab and the panel of the retention tabs apart, whichever is closed first', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<RetentionPage />);
+    const close = () =>
+      user.click(
+        within(
+          screen.getByText('How to read this report').closest('.ant-alert') as HTMLElement,
+        ).getByRole('button', { name: /close/i }),
+      );
+    // closing the reactivation panel first leaves the retention panel as it was: open
+    await user.click(tab('Reactivation'));
+    await close();
     expect(localStorage.getItem('reportHelper:reactivation')).toBe('1');
+    expect(localStorage.getItem('reportHelper:retention')).toBeNull();
     await user.click(tab('Active retention'));
+    expect(screen.getByText('How to read this report')).toBeInTheDocument();
+    // and closing that one does not bring the other back
+    await close();
+    await user.click(tab('Reactivation'));
+    expect(screen.queryByText('How to read this report')).toBeNull();
+    await user.click(tab('Call retention'));
     expect(screen.queryByText('How to read this report')).toBeNull();
   });
 });

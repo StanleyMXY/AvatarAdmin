@@ -2,6 +2,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { Alert, Card, Tag, theme } from 'antd';
 import { useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
@@ -105,7 +106,7 @@ export default function LikenessComplaintsPage() {
     {
       title: t('complaints.col.actions'),
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       onCell: mark,
       render: (_, row) => {
         const actions: RowAction[] = [

@@ -1,6 +1,8 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Divider, Form, Input, Modal, Spin, Tag, Typography } from 'antd';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -10,9 +12,10 @@ import {
   updateCampaign,
 } from '../../services/campaign';
 import { type ChannelRow, getChannels } from '../../services/channels/getChannels';
+import { failureToForm } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
+import { UTM_VALUE } from './links';
 
 type Values = {
   code: string;
@@ -40,7 +43,6 @@ type Props = {
 
 const CODE = /^[a-z0-9_-]{3,32}$/;
 // Contract 10.4: what a link takes as a UTM value; anything else is dropped from the link.
-const UTM_VALUE = /^[A-Za-z0-9._-]{1,64}$/;
 const FIELDS = [
   'code',
   'name',
@@ -77,7 +79,7 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const editing = campaign !== null;
   const initialCodes = Array.isArray(campaign?.channelCodes)
     ? campaign.channelCodes.filter((c) => typeof c === 'string')
@@ -85,16 +87,16 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
   const [codes, setCodes] = useState<string[]>(initialCodes);
 
   const [channels, setChannels] = useState<ChannelState>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   const readChannels = () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setChannels(null);
     getChannels()
       .then((rows) => {
-        if (mine === counter.current) setChannels({ rows });
+        if (isCurrent()) setChannels({ rows });
       })
       .catch(() => {
-        if (mine === counter.current) setChannels('failed');
+        if (isCurrent()) setChannels('failed');
       });
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: the channel packages are read once, when the dialog opens
@@ -103,7 +105,7 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
   }, []);
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     const token = trimSpec(values.facebookAccessToken ?? '');
     const fields: CampaignFields = {
       name: trimSpec(values.name),
@@ -125,7 +127,8 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
       if (campaign) await updateCampaign(campaign.id, fields);
       else await createCampaign({ ...fields, code: trimSpec(values.code) });
     } catch (error) {
-      setFailure(failureToForm(intl, form, error, FIELDS));
+      failureToForm(intl, form, error, FIELDS);
+      fail(error);
       return;
     }
     message.success(t('campaign.campaigns.saved'));

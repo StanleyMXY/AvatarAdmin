@@ -1,5 +1,5 @@
 import { ApiError } from '../../request/errors';
-import type { Translator } from './texts';
+import type { Translator } from '../../utils/displayText';
 import { guardedFailureText } from './useLastOtpPrompt';
 
 /** The detail the backend gives when the last enabled English OTP template for every country would go: its `ref` is the entity, not a field of a form. */

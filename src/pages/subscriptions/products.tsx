@@ -15,8 +15,11 @@ import {
   Typography,
 } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -25,11 +28,13 @@ import {
   listEntitlementDefs,
   listFeatureGates,
   listSubscriptionProducts,
+  SUBSCRIPTION_STORES,
   type SubscriptionProduct,
   saveSubscriptionProduct,
 } from '../../services/subscriptions';
-import { describeFailure } from '../../session/describe';
+import { failureLine } from '../../session/failureLine';
 import { countCodePoints } from '../../utils/codePoints';
+import { detailReasons, messageReason, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
 import { FailureAlert } from './FailureAlert';
 import { valuesOf } from './featureRules';
@@ -37,7 +42,7 @@ import { QuotaWarnings } from './QuotaWarnings';
 
 // Contract 15.3: the stores are Apple and Google today; the list of stores can grow, so a store
 // that is not one of these is still shown as it is.
-const STORES = ['APPLE', 'GOOGLE'];
+const STORES: readonly string[] = SUBSCRIPTION_STORES;
 
 const keyOf = (p: SubscriptionProduct) => `${p.store}|${p.productId}`;
 
@@ -92,7 +97,7 @@ function ProductDialog({
       product === null &&
       loaded.products.some((p) => p.store === store && p.productId === productId)
     ) {
-      form.setFields([{ name: 'productId', errors: [t('subscriptions.products.exists')] }]);
+      setFieldReasons(form, intl, [messageReason('productId', 'subscriptions.products.exists')]);
       return;
     }
     try {
@@ -106,12 +111,12 @@ function ProductDialog({
         surfaces: product?.surfaces ?? [],
       });
     } catch (error) {
-      const { fields } = describeFailure(intl, error);
-      const known = fields.filter((f) =>
-        ['store', 'productId', 'entitlementKey', 'enabled', 'sortOrder'].includes(f.ref),
+      const known = detailReasons(intl, error, (ref) =>
+        ['store', 'productId', 'entitlementKey', 'enabled', 'sortOrder'].includes(ref)
+          ? ref
+          : undefined,
       );
-      if (known.length > 0)
-        form.setFields(known.map((f) => ({ name: f.ref as keyof ProductForm, errors: [f.text] })));
+      if (known.length > 0) setFieldReasons(form, intl, known);
       else setFailure(error);
       return;
     }
@@ -230,7 +235,7 @@ function EnabledSwitch({
     try {
       await saveSubscriptionProduct({ ...product, enabled });
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      message.error(failureLine(intl, error));
       return;
     }
     onSaved();
@@ -256,23 +261,28 @@ export default function ProductsPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [dialog, setDialog] = useState<{ product: SubscriptionProduct | null } | null>(null);
   const canConfig = access.canAccess('SUBSCRIPTION:CONFIG');
 
+  const begin = useLatestCall();
+
   const load = useCallback(async () => {
+    // Only the newest read counts: after two quick changes the first reload may arrive last.
+    const isCurrent = begin();
     try {
       const [products, defs, gates] = await Promise.all([
         listSubscriptionProducts(),
         listEntitlementDefs(),
         listFeatureGates(),
       ]);
+      if (!isCurrent()) return;
       setLoaded({ products: products.items, defs: defs.items, gates: gates.items });
-      setFailure(null);
+      clear();
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [intl]);
+  }, [begin, fail, clear]);
 
   useEffect(() => {
     void load();
@@ -339,6 +349,7 @@ export default function ProductsPage() {
           },
           { title: t('subscriptions.products.sortOrder'), dataIndex: 'sortOrder' },
           {
+            ...ACTIONS_COLUMN,
             title: t('subscriptions.list.actions'),
             render: (_, product) =>
               canConfig ? (

@@ -2,24 +2,25 @@ import { Bar } from '@ant-design/plots';
 import { useIntl } from '@umijs/max';
 import { Button, Empty, Flex, Radio, Spin, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { FailureBar } from '../../components/FailureBar';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
+import { type Kept, useKeptState } from '../../hooks/useKeptState';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import {
   getSummary,
   SUMMARY_GROUPS,
   type SummaryGroup,
   type SummaryRow,
 } from '../../services/campaign';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
+import { codeText, countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
-import { FailureBar } from './FailureBar';
 import { costsText, numberOf } from './figures';
-import { codeText, countText } from './texts';
-import { useRead } from './useRead';
 
 type Row = SummaryRow & { rowKey: string };
 
@@ -36,23 +37,23 @@ const count = (value: unknown): number => {
  * from the first to the last UTC day. The two sources are listed apart, a cost is shown for each
  * currency and never added across currencies, and there is no revenue and so no ROI.
  */
-export function SummaryTab() {
+export function SummaryTab({ kept }: { kept: Kept }) {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [mode] = useThemeMode();
   const theme = getChartTheme(mode);
 
-  const [groupBy, setGroupBy] = useState<SummaryGroup>('source');
-  const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [groupBy, setGroupBy] = useKeptState<SummaryGroup>(kept, 'summary.groupBy', 'source');
+  const [draft, setDraft] = useKeptState<DayRange>(kept, 'summary.draft', () => lastNDaysUtc(7));
   // A new object for each search, so that a search with the same days asks again.
-  const [applied, setApplied] = useState<DayRange>(draft);
+  const [applied, setApplied] = useKeptState<DayRange>(kept, 'summary.applied', draft);
 
   const fetcher = useCallback(
     () => getSummary({ groupBy, from: applied.from, to: applied.to }),
     [groupBy, applied],
   );
-  const read = useRead(fetcher);
+  const read = useLatestRead(fetcher);
 
   const items = useMemo<Row[]>(
     () =>
@@ -162,8 +163,8 @@ export function SummaryTab() {
                 theme={theme.g2Theme}
                 scale={{ color: { range: theme.palette } }}
                 axis={{
-                  x: { labelFill: theme.textColor },
-                  y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+                  x: { ...axisTextStyle(theme) },
+                  y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
                 }}
                 height={Math.max(240, 28 * chart.data.length)}
               />

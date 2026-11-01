@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { ApiError } from '../../request/errors';
 
 export type OptionsStatus = 'loading' | 'ready' | 'forbidden' | 'failed';
@@ -14,28 +15,25 @@ export function useOptions<T>(load: () => Promise<T[]>) {
     status: 'loading',
     rows: [],
   });
-  const counter = useRef(0);
+  const begin = useLatestCall();
   const loadRef = useRef(load);
   loadRef.current = load;
 
   const reload = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setState((before) => ({ status: 'loading', rows: before.rows }));
     try {
       const rows = await loadRef.current();
-      if (mine === counter.current) setState({ status: 'ready', rows });
+      if (isCurrent()) setState({ status: 'ready', rows });
     } catch (error) {
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       const refused = error instanceof ApiError && error.httpStatus === 403;
       setState({ status: refused ? 'forbidden' : 'failed', rows: [] });
     }
-  }, []);
+  }, [begin]);
 
   useEffect(() => {
     void reload();
-    return () => {
-      counter.current += 1;
-    };
   }, [reload]);
 
   return { ...state, reload: () => void reload() };

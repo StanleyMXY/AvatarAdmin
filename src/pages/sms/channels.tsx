@@ -2,9 +2,15 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
+import { FailureBar } from '../../components/FailureBar';
+import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   deleteChannel,
   getSmsMeta,
@@ -14,17 +20,12 @@ import {
   type SmsChannel,
   setChannelEnabled,
 } from '../../services/sms';
+import { countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { asCoverage, ChannelModal } from './ChannelModal';
-import { FailureBar } from './FailureBar';
 import { isLastOtpChannel } from './lastOtp';
-import { PagedTable } from './PagedTable';
-import { StatusSwitch } from './StatusSwitch';
 import { TestSendModal } from './TestSendModal';
-import { countText } from './texts';
 import { guardedFailureText, useLastOtpPrompt } from './useLastOtpPrompt';
-import { useLatestRead } from './useLatestRead';
-import { useServerPage } from './useServerPage';
 
 const NO_FILTERS: Record<string, never> = {};
 /** An enabled OTP row: when the backend refuses to delete or switch it off, the reason is the rule of contract 23.4, last or not (the page may not have known that it was the last). */
@@ -119,7 +120,7 @@ export default function ChannelsPage() {
       key: 'code',
       title: t('sms.channels.col.code'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{plainText(row.channelCode)}</span>
+        <EllipsisPopoverText text={plainText(row.channelCode)} lines={2} width={200} dir="ltr" />
       ),
     },
     {
@@ -131,7 +132,7 @@ export default function ChannelsPage() {
       key: 'provider',
       title: t('sms.channels.col.provider'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{plainText(row.providerCode)}</span>
+        <EllipsisPopoverText text={plainText(row.providerCode)} lines={2} width={160} dir="ltr" />
       ),
     },
     {
@@ -172,7 +173,7 @@ export default function ChannelsPage() {
       key: 'enabled',
       title: t('sms.channels.col.enabled'),
       render: (_, row) => (
-        <StatusSwitch
+        <EnabledSwitch
           checked={row.enabled === true}
           label={t('sms.channels.switchLabel', { code: plainText(row.channelCode) })}
           disabled={!canConfig}
@@ -198,6 +199,7 @@ export default function ChannelsPage() {
         ),
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('sms.common.actions'),
       render: (_, row) => <RowActions actions={actionsOf(row)} />,

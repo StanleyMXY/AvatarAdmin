@@ -1,0 +1,188 @@
+/* The browser's default 8px margin around the page body is not wanted (see src/theme/modes.test.ts). */
+body {
+  margin: 0;
+}
+
+/*
+ * What Ant Design and its pro components draw with the raw primary colour (#0ABAB5), which is
+ * only 2.4:1 against white (needs 4.5:1), or with white on the primary colour. The colours are the
+ * readable ones of src/theme/modes.ts, put on the document by applyModeToDocument. The selectors
+ * start with html[data-theme] so that they win over the rules Ant Design injects while the app runs.
+ */
+
+/* The selected and the hovered round radio button (the outline style; the solid style has its own token). */
+html[data-theme]
+  .ant-radio-group:not(.ant-radio-group-solid)
+  .ant-radio-button-wrapper:not(.ant-radio-button-wrapper-disabled):hover,
+html[data-theme]
+  .ant-radio-group:not(.ant-radio-group-solid)
+  .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled) {
+  color: var(--avatar-link);
+}
+
+html[data-theme]
+  .ant-radio-group:not(.ant-radio-group-solid)
+  .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled):hover {
+  color: var(--avatar-link-hover);
+}
+
+html[data-theme]
+  .ant-radio-group:not(.ant-radio-group-solid)
+  .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled):active {
+  color: var(--avatar-link-active);
+}
+
+/* The selected day, and the two ends of a selected range, in a date picker. */
+html[data-theme]
+  .ant-picker-cell-in-view.ant-picker-cell-selected:not(.ant-picker-cell-disabled)
+  .ant-picker-cell-inner,
+html[data-theme]
+  .ant-picker-cell-in-view.ant-picker-cell-range-start:not(.ant-picker-cell-disabled)
+  .ant-picker-cell-inner,
+html[data-theme]
+  .ant-picker-cell-in-view.ant-picker-cell-range-end:not(.ant-picker-cell-disabled)
+  .ant-picker-cell-inner {
+  color: var(--avatar-on-primary);
+}
+
+/* "Expand" and "Collapse" of a search form. */
+html[data-theme] .ant-pro-query-filter-collapse-button {
+  color: var(--avatar-link);
+}
+
+/* The status tags (not the solid ones) and the status colours of text. */
+html[data-theme] .ant-tag-success:not(.ant-tag-solid):not(.ant-tag-disabled),
+html[data-theme] .ant-typography.ant-typography-success {
+  color: var(--avatar-success-text);
+}
+
+html[data-theme] .ant-tag-warning:not(.ant-tag-solid):not(.ant-tag-disabled),
+html[data-theme] .ant-typography.ant-typography-warning {
+  color: var(--avatar-warning-text);
+}
+
+html[data-theme] .ant-tag-error:not(.ant-tag-solid):not(.ant-tag-disabled),
+html[data-theme] .ant-typography.ant-typography-danger {
+  color: var(--avatar-error-text);
+}
+
+html[data-theme] .ant-tag-processing:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-info-text);
+}
+
+/* The preset colour tags (green, orange, gold ...), not the solid ones. */
+html[data-theme] .ant-tag-blue:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-blue-text);
+}
+
+html[data-theme] .ant-tag-purple:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-purple-text);
+}
+
+html[data-theme] .ant-tag-cyan:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-cyan-text);
+}
+
+html[data-theme] .ant-tag-green:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-green-text);
+}
+
+html[data-theme] .ant-tag-magenta:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-magenta-text);
+}
+
+html[data-theme] .ant-tag-pink:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-pink-text);
+}
+
+html[data-theme] .ant-tag-red:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-red-text);
+}
+
+html[data-theme] .ant-tag-orange:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-orange-text);
+}
+
+html[data-theme] .ant-tag-yellow:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-yellow-text);
+}
+
+html[data-theme] .ant-tag-volcano:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-volcano-text);
+}
+
+html[data-theme] .ant-tag-geekblue:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-geekblue-text);
+}
+
+html[data-theme] .ant-tag-lime:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-lime-text);
+}
+
+html[data-theme] .ant-tag-gold:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-tag-gold-text);
+}
+
+/* Red buttons without a red fill: the text in the readable red, also while hovered and pressed. */
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-link:not(:disabled):not(.ant-btn-disabled),
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-text:not(:disabled):not(.ant-btn-disabled),
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-outlined:not(:disabled):not(.ant-btn-disabled),
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-dashed:not(:disabled):not(.ant-btn-disabled),
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-filled:not(:disabled):not(.ant-btn-disabled) {
+  color: var(--avatar-error-text);
+}
+
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-link:not(:disabled):not(.ant-btn-disabled):hover,
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-text:not(:disabled):not(.ant-btn-disabled):hover,
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-outlined:not(:disabled):not(.ant-btn-disabled):hover,
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-dashed:not(:disabled):not(.ant-btn-disabled):hover,
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-filled:not(:disabled):not(.ant-btn-disabled):hover {
+  color: var(--avatar-error-text-hover);
+}
+
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-link:not(:disabled):not(.ant-btn-disabled):active,
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-text:not(:disabled):not(.ant-btn-disabled):active,
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-outlined:not(:disabled):not(.ant-btn-disabled):active,
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-dashed:not(:disabled):not(.ant-btn-disabled):active,
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-filled:not(:disabled):not(.ant-btn-disabled):active {
+  color: var(--avatar-error-text-active);
+}
+
+/*
+ * The solid red button (a delete or leave confirmation): the deeper red under its white text, also
+ * on hover and press (Ant Design lightens it on hover). A disabled one keeps its own look.
+ */
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-solid:not(:disabled):not(.ant-btn-disabled) {
+  background-color: var(--avatar-error-solid);
+}
+
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-solid:not(:disabled):not(.ant-btn-disabled):hover {
+  background-color: var(--avatar-error-solid-hover);
+}
+
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-solid:not(:disabled):not(.ant-btn-disabled):active {
+  background-color: var(--avatar-error-solid-active);
+}
+
+/* Inline code. */
+html[data-theme] .ant-typography code {
+  color: var(--avatar-code-text);
+}

@@ -18,6 +18,11 @@ describe('isOwnAccount', () => {
     expect(isOwnAccount({ id: '7' }, { username: 'x' })).toBe(false);
   });
 
+  it('knows its own row by the user name when the row has no id, although the signed-in account has one', () => {
+    expect(isOwnAccount({ id: '7', username: 'Root' }, { username: 'root' })).toBe(true);
+    expect(isOwnAccount({ id: '7', username: 'Root' }, { username: 'other' })).toBe(false);
+  });
+
   it('counts every row as the own one when nothing is known about the signed-in administrator', () => {
     expect(isOwnAccount(undefined, { id: '1', username: 'x' })).toBe(true);
     expect(isOwnAccount({}, { id: '1' })).toBe(true);

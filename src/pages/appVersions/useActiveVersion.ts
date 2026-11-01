@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { type AppVersion, readActiveVersion } from '../../services/appVersions';
-import { useLatestRead } from './useLatestRead';
 
 export type ActiveHint =
   | { state: 'idle' }

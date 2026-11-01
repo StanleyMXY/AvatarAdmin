@@ -2,10 +2,15 @@ import type { ProColumns } from '@ant-design/pro-components';
 import { Link, useAccess, useIntl } from '@umijs/max';
 import { Button, Tag } from 'antd';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { StatusTag } from '../../components/StatusTag';
-import { listSubscriptions, type Subscription } from '../../services/subscriptions';
+import {
+  listSubscriptions,
+  SUBSCRIPTION_STORES,
+  type Subscription,
+} from '../../services/subscriptions';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
 import { SUBSCRIPTION_STATES, SubscriptionDrawer, useStateOptions } from './SubscriptionDrawer';
@@ -44,7 +49,12 @@ export default function SubscriptionListPage() {
       ),
       render: (_, row) => <StatusTag status={row.state} options={states} />,
     },
-    { title: t('subscriptions.list.store'), dataIndex: 'store' },
+    {
+      title: t('subscriptions.list.store'),
+      dataIndex: 'store',
+      valueType: 'select',
+      valueEnum: Object.fromEntries(SUBSCRIPTION_STORES.map((store) => [store, { text: store }])),
+    },
     {
       title: t('subscriptions.list.product'),
       dataIndex: 'productId',
@@ -79,6 +89,7 @@ export default function SubscriptionListPage() {
       render: (_, row) => when(row.purchasedAt),
     },
     {
+      ...ACTIONS_COLUMN,
       title: t('subscriptions.list.actions'),
       valueType: 'option',
       render: (_, row) => [
@@ -94,6 +105,8 @@ export default function SubscriptionListPage() {
       <PagedListTable<Subscription, Filter>
         rowKey="id"
         columns={columns}
+        // four filters: all of them are shown, none hides behind "expand"
+        defaultCollapsed={false}
         request={(params) => listSubscriptions(params)}
       />
       <SubscriptionDrawer id={open} onClose={() => setOpen(null)} />

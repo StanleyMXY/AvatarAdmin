@@ -6,6 +6,7 @@ import adsMock from '../../../mock/ads.mock';
 import configMock from '../../../mock/config.mock';
 import { fileOf, jpegBytes, mp4Bytes, pngBytes } from '../../../tests/imageBytes';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import CreativesPage from './creatives';
 import {
@@ -18,7 +19,6 @@ import {
   overrideFetch,
   settled,
   signIn,
-  uploadModule,
   uploads,
   writesOf,
 } from './testSetup';
@@ -46,7 +46,7 @@ const creative = (id: string) => {
   if (!found) throw new Error(`no creative ${id}`);
   return found;
 };
-const unit = (id: string) => adsState.units.get(id)!;
+const unit = (id: string) => must(adsState.units.get(id));
 const rowOf = async (id: string) => {
   await waitFor(() => expect(document.querySelector(`tr[data-row-key="${id}"]`)).not.toBeNull());
   return document.querySelector(`tr[data-row-key="${id}"]`) as HTMLTableRowElement;
@@ -294,7 +294,7 @@ describe('the filters', { timeout: 30000 }, () => {
     const { calls, user } = await load();
     expect([...lastQuery(calls).keys()].sort()).toEqual(['page', 'pageSize']);
     await chooseOption(user, 'Unit', unit('1').name);
-    await chooseOption(user, 'Campaign', adsState.campaigns.get('2')!.name);
+    await chooseOption(user, 'Campaign', must(adsState.campaigns.get('2')).name);
     await chooseOption(user, 'Review status', 'Approved');
     await chooseOption(user, 'Serving status', 'Paused');
     await chooseOption(user, 'Type', 'Video');
@@ -387,7 +387,7 @@ describe('approve, reject, serve and delete', { timeout: 40000 }, () => {
       body: { reviewStatus: 'APPROVED' },
     });
     await waitFor(() =>
-      expect(cellsOf(document.querySelector('tr[data-row-key="3"]')!)[4]).toBe('Approved'),
+      expect(cellsOf(must(document.querySelector('tr[data-row-key="3"]')))[4]).toBe('Approved'),
     );
   });
 
@@ -421,9 +421,11 @@ describe('approve, reject, serve and delete', { timeout: 40000 }, () => {
       body: { reviewStatus: 'REJECTED', reviewNote: 'Logo too small สวัสดี' },
     });
     await waitFor(() =>
-      expect(cellsOf(document.querySelector('tr[data-row-key="3"]')!)[4]).toContain('Rejected'),
+      expect(cellsOf(must(document.querySelector('tr[data-row-key="3"]')))[4]).toContain(
+        'Rejected',
+      ),
     );
-    expect(document.querySelector('tr[data-row-key="3"]')!.textContent).toContain(
+    expect(must(document.querySelector('tr[data-row-key="3"]')).textContent).toContain(
       'Logo too small สวัสดี',
     );
   });
@@ -480,10 +482,12 @@ describe('approve, reject, serve and delete', { timeout: 40000 }, () => {
     });
     await waitFor(() =>
       expect(
-        within(document.querySelector('tr[data-row-key="1"]')!).getByRole('switch'),
+        within(must(document.querySelector<HTMLElement>('tr[data-row-key="1"]'))).getByRole(
+          'switch',
+        ),
       ).not.toBeChecked(),
     );
-    expect(cellsOf(document.querySelector('tr[data-row-key="1"]')!)[4]).toBe('Approved');
+    expect(cellsOf(must(document.querySelector('tr[data-row-key="1"]')))[4]).toBe('Approved');
     await user.click(within(await rowOf('2')).getByRole('switch'));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
     expect(writesOf(calls)[1].body).toEqual({ servingStatus: 'ACTIVE' });
@@ -581,7 +585,10 @@ describe('the form: the file', { timeout: 60000 }, () => {
   it('does not show a second, native file box (only the button)', async () => {
     const { user } = await load();
     await open(user);
-    expect(document.querySelector('.ads-upload-box')).not.toBeNull();
+    const box = screen.getByTestId('upload-input');
+    // the shared control hides the native box with its own style, which the form style cannot undo
+    expect(box.style.display).toBe('none');
+    expect(screen.getByRole('button', { name: 'Choose file' })).toBeInTheDocument();
   });
 
   it('stops a file of another type before any upload, and says what is accepted', async () => {
@@ -1095,6 +1102,27 @@ describe('the form: creating', { timeout: 60000 }, () => {
     expect(form.queryByRole('spinbutton', { name: 'Reward threshold (seconds)' })).toBeNull();
   });
 
+  it('sends no reward threshold when the unit was changed to a placement that is not rewarded after one was typed', async () => {
+    nextMedia();
+    const { calls, user } = await load();
+    const form = await open(user);
+    await pickUnit(user, form, '4');
+    choose(png());
+    await form.findByTestId('creative-media');
+    await user.type(form.getByRole('spinbutton', { name: 'Reward threshold (seconds)' }), '10');
+    await pickUnit(user, form, '1');
+    await waitFor(() =>
+      expect(form.queryByRole('spinbutton', { name: 'Reward threshold (seconds)' })).toBeNull(),
+    );
+    const field = form.getByRole('textbox', { name: 'Click target' });
+    await user.type(field, 'https://example.com/a');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
+    const body = writesOf(calls)[1].body as Record<string, unknown>;
+    expect(body.adUnitId).toBe('1');
+    expect(body.rewardAfterSeconds).toBeNull();
+  });
+
   it('puts the upload again when the backend does not accept the upload id, and sends nothing until a new file is uploaded', async () => {
     nextMedia();
     const { calls, user } = await load();
@@ -1227,7 +1255,7 @@ describe('the form: editing', { timeout: 60000 }, () => {
     );
     await user.click(form.getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls).filter((c) => c.method === 'PUT')).toHaveLength(1));
-    const body = writesOf(calls).find((c) => c.method === 'PUT')!.body as { uploadId: string };
+    const body = must(writesOf(calls).find((c) => c.method === 'PUT')).body as { uploadId: string };
     expect(body.uploadId).toMatch(/^up-0/);
     expect(JSON.stringify(body)).not.toMatch(/mediaUrl|thumbnailUrl/);
   });
@@ -1239,7 +1267,7 @@ describe('the form: editing', { timeout: 60000 }, () => {
     await user.click(form.getByRole('button', { name: 'Submit' }));
     await dialogsClosed();
     await waitFor(() =>
-      expect(cellsOf(document.querySelector('tr[data-row-key="4"]')!)[4]).toBe('Draft'),
+      expect(cellsOf(must(document.querySelector('tr[data-row-key="4"]')))[4]).toBe('Draft'),
     );
   });
 

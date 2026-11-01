@@ -62,11 +62,9 @@ const messages: Record<string, string> = {
   'memory.model.dimensionsInvalid': 'Enter a whole number from 1 to 8192',
   'memory.model.submit': 'Register',
   'memory.model.registered': 'Model registered',
-  'memory.model.conflictTitle': 'A model with this name is registered with other dimensions',
   'memory.model.empty': 'No model is registered yet',
   'memory.model.params': 'Parameters',
 
-  'memory.account.title': 'Memory',
   'memory.account.tier': 'Tier',
   'memory.account.tierName': 'Current tier',
   'memory.account.tierNone': 'No tier has been assigned yet; the default tier applies',

@@ -9,8 +9,16 @@ import {
   setTestInitialState,
   setTestLocation,
 } from '../tests/stubs/umi-max';
-import { getInitialState, innerProvider, layout, render as renderHook, rootContainer } from './app';
+import {
+  getInitialState,
+  innerProvider,
+  layout,
+  render as renderHook,
+  rootContainer,
+  locale as umiLocale,
+} from './app';
 import { buildVars } from './buildVars';
+import { adoptLocale, rememberLocale, resetActiveLocaleForTests } from './locales/activeLocale';
 import { applyInitialLocale } from './locales/initLocale';
 import { apiRequest } from './request/apiClient';
 import { resetThemeModeForTests } from './theme/modes';
@@ -72,14 +80,34 @@ describe('layout', () => {
     expect(screen.getByText('Page not found')).toBeInTheDocument();
   });
 
-  it('draws no menu or header only while the account could not be read and the token is still held', () => {
+  it('draws no menu or header unless an account is known: not while it loads, not when signed out, not when it could not be read', () => {
     expect(layout({ initialState: { unavailable: true } }).pure).toBe(true);
+    expect(layout({ initialState: {} }).pure).toBe(true);
+    expect(layout({ initialState: undefined }).pure).toBe(true);
     expect(layout({ initialState: { me: signedIn(false, []), unavailable: true } }).pure).toBe(
       false,
     );
-    expect(layout({ initialState: {} }).pure).toBe(false);
-    expect(layout({ initialState: undefined }).pure).toBe(false);
     expect(layout({ initialState: { me: signedIn(false, []) } }).pure).toBe(false);
+  });
+
+  it('keeps the tab bar above the 403 page, as it is above every other page', () => {
+    setTestInitialState({ me: signedIn(false, []) });
+    setTestLocation({ pathname: '/users/list', search: '' });
+    const c = config(signedIn(false, []));
+    render(
+      <IntlProvider
+        locale="en-US"
+        messages={{
+          'pages.403.title': 'No permission',
+          'menu.dashboard.overview': 'Overview',
+        }}
+        onError={() => {}}
+      >
+        {c.unAccessible}
+      </IntlProvider>,
+    );
+    expect(screen.getByText('No permission')).toBeInTheDocument();
+    expect(screen.getByText('Overview', { selector: '.ant-tabs-tab *' })).toBeInTheDocument();
   });
 
   it('writes the identifier of a parameter page in the window title, and leaves the others alone', () => {
@@ -253,6 +281,42 @@ describe('the language', () => {
     languages(['zh']);
     expect(() => applyInitialLocale()).not.toThrow();
     expect(getLocale()).toBe('zh-CN');
+  });
+
+  it("answers Umi's question which language is in use from the app, not from localStorage", () => {
+    resetActiveLocaleForTests();
+    languages(['en']);
+    expect(umiLocale.getLocale()).toBe('en-US');
+    applyInitialLocale();
+    adoptLocale('en-US');
+    rememberLocale('zh-CN');
+    expect(umiLocale.getLocale()).toBe('zh-CN');
+    resetActiveLocaleForTests();
+  });
+
+  it('holds on to the language it started in, whatever storage or the browser say later', () => {
+    resetActiveLocaleForTests();
+    languages(['zh']);
+    applyInitialLocale();
+    expect(umiLocale.getLocale()).toBe('zh-CN');
+    languages(['en']);
+    expect(umiLocale.getLocale()).toBe('zh-CN');
+    resetActiveLocaleForTests();
+  });
+
+  it('keeps what the person chose when the browser refuses all storage', () => {
+    resetActiveLocaleForTests();
+    languages(['en']);
+    const denied = () => {
+      throw new DOMException('denied', 'SecurityError');
+    };
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(denied);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(denied);
+    applyInitialLocale();
+    expect(umiLocale.getLocale()).toBe('en-US');
+    expect(() => rememberLocale('zh-CN')).not.toThrow();
+    expect(umiLocale.getLocale()).toBe('zh-CN');
+    resetActiveLocaleForTests();
   });
 
   it('sends the current language in Accept-Language: the request layer asks Umi', async () => {

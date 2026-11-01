@@ -47,7 +47,7 @@ const messages: Record<string, string> = {
   'stat.daily.col.newSubscriptions': 'New subscriptions',
   'stat.daily.col.activeSubscriptions': 'Active subscriptions',
   'stat.daily.col.activeSubscriptions.tip':
-    'Active subscriptions at the end of the day (a day-end snapshot, production only). Today and days without a snapshot show a dash; a value marked Back-filled is an approximation from the current state.',
+    'Active subscriptions at the end of the day (a day-end snapshot, production only). Today and days without a snapshot show a dash; a value marked Back-filled is an approximation from the current state. For a channel package the number is always a dash (the snapshot has no channel), which is not a missing snapshot.',
   'stat.daily.col.creditPurchases': 'Credit purchases',
   'stat.daily.col.creditsSpent': 'Credits spent',
   'stat.daily.col.guestSessionsConnected': 'Guest calls connected',
@@ -98,6 +98,8 @@ const messages: Record<string, string> = {
   'dashboard.card.loadFailed': 'Failed to load: {message}',
   'dashboard.change.vsYesterday': 'vs yesterday',
   'dashboard.change.vs7Days': 'vs 7 days ago',
+  'dashboard.trend.partialFailed':
+    'Not shown, because they could not be read: {metrics}. {message}',
   'dashboard.trend.title': 'Trend',
   'dashboard.trend.metrics': 'Metrics',
   'dashboard.trend.lastWeek': '{metric} (same period last week)',

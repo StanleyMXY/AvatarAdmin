@@ -2,7 +2,9 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Flex, Typography } from 'antd';
 import { useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import { RowActions } from '../../components/RowActions';
 import {
@@ -13,13 +15,12 @@ import {
 } from '../../services/push';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { codeText, instantText, type Translator } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { scheduleFields, scheduleToValues } from './bodies';
 import { supportedLocalesOf } from './coverage';
-import { EnabledSwitch } from './EnabledSwitch';
 import { ScheduleModal } from './ScheduleModal';
-import { codeText, instantText, type Translator } from './texts';
 
 /** "Every day", "Weekly on Mon, Wed", "Monthly on day 31". */
 function describeRepeat(intl: Translator, row: PushSchedule): string {
@@ -111,7 +112,7 @@ export default function SchedulesPage() {
     {
       title: t('push.schedules.col.actions'),
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) =>
         canSend ? (
           <RowActions

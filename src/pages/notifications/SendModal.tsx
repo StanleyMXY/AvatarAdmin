@@ -34,10 +34,13 @@ import {
   MAX_BODY,
   MAX_TITLE,
 } from './compose';
-import { parseRecipients, recipientsProblem } from './recipients';
+import { parseRecipients, recipientsProblem, visibleId } from './recipients';
 import { reasonText } from './texts';
 
 type Values = { recipients: string; link: LinkTargetValue; push: boolean };
+
+/** The send that was refused or failed, and the ids it carried. */
+type Refusal = { error: unknown; ids: string[]; edited: string[] };
 
 /** What a refused or failed send shows under the form. */
 type Failure = {
@@ -78,10 +81,16 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
   const [entries, setEntries] = useState<Entry[]>([{ locale: 'en', title: '', body: '' }]);
   const [active, setActive] = useState('en');
   const [attempted, setAttempted] = useState(false);
-  const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
-  const [failure, setFailure] = useState<Failure | null>(null);
+  // The last send the backend refused, kept as the failure itself (not as words, which would stay in
+  // the language they were made in); `edited` are the texts typed in since (`title:th`): their marks go.
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const refused = refusal === null ? null : refusalView(intl, t, refusal);
+  const failure = refused === null ? null : refused.failure;
+  const serverErrors: Record<string, string> = Object.fromEntries(
+    Object.entries(refused?.textErrors ?? {}).filter(([key]) => !refusal?.edited.includes(key)),
+  );
   const [newLanguage, setNewLanguage] = useState('');
-  const [languageProblem, setLanguageProblem] = useState<string | null>(null);
+  const [languageProblem, setLanguageProblem] = useState<'DUPLICATE' | 'INVALID' | null>(null);
 
   const recipientsText: string = Form.useWatch('recipients', form) ?? '';
   const parsed = useMemo(() => parseRecipients(recipientsText), [recipientsText]);
@@ -115,11 +124,9 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
       all.map((entry) => (entry.locale === locale ? { ...entry, ...patch } : entry)),
     );
     const field = 'title' in patch ? 'title' : 'body';
-    setServerErrors((errors) => {
-      const next = { ...errors };
-      delete next[`${field}:${locale}`];
-      return next;
-    });
+    setRefusal((current) =>
+      current === null ? null : { ...current, edited: [...current.edited, `${field}:${locale}`] },
+    );
   };
 
   const hasError = (entry: Entry) => {
@@ -140,13 +147,7 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
   const addTab = () => {
     const result = addLanguage(entries, newLanguage);
     if (!result.ok) {
-      setLanguageProblem(
-        t(
-          result.problem === 'DUPLICATE'
-            ? 'notifications.send.languageDuplicate'
-            : 'notifications.send.languageInvalid',
-        ),
-      );
+      setLanguageProblem(result.problem === 'DUPLICATE' ? 'DUPLICATE' : 'INVALID');
       return;
     }
     setLanguageProblem(null);
@@ -161,7 +162,7 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
   };
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    setRefusal(null);
     // The ids come from the box as it is now, not from the last drawing of the dialog.
     const ids = parseRecipients(values.recipients ?? '').ids;
     try {
@@ -176,46 +177,13 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
       onSent();
       onClose();
     } catch (error) {
-      const { error: failed, text } = describeFailure(intl, error);
-      const lines: string[] = [];
-      const accountLines: string[] = [];
-      const textErrors: Record<string, string> = {};
-      for (const detail of failed.details) {
-        const reason = reasonText(intl, detail.reason);
-        const place = languageRef(detail.ref);
-        if (place) {
-          textErrors[`${place.field}:${place.locale}`] = reason;
-          lines.push(
-            t('notifications.send.detailLine', {
-              field: t(
-                `notifications.send.ref.${place.field === 'title' ? 'titleI18n' : 'bodyI18n'}`,
-              ),
-              reason,
-            }),
-          );
-        } else if (FIELD_REFS.includes(detail.ref)) {
-          lines.push(
-            t('notifications.send.detailLine', {
-              field: t(`notifications.send.ref.${detail.ref}`),
-              reason,
-            }),
-          );
-        } else if (ids.includes(detail.ref)) {
-          accountLines.push(t('notifications.send.accountLine', { id: detail.ref, reason }));
-        } else {
-          lines.push(t('notifications.send.detailLine', { field: plainText(detail.ref), reason }));
-        }
-      }
-      setServerErrors(textErrors);
-      const first = Object.keys(textErrors)[0]?.split(':').slice(1).join(':');
+      const refused = { error, ids, edited: [] };
+      setRefusal(refused);
+      const first = Object.keys(refusalView(intl, t, refused).textErrors)[0]
+        ?.split(':')
+        .slice(1)
+        .join(':');
       if (first && entries.some((entry) => entry.locale === first)) setActive(first);
-      setFailure({
-        text,
-        notSent: failed.code === 'INVALID_REQUEST' && failed.httpStatus === 400,
-        maybeSent: isOutcomeUnknown(failed),
-        lines,
-        accountLines,
-      });
     }
   });
 
@@ -411,7 +379,13 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
           />
           <Button onClick={addTab}>{t('notifications.send.addLanguage')}</Button>
           {languageProblem ? (
-            <Typography.Text type="danger">{languageProblem}</Typography.Text>
+            <Typography.Text type="danger">
+              {t(
+                languageProblem === 'DUPLICATE'
+                  ? 'notifications.send.languageDuplicate'
+                  : 'notifications.send.languageInvalid',
+              )}
+            </Typography.Text>
           ) : null}
         </Flex>
         <Form.Item name="link" label={t('notifications.send.link')} rules={[linkTargetRule(intl)]}>
@@ -457,6 +431,52 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
       ) : null}
     </Modal>
   );
+}
+
+/** What a refused or failed send shows under the form, in the language of this drawing. */
+function refusalView(
+  intl: ReturnType<typeof useIntl>,
+  t: (id: string, values?: Record<string, string | number>) => string,
+  refusal: Refusal,
+): { failure: Failure; textErrors: Record<string, string> } {
+  const { error: failed, text } = describeFailure(intl, refusal.error);
+  const lines: string[] = [];
+  const accountLines: string[] = [];
+  const textErrors: Record<string, string> = {};
+  for (const detail of failed.details) {
+    const reason = reasonText(intl, detail.reason);
+    const place = languageRef(detail.ref);
+    if (place) {
+      textErrors[`${place.field}:${place.locale}`] = reason;
+      lines.push(
+        t('notifications.send.detailLine', {
+          field: t(`notifications.send.ref.${place.field === 'title' ? 'titleI18n' : 'bodyI18n'}`),
+          reason,
+        }),
+      );
+    } else if (FIELD_REFS.includes(detail.ref)) {
+      lines.push(
+        t('notifications.send.detailLine', {
+          field: t(`notifications.send.ref.${detail.ref}`),
+          reason,
+        }),
+      );
+    } else if (refusal.ids.includes(detail.ref)) {
+      accountLines.push(t('notifications.send.accountLine', { id: visibleId(detail.ref), reason }));
+    } else {
+      lines.push(t('notifications.send.detailLine', { field: plainText(detail.ref), reason }));
+    }
+  }
+  return {
+    failure: {
+      text,
+      notSent: failed.code === 'INVALID_REQUEST' && failed.httpStatus === 400,
+      maybeSent: isOutcomeUnknown(failed),
+      lines,
+      accountLines,
+    },
+    textErrors,
+  };
 }
 
 /** The shared link control in a box a test can find. */

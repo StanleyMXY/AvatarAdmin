@@ -4,8 +4,8 @@ import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { StatusTag } from '../../components/StatusTag';
+import { useFailure } from '../../hooks/useFailure';
 import { getFeedback, type SupportFeedback } from '../../services/support';
-import { describeFailure } from '../../session/describe';
 import { formatInstant } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
@@ -26,24 +26,24 @@ export function FeedbackDrawer({ id, onClose }: { id: string | null; onClose: ()
   const t = (key: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id: key }, values);
   const [feedback, setFeedback] = useState<SupportFeedback | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
 
   useEffect(() => {
     if (id === null) return;
     let live = true;
     setFeedback(null);
-    setFailure(null);
+    clear();
     getFeedback(id)
       .then((row) => {
         if (live) setFeedback(row);
       })
       .catch((error) => {
-        if (live) setFailure(describeFailure(intl, error).text);
+        if (live) fail(error);
       });
     return () => {
       live = false;
     };
-  }, [id, intl]);
+  }, [id, fail, clear]);
 
   const context = feedback?.context ?? null;
   const errors = Array.isArray(context?.recentErrors) ? context.recentErrors : [];

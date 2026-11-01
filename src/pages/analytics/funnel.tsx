@@ -1,11 +1,15 @@
 import { Funnel } from '@ant-design/plots';
 import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Card, Flex, Form, InputNumber, Select, Table, Tag, Typography } from 'antd';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { ReadState } from '../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import {
   createSavedFunnel,
   deleteSavedFunnel,
@@ -21,7 +25,7 @@ import { useAdminMeta } from '../../session/useSession';
 import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { formatCount, formatPercent } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from './defaultRange';
 import { FunnelNameModal } from './FunnelNameModal';
 import {
   DEFAULT_WINDOW_HOURS,
@@ -29,8 +33,6 @@ import {
   funnelProblems,
   normalizeSteps,
 } from './funnelRules';
-import { ReadState } from './ReadState';
-import { useRead } from './useRead';
 
 const PROBLEM_TEXT: Record<FunnelProblem, string> = {
   tooFewSteps: 'analytics.funnel.problem.stepCount',
@@ -59,7 +61,7 @@ export default function FunnelPage() {
   const [mode] = useThemeMode();
   const chartTheme = getChartTheme(mode);
 
-  const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [range, setRange] = useState<DayRange>(() => defaultRange(meta.analyticsLiveMaxRangeDays));
   const [steps, setSteps] = useState<string[]>([]);
   const [windowHours, setWindowHours] = useState<number | null>(DEFAULT_WINDOW_HOURS);
   const [touched, setTouched] = useState(false);
@@ -67,12 +69,12 @@ export default function FunnelPage() {
   const [dialog, setDialog] = useState<Dialog>(null);
 
   const savedFetcher = useCallback(() => listSavedFunnels(), []);
-  const saved = useRead(savedFetcher, { keep: true });
+  const saved = useLatestRead(savedFetcher, { keepWhileReading: true });
   const savedList = saved.data ?? [];
   const selected = savedList.find((f) => f.id === selectedId);
 
   const namesFetcher = useCallback(() => getEventNames(range), [range]);
-  const names = useRead(namesFetcher, { keep: true }).data?.items ?? [];
+  const names = useLatestRead(namesFetcher, { keepWhileReading: true }).data?.items ?? [];
   const stepOptions = useMemo(() => names.map((value) => ({ value, label: value })), [names]);
 
   const problems = funnelProblems(steps, windowHours);
@@ -84,25 +86,37 @@ export default function FunnelPage() {
 
   // The query: the newest one is what is shown, whichever answer arrives first.
   const [result, setResult] = useState<FunnelStepResult[] | null>(null);
-  const [queryFailure, setQueryFailure] = useState<string | null>(null);
+  const { text: queryFailure, fail, clear } = useFailure();
   const [querying, setQuerying] = useState(false);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   /** Asks for `asked` (the form as it is by default). */
   const query = async (asked: { steps: string[]; windowHours: number } = body()) => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setQuerying(true);
-    setQueryFailure(null);
+    clear();
     try {
       const answer = await getFunnel({ ...asked, ...range });
-      if (mine === counter.current) setResult(answer.steps);
+      if (isCurrent()) setResult(answer.steps);
     } catch (error) {
-      if (mine === counter.current) {
+      if (isCurrent()) {
         setResult(null);
-        setQueryFailure(describeFailure(intl, error).text);
+        fail(error);
       }
     } finally {
-      if (mine === counter.current) setQuerying(false);
+      if (isCurrent()) setQuerying(false);
     }
+  };
+
+  /**
+   * The form changed: the result on the screen (or the answer still on its way) belongs to the form
+   * as it was, so it goes. The numbers of another window next to the steps of this form would be read as
+   * the numbers of this form.
+   */
+  const dropResult = () => {
+    begin();
+    setResult(null);
+    clear();
+    setQuerying(false);
   };
 
   /** The Query button and Retry: the form as it is, if it can be asked. */
@@ -114,6 +128,7 @@ export default function FunnelPage() {
     setSelectedId(id);
     const funnel = savedList.find((f) => f.id === id);
     if (funnel) {
+      dropResult();
       setSteps(funnel.steps);
       setWindowHours(funnel.windowHours);
       setTouched(true);
@@ -203,6 +218,7 @@ export default function FunnelPage() {
               onChange={(values: string[]) => {
                 setSteps(values);
                 setTouched(true);
+                dropResult();
               }}
             />
           </div>
@@ -219,6 +235,7 @@ export default function FunnelPage() {
               onChange={(value) => {
                 setWindowHours(typeof value === 'number' ? value : null);
                 setTouched(true);
+                dropResult();
               }}
               style={{ width: 160 }}
             />
@@ -227,7 +244,10 @@ export default function FunnelPage() {
             <Flex gap={12} wrap align="center">
               <DateRangeUtc
                 value={range}
-                onChange={setRange}
+                onChange={(next) => {
+                  setRange(next);
+                  dropResult();
+                }}
                 maxDays={meta.analyticsLiveMaxRangeDays ?? undefined}
               />
               <UtcNotice />

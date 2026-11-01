@@ -27,7 +27,7 @@ const open = async (id: string, tab: string, language: 'en-US' | 'zh-CN' = 'en-U
   await screen.findByText(language === 'en-US' ? `User ${id}` : `用户 ${id}`);
   return view;
 };
-const setStatus = (id: string, status: 'PENDING_DELETION' | 'DELETING') => {
+const setStatus = (id: string, status: 'BANNED' | 'PENDING_DELETION' | 'DELETING') => {
   const account = usersState.users.find((u) => u.id === id);
   if (account) account.status = status;
 };
@@ -64,6 +64,14 @@ describe('the subscription and entitlements tab', { timeout: 30000 }, () => {
     expect(await screen.findByRole('button', { name: 'Grant entitlement' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Revoke' })).toBeEnabled();
     expect(screen.getByText(enUS['users.banner.PENDING_DELETION'])).toBeInTheDocument();
+  });
+
+  it('leaves the grant and the revoke usable for a banned account, which is the case support handles most', async () => {
+    setStatus(SUBSCRIBER, 'BANNED');
+    backend();
+    await open(SUBSCRIBER, 'entitlements');
+    expect(await screen.findByRole('button', { name: 'Grant entitlement' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Revoke' })).toBeEnabled();
   });
 
   it('disables the grant and the revoke while the account is being deleted', async () => {
@@ -114,6 +122,16 @@ describe('the credits tab', { timeout: 30000 }, () => {
     expect(screen.getByText(enUS['users.credits.blocked'])).toBeInTheDocument();
   });
 
+  it('leaves the new-request button usable for a banned account', async () => {
+    setStatus(ACCOUNT.active, 'BANNED');
+    backend();
+    await open(ACCOUNT.active, 'credits');
+    expect(
+      await screen.findByRole('button', { name: enUS['users.credits.newRequest'] }),
+    ).toBeEnabled();
+    expect(screen.queryByText(enUS['users.credits.blocked'])).toBeNull();
+  });
+
   it('shows the ledger of the account that was opened, not of the one before it', async () => {
     backend();
     await open(ACCOUNT.active, 'credits');
@@ -142,6 +160,14 @@ describe('the memory tab', { timeout: 30000 }, () => {
       expect(screen.getByRole('button', { name: 'Assign model' })).toBeDisabled();
     },
   );
+
+  it('leaves the model choice usable for a banned account', async () => {
+    backend();
+    await open(MEMORY_ACCOUNT_IDS.banned, 'memory');
+    await screen.findByText('Current tier');
+    expect(screen.queryByText(enUS['memory.account.blocked'])).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Choose a model' })).toBeEnabled();
+  });
 
   it('leaves the model choice usable for an active account', async () => {
     backend();

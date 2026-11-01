@@ -7,6 +7,7 @@ import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import enUS from '../../locales/en-US';
+import zhCN from '../../locales/zh-CN';
 import ShareStatsPage from './shareStats';
 import { clickExport, signIn, withExportSheet } from './testSetup';
 
@@ -102,6 +103,13 @@ const called = (calls: { url: string }[], path: string) =>
   calls.filter((c) => c.url.startsWith(`/api/admin/invites/${path}`));
 const json = (id: string, kind: string) =>
   JSON.parse(within(screen.getByTestId(id)).getByTestId(`chart-${kind}`).textContent ?? '[]');
+// The stand-in chart prints its settings as JSON, which drops the tick function but keeps the
+// vertical scale that carries it: a chart of counts has one, a chart that leaves the ticks to the
+// library has none.
+const hasWholeNumberAxis = (id: string) =>
+  JSON.parse(
+    within(screen.getByTestId(id)).getByTestId('chart-line').getAttribute('data-config') ?? '{}',
+  ).scale?.y !== undefined;
 const card = async (name: string) =>
   (await screen.findByTestId(`invite-share-card-${name}`)).querySelector('.ant-statistic-content')
     ?.textContent;
@@ -176,6 +184,7 @@ describe('the share statistics page: the range and the overview', { timeout: 300
       '2026-10-26',
     ]);
     expect(data.map((d) => d.value)).toEqual([0, 0, 0, 0, 100, 300, 0]);
+    expect(hasWholeNumberAxis('invite-share-trend')).toBe(true);
   });
 
   it('shows a dash instead of 0 when no day has a row, and sums a day without a number as nothing', async () => {
@@ -253,6 +262,38 @@ describe('the share statistics page: the funnel', { timeout: 30000 }, () => {
     ]);
   });
 
+  it('writes the number and the ratio of every step as plain text under the chart, where small blocks cannot hide them', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<ShareStatsPage />);
+    await card('sharePv');
+    await tab(user, 'Funnel');
+    const lines = within(screen.getByTestId('invite-share-funnel-steps'))
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(lines).toEqual([
+      'Share: 400',
+      'Link click: 150, 37.5% of the step before',
+      'Download click: 60, 40% of the step before',
+      'Sign-up: 15, 25% of the step before',
+    ]);
+  });
+
+  it('writes a dash in the text under the chart for a step whose previous step is 0, and in Chinese too', async () => {
+    backend({
+      funnel: [funnelRow('2026-10-24', { linkClickPv: 0, downloadClickPv: 5, registered: 2 })],
+    });
+    const user = userEvent.setup();
+    renderPage(<ShareStatsPage />, 'zh-CN');
+    await screen.findByTestId('invite-share-card-sharePv');
+    await user.click(screen.getByRole('tab', { name: zhCN['invite.share.tab.funnel'] }));
+    const lines = within(screen.getByTestId('invite-share-funnel-steps'))
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(lines[2]).toBe('下载点击：5，相对上一步 —');
+    expect(lines[3]).toBe('注册：2，相对上一步 40%');
+  });
+
   it('writes a dash as the ratio of a step whose previous step is 0', async () => {
     backend({
       funnel: [funnelRow('2026-10-24', { linkClickPv: 0, downloadClickPv: 5, registered: 2 })],
@@ -286,6 +327,7 @@ describe('the share statistics page: the funnel', { timeout: 30000 }, () => {
     ]);
     expect(data).toHaveLength(28);
     expect(screen.getAllByTestId('chart-line').length).toBeGreaterThan(0);
+    expect(hasWholeNumberAxis('invite-share-lines')).toBe(true);
   });
 
   it('lists the days with the six columns, the unique visitors of each day and no total row', async () => {
@@ -400,6 +442,7 @@ describe('the share statistics page: the channels', { timeout: 30000 }, () => {
     expect(at('Other', '2026-10-25')).toBe(140);
     expect(at('whatsapp', '2026-10-25')).toBe(400);
     expect(at('whatsapp', '2026-10-22')).toBe(0);
+    expect(hasWholeNumberAxis('invite-channel-lines')).toBe(true);
   });
 
   it('draws no "Other" when there are five channels or fewer, and breaks a tie by name', async () => {

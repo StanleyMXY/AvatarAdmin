@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetConfigStore } from '../../../mock/_core/configStore';
 import { BATCH, costState, HOSTILE_MODEL, MODEL } from '../../../mock/_core/costData';
-import { monitorStore, resetMonitorStore } from '../../../mock/_core/monitorData';
+import { monitorStore, raiseAlert, resetMonitorStore } from '../../../mock/_core/monitorData';
 import * as configMock from '../../../mock/config.mock';
 import * as costMock from '../../../mock/cost.mock';
 import * as monitorMock from '../../../mock/monitor.mock';
@@ -136,7 +136,19 @@ describe('the price page: tabs, alerts and parameters', () => {
   });
 
   it('shows the number of open alerts only with MONITOR:VIEW and COST:PRICE together, and links to the alert page', async () => {
-    await open([...ALL, 'MONITOR:VIEW']);
+    // Two more models without a price, so that the two counts differ and a swap of them shows.
+    await open([...ALL, 'MONITOR:VIEW'], {
+      prepare: () => {
+        for (const model of ['LLM/p/extra-1', 'LLM/p/extra-2'])
+          raiseAlert({
+            type: 'USAGE_PRICE_MISSING',
+            refType: 'USAGE_MODEL',
+            refId: model,
+            accountId: null,
+            detail: 'A usage report for a model that has no price',
+          });
+      },
+    });
     const open1 = monitorStore.alerts.filter(
       (a) => a.status === 'OPEN' && a.type === 'USAGE_PRICE_MISSING',
     ).length;

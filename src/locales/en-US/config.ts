@@ -67,7 +67,6 @@ const messages: Record<string, string> = {
   'config.warning.SMS_COUNTRY_UNCOVERED':
     'A country in the allow list has no enabled SMS channel covering it',
   'config.requiresUploadBase': 'Ad media and APK uploads need it',
-  'config.jsonInvalid': 'Not valid JSON',
   'config.warning.PHONE_LOGIN_DISABLED_ACCOUNTS':
     'Phone sign-in is now off, but {count} phone-number accounts exist',
   'config.warning.UNKNOWN': 'Saved, with a warning',
@@ -423,10 +422,10 @@ const messages: Record<string, string> = {
     'Days of companionship that count as milestones, as a JSON array, for example the 7th, 30th and 100th day.',
   'config.moderation.block_score.label': 'Moderation block score',
   'config.moderation.block_score.desc':
-    'Content is blocked when its moderation score reaches this value. The value depends on the chosen moderation service and has no default. In production, if it is not set, user-facing endpoints that depend on moderation are unavailable and generation jobs are not processed; the admin site is not affected, so configure it here first and then bring the user side online.',
+    'The threshold that maps the score returned by the moderation service to the block level; the review score is the lower threshold. The value depends on the chosen moderation service and has no default. In production, if it is not set, user-facing endpoints that depend on moderation are unavailable and generation jobs are not processed; the admin site is not affected, so configure it here first and then bring the user side online.',
   'config.moderation.review_score.label': 'Moderation review score',
   'config.moderation.review_score.desc':
-    'Content goes to manual review when its moderation score reaches this value. It must be lower than the block score. If it is not set the consequences are the same as for the block score.',
+    'The threshold that maps the score returned by the moderation service to the review level. It must be lower than the block score. The value depends on the chosen moderation service and has no default. If it is not set the consequences are the same as for the block score.',
   'config.moderation.call_timeout_seconds.label': 'Moderation call timeout',
   'config.moderation.call_timeout_seconds.desc':
     'Timeout for one call to the moderation service, in seconds. A timeout is treated as medium risk (companion names are the exception).',
@@ -456,7 +455,7 @@ const messages: Record<string, string> = {
   'config.complaint.likeness_due_hours.desc':
     'Time allowed to handle a complaint from the person in a photo, in hours. An alert is written when it is exceeded.',
   'config.complaint.likeness_due_hours.risk':
-    'This is the handling deadline for complaints from the person in a photo; an alert is written once it is exceeded, so a longer value means overdue complaints are noticed later.',
+    'A complaint from the person in a photo must be handled within this time (the default is 48 hours); an alert is written when it is exceeded.',
   'config.complaint.retention_days.label': 'Complaint record retention',
   'config.complaint.retention_days.desc':
     'How many days a complaint record (including the complainant email and evidence) and its handling history are kept after the case is closed, in days. A daily cleanup job deletes them together when they expire. Complaints that are not closed are never deleted.',
@@ -835,6 +834,10 @@ const messages: Record<string, string> = {
     'The allowed currencies must contain the default currency. To change the default, add the new currency to the allowed list first; to take the current default out of the list, change the default first.',
   'config.push.schedule_catchup_minutes.reject.OUT_OF_RANGE':
     'Not saved. The value must be 1 to 10080, and catch-up minutes × 60 must be at least 600 + the push task poll seconds (at least 11 with the default poll).',
+  'config.invite.reward_start_at.reject.OUT_OF_RANGE':
+    'The start of the reward has to be earlier than its end.',
+  'config.invite.reward_end_at.reject.OUT_OF_RANGE':
+    'The start of the reward has to be earlier than its end.',
   'config.push.task_poll_seconds.reject.OUT_OF_RANGE':
     'Not saved. The value must be at least 1, and catch-up minutes × 60 must stay at least 600 + these poll seconds.',
   'config.chat.message_retention_days.reject.OUT_OF_RANGE':

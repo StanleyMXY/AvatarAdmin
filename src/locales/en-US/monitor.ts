@@ -21,8 +21,6 @@ const messages: Record<string, string> = {
   'monitor.pipeline.costLink': 'Usage and cost are not here; open the cost report',
   'monitor.pipeline.costText': 'Usage and cost are not here; see the cost report.',
 
-  'monitor.alert.status': 'Status',
-  'monitor.alert.type': 'Type',
   'monitor.alert.status.OPEN': 'Open',
   'monitor.alert.status.RESOLVED': 'Resolved',
   'monitor.alert.col.type': 'Type',
@@ -38,8 +36,6 @@ const messages: Record<string, string> = {
   'monitor.alert.closeConfirmLookPackage':
     'Closing this alert resets the failure count of this driving package to zero and queues the prepare job again. Close it?',
   'monitor.alert.closed': 'Alert closed',
-  'monitor.alert.autoNote':
-    'When the object recovers, the backend marks the alert resolved by itself.',
 
   'monitor.alert.type.DELETION_FAILED': 'Account deletion failed',
   'monitor.alert.type.SUBSCRIPTION_UNACKED': 'Subscription not acknowledged',

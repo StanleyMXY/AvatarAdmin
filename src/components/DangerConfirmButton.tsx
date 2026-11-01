@@ -22,7 +22,19 @@ export function DangerConfirmButton({ confirmText, onConfirm, children, disabled
   const { run, pending } = useSingleFlight(onConfirm);
   return (
     <Popconfirm
-      title={confirmText}
+      title={
+        // The bubble is as wide as its text up to the window; a long question wraps here instead.
+        <span
+          style={{
+            display: 'inline-block',
+            maxWidth: 'min(360px, 80vw)',
+            whiteSpace: 'normal',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {confirmText}
+        </span>
+      }
       okText={intl.formatMessage({ id: 'pages.common.ok' })}
       cancelText={intl.formatMessage({ id: 'pages.common.cancel' })}
       okButtonProps={{ danger: true, loading: pending, disabled: pending }}

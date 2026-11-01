@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Input, Modal, Tabs, Typography } from 'antd';
 import { type ChangeEvent, useMemo, useRef, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { saveBlob } from '../../request/download';
 import { ApiError } from '../../request/errors';
@@ -11,7 +12,6 @@ import {
   type CostSettings,
   parseCostBatch,
 } from '../../services/campaign';
-import { describeFailure } from '../../session/describe';
 import { formatBytes } from '../../utils/format';
 import { buildCostTemplate, CSV_HEADER, MAX_FILE_BYTES, TEMPLATE_FILE_NAME } from './costTemplate';
 
@@ -44,8 +44,9 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
   const [fileProblem, setFileProblem] = useState<'tooLarge' | 'unreadable' | 'notUtf8' | null>(
     null,
   );
-  const [failure, setFailure] = useState<string | null>(null);
-  const [refused, setRefused] = useState<{ ref: string; text: string }[]>([]);
+  const { text: failure, fail, clear } = useFailure();
+  // What the backend said about each row, by reason code: the words are made when drawn.
+  const [refused, setRefused] = useState<{ ref: string; reason: string }[]>([]);
   const input = useRef<HTMLInputElement>(null);
 
   const limits = useMemo(
@@ -59,16 +60,20 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
   );
   const ready = result !== null && result.errors.length === 0 && result.rows.length > 0;
 
+  // In a CSV the number is the line of the file; in JSON it is the place in the array (the text may
+  // be on one line, so "line" would send the person looking for something that is not there).
   const reasonText = (error: BatchError): string => {
-    const id = `campaign.batch.reason.${error.reason}`;
+    const unit = kind === 'json' ? 'item' : 'line';
+    const own = `campaign.batch.reason.${error.reason}.${unit}`;
+    const id = intl.messages[own] ? own : `campaign.batch.reason.${error.reason}`;
     const words = intl.messages[id] ? t(id, error.values) : error.reason;
     return error.line === 0
       ? words
-      : t('campaign.batch.errors.line', { line: error.line, reason: words });
+      : t(`campaign.batch.errors.${unit}`, { line: error.line, reason: words });
   };
 
   const readFile = async (chosen: File) => {
-    setFailure(null);
+    clear();
     setRefused([]);
     setFile({ name: chosen.name, size: chosen.size });
     setFileProblem(null);
@@ -110,21 +115,16 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
 
   const { run, pending } = useSingleFlight(async () => {
     if (!ready || result === null) return;
-    setFailure(null);
+    clear();
     setRefused([]);
     let done: Awaited<ReturnType<typeof batchCosts>>;
     try {
       done = await batchCosts(result.rows);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
-      // What the backend says about each row: its reason in words (or the code), never its own message.
+      fail(error);
+      // What the backend says about each row: its reason (in words when drawn, or the code), never its own message.
       if (error instanceof ApiError) {
-        setRefused(
-          error.details.map((d) => ({
-            ref: d.ref,
-            text: intl.messages[`reason.${d.reason}`] ? t(`reason.${d.reason}`) : d.reason,
-          })),
-        );
+        setRefused(error.details.map((d) => ({ ref: d.ref, reason: d.reason })));
       }
       return;
     }
@@ -233,7 +233,7 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
                     value={jsonText}
                     onChange={(event) => {
                       setJsonText(event.target.value);
-                      setFailure(null);
+                      clear();
                       setRefused([]);
                     }}
                     style={{ fontFamily: 'monospace' }}
@@ -303,8 +303,13 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
               refused.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20, maxHeight: 160, overflow: 'auto' }}>
                   {refused.slice(0, MAX_SHOWN).map((entry) => (
-                    <li key={`${entry.ref}|${entry.text}`} style={{ overflowWrap: 'anywhere' }}>
-                      {t('campaign.batch.refused.ref', { ref: entry.ref, reason: entry.text })}
+                    <li key={`${entry.ref}|${entry.reason}`} style={{ overflowWrap: 'anywhere' }}>
+                      {t('campaign.batch.refused.ref', {
+                        ref: entry.ref,
+                        reason: intl.messages[`reason.${entry.reason}`]
+                          ? t(`reason.${entry.reason}`)
+                          : entry.reason,
+                      })}
                     </li>
                   ))}
                 </ul>

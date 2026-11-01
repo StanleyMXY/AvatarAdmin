@@ -2,9 +2,13 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
+import { type Kept, useKeptState } from '../../hooks/useKeptState';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AttributionCost,
   type CostSettings,
@@ -12,21 +16,22 @@ import {
   listCosts,
 } from '../../services/campaign';
 import { describeFailure } from '../../session/describe';
+import { clipCodePoints } from '../../utils/codePoints';
+import { instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { lastNDaysUtc } from '../../utils/utcDay';
 import { BatchModal } from './BatchModal';
 import { CampaignSelect } from './CampaignSelect';
 import { CostModal } from './CostModal';
 import { moneyText } from './figures';
-import { PagedTable } from './PagedTable';
-import { instantText, orDash } from './texts';
 import type { CampaignList } from './useCampaigns';
-import { useServerPage } from './useServerPage';
 
 type Props = {
   campaigns: CampaignList;
   /** What `GET /config` said, or null while it is being read or when it could not be read. */
   settings: CostSettings | null;
+  /** What the filters held when the tab was closed (the tab is drawn again each time it is opened). */
+  kept: Kept;
 };
 
 type Filter = { campaignId: string | undefined; range: DayRange };
@@ -36,7 +41,7 @@ const initialFilter = (): Filter => ({ campaignId: undefined, range: lastNDaysUt
  * 投放成本: the costs of the campaigns, one for each campaign and day, in one currency. Filter by
  * campaign and days; enter a cost, change one, delete one (asked in the row), import many.
  */
-export function CostsTab({ campaigns, settings }: Props) {
+export function CostsTab({ campaigns, settings, kept }: Props) {
   const intl = useIntl();
   const { message } = App.useApp();
   const t = (id: string, values?: Record<string, string | number>) =>
@@ -45,8 +50,8 @@ export function CostsTab({ campaigns, settings }: Props) {
   const canManage = access.canAccess('ATTRIBUTION:MANAGE');
   const currency = settings?.currency ?? null;
 
-  const [draft, setDraft] = useState<Filter>(initialFilter);
-  const [applied, setApplied] = useState<Filter>(initialFilter);
+  const [draft, setDraft] = useKeptState<Filter>(kept, 'costs.draft', initialFilter);
+  const [applied, setApplied] = useKeptState<Filter>(kept, 'costs.applied', initialFilter);
   const [editing, setEditing] = useState<AttributionCost | 'new' | null>(null);
   const [importing, setImporting] = useState(false);
 
@@ -109,7 +114,7 @@ export function CostsTab({ campaigns, settings }: Props) {
     {
       title: t('campaign.costs.col.actions'),
       key: 'actions',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) =>
         canManage ? (
           <Flex gap={4}>
@@ -118,7 +123,8 @@ export function CostsTab({ campaigns, settings }: Props) {
             </Button>
             <DangerConfirmButton
               confirmText={t('campaign.costs.deleteConfirm', {
-                name: nameOf(row),
+                // A name of any length: the question stays short enough for its buttons to be reached.
+                name: clipCodePoints(nameOf(row), 60),
                 date: plainText(row.statDate),
               })}
               onConfirm={() => remove(row)}

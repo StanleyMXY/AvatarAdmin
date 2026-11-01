@@ -2,15 +2,16 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { type RowAction, RowActions } from '../../components/RowActions';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { deletePermission, listPermissions, type PermissionNode } from '../../services/system';
 import { describeFailure } from '../../session/describe';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { PermissionNodeModal } from './PermissionNodeModal';
 import { buildIndex, isBuiltinNode, nodeName, type TreeIndex } from './permissionTree';
-import { useRead } from './useRead';
 
 type Row = { node: PermissionNode; children?: Row[] };
 
@@ -37,10 +38,10 @@ export default function PermissionsPage() {
   const canWrite = access.canAccess('PERMISSION:MANAGE');
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
-  const tree = useRead(listPermissions);
+  const tree = useLatestRead(listPermissions, { keepWhileReading: true });
   const nodes: PermissionNode[] = useMemo(
-    () => (tree.state.data ?? []).filter((n) => typeof n === 'object' && n !== null),
-    [tree.state.data],
+    () => (tree.data ?? []).filter((n) => typeof n === 'object' && n !== null),
+    [tree.data],
   );
   const index = useMemo(() => buildIndex(nodes), [nodes]);
   const data = useMemo(() => rowsOf(index, index.roots), [index]);
@@ -91,7 +92,7 @@ export default function PermissionsPage() {
       key: 'code',
       title: t('system.permissions.col.code'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{plainText(row.node.code)}</span>
+        <EllipsisPopoverText text={plainText(row.node.code)} lines={2} width={220} dir="ltr" />
       ),
     },
     {
@@ -124,6 +125,7 @@ export default function PermissionsPage() {
     ...(canWrite
       ? [
           {
+            ...ACTIONS_COLUMN,
             key: 'actions',
             title: t('system.permissions.col.actions'),
             render: (_: unknown, row: Row) => <RowActions actions={actionsOf(row.node)} />,
@@ -135,12 +137,12 @@ export default function PermissionsPage() {
   return (
     <Flex vertical gap={16}>
       <Alert type="info" showIcon title={t('system.permissions.note')} />
-      {tree.state.status === 'failed' ? (
+      {tree.failure !== null ? (
         <Alert
           type="error"
           showIcon
           title={t('system.common.readFailed', {
-            message: describeFailure(intl, tree.state.error).text,
+            message: describeFailure(intl, tree.error).text,
           })}
           action={
             <Button size="small" onClick={tree.reload}>
@@ -160,7 +162,7 @@ export default function PermissionsPage() {
         rowKey={(row) => row.node.code}
         columns={columns}
         dataSource={data}
-        loading={tree.state.status === 'loading' && tree.state.data === null}
+        loading={tree.loading && tree.data === null}
         pagination={false}
         scroll={{ x: 'max-content' }}
         expandable={{
@@ -169,7 +171,7 @@ export default function PermissionsPage() {
         }}
         locale={{ emptyText: t('system.permissions.empty') }}
       />
-      {dialog !== null && tree.state.data !== null ? (
+      {dialog !== null && tree.data !== null ? (
         <PermissionNodeModal
           key={dialog === 'new' ? 'new' : dialog.code}
           node={dialog === 'new' ? null : dialog}

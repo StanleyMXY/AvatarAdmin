@@ -1,7 +1,14 @@
 import { screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { renderPage } from '../../../tests/renderPage';
+import { contrastRatio } from '../../theme/contrast';
+import { getModeTokens, resetThemeModeForTests, setThemeMode } from '../../theme/modes';
 import { StatCard } from './StatCard';
+
+afterEach(() => {
+  localStorage.clear();
+  resetThemeModeForTests();
+});
 
 const card = (
   props: Partial<React.ComponentProps<typeof StatCard>> = {},
@@ -17,13 +24,34 @@ describe('StatCard', () => {
     card();
     expect(screen.getByTestId('stat-value')).toHaveTextContent('1,200');
     expect(screen.getByTestId('stat-change')).toHaveTextContent('+20%');
-    expect(screen.getByTestId('stat-change')).toHaveStyle({ color: '#22C55E' });
+    expect(screen.getByTestId('stat-change')).toHaveStyle({
+      color: getModeTokens('dim').colorRiseText,
+    });
   });
 
   it('shows a fall in red', () => {
     card({ value: 800 });
     expect(screen.getByTestId('stat-change')).toHaveTextContent('-20%');
-    expect(screen.getByTestId('stat-change')).toHaveStyle({ color: '#EF4444' });
+    expect(screen.getByTestId('stat-change')).toHaveStyle({
+      color: getModeTokens('dim').colorFallText,
+    });
+  });
+
+  it('writes the change in a green and a red that can be read (4.5:1) on the light page too, not the pale chart colours', () => {
+    setThemeMode('light');
+    const { unmount } = card();
+    const tokens = getModeTokens('light');
+    const rise = screen.getByTestId('stat-change');
+    expect(rise).toHaveStyle({ color: tokens.colorRiseText });
+    expect(contrastRatio(tokens.colorRiseText, tokens.colorBgContainer)).toBeGreaterThanOrEqual(
+      4.5,
+    );
+    unmount();
+    card({ value: 800 });
+    expect(screen.getByTestId('stat-change')).toHaveStyle({ color: tokens.colorFallText });
+    expect(contrastRatio(tokens.colorFallText, tokens.colorBgContainer)).toBeGreaterThanOrEqual(
+      4.5,
+    );
   });
 
   it('shows no colour and no sign for no change', () => {

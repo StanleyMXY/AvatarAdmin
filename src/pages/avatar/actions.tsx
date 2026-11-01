@@ -2,7 +2,9 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Tag } from 'antd';
 import { useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import {
@@ -12,11 +14,11 @@ import {
   setActionEnabled,
 } from '../../services/avatar';
 import { describeFailure } from '../../session/describe';
+import { codeText } from '../../utils/displayText';
 import { ActionModal } from './ActionModal';
-import { EnabledSwitch } from './EnabledSwitch';
 import { pickText } from './localized';
 import { Thumb } from './Thumb';
-import { codeText, describeSurfaces } from './texts';
+import { describeSurfaces } from './texts';
 
 /** 动作目录 (`ACTION:MANAGE`): the gestures a character can make, each a clip generated in advance. */
 export default function ActionsPage() {
@@ -107,7 +109,7 @@ export default function ActionsPage() {
     {
       title: t('avatar.col.actions'),
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) => {
         const actions: RowAction[] = [];
         if (canWrite) {

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import channelsMock from '../../../mock/channels.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
+import { apiRequest } from '../../request/apiClient';
 import type { Surface } from '../../services/avatar';
 import { SurfacesPicker } from './SurfacesPicker';
 import { chooseOption, signIn } from './testSetup';
@@ -73,6 +74,26 @@ describe('SurfacesPicker', () => {
     expect(listed.queryAllByText('appstore · iOS store').length).toBeGreaterThan(0);
     expect(listed.queryAllByText('direct · Direct download')).toHaveLength(0);
     expect(listed.queryAllByText('play · Android store')).toHaveLength(0);
+  });
+
+  it('lists a channel that was added after the picker was shown the last time', async () => {
+    const user = userEvent.setup();
+    const first = renderPage(<Harness seen={vi.fn()} />);
+    await chooseOption(user, 'Android', 'play · Android store');
+    first.unmount();
+    // A channel package is added on its own page, and the dialog is opened again.
+    await apiRequest({
+      method: 'POST',
+      url: '/channels',
+      body: {
+        code: 'brand_new',
+        name: 'Brand new store',
+        platform: 'ANDROID',
+        distribution: 'STORE',
+      },
+    });
+    renderPage(<Harness seen={vi.fn()} />);
+    await chooseOption(user, 'Android', 'brand_new · Brand new store');
   });
 
   it('takes the single channels away when "all channels" is chosen, and the other way round', async () => {

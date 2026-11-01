@@ -1,20 +1,21 @@
+import { QuestionCircleOutlined } from '@ant-design/icons';
 import { Column } from '@ant-design/plots';
 import { Link, useAccess, useIntl } from '@umijs/max';
 import { Button, Card, Flex, Statistic, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo, useState } from 'react';
+import { ReadState } from '../../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../../components/stat/DateRangeUtc';
+import { useLatestRead } from '../../../hooks/useLatestRead';
 import { getGuestQuota } from '../../../services/stats/reports';
 import type { GuestQuotaBucketKey } from '../../../services/stats/types';
 import { useAdminMeta } from '../../../session/useSession';
-import { getChartTheme } from '../../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../../theme/chartTheme';
 import { useThemeMode } from '../../../theme/modes';
 import { DASH, formatCount, formatPercent } from '../../../utils/ratio';
-import { lastNDaysUtc } from '../../../utils/utcDay';
+import { defaultRange } from '../../analytics/defaultRange';
 import { HeaderWithTip } from './GuestDailyTab';
 import { bucketConversionRate, QUOTA_BUCKETS, quotaCards } from './quota';
-import { ReportState } from './ReportState';
-import { useReport } from './useReport';
 
 type Access = { canAccess: (code?: string) => boolean };
 
@@ -30,10 +31,10 @@ export function GuestQuotaTab() {
   const access = useAccess() as unknown as Access;
   const [mode] = useThemeMode();
   const theme = getChartTheme(mode);
-  const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getGuestQuota(applied), [applied]);
-  const { data: quota, failure, reload } = useReport(fetcher);
+  const { data: quota, failure, reload } = useLatestRead(fetcher);
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const minutes = (n: number | null) =>
@@ -61,7 +62,22 @@ export function GuestQuotaTab() {
       style={{ flex: '1 1 150px', minWidth: 0 }}
     >
       <Statistic
-        title={tip ? <Tooltip title={tip}>{title}</Tooltip> : title}
+        title={
+          tip ? (
+            <span>
+              {title}
+              <Tooltip title={tip}>
+                <QuestionCircleOutlined
+                  data-testid={`tip-quota-card-${name}`}
+                  aria-hidden={false}
+                  style={{ marginInlineStart: 4 }}
+                />
+              </Tooltip>
+            </span>
+          ) : (
+            title
+          )
+        }
         value={value}
         formatter={(v) => <span data-testid="quota-value">{v}</span>}
       />
@@ -109,7 +125,8 @@ export function GuestQuotaTab() {
           <Link to="/config#guest.call_minutes_total">{t('stat.guest.quota.configLink')}</Link>
         ) : null}
       </Flex>
-      <ReportState failure={failure} loading={quota === null} onRetry={reload} />
+      <Typography.Text type="secondary">{t('stat.guest.quota.rangeNote')}</Typography.Text>
+      <ReadState failure={failure} loading={quota === null} onRetry={reload} />
       {quota && cards ? (
         <>
           <Flex gap={12} wrap>
@@ -160,8 +177,8 @@ export function GuestQuotaTab() {
               theme={theme.g2Theme}
               scale={{ color: { range: theme.palette } }}
               axis={{
-                x: { labelFill: theme.textColor },
-                y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+                x: { ...axisTextStyle(theme) },
+                y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
               }}
               height={280}
             />

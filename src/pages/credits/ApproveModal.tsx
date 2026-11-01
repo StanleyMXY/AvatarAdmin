@@ -1,9 +1,9 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Form, Input, Modal } from 'antd';
-import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
-import { describeFailure } from '../../session/describe';
+import { failureLine } from '../../session/failureLine';
 import { countCodePoints } from '../../utils/codePoints';
 import { trimSpec } from '../../utils/trimSpec';
 
@@ -22,13 +22,13 @@ export function ApproveModal({ open, onSubmit, onClose }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<{ note: string }>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, failWith, clear } = useFailure();
   const { run, pending } = useSingleFlight(async (note: string) => {
-    setFailure(null);
+    clear();
     try {
       await onSubmit(note);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      failWith((words) => failureLine(words, error));
     }
   });
 
@@ -41,7 +41,7 @@ export function ApproveModal({ open, onSubmit, onClose }: Props) {
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       okText={t('credits.requests.approve')}
       cancelText={t('pages.common.cancel')}
@@ -64,7 +64,7 @@ export function ApproveModal({ open, onSubmit, onClose }: Props) {
             {
               validator: async (_, value: string | undefined) => {
                 if (countCodePoints(trimSpec(value ?? '')) > NOTE_MAX) {
-                  throw new Error(t('pages.common.reasonLength', { min: 1, max: NOTE_MAX }));
+                  throw new Error(t('credits.requests.noteLength', { max: NOTE_MAX }));
                 }
               },
             },

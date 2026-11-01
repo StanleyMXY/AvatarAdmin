@@ -72,3 +72,61 @@ describe('templateFailureText', () => {
     );
   });
 });
+
+describe('templateFailureText: a refusal that names a reason', () => {
+  const detailed = (reason: string, message = 'BACKEND SENTENCE') =>
+    refusal({ details: [{ ref: 'enabled', reason }] }, 'INVALID_REQUEST', message);
+
+  it('adds the words of a reason the page has words for, to the words of the error code', () => {
+    const text = templateFailureText(intlOf(enUS), detailed('OUT_OF_RANGE'), { reasons: true });
+    expect(text).toContain(enUS['error.INVALID_REQUEST']);
+    expect(text).toContain(enUS['reason.OUT_OF_RANGE']);
+    expect(text).not.toContain('BACKEND SENTENCE');
+  });
+
+  it('does the same in Chinese', () => {
+    const text = templateFailureText(intlOf(zhCN), detailed('OUT_OF_RANGE'), { reasons: true });
+    expect(text).toContain(zhCN['error.INVALID_REQUEST']);
+    expect(text).toContain(zhCN['reason.OUT_OF_RANGE']);
+  });
+
+  it('adds nothing for a reason it has no words for: the backend sentence is not shown instead', () => {
+    const text = templateFailureText(intlOf(enUS), detailed('SOMETHING_NEW'), { reasons: true });
+    expect(text).toBe(enUS['error.INVALID_REQUEST']);
+    expect(text).not.toContain('BACKEND SENTENCE');
+    expect(text).not.toContain('SOMETHING_NEW');
+  });
+
+  it('says each reason once, when several fields name the same one', () => {
+    const text = templateFailureText(
+      intlOf(enUS),
+      refusal({
+        details: [
+          { ref: 'title', reason: 'OUT_OF_RANGE' },
+          { ref: 'body', reason: 'OUT_OF_RANGE' },
+        ],
+      }),
+      { reasons: true },
+    );
+    expect(text.split(enUS['reason.OUT_OF_RANGE']).length - 1).toBe(1);
+  });
+
+  it('leaves the reasons to the fields of a form when the caller does not ask for them', () => {
+    const text = templateFailureText(intlOf(enUS), detailed('OUT_OF_RANGE'));
+    expect(text).toBe(enUS['error.INVALID_REQUEST']);
+  });
+
+  it('keeps the rule of the default language as it is when data has both', () => {
+    const text = templateFailureText(
+      intlOf(enUS),
+      refusal({
+        defaultLocale: 'en',
+        reason: 'daily_recall',
+        details: [{ ref: 'enabled', reason: 'OUT_OF_RANGE' }],
+      }),
+      { reasons: true },
+    );
+    expect(text).toContain('Daily recall');
+    expect(text).not.toContain(enUS['reason.OUT_OF_RANGE']);
+  });
+});

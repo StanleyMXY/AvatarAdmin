@@ -10,11 +10,11 @@ import {
   type RecordStatus,
   type TaskRecord,
 } from '../../services/activity';
+import { countText, instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { CopyableId } from './CopyableId';
-import { countText, instantText, plainOrDash } from './texts';
 
 type Filters = { accountId?: string; status?: RecordStatus };
 
@@ -54,7 +54,7 @@ export default function TaskRecordPage() {
           <Flex vertical gap={0}>
             <span>{DASH}</span>
             <Typography.Text type="secondary">
-              {t('activity.taskRecord.idOf', { id: plainOrDash(row.taskId) })}
+              {t('activity.taskRecord.idOf', { id: orDash(row.taskId) })}
             </Typography.Text>
           </Flex>
         ) : (
@@ -66,7 +66,7 @@ export default function TaskRecordPage() {
       title: t('activity.taskRecord.col.date'),
       dataIndex: 'taskDate',
       search: false,
-      render: (_, row) => plainOrDash(row.taskDate),
+      render: (_, row) => orDash(row.taskDate),
     },
     {
       title: t('activity.taskRecord.col.progress'),

@@ -66,7 +66,6 @@ const messages: Record<string, string> = {
     '强制关闭已设为 0（不启用），非激励广告没有兜底的关闭按钮',
   'config.warning.SMS_COUNTRY_UNCOVERED': '白名单里有国家没有启用的短信通道覆盖',
   'config.requiresUploadBase': '广告素材和 APK 上传需要它',
-  'config.jsonInvalid': 'JSON 格式不对',
   'config.warning.PHONE_LOGIN_DISABLED_ACCOUNTS': '关闭手机号登录后，仍有 {count} 个手机号账号',
   'config.warning.UNKNOWN': '保存成功，但有提醒',
   'config.auth.access_ttl_minutes.label': '访问令牌有效期',
@@ -391,10 +390,10 @@ const messages: Record<string, string> = {
     '陪伴纪念日的天数清单，用 JSON 数组表示，例如满 7、30、100 天时触发纪念日。',
   'config.moderation.block_score.label': '审核拦截分数',
   'config.moderation.block_score.desc':
-    '审核分数达到这个值就拦截内容。取值随审核服务选型确定，没有默认值。生产环境未配置时，依赖审核的用户端接口不可用，生成任务也不处理；管理端不受影响，应先在管理端配置，再让用户端上线。',
+    '把审核服务返回的分数映射为“拦截”级别的阈值，复核分数是比它低的那个阈值。取值随审核服务选型确定，没有默认值。生产环境未配置时，依赖审核的用户端接口不可用，生成任务也不处理；管理端不受影响，应先在管理端配置，再让用户端上线。',
   'config.moderation.review_score.label': '审核复核分数',
   'config.moderation.review_score.desc':
-    '审核分数达到这个值就进入人工复核，必须小于拦截分数。未配置时的后果与拦截分数相同。',
+    '把审核服务返回的分数映射为“复核”级别的阈值，必须小于拦截分数。取值随审核服务选型确定，没有默认值。未配置时的后果与拦截分数相同。',
   'config.moderation.call_timeout_seconds.label': '审核调用超时',
   'config.moderation.call_timeout_seconds.desc':
     '一次调用审核服务的超时时间，单位秒，超时按中风险处理（伴侣名字除外）。',
@@ -422,7 +421,7 @@ const messages: Record<string, string> = {
   'config.complaint.likeness_due_hours.desc':
     '照片里的人投诉的处理时限，单位小时，超过时限会写告警。',
   'config.complaint.likeness_due_hours.risk':
-    '这是照片里的人投诉的处理时限，超过后会写告警，改大这个值会让逾期的投诉更晚才被发现。',
+    '照片里的人的投诉必须在这个时间内处理（默认 48 小时），超过会写告警。',
   'config.complaint.retention_days.label': '投诉记录保留天数',
   'config.complaint.retention_days.desc':
     '投诉记录（含投诉人的邮箱和证据）及其处理记录，从结案起保留多少天，单位天，到期由每天一次的清理任务一起删除。没有结案的投诉不会删除。',
@@ -755,6 +754,8 @@ const messages: Record<string, string> = {
     '允许的币种必须包含默认币种。要改默认币种，先把新币种加进允许列表；要把当前默认币种从列表里去掉，先改默认币种。',
   'config.push.schedule_catchup_minutes.reject.OUT_OF_RANGE':
     '没有保存。取值必须在 1 到 10080 之间，并且 catch-up 分钟数×60 须 ≥ 600 + 推送任务轮询秒数（默认轮询下至少 11）。',
+  'config.invite.reward_start_at.reject.OUT_OF_RANGE': '奖励的开始时间必须早于结束时间。',
+  'config.invite.reward_end_at.reject.OUT_OF_RANGE': '奖励的开始时间必须早于结束时间。',
   'config.push.task_poll_seconds.reject.OUT_OF_RANGE':
     '没有保存。取值不能小于 1，并且 catch-up 分钟数×60 须保持 ≥ 600 + 这个轮询秒数。',
   'config.chat.message_retention_days.reject.OUT_OF_RANGE':

@@ -38,6 +38,40 @@ describe.each(ZONES)('UTC day helpers in %s', (zone) => {
     });
   });
 
+  it('is not moved by the days on which the zone changes its clock (a day of 23 or 25 hours)', () => {
+    withTimeZone(zone, () => {
+      // America/Los_Angeles: clocks go forward on 2026-03-08 and back on 2026-11-01.
+      expect(yesterdayUtc(new Date('2026-03-09T00:30:00Z'))).toBe('2026-03-08');
+      expect(yesterdayUtc(new Date('2026-03-08T07:30:00Z'))).toBe('2026-03-07');
+      expect(yesterdayUtc(new Date('2026-03-08T11:30:00Z'))).toBe('2026-03-07');
+      expect(yesterdayUtc(new Date('2026-11-02T00:30:00Z'))).toBe('2026-11-01');
+      expect(yesterdayUtc(new Date('2026-11-01T08:30:00Z'))).toBe('2026-10-31');
+      expect(yesterdayUtc(new Date('2026-11-01T09:30:00Z'))).toBe('2026-10-31');
+      // Europe: 2026-03-29 and 2026-10-25.
+      expect(yesterdayUtc(new Date('2026-03-30T00:30:00Z'))).toBe('2026-03-29');
+      expect(yesterdayUtc(new Date('2026-10-26T00:30:00Z'))).toBe('2026-10-25');
+    });
+  });
+
+  it('lastNDaysUtc counts whole UTC days across a clock change', () => {
+    withTimeZone(zone, () => {
+      expect(lastNDaysUtc(30, new Date('2026-11-02T00:30:00Z'))).toEqual({
+        from: '2026-10-04',
+        to: '2026-11-02',
+      });
+      expect(lastNDaysUtc(7, new Date('2026-03-09T00:30:00Z'))).toEqual({
+        from: '2026-03-03',
+        to: '2026-03-09',
+      });
+      expect(lastNDaysUtc(30, new Date('2026-03-09T00:30:00Z'))).toEqual({
+        from: '2026-02-08',
+        to: '2026-03-09',
+      });
+      expect(daysBetween('2026-10-04', '2026-11-02')).toHaveLength(30);
+      expect(daysBetween('2026-02-08', '2026-03-09')).toHaveLength(30);
+    });
+  });
+
   it('pickedDay uses the calendar day that was picked, whatever the zone', () => {
     withTimeZone(zone, () => {
       expect(pickedDay(dayjs('2026-10-21'))).toBe('2026-10-21');

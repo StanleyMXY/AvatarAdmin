@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Progress, Typography } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { useFailureView } from '../hooks/useFailure';
 import { useSingleFlight } from '../hooks/useSingleFlight';
 import { uploadFile } from '../request/upload';
 import { describeFailure } from '../session/describe';
@@ -30,6 +31,18 @@ type Props<T extends { uploadId: string }> = {
    * `uploadId` from the earlier one must not be submitted any more).
    */
   onCleared?: () => void;
+  /** Called when a file is chosen, before anything else (the form forgets the last refusal). */
+  onStart?: () => void;
+  /**
+   * Called with the error of a failed upload. It returns `true` when the page shows that failure
+   * itself (a page that has to say what to set up, for example); the control then does not repeat
+   * it in its own words.
+   */
+  onFailed?: (error: unknown) => boolean | undefined;
+  /** Say, with the text of the error, the reason the backend gave for each field (default: the text of the error only). */
+  withFieldReasons?: boolean;
+  /** Show a small preview of a chosen picture (default: yes). */
+  showPreview?: boolean;
   disabled?: boolean;
 };
 
@@ -48,14 +61,20 @@ export function UploadField<T extends { uploadId: string }>({
   onUploaded,
   onBusyChange,
   onCleared,
+  onStart,
+  onFailed,
+  withFieldReasons,
+  showPreview = true,
   disabled,
 }: Props<T>) {
   const intl = useIntl();
   const meta = useAdminMeta() as Partial<UploadLimitMeta>;
   const entry = UPLOAD_ENTRIES[kind];
   const input = useRef<HTMLInputElement>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  // What was wrong with the chosen file (kept as the check, whose words are made when drawn) and
+  // the upload that failed (kept as the failure, for the same reason): both follow the language.
+  const [problem, setProblem] = useState<Awaited<ReturnType<typeof checkUploadFile>> | null>(null);
+  const { view: failure, show, clear } = useFailureView<string>();
   const [percent, setPercent] = useState<number | null>(null);
   const [doneName, setDoneName] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -100,8 +119,8 @@ export function UploadField<T extends { uploadId: string }>({
   const abort = useRef<AbortController | null>(null);
   const busy = useRef(false);
   const holdsResult = useRef(false);
-  const latest = useRef({ onUploaded, onBusyChange, onCleared });
-  latest.current = { onUploaded, onBusyChange, onCleared };
+  const latest = useRef({ onUploaded, onBusyChange, onCleared, onStart, onFailed });
+  latest.current = { onUploaded, onBusyChange, onCleared, onStart, onFailed };
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -113,10 +132,11 @@ export function UploadField<T extends { uploadId: string }>({
 
   const { run, pending } = useSingleFlight(async (file: File) => {
     setProblem(null);
-    setFailure(null);
+    clear();
     setDoneName(null);
     setPercent(null);
     setPreview(null);
+    latest.current.onStart?.();
     if (holdsResult.current) {
       holdsResult.current = false;
       latest.current.onCleared?.();
@@ -126,17 +146,17 @@ export function UploadField<T extends { uploadId: string }>({
       check = await checkUploadFile(kind, file, meta);
     } catch {
       // the file could not be read at all
-      if (alive.current) setFailure(t('error.UNKNOWN'));
+      if (alive.current) show((words) => words.formatMessage({ id: 'error.UNKNOWN' }));
       return;
     }
     if (!alive.current) return;
     if (!check.ok) {
-      setProblem(problemText(check));
+      setProblem(check);
       return;
     }
     // A picture is shown only after the check, and only when its header says it is small: the
     // browser decodes the whole picture to show it, and a small file can declare a huge one.
-    if (file.type.startsWith('image/') || /\.(png|jpe?g)$/i.test(file.name)) {
+    if (showPreview && (file.type.startsWith('image/') || /\.(png|jpe?g)$/i.test(file.name))) {
       const size = await readImageSize(file).catch(() => null);
       if (alive.current && size && size.width * size.height <= PREVIEW_MAX_PIXELS) {
         setPreview(URL.createObjectURL(file));
@@ -160,7 +180,15 @@ export function UploadField<T extends { uploadId: string }>({
     } catch (error) {
       if (alive.current) {
         setPreview(null);
-        setFailure(describeFailure(intl, error).text);
+        const shownByPage = latest.current.onFailed?.(error) === true;
+        if (!shownByPage) {
+          show((words) => {
+            const described = describeFailure(words, error);
+            return withFieldReasons
+              ? [described.text, ...described.fields.map((f) => f.text)].join(' ')
+              : described.text;
+          });
+        }
       }
     } finally {
       abort.current = null;
@@ -191,6 +219,8 @@ export function UploadField<T extends { uploadId: string }>({
           ref={input}
           type="file"
           hidden
+          // an Ant Design form shows a file input again whatever `hidden` says; the inline style wins
+          style={{ display: 'none' }}
           accept={accept}
           data-testid="upload-input"
           onChange={(event) => {
@@ -223,7 +253,7 @@ export function UploadField<T extends { uploadId: string }>({
           format={() => t('pages.upload.uploading', { percent })}
         />
       ) : null}
-      {problem ? <Alert type="error" title={problem} showIcon /> : null}
+      {problem && !problem.ok ? <Alert type="error" title={problemText(problem)} showIcon /> : null}
       {failure ? <Alert type="error" title={failure} showIcon /> : null}
       {doneName ? (
         <Typography.Text type="success">

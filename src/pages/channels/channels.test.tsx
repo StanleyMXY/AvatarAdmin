@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import channelsMock from '../../../mock/channels.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import enUS from '../../locales/en-US';
 import {
@@ -132,9 +133,9 @@ describe('the list of channel packages', () => {
 
   it('shows the names of every language, long unbroken text and emoji without widening the table', async () => {
     backend();
-    channelsState.channels.get('play')!.name = 'ก'.repeat(5000);
-    channelsState.channels.get('direct')!.name = 'مرحبا بك 🌟 Xin chào';
-    channelsState.channels.get('appstore')!.packageName = 'a'.repeat(3000);
+    must(channelsState.channels.get('play')).name = 'ก'.repeat(5000);
+    must(channelsState.channels.get('direct')).name = 'مرحبا بك 🌟 Xin chào';
+    must(channelsState.channels.get('appstore')).packageName = 'a'.repeat(3000);
     renderPage(<ChannelsPage />);
     await waitFor(() => expect(rows().length).toBe(3));
     for (const pattern of [/^ก+$/, /^مرحبا بك/, /^a+$/]) {
@@ -311,16 +312,19 @@ describe('creating a channel package', { timeout: 60000 }, () => {
     const form = await openNew(user);
     await fillNew(user, form);
     channelsState.channels.set('partner-th', {
-      ...channelsState.channels.get('play')!,
+      ...must(channelsState.channels.get('play')),
       code: 'partner-th',
     });
     await user.click(submit(form));
-    const messages = await form.findAllByText(enUS['error.DUPLICATE_RESOURCE']);
-    expect(messages.length).toBeGreaterThan(0);
-    const field = messages
-      .map((m) => m.closest('.ant-form-item'))
-      .find((item) => item?.querySelector('input#channelPackage_code'));
-    expect(field).toBeTruthy();
+    // The same sentence is also in the bar at the top of the dialog, which comes first: wait for
+    // the one under the field itself.
+    await waitFor(() => {
+      const field = form
+        .getAllByText(enUS['error.DUPLICATE_RESOURCE'])
+        .map((m) => m.closest('.ant-form-item'))
+        .find((item) => item?.querySelector('input#channelPackage_code'));
+      expect(field).toBeTruthy();
+    });
   });
 
   it('wants a name, a platform and a distribution', async () => {
@@ -440,7 +444,7 @@ describe('editing a channel package', { timeout: 60000 }, () => {
   });
 
   it('keeps a channel that is switched off switched off when its name is changed', async () => {
-    channelsState.channels.get('direct')!.enabled = false;
+    must(channelsState.channels.get('direct')).enabled = false;
     const { calls, user } = await load();
     const form = await openEdit(user, 'direct');
     const name = form.getByRole('textbox', { name: 'Name' });
@@ -498,7 +502,7 @@ describe('editing a channel package', { timeout: 60000 }, () => {
 
 describe('the enabled switch', { timeout: 60000 }, () => {
   it('switches a channel on without asking, with the name, the package and the new state', async () => {
-    channelsState.channels.get('direct')!.enabled = false;
+    must(channelsState.channels.get('direct')).enabled = false;
     const { calls, user } = await load();
     const row = await rowOf('direct');
     await user.click(within(row).getByRole('switch'));
@@ -524,6 +528,45 @@ describe('the enabled switch', { timeout: 60000 }, () => {
     await waitFor(() => expect(channelsState.channels.get('play')?.enabled).toBe(false));
     expect(writesOf(calls)).toHaveLength(1);
     expect(writesOf(calls)[0].body).toMatchObject({ enabled: false });
+  });
+
+  it('breaks the name of a channel of 5000 letters without a space inside the question, not out of it', async () => {
+    must(channelsState.channels.get('play')).name = 'N'.repeat(5000);
+    const { user } = await load();
+    await user.click(within(await rowOf('play')).getByRole('switch'));
+    const question = (await screen.findByText(/Switch off N{5000}\?/)) as HTMLElement;
+    expect(question.style.overflowWrap).toBe('anywhere');
+    expect(question.style.maxWidth).not.toBe('');
+  });
+
+  it('keeps the table on the page while it is read again after a change (it does not empty and fill again)', async () => {
+    must(channelsState.channels.get('direct')).enabled = false;
+    const { calls, user } = await load();
+    const rowBefore = await rowOf('direct');
+    // From now on the read of the list is held, so that the page is in the middle of reading again.
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) => {
+        const url = new URL(String(input), 'http://localhost');
+        if ((init.method ?? 'GET') === 'GET' && url.pathname === '/api/admin/channels') {
+          await gate;
+        }
+        return real(input, init);
+      }),
+    );
+    await user.click(within(rowBefore).getByRole('switch'));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    await settled();
+    expect(rowBefore.isConnected).toBe(true);
+    expect(rows().some((tr) => tr.getAttribute('data-row-key') === 'direct')).toBe(true);
+    release();
+    await settled();
+    expect(rows().some((tr) => tr.getAttribute('data-row-key') === 'direct')).toBe(true);
   });
 
   it('does nothing when the question is answered with Cancel', async () => {
@@ -569,7 +612,7 @@ describe('the enabled switch', { timeout: 60000 }, () => {
   });
 
   it('sends one request when the switch is pressed twice to switch on', async () => {
-    channelsState.channels.get('direct')!.enabled = false;
+    must(channelsState.channels.get('direct')).enabled = false;
     const { calls, user } = await load();
     const row = await rowOf('direct');
     const toggle = within(row).getByRole('switch');

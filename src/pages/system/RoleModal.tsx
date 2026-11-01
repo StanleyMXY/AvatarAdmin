@@ -1,6 +1,8 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Spin, Typography } from 'antd';
 import { useMemo, useState } from 'react';
+import { useFailureView } from '../../hooks/useFailure';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -13,11 +15,10 @@ import {
 import { describeFailure } from '../../session/describe';
 import { useSession } from '../../session/useSession';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
+import { failureToForm, failureView } from './formFailure';
 import { PermissionTreeSelect } from './PermissionTreeSelect';
-import { buildIndex, codesNotHeld, isSelectable } from './permissionTree';
+import { ancestorsOf, buildIndex, codesNotHeld, isSelectable } from './permissionTree';
 import { withScopeHint } from './texts';
-import { useRead } from './useRead';
 
 type Values = { name: string; remark: string };
 
@@ -46,9 +47,13 @@ export function RoleModal({ role, onDone, onClose }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<{ text: string; unplaced: string[] } | null>(null);
-  const tree = useRead(listPermissions);
-  const nodes: PermissionNode[] | null = tree.state.status === 'ok' ? tree.state.data : null;
+  const {
+    view: failure,
+    show,
+    clear,
+  } = useFailureView<{ text: string; unplaced: string[] } | null>();
+  const tree = useLatestRead(listPermissions, { keepWhileReading: true });
+  const nodes: PermissionNode[] | null = !tree.loading && tree.failure === null ? tree.data : null;
   const [picked, setPicked] = useState<string[] | null>(null);
   // What the signed-in administrator holds. Only a help for the boxes: `GET /me` is not known to list
   // exactly the codes the backend counts as held, so the backend stays the last word (a 403).
@@ -67,7 +72,7 @@ export function RoleModal({ role, onDone, onClose }: Props) {
   const held = useMemo(() => {
     if (nodes === null) return { value: [] as string[], dropped: [] as string[] };
     const index = buildIndex(nodes);
-    const wanted = role?.permissionCodes ?? [];
+    const wanted = Array.isArray(role?.permissionCodes) ? role.permissionCodes : [];
     const keep = (code: string) => {
       const node = index.byCode.get(code);
       return node !== undefined && isSelectable(node);
@@ -79,8 +84,23 @@ export function RoleModal({ role, onDone, onClose }: Props) {
   }, [nodes, role]);
   const value = picked ?? held.value;
 
+  // A function code without the code of the page it is on: a role saved under an older rule can be
+  // like that, and its holders cannot open the page. Saving does not add the page (that would give
+  // more than the role has), so the dialog says it and the page can be checked.
+  const withoutPage = useMemo(() => {
+    if (nodes === null) return [] as string[];
+    const index = buildIndex(nodes);
+    const chosen = new Set(value);
+    return value.filter((code) =>
+      ancestorsOf(index, code).some((above) => {
+        const node = index.byCode.get(above);
+        return node !== undefined && isSelectable(node) && !chosen.has(above);
+      }),
+    );
+  }, [nodes, value]);
+
   const { run, pending } = useSingleFlight(async () => {
-    setFailure(null);
+    clear();
     let values: Values;
     try {
       values = await form.validateFields();
@@ -101,12 +121,13 @@ export function RoleModal({ role, onDone, onClose }: Props) {
       onDone();
       onClose();
     } catch (error) {
-      const placed = failureToForm(intl, form, error, ['name', 'remark']);
-      setFailure(
-        placed.text === null
+      failureToForm(intl, form, error, ['name', 'remark']);
+      show((words) => {
+        const placed = failureView(words, error, ['name', 'remark']);
+        return placed.text === null
           ? null
-          : { text: withScopeHint(intl, error, placed.text), unplaced: placed.unplaced },
-      );
+          : { text: withScopeHint(words, error, placed.text), unplaced: placed.unplaced };
+      });
     }
   });
 
@@ -170,18 +191,18 @@ export function RoleModal({ role, onDone, onClose }: Props) {
       <Typography.Paragraph strong style={{ marginBottom: 4 }}>
         {t('system.roles.field.permissions')}
       </Typography.Paragraph>
-      {tree.state.status === 'loading' && nodes === null ? (
+      {tree.loading && nodes === null ? (
         <Flex gap={8} align="center">
           <Spin size="small" />
           <span>{t('system.roles.treeLoading')}</span>
         </Flex>
       ) : null}
-      {tree.state.status === 'failed' ? (
+      {tree.failure !== null ? (
         <Alert
           type="error"
           showIcon
           title={t('system.roles.treeFailed', {
-            message: describeFailure(intl, tree.state.error).text,
+            message: describeFailure(intl, tree.error).text,
           })}
           action={
             <Button size="small" onClick={tree.reload}>
@@ -195,6 +216,17 @@ export function RoleModal({ role, onDone, onClose }: Props) {
           <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
             {t('system.roles.selected', { count: value.length })}
           </Typography.Paragraph>
+          {withoutPage.length > 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 8 }}
+              data-testid="role-without-page"
+              title={t('system.roles.withoutPage', {
+                codes: withoutPage.slice(0, NOTE_CODES).join(', '),
+              })}
+            />
+          ) : null}
           {held.dropped.length > 0 ? (
             <Alert
               type="warning"

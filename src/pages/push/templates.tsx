@@ -2,9 +2,13 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Spin, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import { RowActions } from '../../components/RowActions';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   deleteTemplate,
   listAllTemplates,
@@ -13,16 +17,14 @@ import {
   type PushTemplate,
   updateTemplate,
 } from '../../services/push';
-import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { codeText, describeLink } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { coverage, supportedLocalesOf } from './coverage';
-import { EnabledSwitch } from './EnabledSwitch';
 import { PushImage } from './PushImage';
 import { templateFailureText } from './recallRule';
 import { TemplateMatrix } from './TemplateMatrix';
 import { TemplateModal } from './TemplateModal';
-import { codeText, describeLink } from './texts';
 
 /**
  * 模板 (`PUSH:TEMPLATE`): the words of the recall pushes, one template for each trigger reason and
@@ -43,21 +45,21 @@ export default function TemplatesPage() {
   const [editing, setEditing] = useState<PushTemplate | null | 'new'>(null);
   const [all, setAll] = useState<PushTemplate[] | null>(null);
   const [missing, setMissing] = useState<MissingLocales | null>(null);
-  const [allFailure, setAllFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const { text: allFailure, fail, clear } = useFailure();
+  const begin = useLatestCall();
 
   const loadAll = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     try {
       const rows = await listAllTemplates();
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setAll(rows.items);
       setMissing(rows.missingLocales);
-      setAllFailure(null);
+      clear();
     } catch (error) {
-      if (mine === counter.current) setAllFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [intl]);
+  }, [begin, fail, clear]);
 
   useEffect(() => {
     void loadAll();
@@ -107,7 +109,7 @@ export default function TemplatesPage() {
               enabled: next,
             });
           }}
-          failureText={(error) => templateFailureText(intl, error)}
+          failureText={(error) => templateFailureText(intl, error, { reasons: true })}
           onDone={reload}
         />
       ),
@@ -130,7 +132,10 @@ export default function TemplatesPage() {
       search: false,
       render: (_, row) => (
         <EllipsisPopoverText
-          text={describeLink(intl, row.linkType, row.linkTarget)}
+          text={describeLink(intl, row.linkType, row.linkTarget, {
+            summaryId: 'push.link.summary',
+            empty: '',
+          })}
           lines={2}
           width={200}
         />
@@ -145,7 +150,7 @@ export default function TemplatesPage() {
     {
       title: t('push.templates.col.actions'),
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) =>
         canWrite ? (
           <RowActions
@@ -160,7 +165,7 @@ export default function TemplatesPage() {
                     await deleteTemplate(row.id);
                     message.success(t('push.templates.deleted'));
                   } catch (error) {
-                    message.error(templateFailureText(intl, error));
+                    message.error(templateFailureText(intl, error, { reasons: true }));
                   }
                   reload();
                 },

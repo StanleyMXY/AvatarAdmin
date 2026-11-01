@@ -13,6 +13,16 @@ import {
   scanSource,
 } from './noHardcodedText.scan';
 
+/**
+ * The sources that can show text to a person: components and the helpers beside them. Not the tests
+ * and their set-ups, the generated files, nor the request layer, whose `message` is the developer's
+ * description of a failure: what is shown is the text of the error code, from the language files.
+ */
+const isScannedSource = (f: string) =>
+  /^src\/.*\.tsx?$/.test(f) &&
+  !/\.(test|generated)\.tsx?$|\.d\.ts$|(^|\/)testSetup\.ts$|^src\/request\//.test(f) &&
+  isPresent(f);
+
 const show = (findings: Finding[]) =>
   findings.map((f) => `${f.file}:${f.line}  ${f.text}`).join('\n');
 
@@ -39,6 +49,20 @@ describe('scanSource: text in .tsx that does not come from a language file', () 
     expect(
       scan(`export const A = () => intl.formatMessage({ id: 'x', defaultMessage: 'Save it' });`),
     ).toHaveLength(1);
+  });
+
+  it('finds text given to a notice or a dialog through a variable of any name: api.error(...), modal.confirm(...)', () => {
+    const code = `export const A = () => { api.error('Could not save'); modal.warning('Careful'); notice.info('Done'); api.success('已保存'); };`;
+    expect(scan(code).map((f) => f.text)).toEqual(['Could not save', 'Careful', 'Done', '已保存']);
+    // ... and not what merely shares the name of the method
+    expect(scan(`export const A = () => { logger.error(err); api.open({ key: 'x' }); };`)).toEqual(
+      [],
+    );
+  });
+
+  it('reads a .ts file as TypeScript (a generic is not a tag) and finds the text a helper would show', () => {
+    const code = `export const pick = <T,>(x: T) => x;\nexport const columns = [{ title: 'Name', dataIndex: 'name' }];`;
+    expect(scanSource('helper.ts', code).map((f) => f.text)).toEqual(['Name']);
   });
 
   it('reports the line', () => {
@@ -189,9 +213,9 @@ describe('the repository today', () => {
     }
   });
 
-  it('has no text in src/**/*.tsx that skips the language files, except what is allowed', () => {
+  it('has no text in src/**/*.tsx or *.ts that skips the language files, except what is allowed', () => {
     const found = files
-      .filter((f) => /^src\/.*\.tsx$/.test(f) && !/\.test\.tsx$/.test(f))
+      .filter(isScannedSource)
       .flatMap((f) => scanSource(f, readFileSync(f, 'utf8')));
     const { remaining, unused } = applyAllowList(found, allow);
     expect(show(remaining)).toBe('');
@@ -208,6 +232,15 @@ const isTestSupport = (f: string) =>
 const RULES: PatternRule[] = [
   { name: 'fixed token', pattern: new RegExp(`token${'='}123`), skip: isDocs },
   { name: 'hashing in the browser', pattern: new RegExp(`m${'d'}5`, 'i'), skip: isDocs },
+  {
+    name: 'a call that hashes in the browser',
+    // A function that hashes (sha256(...), bcrypt(...)), the browser's digest, or a library for it. A
+    // mention in a text (the SHA-256 of a file the server computed) is not a hash made here.
+    pattern:
+      /\b(?:sha-?(?:1|224|256|384|512)|sha3|bcrypt|scrypt|argon2(?:id|i|d)?|pbkdf2)(?:\.\w+)?\s*\(|\bcreateHash\b|crypto\.subtle|subtle\.digest|crypto-js|js-sha\d*|bcryptjs|sha\.js|hash-wasm/i,
+    // The fake backend and the tests compute checksums of their own data; the browser code must not hash a password.
+    skip: (f) => isTestSupport(f) || !f.startsWith('src/'),
+  },
   { name: 'public CDN address', pattern: new RegExp(`\\bcd${'n'}\\.`, 'i'), skip: isDocs },
   {
     name: 'external address',
@@ -215,6 +248,12 @@ const RULES: PatternRule[] = [
       /(?:https?|wss?):\/\/(?!localhost\b|127\.0\.0\.1\b|www\.w3\.org\/|example\.(?:com|org|net)\b)(?:[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}|\d{1,3}(?:\.\d{1,3}){3})/,
     skip: isTestSupport,
     skipLine: /"\$schema"/,
+  },
+  {
+    name: 'external address without a scheme (//host)',
+    pattern:
+      /["'`(=]\/\/(?!localhost\b|example\.(?:com|org|net)\b)[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z]{2,}/,
+    skip: isTestSupport,
   },
   {
     name: 'name of another project',
@@ -268,6 +307,8 @@ describe('scanPatterns finds what it should (on a temporary fixture)', () => {
       `const f = '${String.fromCharCode(0x200b)}';`,
       `const h = '${String.fromCharCode(0x3000)}';`,
       `const g = '${String.fromCharCode(0xc548, 0xb155)}';`,
+      `const i = crypto.subtle.digest('SHA-256', bytes);`,
+      `const j = '//assets.some-site.io/logo.png';`,
     ].join('\n');
     writeFileSync(file, bad);
     const names = scanPatterns(
@@ -293,6 +334,53 @@ describe('scanPatterns finds what it should (on a temporary fixture)', () => {
     expect(found.map((f) => f.line)).toEqual(codes.map((_, i) => i + 1));
     writeFileSync(file, "const x = 'plain text, ก็ مرحبا 你好';\nconst y = '\\u200b';");
     expect(scanPatterns([file], [{ ...rule, skip: () => false }])).toEqual([]);
+  });
+
+  it('finds the other ways to hash and the address without a scheme, and passes mentions, comments and the example domains', () => {
+    const find = (name: string) => RULES.find((r) => r.name.startsWith(name)) as PatternRule;
+    const hashing = find('a call that hashes');
+    for (const bad of [
+      'await crypto.subtle.digest("SHA-256", data)',
+      "import { createHash } from 'node:crypto'",
+      'sha1(password)',
+      'sha-512 (x)',
+      'bcrypt.hash(password)',
+      'argon2id(password)',
+      'pbkdf2(',
+      "import sha from 'js-sha256'",
+      "import CryptoJS from 'crypto-js'",
+    ]) {
+      expect(hashing.pattern.test(bad), bad).toBe(true);
+    }
+    for (const ok of [
+      'const shared = 1',
+      'a sha is a commit',
+      'sha: string',
+      'this.sha256Of',
+      "'SHA-256 {sha}'",
+      'createHashHistory()',
+      'row.sha256',
+    ]) {
+      expect(hashing.pattern.test(ok), ok).toBe(false);
+    }
+    const bare = find('external address without a scheme');
+    for (const bad of [
+      `'//cd${'n'}.some-site.io/x.js'`,
+      'src="//assets.some-site.io/a.png"',
+      'url(//a.io/b)',
+    ]) {
+      expect(bare.pattern.test(bad), bad).toBe(true);
+    }
+    for (const ok of [
+      '// a comment about example.org',
+      "x = 'https://a.io'",
+      "'//example.com/a'",
+      "'//localhost/a'",
+      '`a//b`',
+      "path.split('//')",
+    ]) {
+      expect(bare.pattern.test(ok), ok).toBe(false);
+    }
   });
 
   it('lets a local address, an XML namespace and the example domains through', () => {

@@ -222,7 +222,28 @@ describe('approving', { timeout: 30000 }, () => {
     await waitFor(() =>
       expect(dialog.querySelector('.ant-form-item-explain-error')).not.toBeNull(),
     );
+    // the field is a note, not a reason, and it is optional: no "1 to 500 characters" about a reason
+    expect(within(dialog).getByText('The note can have up to 500 characters')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/reason/i)).toBeNull();
     expect(writes(calls)).toHaveLength(0);
+  });
+
+  it('says which field and why when the backend refuses the approval with details', async () => {
+    useMockBackend(creditsMock);
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) =>
+      init?.method === 'POST' && String(input).endsWith('/approve')
+        ? jsonResponse(
+            400,
+            envelope('INVALID_REQUEST', { details: [{ ref: 'note', reason: 'TOO_LONG' }] }),
+          )
+        : real(input, init),
+    );
+    const user = userEvent.setup();
+    renderPage(<RequestsPage />);
+    const dialog = await openApprove(user, pendingBy('1003'));
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    expect(await within(dialog).findByText(/note: The value is too long\./)).toBeInTheDocument();
   });
 
   it('shows the text of the refusal when the account is being deleted, and keeps the request pending', async () => {

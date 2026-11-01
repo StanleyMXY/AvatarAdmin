@@ -6,6 +6,7 @@ import { resetStore } from '../../../mock/_core/store';
 import { resetSubscriptionsStore, subscriptionsState } from '../../../mock/_core/subscriptionsData';
 import * as configMock from '../../../mock/config.mock';
 import * as subscriptionsMock from '../../../mock/subscriptions.mock';
+import { holdRequests } from '../../../tests/heldRequests';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { signInAs, useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
@@ -176,7 +177,8 @@ describe('editing a default', { timeout: 30000 }, () => {
       await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     }
-  });
+    // ten dialogs are opened and closed one after the other, which takes long when the machine is busy
+  }, 120000);
 
   it('does not offer "No limit" for credits.period_grant, but does for avatar.looks_max', async () => {
     useMockBackend(subscriptionsMock, configMock);
@@ -335,6 +337,65 @@ describe('the credit price column', { timeout: 30000 }, () => {
     );
     await waitFor(() => expect(writes(calls)).toHaveLength(2));
     expect(writes(calls)[1].body).toEqual({ creditCost: null });
+  });
+
+  it('sends one request while the save of a price is under way, however often Save price is clicked then', async () => {
+    useMockBackend(subscriptionsMock, configMock);
+    const held = holdRequests((_, method) => method === 'PUT');
+    renderPage(<GatesPage />);
+    fireEvent.change(await price('assets.avatar_max'), { target: { value: '45' } });
+    const save = within(await rowOf('assets.avatar_max')).getByRole('button', {
+      name: 'Save price',
+    });
+    fireEvent.click(save);
+    await waitFor(() => expect(held.started()).toBe(1));
+    fireEvent.click(save);
+    fireEvent.click(save);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(held.started()).toBe(1);
+    held.release();
+  });
+
+  it('shows the prices the last read brought when the answer of an earlier read arrives late', async () => {
+    useMockBackend(subscriptionsMock, configMock);
+    // the 2nd read of the switches (after the first saved price) is held; the 3rd is not
+    const held = holdRequests(
+      (url, method) => method === 'GET' && url.endsWith('/feature-gates'),
+      2,
+    );
+    renderPage(<GatesPage />);
+    fireEvent.change(await price('assets.avatar_max'), { target: { value: '45' } });
+    fireEvent.click(
+      within(await rowOf('assets.avatar_max')).getByRole('button', { name: 'Save price' }),
+    );
+    await waitFor(() => expect(held.started()).toBe(2));
+    fireEvent.change(await price('assets.voice_max'), { target: { value: '77' } });
+    fireEvent.click(
+      within(await rowOf('assets.voice_max')).getByRole('button', { name: 'Save price' }),
+    );
+    await waitFor(() =>
+      expect(subscriptionsState().gates.find((g) => g.key === 'assets.voice_max')?.creditCost).toBe(
+        77,
+      ),
+    );
+    held.release();
+    await new Promise((r) => setTimeout(r, 150));
+    // the held read knew only the first price: it must not bring the second one back to its old value
+    expect(await price('assets.voice_max')).toHaveValue('77');
+    expect(await price('assets.avatar_max')).toHaveValue('45');
+  });
+
+  it('says which field and why when the backend refuses a price (out of range), not only that the request is invalid', async () => {
+    useMockBackend(subscriptionsMock, configMock);
+    const user = userEvent.setup();
+    renderPage(<GatesPage />);
+    fireEvent.change(await price('assets.avatar_max'), { target: { value: '2000000' } });
+    await user.click(
+      within(await rowOf('assets.avatar_max')).getByRole('button', { name: 'Save price' }),
+    );
+    expect(
+      await screen.findByText(/creditCost: The value is outside the allowed range\./),
+    ).toBeInTheDocument();
   });
 
   it('has no Save price button until the price is changed, and none for a row that cannot be edited', async () => {

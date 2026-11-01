@@ -1,8 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Form, Input, Modal, Typography } from 'antd';
-import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
-import { describeFailure } from '../../session/describe';
 import { useSubmitOnce } from '../../session/useSubmitOnce';
 import { countCodePoints } from '../../utils/codePoints';
 import { trimSpec } from '../../utils/trimSpec';
@@ -25,7 +24,7 @@ export function FunnelNameModal({ title, initialName, onSubmit, onCancel }: Prop
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<{ name: string }>();
   const { busy, run } = useSubmitOnce();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
 
   const submit = () => {
     void run(async () => {
@@ -35,11 +34,11 @@ export function FunnelNameModal({ title, initialName, onSubmit, onCancel }: Prop
       } catch {
         return; // the field says what is wrong
       }
-      setFailure(null);
+      clear();
       try {
         await onSubmit(name);
       } catch (error) {
-        setFailure(describeFailure(intl, error).text);
+        fail(error);
       }
     });
   };

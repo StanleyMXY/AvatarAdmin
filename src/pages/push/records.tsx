@@ -2,9 +2,11 @@ import { QuestionCircleOutlined } from '@ant-design/icons';
 import { Link, useAccess, useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Spin, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   getRecord,
   listRecords,
@@ -13,10 +15,9 @@ import {
   type PushRecord,
   type PushRecordDetail,
 } from '../../services/push';
-import { describeFailure } from '../../session/describe';
+import { codeText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
-import { codeText, instantText } from './texts';
 
 /** An account id: any text, cut to two lines; a link to the user when the administrator may see users. */
 function AccountCell({ accountId }: { accountId: unknown }) {
@@ -51,20 +52,20 @@ function Deliveries({ id }: { id: string }) {
   const t = (key: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id: key }, values);
   const [detail, setDetail] = useState<PushRecordDetail | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const { text: failure, fail, clear } = useFailure();
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setDetail(null);
-    setFailure(null);
+    clear();
     try {
       const record = await getRecord(id);
-      if (mine === counter.current) setDetail(record);
+      if (isCurrent()) setDetail(record);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [id, intl]);
+  }, [id, begin, clear, fail]);
 
   useEffect(() => {
     void load();
@@ -129,24 +130,24 @@ export default function RecordsPage() {
     intl.formatMessage({ id }, values);
   const [paging, setPaging] = useState({ page: 1, pageSize: 20 });
   const [data, setData] = useState<Page<PushRecord> | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [loading, setLoading] = useState(true);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setLoading(true);
     try {
       const page = await listRecords(paging);
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setData(page);
-      setFailure(null);
+      clear();
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     } finally {
-      if (mine === counter.current) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [paging, intl]);
+  }, [paging, begin, fail, clear]);
 
   useEffect(() => {
     void load();

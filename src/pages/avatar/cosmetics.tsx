@@ -2,7 +2,9 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
 import { Button, Flex, Tag, Typography } from 'antd';
 import { useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import {
   AVATAR_STYLES,
@@ -13,12 +15,12 @@ import {
   listCosmetics,
   setCosmeticEnabled,
 } from '../../services/avatar';
+import { codeText } from '../../utils/displayText';
 import { DASH, formatCount } from '../../utils/ratio';
 import { CosmeticModal } from './CosmeticModal';
-import { EnabledSwitch } from './EnabledSwitch';
 import { pickText } from './localized';
 import { Thumb } from './Thumb';
-import { codeText, describeSurfaces } from './texts';
+import { describeSurfaces } from './texts';
 
 type Filter = { kind?: CosmeticKind; enabled?: string; style?: AvatarStyle };
 
@@ -144,7 +146,7 @@ export default function CosmeticsPage() {
     {
       title: t('avatar.col.actions'),
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) =>
         canWrite ? (
           <Button type="link" size="small" onClick={() => setEditing(row)}>

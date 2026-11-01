@@ -3,7 +3,9 @@ import type { SessionQualityRow } from '../../services/stats/types';
 import {
   averageJoinSeconds,
   bucketShare,
+  invalidDays,
   JOIN_BUCKETS,
+  percentAgainst,
   qualityFlags,
   successRate,
   sumRows,
@@ -108,13 +110,31 @@ describe('the totals of a range', () => {
     expect(sumRows([])).toBeNull();
   });
 
-  it('skip a number that is missing or negative instead of adding it', () => {
+  it('are not known (NaN, never a sum without that day) for a figure that is missing or negative on any day', () => {
     const totals = sumRows([
       row({ limitReached: Number.NaN }),
       row({ limitReached: -3 }),
       row({ limitReached: 4 }),
     ]);
-    expect(totals?.limitReached).toBe(4);
+    expect(Number.isNaN(totals?.limitReached)).toBe(true);
+    // the other figures of the same days are still added
+    expect(totals?.connected).toBe(3 * row({}).connected);
+  });
+
+  it('make a ratio that needs an unknown total not known', () => {
+    const totals = sumRows([row({ connected: -50 }), row({ connected: 90, agentUnavailable: 10 })]);
+    expect(successRate(totals as never)).toBeNull();
+    expect(bucketShare(totals as never, 'joinGt10s')).toBeNull();
+  });
+
+  it('say which days have a figure that is not valid', () => {
+    expect(invalidDays([row({}), row({ statDate: '2026-10-02', connected: -1 })])).toEqual([
+      '2026-10-02',
+    ]);
+    expect(invalidDays([row({ statDate: '2026-10-03', joinMsSum: Number.NaN })])).toEqual([
+      '2026-10-03',
+    ]);
+    expect(invalidDays([row({})])).toEqual([]);
   });
 });
 
@@ -157,5 +177,31 @@ describe('the red frame', () => {
       lowSuccessRate: false,
       highSlowShare: false,
     });
+  });
+});
+
+describe('a percentage written next to its limit', () => {
+  const at = (value: number | null, limit: number) => percentAgainst(value, limit, 'en-US');
+
+  it('keeps one digit when the figure is clearly on one side', () => {
+    expect(at(0.99, 0.95)).toBe('99%');
+    expect(at(0.9, 0.95)).toBe('90%');
+    expect(at(0.123, 0.05)).toBe('12.3%');
+  });
+
+  it('adds digits until the figure no longer reads as the limit', () => {
+    expect(at(0.9496, 0.95)).toBe('94.96%');
+    expect(at(0.9504, 0.95)).toBe('95.04%');
+    expect(at(0.0504, 0.05)).toBe('5.04%');
+    expect(at(0.949999, 0.95)).toBe('94.9999%');
+  });
+
+  it('writes the limit itself as the limit when the figure is the limit', () => {
+    expect(at(0.95, 0.95)).toBe('95%');
+    expect(at(0.05, 0.05)).toBe('5%');
+  });
+
+  it('is a dash for a figure that is not known', () => {
+    expect(at(null, 0.95)).toBe('—');
   });
 });

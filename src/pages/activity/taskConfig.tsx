@@ -3,6 +3,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Flex, Tooltip, Typography } from 'antd';
 import { useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
@@ -18,11 +19,11 @@ import {
   type TaskType,
 } from '../../services/activity';
 import { describeFailure } from '../../session/describe';
+import { codeText, countText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { TaskFormModal } from './TaskFormModal';
-import { codeText, countText, instantText } from './texts';
 
 type Filters = { taskName?: string; taskType?: TaskType; status?: TaskStatus };
 
@@ -113,7 +114,8 @@ export default function TaskConfigPage() {
       valueEnum: Object.fromEntries(
         TASK_TYPES.map((type) => [type, { text: t(`activity.task.type.${type}`) }]),
       ),
-      render: (_, row) => codeText(intl, 'activity.task.type', row.taskType) || DASH,
+      render: (_, row) =>
+        codeText(intl, 'activity.task.type', row.taskType, { writeOut: true }) || DASH,
     },
     {
       title: t('activity.task.col.target'),
@@ -199,7 +201,7 @@ export default function TaskConfigPage() {
     {
       title: t('activity.task.col.actions'),
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) => (canManage ? <RowActions actions={actionsOf(row)} /> : null),
     },
   ];

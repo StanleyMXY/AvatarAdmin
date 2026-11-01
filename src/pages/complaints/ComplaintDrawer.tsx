@@ -14,10 +14,12 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { StatusTag } from '../../components/StatusTag';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   CLOSED_COMPLAINT_STATUSES,
@@ -29,7 +31,6 @@ import {
   type SettableComplaintStatus,
   setComplaintStatus,
 } from '../../services/complaints';
-import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
@@ -69,26 +70,31 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
   const t = (key: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id: key }, values);
   const [detail, setDetail] = useState<ComplaintDetail | null>(null);
-  const [loadFailure, setLoadFailure] = useState<string | null>(null);
+  const { text: loadFailure, fail: failLoad, clear: clearLoad } = useFailure();
   const [status, setStatus] = useState<SettableComplaintStatus | undefined>();
   const [note, setNote] = useState('');
   const [assetIds, setAssetIds] = useState<string[]>([]);
-  const [problem, setProblem] = useState<string | null>(null);
+  const {
+    text: problem,
+    fail: failWrite,
+    failWith: failWriteWith,
+    clear: clearProblem,
+  } = useFailure();
   const options = statusOptions(intl);
 
   // Only the newest read is shown: an answer for a complaint that was closed or replaced is dropped.
-  const newest = useRef(0);
+  const begin = useLatestCall();
   const load = useCallback(async () => {
-    const mine = ++newest.current;
+    const isCurrent = begin();
     if (id === null) return;
-    setLoadFailure(null);
+    clearLoad();
     try {
       const read = await getComplaint(id);
-      if (mine === newest.current) setDetail(read);
+      if (isCurrent()) setDetail(read);
     } catch (error) {
-      if (mine === newest.current) setLoadFailure(describeFailure(intl, error).text);
+      if (isCurrent()) failLoad(error);
     }
-  }, [id, intl]);
+  }, [id, begin, failLoad, clearLoad]);
 
   // A different complaint starts from an empty drawer.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `id` is the trigger, nothing else is read
@@ -97,7 +103,7 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
     setStatus(undefined);
     setNote('');
     setAssetIds([]);
-    setProblem(null);
+    clearProblem();
   }, [id]);
 
   useEffect(() => {
@@ -109,7 +115,7 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
 
   /** Runs a write; whatever the answer, the complaint and the list are read again, since a refusal can mean the state moved. */
   const write = async (call: () => Promise<unknown>, done: string) => {
-    setProblem(null);
+    clearProblem();
     try {
       await call();
       message.success(t(done));
@@ -117,7 +123,7 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
       setNote('');
       setAssetIds([]);
     } catch (error) {
-      setProblem(describeFailure(intl, error).text);
+      failWrite(error);
     }
     await load();
     onChanged();
@@ -126,7 +132,9 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
   const changeStatus = useSingleFlight(async () => {
     if (!detail || !status) return;
     if (countCodePoints(trimSpec(note)) > NOTE_MAX) {
-      setProblem(t('complaints.note.length', { max: NOTE_MAX }));
+      failWriteWith((words) =>
+        words.formatMessage({ id: 'complaints.note.length' }, { max: NOTE_MAX }),
+      );
       return;
     }
     await write(

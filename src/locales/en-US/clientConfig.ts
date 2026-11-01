@@ -51,6 +51,7 @@ const messages: Record<string, string> = {
   'clientConfig.editor.languageDuplicate': 'This language is already added',
   'clientConfig.editor.removeLanguage': 'Remove the value of this language',
   'clientConfig.editor.removeHelp': 'After saving, this language uses the default value.',
+  'clientConfig.editor.removeHelpNone': 'After saving, this language has no value.',
   'clientConfig.editor.valueLabel': 'Value ({language})',
   'clientConfig.editor.valueOn': 'On',
   'clientConfig.editor.valueOff': 'Off',
@@ -75,6 +76,8 @@ const messages: Record<string, string> = {
   'clientConfig.reset.button': 'Reset',
   'clientConfig.reset.confirm':
     'Delete the values of {key} in every language? The client goes back to the default.',
+  'clientConfig.reset.confirmNoDefault':
+    'Delete the values of {key} in every language? The key is then not configured and has no value.',
   'clientConfig.reset.done': 'Reset done',
   'clientConfig.reset.nothing': 'This key is not configured; there is no value to reset.',
 

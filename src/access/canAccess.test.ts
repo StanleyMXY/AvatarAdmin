@@ -73,6 +73,26 @@ describe('canAccess', () => {
     expect(canAccess(undefined, 'USER:VIEW')).toBe(false);
   });
 
+  it('is false for everyone while the password must be changed, a super administrator and a page without a code included', () => {
+    const forced = (over: { superAdmin?: boolean; permissions?: string[] }) => ({
+      superAdmin: false,
+      permissions: ['USER:VIEW'],
+      ...over,
+      mustChangePassword: true,
+    });
+    expect(canAccess(forced({}), 'USER:VIEW')).toBe(false);
+    expect(canAccess(forced({ superAdmin: true }), 'USER:VIEW')).toBe(false);
+    expect(canAccess(forced({ superAdmin: true }), undefined)).toBe(false);
+    expect(canAccess(forced({}), '')).toBe(false);
+  });
+
+  it('lets an administrator through once the password has been changed (false and a missing flag are the same)', () => {
+    const me = { superAdmin: false, permissions: ['USER:VIEW'] };
+    expect(canAccess({ ...me, mustChangePassword: false }, 'USER:VIEW')).toBe(true);
+    expect(canAccess({ ...me }, 'USER:VIEW')).toBe(true);
+    expect(canAccess({ ...me, mustChangePassword: 'true' as never }, 'USER:VIEW')).toBe(true);
+  });
+
   it('is false when the permission list is missing, not a crash', () => {
     expect(canAccess({ superAdmin: false } as never, 'USER:VIEW')).toBe(false);
   });
@@ -100,6 +120,19 @@ describe('access factory', () => {
   it('denies everything before the administrator is known', () => {
     expect(access(undefined)['USER:VIEW']).toBe(false);
     expect(access({})['USER:VIEW']).toBe(false);
+  });
+
+  it('denies every code, and the codeless check, while the password must be changed', () => {
+    const rules = access({ me: { ...admin(['USER:VIEW'], true), mustChangePassword: true } });
+    expect(rules['USER:VIEW']).toBe(false);
+    expect(rules.canAccess('USER:VIEW')).toBe(false);
+    expect(rules.canAccess(undefined)).toBe(false);
+  });
+
+  it('gives a canAccess that is false for an administrator who is not known yet, for a code as well', () => {
+    expect(access({ me: undefined }).canAccess('USER:VIEW')).toBe(false);
+    expect(access({ me: undefined }).canAccess(undefined)).toBe(false);
+    expect(access(undefined).canAccess('USER:VIEW')).toBe(false);
   });
 
   it('answers true for every code for a super administrator', () => {
@@ -175,6 +208,29 @@ describe('filterMenu', () => {
     );
     expect(visible[1].routes?.map((r) => r.path)).toEqual(['/users/list']);
     expect(visible.map((r) => r.path)).toEqual(['/dashboard', '/users']);
+  });
+
+  it('never shows a route that has a name but is a redirect, or opens without the layout', () => {
+    const visible = filterMenu(
+      [
+        { path: '/old', name: 'old', redirect: '/dashboard' },
+        { path: '/login', name: 'login', component: './login', layout: false },
+        { path: '/ok', name: 'ok', component: './ok' },
+      ],
+      can(),
+    );
+    expect(visible.map((r) => r.path)).toEqual(['/ok']);
+  });
+
+  it('hides a parent that has no children at all, also when the list of children is empty', () => {
+    expect(filterMenu([{ path: '/e', name: 'e', routes: [] }], can())).toEqual([]);
+    expect(
+      filterMenu([{ path: '/e', name: 'e', routes: [{ path: '/e/x', component: './x' }] }], can()),
+    ).toEqual([]);
+  });
+
+  it('shows a page with a name, no children and no code to everyone signed in', () => {
+    expect(filterMenu([{ path: '/p', name: 'p', component: './p' }], can())).toHaveLength(1);
   });
 
   it('hides a whole subtree when the parent itself has an access code the administrator lacks', () => {

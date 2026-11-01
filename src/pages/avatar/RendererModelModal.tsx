@@ -2,14 +2,14 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select, Typography } from 'antd';
 import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import { createRendererModel, PLATFORMS, type Platform } from '../../services/avatar';
+import { codeText } from '../../utils/displayText';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
-import { codeText } from './texts';
-import { UploadBox } from './UploadBox';
-import { useUploadSlot } from './uploadSlot';
 
 type Values = {
   rendererKind: string;
@@ -48,15 +48,16 @@ export function RendererModelModal({ open, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
+  // The language-file key of the problem, not its words: the words are made when drawn.
   const [fileProblem, setFileProblem] = useState<string | null>(null);
   const file = useUploadSlot();
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     setFileProblem(null);
     if (!file.uploadId) {
-      setFileProblem(t('avatar.models.fileRequired'));
+      setFileProblem('avatar.models.fileRequired');
       return;
     }
     try {
@@ -73,9 +74,9 @@ export function RendererModelModal({ open, onClose, onSaved }: Props) {
       const result = failureToForm(intl, form, error, FIELDS);
       if (result.uploadRejected) {
         file.reset();
-        setFileProblem(t('avatar.models.fileRejected'));
+        setFileProblem('avatar.models.fileRejected');
       }
-      setFailure(result.text);
+      fail(error);
       return;
     }
     message.success(t('avatar.models.saved'));
@@ -101,7 +102,7 @@ export function RendererModelModal({ open, onClose, onSaved }: Props) {
       afterClose={() => {
         form.resetFields();
         file.reset();
-        setFailure(null);
+        clear();
         setFileProblem(null);
       }}
       okText={t('pages.common.submit')}
@@ -127,15 +128,13 @@ export function RendererModelModal({ open, onClose, onSaved }: Props) {
       >
         <RevalidateOnLocaleChange />
         <Form.Item label={t('avatar.models.file')} extra={t('avatar.models.fileHint')}>
-          <UploadBox>
-            <UploadField<{ uploadId: string }>
-              kind="rendererModel"
-              onBusyChange={file.fieldProps.onBusyChange}
-              onUploaded={file.fieldProps.onUploaded}
-              onCleared={file.fieldProps.onCleared}
-            />
-          </UploadBox>
-          {fileProblem ? <Alert type="error" title={fileProblem} showIcon /> : null}
+          <UploadField<{ uploadId: string }>
+            kind="rendererModel"
+            onBusyChange={file.fieldProps.onBusyChange}
+            onUploaded={file.fieldProps.onUploaded}
+            onCleared={file.fieldProps.onCleared}
+          />
+          {fileProblem ? <Alert type="error" title={t(fileProblem)} showIcon /> : null}
         </Form.Item>
         <Form.Item
           name="rendererKind"

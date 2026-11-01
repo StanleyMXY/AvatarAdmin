@@ -1,11 +1,12 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Card, Flex, Spin, Statistic, Table, Typography } from 'antd';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useFailure } from '../../hooks/useFailure';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { getSubscriptionStats, type SubscriptionStatRow } from '../../services/subscriptions';
-import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
@@ -76,20 +77,20 @@ export default function SubscriptionStatsPage() {
   const meta = useAdminMeta();
   const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
   const [rows, setRows] = useState<SubscriptionStatRow[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const { text: failure, fail, clear } = useFailure();
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setRows(null);
-    setFailure(null);
+    clear();
     try {
       const { items } = await getSubscriptionStats(range);
-      if (mine === counter.current) setRows(items);
+      if (isCurrent()) setRows(items);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [range, intl]);
+  }, [range, begin, fail, clear]);
 
   useEffect(() => {
     void load();
@@ -157,7 +158,7 @@ export default function SubscriptionStatsPage() {
           </Flex>
           <Table<SubscriptionStatRow>
             size="small"
-            rowKey={(r) => `${r.statDate}|${r.store}|${r.productId}`}
+            rowKey={(r) => `${r.statDate}|${r.store}|${r.productId}|${r.listPriceCurrency ?? ''}`}
             dataSource={rows}
             scroll={{ x: 'max-content' }}
             pagination={{

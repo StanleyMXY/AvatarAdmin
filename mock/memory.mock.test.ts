@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MEMORY_ACCOUNT_IDS, memoryStore, resetMemoryStore } from './_core/memoryData';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
+import { USER } from './_core/usersData';
 import memory from './memory.mock';
 
 beforeEach(() => {
@@ -220,6 +221,20 @@ describe('GET /accounts/:id/memory', () => {
       assignedByUsername: 'root',
       assignedAt: expect.any(String),
     });
+  });
+
+  it('knows an account of the user module that was never given a model: no tier yet, an empty history, not 404', async () => {
+    const { status, body } = await get(asViewer(), USER.rich);
+    expect(status).toBe(200);
+    expect(body.data.tier.tierName).toBeNull();
+    expect(body.data.embeddingAssignments).toEqual([]);
+    expect(body.data.totalCount).toBe(0);
+    expect(body.data.truncated).toBe(false);
+  });
+
+  it('still answers 404 for an id that no module knows', async () => {
+    const { status } = await get(asViewer(), 'no-such-account');
+    expect(status).toBe(404);
   });
 
   it('says it is not cut and how many there are when the account has 200 or fewer assignments', async () => {

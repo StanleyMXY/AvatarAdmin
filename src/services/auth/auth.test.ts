@@ -32,6 +32,17 @@ describe('login', () => {
     expect(JSON.parse(calls[0].init.body as string)).toEqual({ username: 'root', password: 'pw' });
   });
 
+  it('sends no Authorization header even when a token is held (signing in is not done with an old session)', async () => {
+    setToken('old-token');
+    const calls = stubFetch(() =>
+      jsonResponse(200, envelope('200', { token: 't', expiresAt: 'x' })),
+    );
+    await login({ username: 'root', password: 'pw' });
+    expect(Object.keys(calls[0].init.headers).map((k) => k.toLowerCase())).not.toContain(
+      'authorization',
+    );
+  });
+
   it('returns a token answer as it is, and the enrollment answer with its status', async () => {
     stubFetch(() => jsonResponse(200, envelope('200', { token: 't', expiresAt: 'x' })));
     expect(await login({ username: 'a', password: 'b' })).toEqual({ token: 't', expiresAt: 'x' });
@@ -64,6 +75,17 @@ describe('enrollTotp, changePassword', () => {
     await enrollTotp({ enrollToken: 'e', totp: '123456' });
     expect(calls[0].url).toBe('/api/admin/auth/totp/enroll');
     expect(JSON.parse(calls[0].init.body as string)).toEqual({ enrollToken: 'e', totp: '123456' });
+  });
+
+  it('sends no Authorization header for the enrollment either: the enrollment token is in the body', async () => {
+    setToken('old-token');
+    const calls = stubFetch(() =>
+      jsonResponse(200, envelope('200', { token: 't', expiresAt: 'x' })),
+    );
+    await enrollTotp({ enrollToken: 'e', totp: '123456' });
+    expect(Object.keys(calls[0].init.headers).map((k) => k.toLowerCase())).not.toContain(
+      'authorization',
+    );
   });
 
   it('posts the old and the new password with the token', async () => {

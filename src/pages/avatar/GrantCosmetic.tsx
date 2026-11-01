@@ -1,20 +1,19 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Form, Input, Modal, Select } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
-import { type CosmeticItem, grantCosmetic, listCosmetics } from '../../services/avatar';
+import { type CosmeticItem, grantCosmetic, listAllCosmetics } from '../../services/avatar';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { codeText } from '../../utils/displayText';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 import { pickText } from './localized';
-import { codeText } from './texts';
 
 const REASON_MAX = 500;
-/** `GET /cosmetics` takes at most this many rows in a page; the catalog is read in one page. */
-const CATALOG_PAGE_SIZE = 200;
 
 type Props = {
   accountId: string;
@@ -46,20 +45,20 @@ export function GrantCosmeticModal({
   const [form] = Form.useForm<Values>();
   const [items, setItems] = useState<CosmeticItem[] | null>(null);
   const [forbidden, setForbidden] = useState(false);
-  const [loadFailure, setLoadFailure] = useState<string | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState<{ error: unknown } | null>(null);
+  const loadFailure = loadFailed === null ? null : describeFailure(intl, loadFailed.error).text;
+  const { text: failure, fail, clear } = useFailure();
 
   const load = useCallback(async () => {
-    setLoadFailure(null);
+    setLoadFailed(null);
     setForbidden(false);
     try {
-      const page = await listCosmetics({ page: 1, pageSize: CATALOG_PAGE_SIZE });
-      setItems(page.items);
+      setItems(await listAllCosmetics());
     } catch (error) {
       if (error instanceof ApiError && error.httpStatus === 403) setForbidden(true);
-      else setLoadFailure(describeFailure(intl, error).text);
+      else setLoadFailed({ error });
     }
-  }, [intl]);
+  }, []);
 
   // The catalog is read again each time the dialog opens: the addresses and the list change.
   useEffect(() => {
@@ -67,14 +66,15 @@ export function GrantCosmeticModal({
   }, [open, load]);
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     try {
       await grantCosmetic(accountId, {
         itemId: values.itemId as string,
         reason: trimSpec(values.reason),
       });
     } catch (error) {
-      setFailure(failureToForm(intl, form, error, ['itemId', 'reason']).text);
+      failureToForm(intl, form, error, ['itemId', 'reason']);
+      fail(error);
       return;
     }
     message.success(t('avatar.grant.done'));
@@ -97,7 +97,7 @@ export function GrantCosmeticModal({
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}

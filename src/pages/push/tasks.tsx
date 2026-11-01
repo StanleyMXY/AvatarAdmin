@@ -2,6 +2,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Flex, Tag, Typography } from 'antd';
 import { useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { RowActions } from '../../components/RowActions';
@@ -9,11 +10,11 @@ import { StatusTag } from '../../components/StatusTag';
 import { cancelTask, listTasks, type PushTask } from '../../services/push';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { codeText, countText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { supportedLocalesOf } from './coverage';
 import { TaskModal } from './TaskModal';
-import { codeText, countText, instantText } from './texts';
 
 /** 手动推送任务 (`PUSH:SEND`): one-off pushes to an audience, now or at a time. Only a waiting task can be cancelled. */
 export default function TasksPage() {
@@ -111,7 +112,7 @@ export default function TasksPage() {
     {
       title: t('push.tasks.col.actions'),
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) =>
         canSend && row.status === 'PENDING' ? (
           <RowActions

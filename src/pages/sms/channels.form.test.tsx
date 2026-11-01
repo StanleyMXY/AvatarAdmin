@@ -500,7 +500,7 @@ describe('the dialog', () => {
     const form = await openNew(user);
     await fillNew(user, form, { ext: '{"appId": ' });
     await user.click(form.getByRole('button', { name: 'Submit' }));
-    expect(await form.findByText('The extension is not valid JSON')).toBeInTheDocument();
+    expect(await form.findByText('Not valid JSON')).toBeInTheDocument();
     setText(form.getByRole('textbox', { name: 'Extension (JSON)' }), '[1,2]');
     await user.click(form.getByRole('button', { name: 'Submit' }));
     expect(await form.findByText('The extension must be a JSON object')).toBeInTheDocument();

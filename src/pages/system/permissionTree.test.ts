@@ -67,7 +67,7 @@ type RefNode = { code: string; selectable: boolean; children: RefNode[] };
 function nest(nodes: PermissionNode[]): RefNode[] {
   const make = (n: PermissionNode): RefNode => ({
     code: n.code,
-    selectable: (PERMISSION_CODES as readonly string[]).includes(n.code),
+    selectable: (PERMISSION_CODES as readonly string[]).includes(n.code) || n.builtin !== false,
     children: nodes.filter((c) => c.parent === n.code).map(make),
   });
   return nodes.filter((n) => n.parent === null).map(make);
@@ -133,13 +133,13 @@ describe('which nodes are built in and which can be chosen', () => {
     expect(isBuiltinNode(node('USER:VIEW', null, { builtin: false }))).toBe(true);
   });
 
-  it('lets only a code of the real permission list be chosen: not a custom node, not a built-in one the list lacks', () => {
+  it('lets the system nodes be chosen, also a built-in one the application does not know yet, and not a custom node', () => {
     expect(isSelectable(node('USER:VIEW', null, { builtin: true }))).toBe(true);
     // a real code stays a system node whatever the backend says about it
     expect(isSelectable(node('USER:VIEW', null, { builtin: false }))).toBe(true);
     expect(isSelectable(node('CUSTOM:A', null, { builtin: false }))).toBe(false);
-    expect(isSelectable(node('NEW:BUILTIN', null, { builtin: true }))).toBe(false);
-    expect(isSelectable(node('NEW:BUILTIN', null, { builtin: undefined as never }))).toBe(false);
+    expect(isSelectable(node('NEW:BUILTIN', null, { builtin: true }))).toBe(true);
+    expect(isSelectable(node('NEW:BUILTIN', null, { builtin: undefined as never }))).toBe(true);
   });
 });
 
@@ -154,6 +154,29 @@ describe('the tree as the page draws it', () => {
     ]);
     expect(index.roots).toEqual(['C', 'A', 'B']);
     expect(index.childrenOf.get('A')).toEqual(['A1', 'A2']);
+  });
+
+  it('leaves out a node that has no code that is text, and a row that is not a node, and keeps the others', () => {
+    const list = [
+      {
+        code: 'A',
+        parent: null,
+        type: 'MENU',
+        sortOrder: 1,
+        nameZh: 'A',
+        nameEn: 'A',
+        builtin: true,
+      },
+      { parent: null, type: 'MENU', sortOrder: 2 },
+      { code: 12, parent: null, type: 'MENU', sortOrder: 3 },
+      { code: '', parent: null, type: 'MENU', sortOrder: 4 },
+      null,
+      { code: 'B', parent: 'A', type: 'FUNCTION', sortOrder: 5, builtin: true },
+    ] as never;
+    const index = buildIndex(list);
+    expect(index.codes).toEqual(['A', 'B']);
+    expect(index.roots).toEqual(['A']);
+    expect(index.childrenOf.get('A')).toEqual(['B']);
   });
 
   it('shows a node whose parent is not in the list as a root, and keeps the first of two nodes with one code', () => {
@@ -304,8 +327,8 @@ describe('choosing nodes of the permission tree', () => {
       node('STATS:VIEW', null, { builtin: true }),
       node('CUSTOM:GROUP', 'STATS:VIEW'),
       node('USER:BAN', 'CUSTOM:GROUP', { builtin: true }),
-      node('NEW:BUILTIN', 'STATS:VIEW', { builtin: true }),
-      node('USER:EXPORT', 'NEW:BUILTIN', { builtin: true }),
+      node('CUSTOM:SECOND', 'STATS:VIEW'),
+      node('USER:EXPORT', 'CUSTOM:SECOND', { builtin: true }),
     ];
     expect(toggleCode(list, [], 'USER:BAN')).toEqual(['STATS:VIEW', 'USER:BAN']);
     expect(toggleCode(list, [], 'USER:EXPORT')).toEqual(['STATS:VIEW', 'USER:EXPORT']);
@@ -348,28 +371,39 @@ describe('choosing nodes of the permission tree', () => {
 
   it('gives the complete list, sorted, without a code twice or a code that is not in the tree or cannot be chosen', () => {
     const out = toggleCode(
-      [...tree, node('NEW:BUILTIN', null, { builtin: true })],
-      ['STATS:VIEW', 'STATS:VIEW', 'GONE:CODE', 'NEW:BUILTIN'],
+      [...tree, node('CUSTOM:X', null)],
+      ['STATS:VIEW', 'STATS:VIEW', 'GONE:CODE', 'CUSTOM:X'],
       'USER:BAN',
     );
     expect(out).toEqual(['STATS:VIEW', 'USER:BAN', 'USER:VIEW']);
   });
 
   it('ignores a click on a node that cannot be chosen or is not there', () => {
-    const list = [...tree, node('NEW:BUILTIN', null, { builtin: true })];
-    expect(toggleCode(list, ['STATS:VIEW'], 'NEW:BUILTIN')).toEqual(['STATS:VIEW']);
+    const list = [...tree, node('CUSTOM:X', null)];
+    expect(toggleCode(list, ['STATS:VIEW'], 'CUSTOM:X')).toEqual(['STATS:VIEW']);
     expect(toggleCode(list, ['STATS:VIEW'], 'NOPE')).toEqual(['STATS:VIEW']);
   });
 
   it('does not choose a node that cannot be chosen when its parent is checked', () => {
     const list = [
       node('USER:VIEW', null, { builtin: true }),
-      node('NEW:BUILTIN', 'USER:VIEW', { builtin: true }),
+      node('CUSTOM:SIBLING', 'USER:VIEW'),
       node('USER:BAN', 'USER:VIEW', { builtin: true }),
     ];
     expect(toggleCode(list, [], 'USER:VIEW')).toEqual(['USER:BAN', 'USER:VIEW']);
     // the page above is checked although a sibling cannot be chosen
     expect(toggleCode(list, [], 'USER:BAN')).toEqual(['USER:BAN', 'USER:VIEW']);
+  });
+
+  it('chooses and keeps a built-in node the application does not know yet, like any system node', () => {
+    const list = [
+      node('USER:VIEW', null, { builtin: true }),
+      node('NEW:BUILTIN', 'USER:VIEW', { builtin: true }),
+    ];
+    expect(toggleCode(list, [], 'USER:VIEW')).toEqual(['NEW:BUILTIN', 'USER:VIEW']);
+    expect(toggleCode(list, ['NEW:BUILTIN'], 'NEW:BUILTIN')).toEqual([]);
+    expect(toggleCode(list, ['NEW:BUILTIN', 'USER:VIEW'], 'USER:VIEW')).toEqual([]);
+    expect(stateOf(list, ['NEW:BUILTIN'], 'NEW:BUILTIN')).toBe('checked');
   });
 
   it('does not change the list it is given', () => {
@@ -603,5 +637,11 @@ describe('the codes of a role that the administrator does not hold', () => {
 
   it('compares the exact code: case and spaces count', () => {
     expect(codesNotHeld(['user:view', ' USER:VIEW'], held)).toEqual(['user:view', ' USER:VIEW']);
+  });
+
+  it('treats a role without a list of codes as having none', () => {
+    for (const bad of [undefined, null, 'USER:VIEW', 7, { length: 1, 0: 'COST:VIEW' }]) {
+      expect(codesNotHeld(bad, held)).toEqual([]);
+    }
   });
 });

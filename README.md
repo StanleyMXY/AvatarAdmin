@@ -2,7 +2,8 @@
 
 Admin console frontend: Umi Max, React, Ant Design 6 and `@ant-design/pro-components`.
 The design lives in the plan under `docs/superpowers/plans/`; the shared specification and
-backend contract live in the AvatarApp repository and are not copied here.
+backend contract live in the AvatarApp repository (its `main`). This repository holds read-only,
+byte-identical snapshots of the two files in `docs/shared-snapshots/`; they are never edited here.
 
 ## Requirements
 
@@ -31,6 +32,7 @@ backend contract live in the AvatarApp repository and are not copied here.
 | `npm run lint`                                             | `biome check` (lint, format, import order).                                                                                                     |
 | `npm run tsc`                                              | `tsc --noEmit` for the whole project.                                                                                                           |
 | `npm run check:routes`, `check:codes`, `check:config-keys` | Consistency checks against the specification and contract, run with `tsx`.                                                                      |
+| `npm run gen:permission-tree`, `gen:config-keys`           | Rewrite the generated permission tree and configuration key files from the spec / contract; pass the file path after `--` (see the script header).   |
 
 `postinstall` runs `max setup` (generates `src/.umi`, which is git-ignored); `prepare` installs the
 husky hooks.
@@ -50,7 +52,7 @@ husky hooks.
 | `newhire` | `mock-password-newhire` | must change the password first | users (view), statistics (view) |
 | `fresh` | `mock-password-fresh` | has no authenticator yet (login answers `ENROLL_REQUIRED`) | statistics (view), monitor (view) |
 
-The verification code is `000000` for every account, also for the first enrollment. Five wrong codes in a row lock the user name for 5 minutes (429 `RATE_LIMITED` with `data.retryAfterSeconds`), the defaults of `admin.totp_max_failures` and `admin.totp_lockout_minutes`; on enrollment the same count voids the enrollment token. The contract does not say whether the lock answers on the fifth wrong code or the sixth attempt, nor whether the 429 carries `retryAfterSeconds` (open question in `docs/contract-requests/2026-10-26-admin-frontend-auth-and-permissions.md`). Two flags of an administrator in the store (set in a test, not by any request) make the sign-in answers of an unreadable secret: `totpSecretUnreadable` answers 401 `ADMIN_TOTP_INVALID` at sign-in whatever the code is (counted like a wrong code), `enrollSecretUnreadable` answers 401 `ADMIN_INVALID_TOKEN` at enrollment and voids the enrollment token; resetting the authenticator clears the first. A non-super administrator can only grant and act on what they hold (the four 403 `ADMIN_FORBIDDEN` rules of the backend: grant, own role, role, administrator), a super administrator is not bound by them. `GET /api/admin/meta` returns the defaults of contract 17.5 and the upload limits of the backend's third reply, with one difference: `supportedLocales` is `["en", "zh-Hans", "th", "ar", "id", "vi", "es"]` (the contract's default is only `["en"]`), so that the language tabs and the template matrix can be looked at with Thai, Arabic, Indonesian, Vietnamese, Spanish, English and Chinese. The value does not follow `PUT /config/app.supported_locales`. `GET /api/admin/permissions` is the built-in permission tree, derived from spec table 5.0 (`scripts/permissionTree.ts`; the data is `mock/_core/permissionTree.generated.json`, rewritten with `npm run gen:permission-tree -- <spec path>`, and a test keeps the two equal). A code that table 5.0 does not tie to one page (`COSMETIC:GRANT`, `STATS:EXPORT`, `STATS:LAND`) is put under the page of its own area; that is an inference, asked in the same contract request.
+The verification code is `000000` for every account, also for the first enrollment. Five wrong codes in a row lock the user name for 5 minutes (429 `RATE_LIMITED` with `data.retryAfterSeconds`), the defaults of `admin.totp_max_failures` and `admin.totp_lockout_minutes`; on enrollment the same count voids the enrollment token. The contract does not say whether the lock answers on the fifth wrong code or the sixth attempt, nor whether the 429 carries `retryAfterSeconds` (open question in `docs/contract-requests/2026-10-26-admin-frontend-auth-and-permissions.md`). Two flags of an administrator in the store (set in a test, not by any request) make the sign-in answers of an unreadable secret: `totpSecretUnreadable` answers 401 `ADMIN_TOTP_INVALID` at sign-in whatever the code is (counted like a wrong code), `enrollSecretUnreadable` answers 401 `ADMIN_INVALID_TOKEN` at enrollment and voids the enrollment token; resetting the authenticator clears the first. A non-super administrator can only grant and act on what they hold (the four 403 `ADMIN_FORBIDDEN` rules of the backend: grant, own role, role, administrator), a super administrator is not bound by them. `GET /api/admin/meta` returns the defaults of contract 17.5 and the upload limits of the backend's third reply, with one difference: `supportedLocales` is `["en", "zh-Hans", "th", "ar", "id", "vi", "es"]` (the contract's default is only `["en"]`), so that the language tabs and the template matrix can be looked at with Thai, Arabic, Indonesian, Vietnamese, Spanish, English and Chinese. Until `app.supported_locales` is saved it stays so (while `GET /config` reports the contract's default `["en"]`); once a setting that `GET /meta` repeats (the languages, the currencies, the longest report range and the upload limits, listed in `mock/_core/meta.ts`) is saved with `PUT /config/{key}`, the answer follows it, and a reset brings the defaults above back. `GET /api/admin/permissions` is the built-in permission tree, derived from spec table 5.0 (`scripts/permissionTree.ts`; the data is `mock/_core/permissionTree.generated.json`, rewritten with `npm run gen:permission-tree -- <spec path>`, and a test keeps the two equal). A code that table 5.0 does not tie to one page (`COSMETIC:GRANT`, `STATS:EXPORT`, `STATS:LAND`) is put under the page of its own area; that is an inference, asked in the same contract request.
 
 Each module's mock file exports `{ 'METHOD /api/admin/path': handler }`; wrap handlers with `guard(permission, handler)` from `mock/_core/auth.ts`, which gives the contract's 401 and 403 answers and `req.admin`. Sample data comes from `mock/_core/fixtures.ts` (Thai, Arabic, Indonesian, Vietnamese, Spanish, English and Chinese, with long strings without spaces and emoji). Tests call a handler directly with `call` from `mock/_core/testing.ts`; no server is started.
 
@@ -93,6 +95,18 @@ npm run check:config-keys -- <contract path>
 The spec and the contract are the snapshots in `docs/shared-snapshots/` (see the README there);
 `check:codes` reads the exclusions from `docs/superpowers/handoff/permission-code-exclusions.txt`.
 `grep -r "mock-password" dist/` must find nothing: the fake backend is not part of the build.
+
+### Dependency audit
+
+`npm audit` (checked 2026-11-01) reports 64 advisories in 70 installed package copies: 1 critical, 16 high, 37 moderate, 10 low. `npm` marks all 70 copies `dev` in `package-lock.json`: none is reached through `dependencies` (antd, pro-components, react, dayjs, qrcode.react). The build tool is itself a dev dependency, though, and a few of its parts end up in the browser bundle, so they were read one by one:
+
+- `react-router` 6.3.0 (open redirect through a backslash or an untrusted address given to `navigate` or `Link`): the only address the app takes from outside is the return address after sign-in, and `safeReturnUrl` (`src/session/returnUrl.ts`) refuses `//`, backslashes, encoded slashes and control characters. Not reachable.
+- `path-to-regexp` 8.2.0 inside `@ant-design/pro-layout` (backtracking patterns): the patterns are the route paths of `config/routes`, written by us; nothing a visitor types is turned into a pattern. Not reachable by a visitor.
+- `@babel/runtime` 7.23.6 (slow generated code for `.replace` with named groups): the only named-group expression in `src` is replaced with a function, never with a `$<name>` string (`src/pages/system/auditDetail.ts`). Not reachable.
+- `immer` (through the dva plugin), `axios` (through the request plugin): neither plugin is enabled in `config/config.ts`.
+- The rest is build, lint, dev-server and test tooling (webpack, mako, esbuild, vite, eslint, glob, minimatch, the crypto polyfills, `happy-dom`, `vitest`): it runs on a developer or CI machine only. `happy-dom` and `vitest` advisories need a page or a mock file from an untrusted source; the tests load only our own code.
+
+Run `npm audit` again before each release; a new advisory in a package that is in the bundle (`antd`, `react`, `react-dom`, `dayjs`, `qrcode.react`, `react-router`, `@ant-design/pro-*`) is a reason to update first.
 
 ## Why these choices
 

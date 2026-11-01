@@ -250,6 +250,25 @@ describe('the subscription statistics', { timeout: 30000 }, () => {
     expect(text).toContain('no-such-currency');
   });
 
+  it('shows one row for each currency when a day, a store and a product come in two currencies, with no repeated key', async () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+    answering([
+      row({ productId: 'both', listPriceAmount: '9.99', listPriceCurrency: 'USD' }),
+      row({ productId: 'both', listPriceAmount: '1290.00', listPriceCurrency: 'THB' }),
+    ]);
+    renderPage(<StatsPage />);
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(2),
+    );
+    const keys = [...document.querySelectorAll('tbody tr.ant-table-row')].map((r) =>
+      r.getAttribute('data-row-key'),
+    );
+    expect(new Set(keys).size).toBe(2);
+    const repeated = warn.mock.calls.filter((call) => /same key/.test(String(call[0])));
+    expect(repeated).toHaveLength(0);
+    warn.mockRestore();
+  });
+
   it('writes a list price from its decimal string, never through a floating point number', async () => {
     answering([
       row({ productId: 'big', listPriceAmount: '9007199254740993.01', listPriceCurrency: 'USD' }),

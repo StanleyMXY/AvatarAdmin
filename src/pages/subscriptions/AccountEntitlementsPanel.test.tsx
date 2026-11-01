@@ -1,9 +1,11 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetStore } from '../../../mock/_core/store';
 import { resetSubscriptionsStore, subscriptionsState } from '../../../mock/_core/subscriptionsData';
 import * as subscriptionsMock from '../../../mock/subscriptions.mock';
+import { holdRequests } from '../../../tests/heldRequests';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { signInAs, useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
@@ -80,6 +82,40 @@ describe('the effective values', { timeout: 30000 }, () => {
     renderPage(<AccountEntitlementsPanel accountId="42" />);
     expect(await screen.findByText(/Failed to load/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+});
+
+const OTHER = '10000000002';
+
+function Switcher() {
+  const [id, setId] = useState(ACCOUNT);
+  return (
+    <>
+      <button type="button" onClick={() => setId(OTHER)}>
+        other account
+      </button>
+      <AccountEntitlementsPanel accountId={id} />
+    </>
+  );
+}
+
+describe('switching to another account', { timeout: 30000 }, () => {
+  it('shows the rows of the account now shown when the answer for the account shown before arrives late', async () => {
+    useMockBackend(subscriptionsMock);
+    const expected = subscriptionsState().accountEntitlements.filter(
+      (e) => e.accountId === OTHER,
+    ).length;
+    expect(expected).not.toBe(
+      subscriptionsState().accountEntitlements.filter((e) => e.accountId === ACCOUNT).length,
+    );
+    const held = holdRequests((url) => url.endsWith(`/accounts/${ACCOUNT}/entitlements`));
+    renderPage(<Switcher />);
+    await waitFor(() => expect(held.started()).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: 'other account' }));
+    await waitFor(() => expect(entitlementRows()).toHaveLength(expected));
+    held.release();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(entitlementRows()).toHaveLength(expected);
   });
 });
 

@@ -25,8 +25,8 @@ function readDetails(data: unknown): ErrorDetail[] {
 /**
  * A failed request. `code` is the backend's error code, or `NETWORK_ERROR` (no answer),
  * `REQUEST_TIMEOUT` (no answer in time), `GATEWAY_UNAVAILABLE` (the gateway's own 502, 503 or 504
- * page), `INVALID_RESPONSE` (any other answer that is not the JSON envelope). `httpStatus` is 0 when there was
- * no answer. `details` comes from `data.details` of an INVALID_REQUEST answer.
+ * page), `INVALID_RESPONSE` (any other answer that is not the JSON envelope), or `UNKNOWN` (made by
+ * `unknownError`, not by a request). `httpStatus` is 0 when there was no answer. `details` comes from `data.details` of an INVALID_REQUEST answer.
  */
 export class ApiError extends Error {
   readonly code: string;
@@ -49,6 +49,22 @@ export function networkError(): ApiError {
     code: 'NETWORK_ERROR',
     httpStatus: 0,
     message: 'The request could not be sent or the answer did not arrive.',
+    data: null,
+  });
+}
+
+/**
+ * What a page holds when a request failed with something that is not an `ApiError` (a mistake in
+ * the page's own code, a value that is not an error at all). The code is `UNKNOWN`, the one
+ * `describeError` gives such a value, and the message is fixed: a foreign error's own words can
+ * carry an address or a token. `httpStatus` 0 keeps `isOutcomeUnknown` true, so a write is not
+ * called "not done" on the strength of an error nobody understands.
+ */
+export function unknownError(): ApiError {
+  return new ApiError({
+    code: 'UNKNOWN',
+    httpStatus: 0,
+    message: 'The request failed in a way that is not known.',
     data: null,
   });
 }
@@ -90,13 +106,17 @@ const hasText = (value: string, key: string) => value !== '' && value !== key;
 
 /**
  * The texts to show for an error: `text` from `error.<code>`, and one text per detail from
- * `reason.<reason>`. A missing `error.<code>` becomes `error.UNKNOWN` plus the backend message; a
- * missing reason falls back to the backend message (English), then to the reason code.
+ * `reason.<reason>`. A missing `error.<code>` becomes `error.UNKNOWN` plus the backend message. A
+ * missing reason falls back to the backend message (English) when it is the only detail, so the
+ * sentence is not repeated on every row; with several details it falls back to the reason code.
+ * Anything that is not an `ApiError` (a TypeError from a page, an abort) is `error.UNKNOWN` alone:
+ * the message of a foreign error may carry an address.
  */
 export function describeError(
-  e: ApiError,
+  e: unknown,
   t: (key: string) => string,
 ): { text: string; fields: { ref: string; text: string }[] } {
+  if (!(e instanceof ApiError)) return { text: t('error.UNKNOWN'), fields: [] };
   const known = t(`error.${e.code}`);
   let text: string;
   if (hasText(known, `error.${e.code}`)) {
@@ -107,9 +127,10 @@ export function describeError(
   }
   const fields = e.details.map((detail) => {
     const reason = t(`reason.${detail.reason}`);
+    const untranslated = e.details.length === 1 ? e.message || detail.reason : detail.reason;
     return {
       ref: detail.ref,
-      text: hasText(reason, `reason.${detail.reason}`) ? reason : e.message || detail.reason,
+      text: hasText(reason, `reason.${detail.reason}`) ? reason : untranslated,
     };
   });
   return { text, fields };

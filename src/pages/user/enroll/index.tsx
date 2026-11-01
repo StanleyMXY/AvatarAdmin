@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { RevalidateOnLocaleChange } from '../../../hooks/useRevalidateOnLocaleChange';
 import { enrollTotp } from '../../../services/auth';
 import { describeFailure, failureNotice, type Notice, noticeText } from '../../../session/describe';
+import { groupKey, setupKeyOf } from '../../../session/otpauth';
 import { clearPendingEnroll, getPendingEnroll } from '../../../session/pendingEnroll';
 import { DEFAULT_RETURN, LOGIN_PATH, safeReturnUrl } from '../../../session/returnUrl';
 import { useGoWhenSignedIn, useSession } from '../../../session/useSession';
@@ -20,6 +21,7 @@ export default function Enroll() {
   const { busy, run } = useSubmitOnce();
   const [form] = Form.useForm<{ totp: string }>();
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [keyShown, setKeyShown] = useState(false);
   // Read once: a successful setup clears the memory copy, and the page must not mistake that for "nothing to set up".
   const [pending] = useState(getPendingEnroll);
   const t = (id: string) => intl.formatMessage({ id });
@@ -30,6 +32,7 @@ export default function Enroll() {
   }, [pending]);
 
   if (!pending) return null;
+  const setupKey = setupKeyOf(pending.otpauthUri);
 
   const backToLogin = (notice?: string) => {
     clearPendingEnroll();
@@ -80,6 +83,30 @@ export default function Enroll() {
           {/* Drawn here from the address the server sent; nothing is sent to a QR service. */}
           <QRCodeSVG value={pending.otpauthUri} size={192} marginSize={0} />
         </div>
+        {setupKey ? (
+          <Flex vertical align="center" gap={8}>
+            <Button type="link" size="small" onClick={() => setKeyShown(!keyShown)}>
+              {t(keyShown ? 'auth.enroll.hideKey' : 'auth.enroll.showKey')}
+            </Button>
+            {keyShown ? (
+              <>
+                <Typography.Text type="secondary">{t('auth.enroll.keyHelp')}</Typography.Text>
+                {/* Letters and digits read left to right whatever the language of the page */}
+                <div dir="ltr">
+                  <Typography.Text
+                    code
+                    copyable={{
+                      text: setupKey,
+                      tooltips: [t('auth.enroll.copy'), t('auth.enroll.copied')],
+                    }}
+                  >
+                    {groupKey(setupKey)}
+                  </Typography.Text>
+                </div>
+              </>
+            ) : null}
+          </Flex>
+        ) : null}
         <Form
           form={form}
           layout="vertical"

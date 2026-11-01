@@ -4,17 +4,17 @@ import { Flex, Table, Tabs, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
+import { ReadState } from '../../components/ReadState';
+import { LandBar } from '../../components/stat/LandBar';
 import { TrendChart } from '../../components/stat/TrendChart';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getCheckinDailyUsers, getCheckinStreakBuckets } from '../../services/stats/reports';
 import type { CheckinDailyUsersRow, StreakBucketRow } from '../../services/stats/types';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
+import { countText, orDash } from '../../utils/displayText';
 import { DASH } from '../../utils/ratio';
-import { ReportState } from '../stat/guest/ReportState';
-import { useReport } from '../stat/guest/useReport';
-import { LocalDayLandBar } from './LocalDayLandBar';
 import { StatsBar, useAppliedRange } from './StatsBar';
-import { countText, plainOrDash } from './texts';
 
 type TabKey = 'daily' | 'streak';
 
@@ -37,8 +37,8 @@ export default function SigninStatsPage() {
 
   const readDaily = useCallback(() => getCheckinDailyUsers(applied), [applied]);
   const readStreak = useCallback(() => getCheckinStreakBuckets(applied), [applied]);
-  const daily = useReport(readDaily);
-  const streak = useReport(readStreak);
+  const daily = useLatestRead(readDaily);
+  const streak = useLatestRead(readStreak);
 
   const dailyRows = useMemo(
     () =>
@@ -66,7 +66,7 @@ export default function SigninStatsPage() {
     {
       title: t('activity.signinStats.col.date'),
       dataIndex: 'statDate',
-      render: (value: unknown) => plainOrDash(value),
+      render: (value: unknown) => orDash(value),
     },
     {
       title: t('activity.signinStats.col.users'),
@@ -108,7 +108,12 @@ export default function SigninStatsPage() {
           />
         }
       />
-      <LocalDayLandBar name="checkin-daily" onLanded={reloadAll} />
+      <LandBar
+        name="checkin-daily"
+        onLanded={reloadAll}
+        dateLabelId="activity.stats.land.date"
+        hintId="activity.stats.land.hint"
+      />
       <Tabs
         activeKey={tab}
         onChange={(key) => setTab(key as TabKey)}
@@ -118,11 +123,7 @@ export default function SigninStatsPage() {
             label: t('activity.signinStats.tab.daily'),
             children: (
               <Flex vertical gap={16}>
-                <ReportState
-                  failure={daily.failure}
-                  loading={daily.data === null}
-                  onRetry={daily.reload}
-                />
+                <ReadState failure={daily.failure} loading={daily.loading} onRetry={daily.reload} />
                 {daily.data ? (
                   <>
                     <Typography.Text strong>
@@ -141,7 +142,7 @@ export default function SigninStatsPage() {
                       columns={dailyColumns}
                       dataSource={dailyRows.map((r, i) => ({
                         ...r,
-                        __key: `${plainOrDash(r.statDate)}|${i}`,
+                        __key: `${orDash(r.statDate)}|${i}`,
                       }))}
                       pagination={false}
                       scroll={{ x: 'max-content' }}
@@ -157,9 +158,9 @@ export default function SigninStatsPage() {
             label: t('activity.signinStats.tab.streak'),
             children: (
               <Flex vertical gap={16}>
-                <ReportState
+                <ReadState
                   failure={streak.failure}
-                  loading={streak.data === null}
+                  loading={streak.loading}
                   onRetry={streak.reload}
                 />
                 {streak.data ? (
@@ -174,8 +175,8 @@ export default function SigninStatsPage() {
                       theme={theme.g2Theme}
                       scale={{ color: { range: theme.palette } }}
                       axis={{
-                        x: { labelFill: theme.textColor },
-                        y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+                        x: { ...axisTextStyle(theme) },
+                        y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
                       }}
                       height={280}
                     />
@@ -185,7 +186,7 @@ export default function SigninStatsPage() {
                       columns={streakColumns}
                       dataSource={streakRows.map((r, i) => ({
                         ...r,
-                        __key: `${plainOrDash(r.consecutiveDays)}|${i}`,
+                        __key: `${orDash(r.consecutiveDays)}|${i}`,
                       }))}
                       pagination={false}
                       scroll={{ x: 'max-content' }}

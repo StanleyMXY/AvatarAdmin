@@ -5,16 +5,16 @@ import type { CSSProperties, ReactNode } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
+import { ReadState } from '../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { type AnalyticsEvent, getEventNames, listEvents } from '../../services/analytics';
 import { useAdminMeta } from '../../session/useSession';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
-import { lastNDaysUtc } from '../../utils/utcDay';
-import { ReadState } from './ReadState';
-import { useRead } from './useRead';
+import { defaultRange } from './defaultRange';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -72,7 +72,7 @@ export default function EventDetailPage() {
     intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
   const [form] = Form.useForm<Filters>();
-  const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [range, setRange] = useState<DayRange>(() => defaultRange(meta.analyticsLiveMaxRangeDays));
   const [asked, setAsked] = useState<{ range: DayRange; filters: Filters }>({
     range,
     filters: { accountId: '', deviceId: '', eventName: '' },
@@ -90,11 +90,11 @@ export default function EventDetailPage() {
       }),
     [asked, paging],
   );
-  const { data, failure, loading, reload } = useRead(fetcher, { keep: true });
+  const { data, failure, loading, reload } = useLatestRead(fetcher, { keepWhileReading: true });
 
   // The names the range has, for the suggestions. When they cannot be read the box is just a text box.
   const namesFetcher = useCallback(() => getEventNames(asked.range), [asked.range]);
-  const names = useRead(namesFetcher, { keep: true }).data?.items ?? [];
+  const names = useLatestRead(namesFetcher, { keepWhileReading: true }).data?.items ?? [];
   const nameOptions = useMemo(() => names.map((value) => ({ value })), [names]);
 
   const ask = (values: Partial<Filters>) => {

@@ -1,21 +1,28 @@
-import { ApiError, describeError, networkError } from '../request/errors';
+import { ApiError, describeError, unknownError } from '../request/errors';
 
 /** The part of `useIntl()` this needs (Umi's copy of react-intl and ours have different types). */
-type Translator = {
+export type Translator = {
   messages: Record<string, unknown>;
   formatMessage: (descriptor: { id: string }, values?: Record<string, string | number>) => string;
 };
 
 /**
  * The texts for a failed request, in the current language: the text of the error and one per
- * field detail. Anything that is not an `ApiError` is shown as a network failure.
+ * field detail. Anything that is not an `ApiError` (a mistake in the page's own code, an abort) is
+ * the unknown error, as `describeError` says it: only the request layer knows that the network
+ * failed, and it says so with an `ApiError`.
  */
 export function describeFailure(intl: Translator, failure: unknown) {
-  const error = failure instanceof ApiError ? failure : networkError();
+  const error = failure instanceof ApiError ? failure : unknownError();
   const described = describeError(error, (key) =>
     intl.messages[key] ? intl.formatMessage({ id: key }) : key,
   );
   return { error, ...described };
+}
+
+/** The error code of a failure (the unknown error's code for anything that is not an `ApiError`), whatever the language. */
+export function failureCode(failure: unknown): string {
+  return (failure instanceof ApiError ? failure : unknownError()).code;
 }
 
 /**

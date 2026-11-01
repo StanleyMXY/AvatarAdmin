@@ -2,6 +2,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { App, Flex, Tag, Typography } from 'antd';
 import { useRef } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { RowActions } from '../../components/RowActions';
@@ -167,7 +168,7 @@ export default function DeletionsPage() {
     {
       title: t('users.common.actions'),
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       onCell: tint,
       render: (_, row) => (
         <RowActions

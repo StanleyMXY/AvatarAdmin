@@ -138,3 +138,7 @@ export function getLocale(): string {
 export function setLocale(locale: string, _realReload?: boolean) {
   localeStore.set(locale);
 }
+/** Umi announces a changed language through this; here the language in use is simply set. */
+export function addLocale(name: string, _messages?: object, _extra?: object) {
+  localeStore.set(name);
+}

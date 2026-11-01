@@ -1,5 +1,5 @@
 import { HOLLOW_MARKER, provisionalPoints } from '../../components/stat/provisionalChart';
-import type { ChartThemeConfig } from '../../theme/chartTheme';
+import { axisTextStyle, type ChartThemeConfig } from '../../theme/chartTheme';
 import { axisGroupOf, TREND_METRICS, type TrendMetric, type TrendPoint } from './trendData';
 
 type Row = { statDate: string; series: string; value: number | null };
@@ -108,12 +108,11 @@ export function buildTrendChart(input: TrendChartInput) {
       data: solid,
       style: { lineWidth: 2 },
       axis: {
-        x: index === 0 ? { labelFill: theme.textColor } : false,
+        x: index === 0 ? { ...axisTextStyle(theme) } : false,
         y: {
           title: units.join(' / '),
           position: index === 0 ? 'left' : 'right',
-          titleFill: theme.textColor,
-          labelFill: theme.textColor,
+          ...axisTextStyle(theme),
           grid: index === 0,
           gridStroke: theme.gridColor,
         },

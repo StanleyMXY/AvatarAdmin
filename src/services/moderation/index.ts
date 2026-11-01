@@ -25,11 +25,11 @@ export const getModerationRecord = (id: string): Promise<ModerationRecord> =>
 /**
  * `GET /moderation/records/{id}/content` (`MODERATION:REVIEW`): the reviewed text, or a short-lived
  * signed address of the file. Every call is a new request and writes an audit entry on the backend:
- * the answer is never kept, and the address is never logged. A record without a stored original
+ * the answer is never kept (the browser cache is off for this call too), and the address is never logged. A record without a stored original
  * (blocked automatically, or a companion name changed since) answers 404 `CONTENT_NOT_STORED`.
  */
 export const getModerationContent = (id: string): Promise<ModerationContent> =>
-  apiRequest({ method: 'GET', url: `/moderation/records/${enc(id)}/content` });
+  apiRequest({ method: 'GET', url: `/moderation/records/${enc(id)}/content`, cache: 'no-store' });
 
 /** `POST /moderation/records/{id}/decision` (`MODERATION:REVIEW`). The note is sent trimmed, and left out when empty. */
 export const decideModeration = async (id: string, body: ModerationDecisionBody): Promise<void> => {

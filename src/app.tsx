@@ -8,6 +8,7 @@ import { LangSwitch } from './components/layout/LangSwitch';
 import { pageTitleRender } from './components/layout/pageTitle';
 import { TabManager } from './components/layout/TabManager';
 import { ThemeSwitch } from './components/layout/ThemeSwitch';
+import { currentLocale } from './locales/activeLocale';
 import { applyInitialLocale } from './locales/initLocale';
 import { Forbidden } from './pages/403';
 import NotFoundPage from './pages/404';
@@ -23,6 +24,13 @@ import { LAYOUT } from './theme/tokens';
 // matches what the user sees. (The call happens later; Umi's plugin manager does not exist yet while
 // this file is being loaded, so nothing here may call getLocale() at load time.)
 setLocaleProvider(() => getLocale());
+
+/**
+ * Umi asks the app which language is in use (it does not read localStorage itself, see
+ * `config/localeConfig.ts`), so the language it shows, the drop-down and `Accept-Language` agree
+ * even when the browser refuses storage.
+ */
+export const locale = { getLocale: currentLocale };
 
 /** Umi calls this once, with its plugins ready, before the first page is drawn: choose the language now. */
 export function render(oldRender: () => void): void {
@@ -57,9 +65,10 @@ export const layout = ({ initialState }: { initialState?: InitialState }) => {
     title: buildVars.productName,
     logo: buildVars.logoUrl,
     layout: 'mix' as const,
-    // The account could not be read (token still held): nothing of the shell (menu,
-    // header) belongs to a person we cannot name yet, so the notice fills the whole page.
-    pure: !me && initialState?.unavailable === true,
+    // Nothing of the shell (menu, header) belongs to a person we cannot name: not while the account
+    // is being read, not when nobody is signed in (the gate is sending them to sign-in), and not
+    // when it could not be read (token still held; the notice fills the whole page).
+    pure: !me,
     fixedHeader: true,
     fixSiderbar: true,
     siderWidth: LAYOUT.siderWidth,
@@ -69,9 +78,13 @@ export const layout = ({ initialState }: { initialState?: InitialState }) => {
     pageTitleRender,
     actionsRender: () => [<LangSwitch key="lang" />, <ThemeSwitch key="theme" />],
     avatarProps: { render: () => <AccountMenu /> },
+    // The 403 page sits under the tab bar like every other page: the tabs are not unmounted and
+    // read back from storage when a limited account opens a page it may not see.
     unAccessible: (
       <SessionGate>
-        <Forbidden />
+        <TabManager routes={appRoutes} can={can} locale={getLocale()}>
+          <Forbidden />
+        </TabManager>
       </SessionGate>
     ),
     noFound: <NotFoundPage />,

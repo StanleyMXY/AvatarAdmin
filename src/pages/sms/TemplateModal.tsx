@@ -1,13 +1,13 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal, Select, Switch, Typography } from 'antd';
-import { useState } from 'react';
+import { type FailureLines, useFailureView } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { createTemplate, SMS_TYPES, type SmsTemplate, updateTemplate } from '../../services/sms';
+import { failureToForm, failureWords } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { countryCodeProblem } from './channelRules';
-import { failureToForm } from './formFailure';
 import { isLastOtpTemplate, keepsEnglishFallback } from './lastOtp';
 import { isEnglishFallbackRefusal, templateFailureText } from './templateFailure';
 import {
@@ -61,11 +61,11 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  const { view: failure, show, clear } = useFailureView<FailureLines>();
   const editing = template !== null;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     let guarded = false;
     if (template && values.smsType !== 'OTP') {
       const others = all ?? [template];
@@ -92,12 +92,14 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
         await updateTemplate(plainText(template.id), buildTemplateBody(input, 'update'));
       else await createTemplate(buildTemplateBody(input, 'create'));
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS);
+      failureToForm(intl, form, error, FIELDS, {}, { generalReason: true });
       // The refusal about the English template names no field: its words stand alone at the top.
-      setFailure({
-        text: templateFailureText(intl, error, guarded),
-        more: isEnglishFallbackRefusal(error) ? [] : result.unplaced,
-      });
+      show((words) => ({
+        text: templateFailureText(words, error, guarded),
+        more: isEnglishFallbackRefusal(error)
+          ? []
+          : failureWords(words, error, FIELDS, {}, { generalReason: true }).unplaced,
+      }));
       return;
     }
     message.success(t('sms.common.saved'));
@@ -265,7 +267,7 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

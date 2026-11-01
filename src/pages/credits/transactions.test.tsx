@@ -189,4 +189,13 @@ describe('the credit transaction page', { timeout: 30000 }, () => {
     expect(button.style.maxWidth).not.toBe('');
     for (const note of notes.slice(1, 8)) expect(screen.getByText(note)).toBeInTheDocument();
   });
+  it('shows all four filters at once, none of them behind "expand"', async () => {
+    useMockBackend(creditsMock);
+    renderPage(<TransactionsPage />);
+    await screen.findAllByRole('row');
+    for (const label of ['Account ID', 'Reason', 'Type']) {
+      expect(screen.getByLabelText(label), label).toBeVisible();
+    }
+    expect(screen.getByText('Time range (UTC)')).toBeVisible();
+  });
 });
