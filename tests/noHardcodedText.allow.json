@@ -8,5 +8,10 @@
     "file": "src/pages/companionship/index.tsx",
     "text": "CLOSE",
     "reason": "The name of the stage in the configuration value companionship.stage_thresholds (a protocol key, not wording)."
+  },
+  {
+    "file": "src/pages/dashboard/trendChart.ts",
+    "text": "value",
+    "reason": "The name of the data field the chart label reads (the label text is the value of the point), not wording."
   }
 ]

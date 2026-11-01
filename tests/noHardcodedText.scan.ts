@@ -37,6 +37,12 @@ const TEXT_PROPS = new Set([
 /** Calls whose string arguments are shown to a person: `message.error('...')`, `Modal.confirm(...)`. */
 const TEXT_CALL_OBJECTS = new Set(['message', 'notification']);
 
+/**
+ * ... and the same through a variable of any name (`api.error('...')` from `notification.useNotification()`,
+ * `modal.warning('...')` from `App.useApp()`).
+ */
+const TEXT_CALL_METHODS = new Set(['success', 'error', 'warning', 'info', 'loading', 'confirm']);
+
 /** A letter of any script (Latin, Thai, Arabic, CJK, ...): symbols, digits and punctuation alone are not text. */
 const hasLetter = (s: string) => /\p{L}/u.test(s);
 
@@ -80,7 +86,7 @@ export function scanSource(fileName: string, text: string): Finding[] {
     text,
     ts.ScriptTarget.Latest,
     true,
-    ts.ScriptKind.TSX,
+    fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   const findings: Finding[] = [];
   const check = (literals: Literal[]) => {
@@ -117,8 +123,9 @@ export function scanSource(fileName: string, text: string): Finding[] {
     } else if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
-      ts.isIdentifier(node.expression.expression) &&
-      TEXT_CALL_OBJECTS.has(node.expression.expression.text)
+      ((ts.isIdentifier(node.expression.expression) &&
+        TEXT_CALL_OBJECTS.has(node.expression.expression.text)) ||
+        TEXT_CALL_METHODS.has(node.expression.name.text))
     ) {
       check(node.arguments.flatMap(literalsOf));
     }
