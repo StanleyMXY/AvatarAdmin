@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode, useEffect } from 'react';
 import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -317,6 +317,14 @@ describe('TabManager: the tab menu without a mouse', () => {
     const menu = await screen.findByRole('menu');
     fireEvent.click(within(menu).getByText('Close'));
     expect(tabLabels()).toEqual(['Overview', 'Multi-account']);
+  });
+
+  it('puts the focus in the menu it opened, so that the arrow keys and Enter choose an entry', async () => {
+    const ui = render(<Shell />);
+    visit('/users/list', ui);
+    fireEvent.keyDown(tabButton('User list'), { key: 'ContextMenu' });
+    const menu = await screen.findByRole('menu');
+    await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true));
   });
 
   it('does not open for F10 alone or for other keys', () => {

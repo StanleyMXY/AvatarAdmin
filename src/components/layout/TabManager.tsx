@@ -183,6 +183,8 @@ export function TabManager({ routes, can, locale, children }: Props) {
                 <Dropdown
                   key={node.key}
                   trigger={['contextMenu']}
+                  // The focus goes into the menu, so that the arrow keys and Enter work after the menu key.
+                  autoFocus
                   open={menuPath === path}
                   onOpenChange={(open) =>
                     setMenuPath((current) => (open ? path : current === path ? null : current))
