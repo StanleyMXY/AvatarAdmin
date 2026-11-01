@@ -8,11 +8,11 @@ import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc'
 import { LandBar } from '../../components/stat/LandBar';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { TRIGGER_REASONS } from '../../services/push';
 import { getPushStats } from '../../services/stats/reports';
 import type { PushStatRow } from '../../services/stats/types';
-import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
 import { codeText, countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
@@ -56,13 +56,13 @@ export default function PushStatsPage() {
   const [draft, setDraft] = useState<Filter>(initialFilter);
   const [applied, setApplied] = useState<Filter>(initialFilter);
   const [rows, setRows] = useState<PushStatRow[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const begin = useLatestCall();
 
   const load = useCallback(async () => {
     const isCurrent = begin();
     setRows(null);
-    setFailure(null);
+    clear();
     try {
       const { items } = await getPushStats({
         from: applied.range.from,
@@ -71,9 +71,9 @@ export default function PushStatsPage() {
       });
       if (isCurrent()) setRows(items);
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [applied, intl, begin]);
+  }, [applied, begin, fail, clear]);
 
   useEffect(() => {
     void load();

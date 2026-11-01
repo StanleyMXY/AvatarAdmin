@@ -7,6 +7,7 @@ import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import { RowActions } from '../../components/RowActions';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   deleteTemplate,
@@ -16,7 +17,6 @@ import {
   type PushTemplate,
   updateTemplate,
 } from '../../services/push';
-import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
 import { codeText, describeLink } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
@@ -45,7 +45,7 @@ export default function TemplatesPage() {
   const [editing, setEditing] = useState<PushTemplate | null | 'new'>(null);
   const [all, setAll] = useState<PushTemplate[] | null>(null);
   const [missing, setMissing] = useState<MissingLocales | null>(null);
-  const [allFailure, setAllFailure] = useState<string | null>(null);
+  const { text: allFailure, fail, clear } = useFailure();
   const begin = useLatestCall();
 
   const loadAll = useCallback(async () => {
@@ -55,11 +55,11 @@ export default function TemplatesPage() {
       if (!isCurrent()) return;
       setAll(rows.items);
       setMissing(rows.missingLocales);
-      setAllFailure(null);
+      clear();
     } catch (error) {
-      if (isCurrent()) setAllFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [intl, begin]);
+  }, [begin, fail, clear]);
 
   useEffect(() => {
     void loadAll();

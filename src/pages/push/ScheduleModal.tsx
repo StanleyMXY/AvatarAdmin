@@ -15,6 +15,7 @@ import {
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
 import type { LinkTargetValue } from '../../components/LinkTargetField';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { useUploadSlot } from '../../hooks/useUploadSlot';
@@ -105,7 +106,7 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [rejected, setRejected] = useState(false);
   const picture = useUploadSlot();
   const editing = schedule !== null;
@@ -142,7 +143,7 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
   }, [schedule]);
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     if (rejected && !picture.uploadId) return;
     const body = scheduleFields(
       {
@@ -162,7 +163,7 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
         picture.reset();
         setRejected(true);
       }
-      setFailure(result.text);
+      fail(error);
       return;
     }
     message.success(t('push.schedules.saved'));
@@ -181,7 +182,7 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
       afterClose={() => {
         form.resetFields();
         picture.reset();
-        setFailure(null);
+        clear();
         setRejected(false);
       }}
       okText={t('pages.common.submit')}

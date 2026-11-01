@@ -5,6 +5,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   getRecord,
@@ -14,7 +15,6 @@ import {
   type PushRecord,
   type PushRecordDetail,
 } from '../../services/push';
-import { describeFailure } from '../../session/describe';
 import { codeText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
@@ -52,20 +52,20 @@ function Deliveries({ id }: { id: string }) {
   const t = (key: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id: key }, values);
   const [detail, setDetail] = useState<PushRecordDetail | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const begin = useLatestCall();
 
   const load = useCallback(async () => {
     const isCurrent = begin();
     setDetail(null);
-    setFailure(null);
+    clear();
     try {
       const record = await getRecord(id);
       if (isCurrent()) setDetail(record);
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [id, intl, begin]);
+  }, [id, begin, clear, fail]);
 
   useEffect(() => {
     void load();
@@ -130,7 +130,7 @@ export default function RecordsPage() {
     intl.formatMessage({ id }, values);
   const [paging, setPaging] = useState({ page: 1, pageSize: 20 });
   const [data, setData] = useState<Page<PushRecord> | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [loading, setLoading] = useState(true);
   const begin = useLatestCall();
 
@@ -141,13 +141,13 @@ export default function RecordsPage() {
       const page = await listRecords(paging);
       if (!isCurrent()) return;
       setData(page);
-      setFailure(null);
+      clear();
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [paging, intl, begin]);
+  }, [paging, begin, fail, clear]);
 
   useEffect(() => {
     void load();

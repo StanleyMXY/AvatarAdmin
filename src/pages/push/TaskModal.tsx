@@ -3,6 +3,7 @@ import { Alert, App, DatePicker, Form, Modal, Radio } from 'antd';
 import type { Dayjs } from 'dayjs';
 import { useState } from 'react';
 import type { LinkTargetValue } from '../../components/LinkTargetField';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { useUploadSlot } from '../../hooks/useUploadSlot';
@@ -55,13 +56,13 @@ export function TaskModal({ open, locales, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [rejected, setRejected] = useState(false);
   const picture = useUploadSlot();
   const mode = Form.useWatch('sendMode', form) ?? 'now';
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     if (rejected && !picture.uploadId) return;
     try {
       await createTask({
@@ -77,7 +78,7 @@ export function TaskModal({ open, locales, onClose, onSaved }: Props) {
         picture.reset();
         setRejected(true);
       }
-      setFailure(result.text);
+      fail(error);
       return;
     }
     message.success(t('push.tasks.created'));
@@ -96,7 +97,7 @@ export function TaskModal({ open, locales, onClose, onSaved }: Props) {
       afterClose={() => {
         form.resetFields();
         picture.reset();
-        setFailure(null);
+        clear();
         setRejected(false);
       }}
       okText={t('pages.common.submit')}
