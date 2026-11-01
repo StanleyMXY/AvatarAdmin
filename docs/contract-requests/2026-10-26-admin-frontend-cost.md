@@ -60,3 +60,5 @@
 **问：** 非 LLM 批次（`IMAGE_EDIT`、`IMAGE_TO_VIDEO`、`MATTING`、`DRIVING_PREP`、`AGE_ESTIMATION`、`CLOUD_RENDER`）的 `unitPrice` 在 `GET /usage/prices`、`GET /usage/price-batches/pending`（包括 `active` 里的那一份）里是字符串还是数？能不能和 LLM 的三个价格一样用字符串？
 
 **暂定做法：** 前端两种都收：字符串原样保留，数用 JavaScript 写出的十进制文字展开（不带指数）；提交 `POST /usage/prices` 时单价始终是字符串。如果后端回的是数，精度在 JSON 解析时已经丢了，这是前端补不回来的。
+
+核对于 2026-11-01

@@ -450,3 +450,123 @@ describe('PagedListTable: skeleton, column settings and the gateway notice', () 
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });
+
+describe('PagedListTable: start values, and a notice of what was asked', () => {
+  const pages = (total: number) =>
+    vi.fn(async (p: { page: number; pageSize: number; q?: string }) => ({
+      items: [{ id: String(p.page), name: `row of page ${p.page} for ${p.q ?? 'nothing'}` }],
+      total,
+    }));
+
+  it('starts with the given search in the form, on the given page and size, and asks for exactly that first', async () => {
+    const request = pages(500);
+    renderPage(
+      <PagedListTable<Row, { q?: string }>
+        rowKey="id"
+        columns={columns}
+        request={request}
+        initial={{ search: { q: 'สม ชาย' }, page: 3, pageSize: 10 }}
+      />,
+    );
+    expect(await screen.findByText('row of page 3 for สม ชาย')).toBeInTheDocument();
+    expect(screen.getByLabelText('Keyword')).toHaveValue('สม ชาย');
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({ q: 'สม ชาย', page: 3, pageSize: 10 }),
+    );
+    // no read of the default page before the one that was asked for
+    expect(request.mock.calls.every(([p]) => p.page === 3 && p.pageSize === 10)).toBe(true);
+  });
+
+  it('goes to the last page when the page it starts on is past the end now (the list got shorter while the tab was left), instead of an empty table', async () => {
+    const request = vi.fn(async (p: { page: number; pageSize: number }) => ({
+      items: p.page > 3 ? [] : [{ id: String(p.page), name: `row of page ${p.page}` }],
+      total: 50,
+    }));
+    const onCommit = vi.fn();
+    renderPage(
+      <PagedListTable<Row>
+        rowKey="id"
+        columns={columns}
+        request={request}
+        onCommit={onCommit}
+        initial={{ page: 9, pageSize: 20 }}
+      />,
+    );
+    expect(await screen.findByText('row of page 3')).toBeInTheDocument();
+    expect(request.mock.calls.map(([p]) => p.page)).toEqual([9, 3]);
+    expect(screen.getByRole('listitem', { name: '3' })).toHaveClass('ant-pagination-item-active');
+    expect(onCommit).toHaveBeenLastCalledWith({ search: {}, page: 3, pageSize: 20 });
+  });
+
+  it('does not ask again for a last page that is empty (a list that says there are rows and sends none)', async () => {
+    const request = vi.fn(async (_: { page: number }) => ({ items: [] as Row[], total: 50 }));
+    renderPage(
+      <PagedListTable<Row> rowKey="id" columns={columns} request={request} initial={{ page: 9 }} />,
+    );
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(request.mock.calls.map(([p]) => p.page)).toEqual([9, 3]);
+  });
+
+  it('tells what each request asks for: after a search and after a change of page', async () => {
+    const request = pages(100);
+    const onCommit = vi.fn();
+    const user = userEvent.setup();
+    renderPage(
+      <PagedListTable<Row, { q?: string }>
+        rowKey="id"
+        columns={columns}
+        request={request}
+        onCommit={onCommit}
+      />,
+    );
+    await screen.findByText('row of page 1 for nothing');
+    expect(onCommit).toHaveBeenLastCalledWith({ search: {}, page: 1, pageSize: 20 });
+    await user.type(screen.getByLabelText('Keyword'), 'ภาษาไทย{Enter}');
+    await screen.findByText('row of page 1 for ภาษาไทย');
+    expect(onCommit).toHaveBeenLastCalledWith({ search: { q: 'ภาษาไทย' }, page: 1, pageSize: 20 });
+    await user.click(screen.getByRole('listitem', { name: '2' }));
+    await screen.findByText('row of page 2 for ภาษาไทย');
+    expect(onCommit).toHaveBeenLastCalledWith({ search: { q: 'ภาษาไทย' }, page: 2, pageSize: 20 });
+  });
+
+  it('does not tell what is only typed: the box that was typed in but not sent is not a search', async () => {
+    const request = pages(100);
+    const onCommit = vi.fn();
+    const user = userEvent.setup();
+    renderPage(
+      <PagedListTable<Row, { q?: string }>
+        rowKey="id"
+        columns={columns}
+        request={request}
+        onCommit={onCommit}
+      />,
+    );
+    await screen.findByText('row of page 1 for nothing');
+    await user.type(screen.getByLabelText('Keyword'), 'unsent');
+    expect(onCommit).toHaveBeenLastCalledWith({ search: {}, page: 1, pageSize: 20 });
+  });
+
+  it('empties the search on Reset (not back to the start values), and tells so', async () => {
+    const request = pages(100);
+    const onCommit = vi.fn();
+    const user = userEvent.setup();
+    renderPage(
+      <PagedListTable<Row, { q?: string }>
+        rowKey="id"
+        columns={columns}
+        request={request}
+        onCommit={onCommit}
+        initial={{ search: { q: 'kept' }, page: 2 }}
+      />,
+    );
+    await screen.findByText('row of page 2 for kept');
+    const before = request.mock.calls.length;
+    await user.click(screen.getByRole('button', { name: /^(Reset|重\s*置)$/ }));
+    await screen.findByText('row of page 1 for nothing');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(request.mock.calls.length - before).toBe(1);
+    expect(screen.getByLabelText('Keyword')).toHaveValue('');
+    expect(onCommit).toHaveBeenLastCalledWith({ search: {}, page: 1, pageSize: 20 });
+  });
+});

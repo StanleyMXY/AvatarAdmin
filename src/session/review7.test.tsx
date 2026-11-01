@@ -103,6 +103,20 @@ describe('the authenticator setup does not end the session', () => {
   });
 });
 
+describe('the lock of the setup without a waiting time', () => {
+  it('shows the text of the code, with no countdown, as the contract gives none for this lock', async () => {
+    setPendingEnroll({ enrollToken: 'e', otpauthUri: 'otpauth://x' });
+    stubFetch(() => jsonResponse(429, envelope('RATE_LIMITED')));
+    const user = userEvent.setup();
+    renderPage(<Enroll />);
+    await user.type(screen.getByLabelText('Verification code'), '000000');
+    await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Too many requests. Please try again later.');
+    expect(alert.textContent).not.toMatch(/minute|NaN|undefined/);
+  });
+});
+
 describe('a lost session while the account is being read', () => {
   it('gives no session, and forgets the tabs, when the token is refused between the account and the shared values', async () => {
     setToken('tok');

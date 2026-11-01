@@ -14,7 +14,7 @@
 2. `GET /cosmetics` 的筛选参数叫什么？我们暂定 `kind`（`OUTFIT`、`BACKGROUND`）、`enabled`（`true`、`false`）、`style`（`STYLIZED_3D`、`REALISTIC`，匹配 `compatibleStyles` 包含它的条目）。
 3. `GET /generation-tasks` 只有 `status`、`type` 两个筛选参数（契约写 `?status=FAILED&type=`），排序是创建时间倒序吗？
 4. `GET /likeness-complaints` 的筛选参数是 `status` 吗？按 `dueAt` 排序是从近到远（升序）吗？
-   **现状（2026-11-01）：** 已回答（后端 2026-10-29 清单 a11）：参数是 `status`，取值 `OPEN`（未结案，等于 `RECEIVED` 和 `INVESTIGATING`）或五个状态之一，区分大小写，错误值 400 `INVALID_REQUEST`；排序是 `dueAt` 升序、同时间按 `id`。假后端和页面按此实现。
+   **现状（2026-11-01）：** 已回答（后端 2026-10-29 清单 a11）：参数是 `status`，取值 `OPEN`（未结案，等于 `RECEIVED` 和 `INVESTIGATING`）或五个状态之一，区分大小写，错误值 400 `INVALID_REQUEST`；排序是 `dueAt` 升序、同时间按 `id`。假后端和页面按此实现。 **【该小问已答（核对于 2026-11-01）：`docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 45 行；其余小问仍待后端回答】**
 
 **暂定做法：**
 - 前端总是发 `page`、`pageSize`。响应里有 `total` 就按服务端分页；没有 `total`（返回了全部）就在前端按页切开。这样两种答案都不会让页面少显示条目。
@@ -60,3 +60,5 @@
 **我们为什么需要：** 若后端回了可缓存的头（例如 `max-age`），管理员在有效期内再点同一个证据文件，请求到不了后端：那次查看没有审计记录，页面还会复用已经快过期的签名地址。
 
 **暂定做法：** 前端对这几个读请求都带 `cache: 'no-store'`（浏览器的请求选项），所以不依赖后端的头；后端补上 `Cache-Control: no-store` 是同一件事的第二层保险（代理和别的客户端也不会缓存）。
+
+核对于 2026-11-01

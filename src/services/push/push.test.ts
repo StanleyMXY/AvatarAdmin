@@ -45,14 +45,14 @@ describe('the templates', () => {
       linkType: 'NONE',
       linkTarget: '',
       enabled: false,
-      imageUploadId: 'up-1',
+      uploadId: 'up-1',
     });
     expect(calls[1].url).toBe('/api/admin/push/templates');
     expect(calls[1].init.method).toBe('POST');
     expect(body(calls[1])).toMatchObject({
       triggerReason: 'daily_recall',
       locale: 'th',
-      imageUploadId: 'up-1',
+      uploadId: 'up-1',
     });
     expect(body(calls[1])).not.toHaveProperty('imageUrl');
 

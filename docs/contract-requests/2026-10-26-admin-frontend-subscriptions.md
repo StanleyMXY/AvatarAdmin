@@ -59,7 +59,7 @@
 
 **问：** `listPriceAmount` 是数字还是十进制字符串（后端的价格批次接口用字符串）？同一天、同一商店、同一商品有两种币种时是两行吗？
 
-**现状（2026-11-01）：** 前半句已回答（后端 2026-10-29 清单 a12）：Google 行的 `listPriceAmount` 是十进制字符串（例如 `"24.99"`，去掉尾零），没有价格的行两个字段都是 `null`，不要经过浮点。前端按字符串原样格式化（`src/pages/subscriptions/stats.tsx` 的 `formatListPrice`）。"两种币种是不是两行"还没有答复。
+**现状（2026-11-01）：** 前半句已回答（后端 2026-10-29 清单 a12）：Google 行的 `listPriceAmount` 是十进制字符串（例如 `"24.99"`，去掉尾零），没有价格的行两个字段都是 `null`，不要经过浮点。前端按字符串原样格式化（`src/pages/subscriptions/stats.tsx` 的 `formatListPrice`）。"两种币种是不是两行"还没有答复。 **【前半已答（核对于 2026-11-01）：`docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 46 行；后半仍待后端回答】**
 
 **暂定做法：** 两种都接受，用浏览器的货币格式显示；币种不是合法的币种代码时按原文写出；金额或币种缺失显示"—"。
 
@@ -78,3 +78,5 @@
 **问：** 能否对 Google 只返回末 6 位（字段名带 `Suffix`，做法同 17.4 附表的设备推送令牌 `tokenSuffix`）？完整变更请求（行为、检查顺序、错误、测试）在 `docs/superpowers/handoff/reports/task-11-review.md` 的 C1。
 
 **暂定做法：** 前端的订阅详情抽屉对 Google 只显示 `…` 加末 6 位，不带复制按钮；Apple 的 `originalTransactionId` 照常显示。响应 JSON 里的完整令牌前端挡不住。
+
+核对于 2026-11-01

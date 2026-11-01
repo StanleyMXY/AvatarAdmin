@@ -38,6 +38,15 @@ type AnalyticsStore = {
   funnelInFlight: number;
 };
 
+/**
+ * A development switch for `npm run dev:mock`: a funnel that has a step with exactly this name is
+ * answered 429 RATE_LIMITED (as when too many funnels are being computed). In the browser the count
+ * of funnels in flight cannot be raised (the mock answers at once), so this is how that error is
+ * looked at: add this step in the steps box and press Query. The name is only known to the fake
+ * backend; the real one would count it as an event name like any other.
+ */
+export const FUNNEL_RATE_LIMIT_STEP = 'mock:rate-limited';
+
 const holder = globalThis as { __avatarAdminMockAnalytics?: AnalyticsStore };
 const isFirstLoad = holder.__avatarAdminMockAnalytics === undefined;
 holder.__avatarAdminMockAnalytics ??= { events: [], funnels: [], funnelInFlight: 0 };

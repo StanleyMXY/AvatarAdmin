@@ -87,7 +87,13 @@ export const layout = ({ initialState }: { initialState?: InitialState }) => {
         </TabManager>
       </SessionGate>
     ),
-    noFound: <NotFoundPage />,
+    // Behind the same gate as the pages: with the token held but the account unreadable the person
+    // sees the notice (retry, sign out), not "page not found"; signed out, the sign-in page.
+    noFound: (
+      <SessionGate>
+        <NotFoundPage />
+      </SessionGate>
+    ),
     childrenRender: (children: ReactElement) => (
       <SessionGate>
         <TabManager routes={appRoutes} can={can} locale={getLocale()}>

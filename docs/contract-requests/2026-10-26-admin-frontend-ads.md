@@ -78,10 +78,12 @@
 1. `GET /ads/report/overview` 的 `daily` 是不是只返回有数据的日子（假后端是这样，页面把缺的日子在折线图上补 0）？当天（UTC 日还没结束）有没有数据？
 2. `totals` 里的比率字段（`ctr`、`completionRate`、`viewableRate`、`measurableRate`、`avgWatchSeconds`）是不是和每行一样？页面对每一个比率都再检查分母：分母为 0（或不是数）一律显示"—"，不管后端给了什么。
 3. `by-country` 的 `country` 是大写 ISO 3166-1 alpha-2 吗？空串是"未知"。
-4. 导出 `GET /stats/export/ads-report`：页面发 `from`、`to`、可选的 `platform`、可选的 `channelCode`，和后端说明第 7 条一致；超过行数上限时 400 `INVALID_REQUEST`，页面显示译文加"请缩小范围"。
+4. 导出 `GET /stats/export/ads-report`：页面发 `from`、`to`、可选的 `platform`、可选的 `channelCode`，和后端说明第 7 条一致；超过行数上限时 400 `INVALID_REQUEST`，页面显示译文加"请缩小范围"。 **【该小问已答（核对于 2026-11-01）：广告报表导出带页面上同样的 `from`、`to`、`platform`、`channelCode`，见 `docs/backend-inputs/2026-10-21-avatar-backend-note-for-avataradmin.md` 第 57 行；其余小问仍待后端回答】**
 
 ## 九、规格需要在 main 上修改的地方（给改契约的会话，不是给后端的问题）
 
 1. 规格 5.17 素材表单写"再填类型、语言、点击动作与目标、时长、可否跳过……"。契约 §22.9 写明 `type`、`width`、`height`、`bytes`、`durationSeconds` 全部取自上传记录、请求里带了也忽略，所以类型和时长是只读的（页面显示服务器读出的值）。建议规格改成"类型、尺寸、大小、时长由上传记录给出，只读"。
 2. 规格 5.17"页面上半部是'广告全局设置'，渲染 `ads.*` 键"：`ads.log_retention_days` 的编辑权限是 `CONFIG:MANAGE`，所以广告位页只渲染 `ADS:PLACEMENT` 的 9 个键，第十个只在系统配置页出现。建议规格写成"`ADS:PLACEMENT` 的全部键（9 个）"。
 3. 规格 5.17 单元的"状态：草稿 → 投放中 ⇄ 暂停"没有写要不要确认；前端对激活、暂停、恢复都先问一次（和计划的"行内确认"一致）。
+
+核对于 2026-11-01

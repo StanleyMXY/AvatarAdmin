@@ -479,7 +479,7 @@ describe('the link', () => {
     await user.click(submit(dialog));
     expect(
       await within(dialog).findAllByText('The link must start with lowercase https://.'),
-    ).not.toHaveLength(0);
+    ).toHaveLength(1);
     expect(sends(calls).length).toBe(0);
     const input = linkBox(dialog).getByPlaceholderText('https://…');
     type(input, 'http://example.com/a');
@@ -493,6 +493,22 @@ describe('the link', () => {
       linkType: 'URL',
       linkTarget: 'https://example.com/a?x=1',
     });
+  });
+
+  it('says why a bad web address is refused once: the address box has the reason, the form rule only blocks', async () => {
+    const calls = useMockBackend({ default: notificationsMock });
+    const user = userEvent.setup();
+    renderPage(<NotificationsPage />);
+    const dialog = await openDialog(user);
+    fill(dialog);
+    await chooseLinkKind(user, dialog, 'Web address');
+    type(linkBox(dialog).getByPlaceholderText('https://…'), 'http://example.com/a');
+    await user.click(submit(dialog));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(sends(calls).length).toBe(0);
+    expect(
+      within(dialog).getAllByText('The link must start with lowercase https://.'),
+    ).toHaveLength(1);
   });
 });
 

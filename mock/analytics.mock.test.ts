@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   type AnalyticsEventRow,
   analyticsStore,
+  FUNNEL_RATE_LIMIT_STEP,
   maskIp,
   resetAnalyticsStore,
 } from './_core/analyticsData';
@@ -402,6 +403,32 @@ describe('GET /analytics/funnel: the limit of funnels being computed', () => {
     expect(await code({ from: 'x' })).toBe(400);
     expect(await code({ from: day(0), to: day(40) })).toBe(400);
     expect(await code({})).toBe(429);
+  });
+
+  it('answers 429 for a funnel that has the development step in it, so that the error can be looked at in the browser, where the count of funnels in flight cannot be raised', async () => {
+    expect(FUNNEL_RATE_LIMIT_STEP).toBe('mock:rate-limited');
+    expect(analyticsStore.funnelInFlight).toBe(0);
+    for (const steps of [
+      `a,${FUNNEL_RATE_LIMIT_STEP}`,
+      `${FUNNEL_RATE_LIMIT_STEP},b`,
+      `a,${FUNNEL_RATE_LIMIT_STEP},c`,
+    ]) {
+      const { status, body } = await funnel({ steps });
+      expect(status).toBe(429);
+      expect(body.code).toBe('RATE_LIMITED');
+      expect(body.data).toBeNull();
+    }
+    expect(analyticsStore.funnelInFlight).toBe(0);
+    // only the exact name: a name that has it inside is an ordinary event
+    expect((await funnel({ steps: `a,x${FUNNEL_RATE_LIMIT_STEP}` })).status).toBe(200);
+    expect((await funnel({ steps: 'a,b' })).status).toBe(200);
+  });
+
+  it('checks the steps, the window and the range before the development step, as for the limit', async () => {
+    const code = async (query: Record<string, string>) => (await funnel(query)).status;
+    expect(await code({ steps: FUNNEL_RATE_LIMIT_STEP })).toBe(400);
+    expect(await code({ steps: `a,${FUNNEL_RATE_LIMIT_STEP}`, windowHours: '0' })).toBe(400);
+    expect(await code({ steps: `a,${FUNNEL_RATE_LIMIT_STEP}`, from: 'x' })).toBe(400);
   });
 
   it('does not limit the saved funnels', async () => {

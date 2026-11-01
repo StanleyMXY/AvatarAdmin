@@ -56,3 +56,5 @@
 `POST /credit-adjust-requests/{id}/approve` 同时可能触发：申请人就是审核人（403 `SELF_REVIEW_FORBIDDEN`）、申请不在 `PENDING`（409 `INVALID_STATE`）、账号待删除或删除中（403 `ACCOUNT_DELETION_SCHEDULED` / `ACCOUNT_DELETING`）。契约没有写它们的先后。
 
 **暂定做法：** 假后端按"权限 → 申请存在（404）→ 申请人是否本人（403）→ 状态（409）→ 账号状态（403）"检查；`reject` 同样，只是没有账号状态这一步，另在最前面检查 `note`（400）。前端对每种结果都只展示后端返回的错误，不依赖先后。
+
+核对于 2026-11-01

@@ -23,14 +23,14 @@ export function parseAccountIds(text: string): string[] {
 export type ContentValues = { title: string; body: string; link: LinkTargetValue };
 
 /** The words and the link of a push as the request wants them; the picture is its upload id, never an address. */
-export function contentFields(values: ContentValues, imageUploadId?: string): ContentFields {
+export function contentFields(values: ContentValues, uploadId?: string): ContentFields {
   const linkType = values.link.linkType;
   return {
     title: trimSpec(values.title),
     body: trimSpec(values.body),
     linkType,
     linkTarget: linkType === 'NONE' ? '' : values.link.linkTarget,
-    ...(imageUploadId ? { imageUploadId } : {}),
+    ...(uploadId ? { uploadId } : {}),
   };
 }
 
@@ -76,7 +76,7 @@ export type ScheduleValues = ContentValues &
   };
 
 /** The request body of a periodic push: only the day field of the chosen repeat is sent. */
-export function scheduleFields(values: ScheduleValues, imageUploadId?: string): ScheduleFields {
+export function scheduleFields(values: ScheduleValues, uploadId?: string): ScheduleFields {
   return {
     repeat: values.repeat,
     ...(values.repeat === 'WEEKLY'
@@ -91,7 +91,7 @@ export function scheduleFields(values: ScheduleValues, imageUploadId?: string): 
     endDate: values.endDate,
     enabled: values.enabled,
     ...audienceFields(values),
-    ...contentFields(values, imageUploadId),
+    ...contentFields(values, uploadId),
   };
 }
 

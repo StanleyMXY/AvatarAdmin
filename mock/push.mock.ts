@@ -55,7 +55,7 @@ function newUpload() {
 /** The upload a request names: 404 when unknown, 409 when it was used already. */
 function takeUpload(id: unknown): string {
   if (typeof id !== 'string' || id === '') {
-    throw fail([{ ref: 'imageUploadId', reason: 'EMPTY_NOT_ALLOWED' }]);
+    throw fail([{ ref: 'uploadId', reason: 'EMPTY_NOT_ALLOWED' }]);
   }
   const upload = pushState.uploads.get(id);
   if (!upload) throw notFound('upload');
@@ -280,7 +280,7 @@ export default {
       });
     }
     enforceDefaultLanguage(null, { id: '', triggerReason, locale, imageFile: null, ...fields });
-    const picture = body.imageUploadId === undefined ? null : takeUpload(body.imageUploadId);
+    const picture = body.uploadId === undefined ? null : takeUpload(body.uploadId);
     const created: MockTemplate = {
       id: String(pushState.next.template++),
       triggerReason,
@@ -316,7 +316,7 @@ export default {
       });
     }
     enforceDefaultLanguage(found, { ...found, triggerReason, locale, ...fields });
-    if (body.imageUploadId !== undefined) found.imageFile = takeUpload(body.imageUploadId);
+    if (body.uploadId !== undefined) found.imageFile = takeUpload(body.uploadId);
     Object.assign(found, fields, { triggerReason, locale });
     return ok(templateRow(found));
   }),
@@ -352,7 +352,7 @@ export default {
       else scheduledAt = new Date(parsed).toISOString();
     }
     if (details.length > 0) throw fail(details);
-    const imageFile = body.imageUploadId === undefined ? null : takeUpload(body.imageUploadId);
+    const imageFile = body.uploadId === undefined ? null : takeUpload(body.uploadId);
     const created: MockTask = {
       id: String(pushState.next.task++),
       createdBy: req.admin.id,
@@ -401,7 +401,7 @@ export default {
     const details: Detail[] = [];
     const fields = readSchedule(body, details);
     if (details.length > 0) throw fail(details);
-    const imageFile = body.imageUploadId === undefined ? null : takeUpload(body.imageUploadId);
+    const imageFile = body.uploadId === undefined ? null : takeUpload(body.uploadId);
     const created: MockSchedule = {
       id: String(pushState.next.schedule++),
       createdBy: req.admin.id,
@@ -421,7 +421,7 @@ export default {
     const details: Detail[] = [];
     const fields = readSchedule(body, details);
     if (details.length > 0) throw fail(details);
-    if (body.imageUploadId !== undefined) found.imageFile = takeUpload(body.imageUploadId);
+    if (body.uploadId !== undefined) found.imageFile = takeUpload(body.uploadId);
     Object.assign(found, fields);
     found.nextRunAt = nextRunAt(found);
     return ok(scheduleRow(found));

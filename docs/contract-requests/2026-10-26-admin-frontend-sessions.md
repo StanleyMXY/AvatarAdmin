@@ -32,7 +32,7 @@
 
 **暂定做法：** 响应是 §18 `Session` 的列，按通则字段名一字不差：除了列表那九个（`id`、`accountId`、`deviceId`、`requestedAt`、`startedAt`、`endedAt`、`durationSeconds`、`modelTier`、`language`）外，详情抽屉读 `freeTier`、`roomName`、`timezone`、`renderMode`、`deadlineAt`、`endReason`、`agentJoinedAt`、`userJoinedAt`、`userLeftAt`。不读 `lastParticipantEventAt`、`agentIdentity`、`statsAppliedAt`（内部字段，运营不需要）。`endReason` 取 §15.6 的五个值，别的值原样显示；每个时刻字段为 `null` 时显示"—"。**问：** 这样读有没有不该返回给运营看的字段（`roomName` 是通话的房间名，我们当作可以显示）？
 
-**现状（2026-11-01）：** 后端 2026-10-29 清单 a7 已写明详情多一个字段 `maxDurationMinutes`（整数分钟，不小于 0，不为空，发起通话时记下的值）。详情抽屉读它，用来解释截止时间和现在的设置为什么不同（`src/pages/sessions/SessionDrawer.tsx`）；列表的九列不变。
+**现状（2026-11-01）：** 后端 2026-10-29 清单 a7 已写明详情多一个字段 `maxDurationMinutes`（整数分钟，不小于 0，不为空，发起通话时记下的值）。详情抽屉读它，用来解释截止时间和现在的设置为什么不同（`src/pages/sessions/SessionDrawer.tsx`）；列表的九列不变。 **【部分已答（核对于 2026-11-01）：`docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 41 行；其余字段仍待后端回答】**
 
 ## 四、列表里怎么认出游客会话
 
@@ -49,3 +49,5 @@
 ## 六、规格需要在 main 上修改的地方（给改规格的人）
 
 规格 5.5 会话列表一段写的是筛选的含义，没有参数名；建议把第一条的答案写进契约 §17.4 通话行后，规格不用改。规格 5.5 通话质量一段"阈值取自构建配置"已经对应 `ADMIN_QUALITY_MIN_SUCCESS_RATE`、`ADMIN_QUALITY_MAX_SLOW_SHARE`（任务 6 已加），不需要改。
+
+核对于 2026-11-01

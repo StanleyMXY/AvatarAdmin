@@ -283,8 +283,8 @@
 - **管理员用户名和密码的规则、创建和重置时 400 的 `ref`。** 问：用户名的长度和字符有没有限制？创建时密码问题的 `ref` 是 `password`、重置时是 `newPassword`、用户名是 `username`、角色是 `roleIds` 吗？为什么：表单要把错误放到对应输入框。暂定：页面只检查用户名去首尾空白后不为空；密码按 `GET /me` 的 `passwordMinLength`（码点数）、不得与用户名相同、两次输入一致检查。来源：`system.md` 一.5。
 - **`DUPLICATE_RESOURCE` 的 `data.field` 取值。** 问：管理员重名是 `username`、角色重名是 `name`、权限节点码重复是 `code` 吗？为什么：页面把译文放到同名的表单项下面。暂定：如上；不认识的 `field` 只显示在对话框底部。来源：`system.md` 一.6、二.1。
 - **角色 `PUT /roles/{id}` 的请求体和名称规则。** 问：整体替换，总是发完整的 `name`、`remark`、`permissionCodes`，`remark` 空时发 `null`，`permissionCodes` 可以是空数组；名称唯一，大小写是否敏感；名称和备注的长度上限。暂定：整体替换；名称去首尾空白后不能为空；假后端大小写不敏感；页面不限制长度。来源：`system.md` 二.1。
-- **自定义权限节点的码能不能放进角色的 `permissionCodes`。** 问：契约 §17.3 写能，"给角色分配不存在的权限码 400"，请确认"存在"包含自定义节点。暂定：页面允许勾选自定义节点和真实权限码清单里的码，不允许勾选"标成内置但页面码清单里没有"的节点。来源：`system.md` 二.2。
-- **权限树 `POST`、`PUT` 的请求体和不可改的字段。** 问：创建 `{code, parent, type, sortOrder, nameZh, nameEn}`（根节点 `parent` 为 `null`）；修改 `{nameZh, nameEn, sortOrder}`，自定义节点改父节点时另带 `parent`；`code` 和 `type` 创建后确实不能改吗？暂定：内置节点永远不带 `parent`；`code`、`type` 不在修改请求里。来源：`system.md` 三.1。
+- **自定义权限节点的码能不能放进角色的 `permissionCodes`。** 问：契约 §17.3 写能，"给角色分配不存在的权限码 400"，请确认"存在"包含自定义节点。暂定：页面允许勾选自定义节点和真实权限码清单里的码，不允许勾选"标成内置但页面码清单里没有"的节点。来源：`system.md` 二.2。 **【已按决定实现（核对于 2026-11-01）：`docs/superpowers/handoff/decisions-2026-10-27.md` 第 19 行（自定义节点不能勾给角色）；`src/pages/system/permissionTree.ts` 第 28 行 `isSelectable`；上面“页面允许勾选自定义节点”的暂定做法已过时，这一条不再需要后端回答】**
+- **权限树 `POST`、`PUT` 的请求体和不可改的字段。** 问：创建 `{code, parent, type, sortOrder, nameZh, nameEn}`（根节点 `parent` 为 `null`）；修改 `{nameZh, nameEn, sortOrder}`，自定义节点改父节点时另带 `parent`；`code` 和 `type` 创建后确实不能改吗？暂定：内置节点永远不带 `parent`；`code`、`type` 不在修改请求里。来源：`system.md` 三.1。 **【部分已答（核对于 2026-11-01）：修改时节点类型不能改，改了答 400 且 `ref` 为 `type`，见 `docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 172 行；其余仍待后端回答】**
 - **权限节点的码、名称、排序的限制。** 问：码的格式和长度、名称长度、`sortOrder` 的范围。暂定：页面要求码去首尾空白后不为空、不含空白、控制字符或格式字符（含零宽和双向控制）、至多 100 个码点；名称不为空；排序是整数。来源：`system.md` 三.2。
 - **把节点移到自己或自己后代下面（成环）时返回什么。** 暂定：400 `INVALID_REQUEST`，`details` 为 `[{ref:'parent', reason:'OUT_OF_RANGE'}]`；页面的父节点选项里本来就没有自己和后代，正常使用碰不到。来源：`system.md` 三.3。
 - **改内置节点的父节点、删除内置节点时返回什么。** 暂定：改父节点 400 `INVALID_REQUEST`（`ref: 'parent'`），删除内置节点 409 `INVALID_STATE`；页面不提供这两个操作。来源：`system.md` 三.4。
@@ -330,7 +330,7 @@
 
 - **`GET /sessions` 的筛选参数名和格式。** 问：账号 ID 是 `accountId`（精确匹配）吗？`requestedAt` 范围是 `from`（含）、`to`（不含）的 ISO-8601 时刻，还是 `YYYY-MM-DD` 的 UTC 日？"是否进行中"是 `ongoing=true|false` 吗？`endReason` 除 `DEADLINE` 外是否也接受 §15.6 的其他四个值，不认识的值是 400 吗？`guest`、`ongoing` 不是布尔、时刻格式不对、`to` 早于 `from` 时是不是 400（`NOT_BOOLEAN` 等）？为什么：参数名猜错，后端会静默忽略，页面显示的就是没有筛选的结果，运营会以为"该账号没有会话"。暂定：只发有值的参数：`accountId`、`guest`、`from`、`to`（所选 UTC 日变成 `[第一天 00:00:00Z, 最后一天的后一天 00:00:00Z)`）、`ongoing`、`endReason=DEADLINE`（页面只问"是"）。来源：`sessions.md` 一。
 - **【安全】会话列表的 `deviceId` 返回完整值还是前 8 位。** 问：契约写"只显示前 8 位"，没说是后端只返回前 8 位，还是返回完整哈希、由前端截取。建议后端只返回前 8 位并把字段名改成 `deviceIdPrefix`（认证事件那一行就是 `deviceIdHashPrefix`），或在契约里写明这个接口里的 `deviceId` 就是前 8 位。为什么：完整的设备哈希是游客的稳定标识（游客额度、锁都按它），页面不需要，也不应送到浏览器里（开发者工具、网络面板都看得到）。暂定：页面一律只取前 8 个字符显示（按字符），完整值不进页面文字、提示、属性，也不写日志。完整的变更请求见第四部分第 9 条。来源：`sessions.md` 二。
-- **`GET /sessions/{id}` 返回哪些字段，有没有不该给运营看的。** 暂定：响应是 §18 `Session` 的列：除列表那九个外，详情抽屉读 `freeTier`、`roomName`、`timezone`、`renderMode`、`deadlineAt`、`endReason`、`agentJoinedAt`、`userJoinedAt`、`userLeftAt`；不读 `lastParticipantEventAt`、`agentIdentity`、`statsAppliedAt`；问 `roomName` 能不能显示。来源：`sessions.md` 三。
+- **`GET /sessions/{id}` 返回哪些字段，有没有不该给运营看的。** 暂定：响应是 §18 `Session` 的列：除列表那九个外，详情抽屉读 `freeTier`、`roomName`、`timezone`、`renderMode`、`deadlineAt`、`endReason`、`agentJoinedAt`、`userJoinedAt`、`userLeftAt`；不读 `lastParticipantEventAt`、`agentIdentity`、`statsAppliedAt`；问 `roomName` 能不能显示。来源：`sessions.md` 三。 **【部分已答（核对于 2026-11-01）：详情多一个字段 `maxDurationMinutes`，见 `docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 41 行；其余字段仍待后端回答】**
 - **列表里怎么认出游客会话。** 暂定：账号 ID 为 `null` 或空串的行就是游客会话（账号列显示"游客"、设备列显示前 8 位）。请确认。来源：`sessions.md` 四。
 - **"进行中"是否包括"启动中"（`agentJoinedAt` 为空）的会话。** 暂定：页面不区分，只发 `ongoing`；`endedAt` 和 `durationSeconds` 都为空的行，时长列写"进行中"。如果后端的"进行中"含启动中的记录，请在契约里写明，页面才能把它们标成"启动中"。来源：`sessions.md` 五。
 
@@ -361,7 +361,7 @@
 
 ## 2.9 形象与装扮、照片里的人投诉（10 条）
 
-- **各列表分不分页、有哪些筛选参数。** 问：`GET /cosmetics`、`/actions`、`/declarations`、`/renderer-models`、`/generation-tasks` 分页吗（`page`、`pageSize`，带 `total`）？`GET /cosmetics` 的筛选参数是不是 `kind`、`enabled`、`style`（匹配 `compatibleStyles` 包含它的条目）？`/generation-tasks` 只有 `status`、`type`，按创建时间倒序吗？`GET /likeness-complaints` 的筛选参数是 `status` 吗，按 `dueAt` 升序吗？为什么：服装条目会超过 20 条，筛选参数名错了会静默失效。暂定：前端总是发 `page`、`pageSize`，响应有 `total` 就用服务端分页，没有就在前端切页；空值不发。来源：`cosmetics-complaints.md` 一。
+- **各列表分不分页、有哪些筛选参数。** 问：`GET /cosmetics`、`/actions`、`/declarations`、`/renderer-models`、`/generation-tasks` 分页吗（`page`、`pageSize`，带 `total`）？`GET /cosmetics` 的筛选参数是不是 `kind`、`enabled`、`style`（匹配 `compatibleStyles` 包含它的条目）？`/generation-tasks` 只有 `status`、`type`，按创建时间倒序吗？`GET /likeness-complaints` 的筛选参数是 `status` 吗，按 `dueAt` 升序吗？为什么：服装条目会超过 20 条，筛选参数名错了会静默失效。暂定：前端总是发 `page`、`pageSize`，响应有 `total` 就用服务端分页，没有就在前端切页；空值不发。来源：`cosmetics-complaints.md` 一。 **【该小问已答（核对于 2026-11-01）：投诉列表的 `status` 筛选与排序，见 `docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 45 行；其余仍待后端回答】**
 - **【安全】渲染模型响应里的 `fileRef`。** 问：`RendererModel` 的 `fileRef` 是存储引用，后端回复通则只列了 `previewRef`、`iconRef`、`sourceImageRef` 等被签名地址替代；管理端要不要收到 `fileRef`？为什么：存储键对浏览器没有用，也不应暴露。暂定：不使用也不显示。来源：`cosmetics-complaints.md` 二.1。
 - **`names`、`texts` 的语言标签，`en` 是否必填。** 暂定：表单语言框取 `GET /meta` 的 `supportedLocales` 加 `en`，已存在条目里的其他标签也保留；名称至少一种语言非空，不强制 `en`。来源：`cosmetics-complaints.md` 二.2。
 - **服装、动作 `POST`/`PUT` 的请求体。** 问：`POST` 发 `key`、`kind`（动作没有）、`names`、`generationSpec`（动作另有 `description`）、`compatibleStyles`、`surfaces`、`creditPrice`（`null` 表示不能用额度兑换）、`isFree`、`isDefault`、`triggerableBy`（动作）、`sortOrder`、`enabled`，加 `previewUploadId`/`iconUploadId`；预览图和图标创建时必填吗？`enabled` 创建时能带吗？`PUT` 发除 `key`、`kind`、`enabled` 之外的全部可编辑字段（整体替换，`creditPrice: null` 清除价格），图片只在换了图时才带；`kind` 创建后是否只读？暂定：如上，预览图和图标创建时必填，`kind` 不带。来源：`cosmetics-complaints.md` 二.3、二.4。
@@ -374,12 +374,12 @@
 
 ## 2.10 记忆服务、系统监控、客服（6 条）
 
-- **`GET /alerts` 的响应形状。** 问：是否 `{"items","total"}`、接受 `page`、`pageSize`，`total` 在带 `status=OPEN` 时是满足筛选的总数而不是当前页条数？不带 `status` 时是全部状态还是只返回 `OPEN`？按 `createdAt` 倒序吗？`detail` 是字符串还是 JSON 对象？为什么：告警页是分页表格；总览的"未处理告警"卡片只读 `GET /alerts?status=OPEN&page=1&pageSize=1` 的 `total`，如果 `total` 是当前页条数，卡片永远显示 1。暂定：分页的 `{items,total}`，字段名同实体的列，不带 `status` 是全部，倒序，`detail` 是字符串或 `null`；告警页默认筛选 `status=OPEN`，由页面发出；`total` 不是数字时卡片显示"—"。来源：`memory-monitor-support.md` 一、`dashboard.md` 四。
+- **`GET /alerts` 的响应形状。** 问：是否 `{"items","total"}`、接受 `page`、`pageSize`，`total` 在带 `status=OPEN` 时是满足筛选的总数而不是当前页条数？不带 `status` 时是全部状态还是只返回 `OPEN`？按 `createdAt` 倒序吗？`detail` 是字符串还是 JSON 对象？为什么：告警页是分页表格；总览的"未处理告警"卡片只读 `GET /alerts?status=OPEN&page=1&pageSize=1` 的 `total`，如果 `total` 是当前页条数，卡片永远显示 1。暂定：分页的 `{items,total}`，字段名同实体的列，不带 `status` 是全部，倒序，`detail` 是字符串或 `null`；告警页默认筛选 `status=OPEN`，由页面发出；`total` 不是数字时卡片显示"—"。来源：`memory-monitor-support.md` 一、`dashboard.md` 四。 **【部分已答（核对于 2026-11-01）：不带 `status` 表示全部，见 `docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 170 行；`detail` 的类型和 `total` 的口径仍待后端回答】**
 - **`GET /support/feedback` 的分页、筛选、列表里带不带全文。** 问：接受 `page`、`pageSize`，响应 `{items,total}`、按 `createdAt` 倒序吗？能不能按 `forwardStatus`（`PENDING`、`FORWARDED`、`FAILED`）和 `category` 筛选？列表每行是 `SupportFeedback` 的全部列（含 `message` 和 `context`）还是摘要？为什么：客服要找的是转发失败的那几条（只有它们能点"重试"）；正文最长 4000 个码点，`context` 里最近的错误最多 20 条、每条 500 字符，每行都带全文时 200 行的一页会很大。暂定：分页、倒序，页面不加筛选；列表行按实体的全部列读，详情抽屉另取 `GET /support/feedback/{id}`。来源：`memory-monitor-support.md` 二。
 - **`POST /support/feedback/{id}/retry` 和 `POST /alerts/{id}/resolve` 的响应和状态错误。** 问：成功时 `data` 是什么？对不是 `FAILED` 的反馈重试、对已 `RESOLVED` 的告警关闭，是不是 409 `INVALID_STATE`，`data.status` 为当前状态？暂定：页面忽略成功响应，失败显示 `error.INVALID_STATE` 并重新读列表。来源：`memory-monitor-support.md` 三。
 - **记忆服务三个写接口的响应、`MEMORY_MODEL_CONFLICT` 的 `detail` 位置、校验错误的 `ref`/`reason`。** 问：`PUT /memory/tiers/{name}`、`PUT /memory/embedding-models/{name}`、`PUT /accounts/{id}/memory/embedding-model` 成功时的 `data`？409 `MEMORY_MODEL_CONFLICT` 里记忆服务那句话在 `data.detail` 还是 `message`？名字不合格（`^[A-Za-z0-9_-]{1,64}$`）、`teiBaseUrl` 主机不在白名单、`dimensions` 越界时 `details` 的 `ref`、`reason` 各是什么？为什么：页面要把记忆服务写的那句话（写明了原来登记的维度）原样展示给技术人员。暂定：成功响应一律忽略；`detail` 读 `data.detail`，不是字符串就显示 `error.MEMORY_MODEL_CONFLICT` 的通用文字；校验失败按 `ref`（`name`、`teiBaseUrl`、`dimensions`、`topK` 等）对到表单项，原因用现有代码（`INVALID_PATH`、`INVALID_HOST`、`NOT_HTTPS`、`OUT_OF_RANGE`、`NOT_AN_INTEGER`、`NOT_BOOLEAN`）。来源：`memory-monitor-support.md` 四。
 - **管线监控页的时间范围上限从哪里读。** 问：能不能在 `GET /meta` 里加 `monitorMaxRangeDays`（当前生效的 `monitor.max_range_days`）？为什么：页面的范围选项（最近 1 小时到 7 天）要和上限一致，否则配置调小以后"最近 7 天"会稳定得到 400。暂定：页面固定提供到 7 天，超限时显示后端的 400 文字。来源：`memory-monitor-support.md` 五。
-- **`embeddingAssignments` 的顺序和"当前模型"。** 暂定：页面按 `assignedAt` 倒序自己排，最新一条当作当前模型；没有记录时显示默认模型 `bge-m3`。如果后端的"当前模型"不是最新一条，请告诉我们。来源：`memory-monitor-support.md` 六。
+- **`embeddingAssignments` 的顺序和"当前模型"。** 暂定：页面按 `assignedAt` 倒序自己排，最新一条当作当前模型；没有记录时显示默认模型 `bge-m3`。如果后端的"当前模型"不是最新一条，请告诉我们。来源：`memory-monitor-support.md` 六。 **【部分已答（核对于 2026-11-01）：账号记忆多了 `truncated`、`totalCount`，只显示最新 200 条，见 `docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 183 行；“当前模型”是不是最新一条仍待后端回答】**
 
 ## 2.11 订阅与权益（9 条）
 
@@ -389,7 +389,7 @@
 - **`GET /subscriptions` 的筛选参数名。** 问：是否 `accountId`（精确）、`state`、`store`、`productId`（精确）？暂定：用这四个名字，空值不发。来源：`subscriptions.md` 四。
 - **`GET /subscription-events` 的行、`status` 取值、"失败"的定义，以及重处理和已处理的响应和错误。** 问：每行是 `SubscriptionEvent` 的列去掉 `payload`，分页 `{"items","total"}`，按 `eventSignedAt` 倒序吗？`status` 除 `FAILED` 外还有别的值吗？"失败"是否等于 `error` 不为空？对一个没有失败的事件重新处理、对一个不需要关注的事件点已处理，是 409 `INVALID_STATE` 吗？两个接口的响应体？为什么：页面只在 `error` 不为空的行上显示"重新处理"，只在 `needsAttention` 的行上显示"已处理"。暂定：行如上，筛选只提供 `status=FAILED` 和 `needsAttention=true`，响应体不读，失败按错误码显示文字后重新读列表。来源：`subscriptions.md` 五。
 - **限时权益发放和撤销的限制与错误。** 问：`durationDays` 的上限，`reason` 的长度（我们按 1 到 500 个码点）；响应是不是 `{"id": "<新权益行的 id>"}`；撤销要不要请求体（理由）；账号不存在 404、账号不是正常状态 400 且原因 `ACCOUNT_NOT_ACTIVE`；撤销一条不是 `PROMO`、或已 `EXPIRED`/`REVOKED` 的行是 409 `INVALID_STATE` 吗？暂定：发放前端预检 `durationDays` 为 1 以上整数、理由 1 到 500 个码点；撤销不带请求体；撤销按钮只在 `source=PROMO` 且 `status=ACTIVE` 的行显示。来源：`subscriptions.md` 六。
-- **`GET /subscriptions/stats` 里 `listPriceAmount` 的 JSON 类型。** 问：数字还是十进制字符串（价格批次接口用字符串）？同一天、同一商店、同一商品有两种币种时是两行吗？暂定：两种都接受，用浏览器的货币格式显示；币种不是合法代码时按原文写出；缺失显示"—"。来源：`subscriptions.md` 七。
+- **`GET /subscriptions/stats` 里 `listPriceAmount` 的 JSON 类型。** 问：数字还是十进制字符串（价格批次接口用字符串）？同一天、同一商店、同一商品有两种币种时是两行吗？暂定：两种都接受，用浏览器的货币格式显示；币种不是合法代码时按原文写出；缺失显示"—"。来源：`subscriptions.md` 七。 **【前半已答（核对于 2026-11-01）：安卓商店订阅那一行的 `listPriceAmount` 是十进制字符串，见 `docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 46 行；“两种币种是不是两行”仍待后端回答】**
 - **权益功能值的上限 `entitlement.limit_max` 能不能放进 `GET /meta`。** 为什么：契约 15.3 写 `LIMIT` 取值 0 到 `entitlement.limit_max`（默认 1000000），这个键属于 `SUBSCRIPTION:CONFIG`，只读 `SUBSCRIPTION:VIEW` 的管理员取不到。暂定：前端只检查"0 以上的整数"，上限交给后端并把拒绝文字显示在那一行旁。来源：`subscriptions.md` 八。
 - **【安全】后台读订阅的接口不应把完整 Google 购买令牌发给只有查看权限的管理员。** 问：`GET /subscriptions`、`GET /subscriptions/{id}` 现在把 Google 的 `storeRef`（就是 `purchaseToken`）和 `linkedPurchaseToken` 完整发给持有 `SUBSCRIPTION:VIEW` 的管理员，而契约 15.2 的绑定规则让持有购买凭证的人可以在 `google/verify` 认领订阅。能否对 Google 只返回末 6 位（字段名带 `Suffix`，做法同 17.4 附表的 `tokenSuffix`）？暂定：订阅详情抽屉对 Google 只显示 `…` 加末 6 位，不带复制按钮，Apple 的 `originalTransactionId` 照常显示；响应 JSON 里的完整令牌前端挡不住。完整变更请求见第四部分第 1 条。来源：`subscriptions.md` 九、`task-11-review.md` C1。
 
@@ -414,12 +414,12 @@
 ## 2.14 推送（18 条）
 
 - **`/push/templates/{id}` 里的 `{id}` 是什么。** 问：契约写"按 `triggerReason`+`locale`"，路径里是实体 `id` 还是 `(triggerReason, locale)`？暂定：用 `id`；`POST` 带 `triggerReason`、`locale`，`PUT` 不带（建好后不改）。来源：`push.md` 一.1。
-- **`GET /push/templates` 是否分页、有无筛选。** 暂定：分页 `{items,total}`，无筛选；完整性矩阵需要全部模板，前端用 `pageSize=200` 一页页读到取够 `total`。来源：`push.md` 一.2。
+- **`GET /push/templates` 是否分页、有无筛选。** 暂定：分页 `{items,total}`，无筛选；完整性矩阵需要全部模板，前端用 `pageSize=200` 一页页读到取够 `total`。来源：`push.md` 一.2。 **【部分已答（核对于 2026-11-01）：响应是 `{items, missingLocales}`，见 `docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 48 行；是否分页、是否保留 `total` 仍待后端回答】**
 - **模板请求体字段。** 暂定：`{triggerReason, locale, title, body, linkType, linkTarget, enabled, imageUploadId?}`（`PUT` 没有前两项）；图片的字段名契约没写，暂定 `imageUploadId`；`linkType` 为 `NONE` 时 `linkTarget` 传空字符串，是否也接受 `null`？来源：`push.md` 一.3。
 - **怎样去掉模板、周期推送上已有的图片。** 暂定：前端不提供去掉图片，`PUT` 不带 `imageUploadId` 表示图片不变。来源：`push.md` 一.4。
 - **推送标题和正文的长度上限。** 为什么：契约通则第 4 条没有列推送。暂定：前端只检查去首尾空白后不为空，长度交给后端（假后端按标题 200、正文 1000 个码点拒绝，仅为演示失败的显示）。请给真实上限，前端再加计数。来源：`push.md` 一.5。
-- **启用模板时缺语言的拒绝是什么错误。** 问：契约 §8.4 写"保存时校验"，错误是 400 `INVALID_REQUEST` 且 `details` 为 `[{"ref":"enabled","reason":"OUT_OF_RANGE"}]` 吗，还是有专用原因码？暂定：如此；前端在启用前已按 `supportedLocales` 提示缺哪几种语言。来源：`push.md` 一.6。
-- **删除一条已启用的模板会让该语言缺模板。** 问：后端是拒绝、允许，还是同时把该触发原因停用？暂定：前端行内确认后发 `DELETE`，按后端的回答显示。来源：`push.md` 一.7。
+- **启用模板时缺语言的拒绝是什么错误。** 问：契约 §8.4 写"保存时校验"，错误是 400 `INVALID_REQUEST` 且 `details` 为 `[{"ref":"enabled","reason":"OUT_OF_RANGE"}]` 吗，还是有专用原因码？暂定：如此；前端在启用前已按 `supportedLocales` 提示缺哪几种语言。来源：`push.md` 一.6。 **【已答（核对于 2026-11-01）：`docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 39、100 行：只要求默认语言有启用的模板，违反时 400，`data` 是 `{defaultLocale, reason}`】**
+- **删除一条已启用的模板会让该语言缺模板。** 问：后端是拒绝、允许，还是同时把该触发原因停用？暂定：前端行内确认后发 `DELETE`，按后端的回答显示。来源：`push.md` 一.7。 **【已答（核对于 2026-11-01）：`docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 39、100 行：非默认语言的模板随时可删，默认语言那条在同一触发原因下还有别的语言启用时被拒】**
 - **同一 `(triggerReason, locale)` 再 `POST`。** 问：409 `DUPLICATE_RESOURCE`（`data.field` 是什么）还是覆盖？暂定：前端发之前就拦住，后端按 409 处理。来源：`push.md` 一.8。
 - **`GET /push/tasks` 的参数和响应。** 问：是否分页 `{items,total}`、按计划时间倒序、每项是 `PushTask` 的列加 `createdByUsername`？支持 `status` 筛选吗？暂定：前端只读 `id`、`audience`、`status`、`note`、`title`、`sentCount`、`failedCount`、`createdBy`、`createdByUsername`、`scheduledAt`，没有筛选。来源：`push.md` 二.1。
 - **立即发送要不要显式带 `scheduledAt`。** 暂定：前端不带，由后端填创建时刻；定时发送带 UTC 时刻（ISO-8601，`…Z`）。来源：`push.md` 二.2。
@@ -471,9 +471,9 @@
 - **落地页接口地址的写法。** 问：页面显示 `POST {attribution.link_base_url}/api/attribution/click`（契约 10.4 写落地页放在 `attribution.link_base_url` 所在域名下，由反向代理转发），请确认。来源：`campaign.md` 二.6。
 - **`GET /attribution/costs` 的行字段。** 问：行是 `AttributionCost` 的列加 `createdByUsername`（已回答）；是否加 `campaignCode`、`campaignName`？`amount` 在响应里是数还是字符串？暂定：页面用 `campaignId` 对到投放账户列表；两种都接受，显示两位小数。来源：`campaign.md` 三.1。
 - **`GET /attribution/costs` 的 `from`、`to`。** 暂定：`YYYY-MM-DD`（UTC 日，含两端），默认最近 30 天。来源：`campaign.md` 三.2。
-- **成本单笔 `POST`、`PUT` 的请求体。** 暂定：`{campaignId, statDate, amount, currency, remark}`，`campaignId` 字符串，`amount` 是 JSON 数（先检查不小于 0、最多两位小数、整数位不超过 13 位）；`PUT` 也带 `campaignId`、`statDate`（值不变）；读不到 `attribution.cost_currency` 时不带 `currency`；`remark` 空传 `null`。来源：`campaign.md` 三.3。
+- **成本单笔 `POST`、`PUT` 的请求体。** 暂定：`{campaignId, statDate, amount, currency, remark}`，`campaignId` 字符串，`amount` 是 JSON 数（先检查不小于 0、最多两位小数、整数位不超过 13 位）；`PUT` 也带 `campaignId`、`statDate`（值不变）；读不到 `attribution.cost_currency` 时不带 `currency`；`remark` 空传 `null`。来源：`campaign.md` 三.3。 **【部分已答（核对于 2026-11-01）：批量和单条成本录入仍要求 `currency` 等于成本币种设置，见 `docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 103 行；读不到该设置时不带 `currency` 是否被接受仍待后端回答】**
 - **`POST /attribution/costs/batch` 的响应和失败明细格式。** 问：400 时 `ref` 的真实格式（假后端："<行下标，从 0 起>.<字段>"，如 `"2.campaignCode"`，批内重复是后一行下标，条数超限或不是数组是 `"body"`）和原因码。为什么：有了行号约定，页面可以写成"第 N 行"。暂定：成功不读响应，提示用自己的行数；失败逐条显示 `ref` 原样和 `reason.<码>` 译文。来源：`campaign.md` 三.4。
-- **批量覆盖的结果能否告诉前端。** 问：响应里能不能给"新增几行、覆盖几行"？暂定：页面在弹窗里一直写明"已存在的 `(campaignId, statDate)` 会被覆盖"，不统计覆盖几行。来源：`campaign.md` 三.5。
+- **批量覆盖的结果能否告诉前端。** 问：响应里能不能给"新增几行、覆盖几行"？暂定：页面在弹窗里一直写明"已存在的 `(campaignId, statDate)` 会被覆盖"，不统计覆盖几行。来源：`campaign.md` 三.5。 **【部分已按决定实现（核对于 2026-11-01）：`docs/superpowers/handoff/decisions-2026-10-27.md` 第 41 行，前端按暂定的 `{imported, overwritten}` 显示；字段名后端是否采用仍待回答】**
 - **`GET /attribution/clicks` 的 `from`、`to`。** 暂定：和 `GET /attribution/records` 一样：ISO-8601 时刻，`from` 含、`to` 不含，按 `clickedAt` 筛；所选 UTC 日变成 `[from 00:00:00Z, 后一天 00:00:00Z)`；`campaignId` 是字符串。来源：`campaign.md` 四.1。
 - **`GET /attribution/summary` 的 `key` 缺失时的值。** 问：分组值缺失（例如记录没有 `mediaSource`）时是 `null` 还是空串？暂定：两种都显示"—"。来源：`campaign.md` 四.2。
 - **【安全】点击明细 IP 掩码的格式。** 问：后端回复第 11 条已定 `ip` 默认掩码、持有 `ANALYTICS:IP_VIEW` 才完整；掩码的具体格式没写。暂定：页面不解析、不改写，原样显示后端给的串。来源：`campaign.md` 四.3。
@@ -487,11 +487,11 @@
 - **删除计划、单元时的错误。** 问：计划名下有单元、单元名下有素材时返回什么？是 409 `INVALID_STATE`（页面看不出是"状态不对"还是"名下有单元"），还是专用的 409（如 `RESOURCE_IN_USE`，`data.what` 是 `units` 或 `creatives`）？草稿计划名下有单元时能不能删？暂定：能读到单元的管理员，页面对有单元的计划不提供删除（按钮灰掉并写明原因）；读不到时提供按钮，后端拒绝时显示 `error.INVALID_STATE` 的译文；单元的删除不预判。来源：`ads.md` 五。
 - **长度、范围、格式的真实上限。** 问：计划名称、描述、优先级范围、单元名称、素材标题/正文/按钮文字/广告主、拒绝备注的长度；`DEEP_LINK` 的 scheme 清单；版本号能不能带后缀。暂定：页面只做契约写明的检查，拒绝备注按 1 到 500 个码点，`DEEP_LINK` 只检查非空且不超过 2048 个字符，版本号只收"数字加点"，其余交给后端 400。来源：`ads.md` 六。
 - **`targeting` 校验失败时 `details` 的 `ref`。** 问：`ref` 是 `targeting`、`targeting.geo` 还是 `geo`？时段第几行出错时是 `targeting.day_parts[0]` 吗？暂定：接受 `targeting`、`targeting.<键>`、`<键>`（snake_case），键后带 `[0]` 或 `.0.start` 都归到这个键下，认不出的显示在表单底部。来源：`ads.md` 七。
-- **广告报表的几处。** 问：`GET /ads/report/overview` 的 `daily` 是否只返回有数据的日子，当天有没有数据？`totals` 里的比率字段是否和每行一样？`by-country` 的 `country` 是大写 ISO 3166-1 alpha-2 吗，空串是"未知"？暂定：页面把缺的日子在折线图上补 0；对每个比率再检查分母，为 0 或非数一律显示"—"。来源：`ads.md` 八.1–八.3。
+- **广告报表的几处。** 问：`GET /ads/report/overview` 的 `daily` 是否只返回有数据的日子，当天有没有数据？`totals` 里的比率字段是否和每行一样？`by-country` 的 `country` 是大写 ISO 3166-1 alpha-2 吗，空串是"未知"？暂定：页面把缺的日子在折线图上补 0；对每个比率再检查分母，为 0 或非数一律显示"—"。来源：`ads.md` 八.1–八.3。 **【该小问已答（核对于 2026-11-01）：第 4 小问（导出带的参数）见 `docs/backend-inputs/2026-10-21-avatar-backend-note-for-avataradmin.md` 第 57 行；其余仍待后端回答】**
 
 ## 2.19 短信与邮件模板（19 条）
 
-- **【安全】短信渠道凭据在请求体里叫什么、是什么类型。** 问：契约写"`PUT /sms/channels/{id}`（含凭据）""留空表示不修改"，实体列是 `credentialsEnc`，请求字段名没写；有的供应商要两三个凭据，要不要结构化的值？暂定：`credentials`，一个字符串（页面是一个密码框）；留空时请求体里没有这个键（不是空串，不是 `null`）；页面永远不显示已保存的凭据。来源：`sms-email.md` 一.1。
+- **【安全】短信渠道凭据在请求体里叫什么、是什么类型。** 问：契约写"`PUT /sms/channels/{id}`（含凭据）""留空表示不修改"，实体列是 `credentialsEnc`，请求字段名没写；有的供应商要两三个凭据，要不要结构化的值？暂定：`credentials`，一个字符串（页面是一个密码框）；留空时请求体里没有这个键（不是空串，不是 `null`）；页面永远不显示已保存的凭据。来源：`sms-email.md` 一.1。 **【已答（核对于 2026-11-01）：`docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 169 行：`credentials` 的值必须是非 null 的文本，不改凭据时省略该字段或发 `{}`】**
 - **`PUT /sms/channels/{id}` 是整条替换还是只改带来的字段。** 暂定：页面总是发完整的可编辑字段：`name`、`providerCode`、`apiUrl`、`extConfig`、`countries`、`smsType`、`priority`，加输入了才有的 `credentials`；不带 `channelCode` 和 `enabled`；`extConfig` 空发 `null`，国家空发 `[]`。来源：`sms-email.md` 一.2。
 - **`PUT …/enabled` 的请求体、`POST /sms/channels` 的 `enabled` 默认值。** 暂定：`{"enabled": true|false}`；新建总是显式发 `enabled`，默认 `false`。来源：`sms-email.md` 一.3、一.4。
 - **【安全】`extConfig` 是 JSON 对象还是 JSON 字符串，里面会不会有凭据。** 暂定：请求发对象（或 `null`），响应对象、字符串都能读；页面的"凭据永不回显"依赖后端不把凭据放进 `extConfig`（规格只写它含 `appId` 和发送方 ID），请确认。来源：`sms-email.md` 一.5、`task-28-review.md`。
@@ -504,7 +504,7 @@
 - **短信模板列表是否分页、有无筛选。** 暂定：按 `page`、`pageSize` 分页，`{items,total}`，没有筛选。来源：`sms-email.md` 二.1。
 - **短信模板请求体。** 暂定：创建 `{templateCode, name, smsType, locale, country, content, providerTemplateId, enabled}`（`country`、`providerTemplateId` 空发 `null`，`country` 写成大写），更新不带 `templateCode` 和 `enabled`，`PUT …/enabled` 是 `{"enabled": true|false}`。来源：`sms-email.md` 二.2。
 - **模板缺 `{code}`（以及邮件模板缺必含项）时 400 的原因码。** 问：假后端用 `[{ref:'content', reason:'MISSING_PLACEHOLDER'}]`，请给真实的原因码。暂定：语言文件里没有的原因码，字段下写"输入内容不合法"。来源：`sms-email.md` 二.3、四.2。
-- **改模板的 `smsType` 能不能使"最后一个启用的 `OTP` 模板"消失。** 暂定：页面把改类型也当作需要先问的操作；后端如果不拒绝，只是多问了一次。来源：`sms-email.md` 二.4。
+- **改模板的 `smsType` 能不能使"最后一个启用的 `OTP` 模板"消失。** 暂定：页面把改类型也当作需要先问的操作；后端如果不拒绝，只是多问了一次。来源：`sms-email.md` 二.4。 **【已答（核对于 2026-11-01）：`docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 40、101 行：创建、修改、启用、停用、删除模板，把“启用、`OTP`、`en`、不限国家”的最后一个拿掉，答 400】**
 - **`GET /sms/records` 的筛选参数名和时间范围。** 问：是否记录的列名：`msgId`、`vendorMsgId`、`mobile`（完整号码精确匹配）、`channel`（`SMS`/`PUSH`）、`channelCode`、`purpose`、`sendStatus`、`deliveryStatus`，"是否已使用"是 `used`（`true`/`false`），时间范围 `from`、`to`；`from` 含、`to` 不含的 ISO-8601 时刻、按 `createdAt` 筛吗？暂定：所选 UTC 日变成 `[第一天 00:00:00Z, 最后一天的后一天 00:00:00Z)`，默认最近 7 个 UTC 日，页面注明 UTC；导出文件名用响应头里的名字，页面不拼。来源：`sms-email.md` 三.1、三.2。
 - **【安全】号码的掩码格式和存库格式。** 问：页面原样显示后端给的掩码串（契约 §23.6：默认只保留末 4 位）；号码筛选不做归一化，用户自己写成存库的格式（E.164），请确认存库的号码不带空格。来源：`sms-email.md` 三.3。
 - **短信导出的筛选参数、行数上限和错误。** 问：导出请求用的筛选参数和列表完全一致（列表参数去掉 `page`、`pageSize`）吗？超出行数（400 `INVALID_REQUEST`）和每小时次数用完（429 `RATE_LIMITED`）的处理见"导出"一节。暂定：只显示译文加"缩小筛选"的提示。来源：`sms-email.md` 三.5。
@@ -758,3 +758,5 @@
 | §17.2 | 写出验证码锁定（`admin.totp_max_failures`）时的响应：429 是否带 `retryAfterSeconds`、哪一次开始、`enroll` 一步的行为 | 2.1 第三条 |
 | 契约 §17.6 | 写出补数 `retention`、`reactivation` 各覆盖哪些行；汇总行缺失时各报表返回什么；`stats.max_range_days` 的"跨度"怎么数；游客留存能否按 `unknown` 平台查 | 2.4 |
 | 契约 §1.7 | 给出客户端 `HttpsLink.PATTERN` 的完整正则原文和标志位 | 2.21 第二条 |
+
+核对于 2026-11-01

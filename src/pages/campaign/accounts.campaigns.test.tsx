@@ -189,6 +189,61 @@ describe('the search', { timeout: 30000 }, () => {
   });
 });
 
+describe('the search and the page when the tab is left and opened again', {
+  timeout: 60000,
+}, () => {
+  const campaignReads = (calls: { method: string; url: string }[]) =>
+    calls
+      .filter((c) => c.url.startsWith('/api/admin/attribution/campaigns?'))
+      .map((c) => new URL(c.url, 'http://x').searchParams);
+
+  const withManyCampaigns = async () => {
+    const first = campaignState.campaigns[0];
+    for (let i = 0; i < 45; i += 1) {
+      campaignState.campaigns.push({
+        ...first,
+        id: String(100 + i),
+        code: `bulk_${i}`,
+        name: `ชุด ${i}`,
+      });
+    }
+    return load();
+  };
+
+  it('shows the keyword and the page that were chosen, and asks for that page first, after another tab was opened and this one again', async () => {
+    const { calls, user } = await withManyCampaigns();
+    await user.type(screen.getByRole('textbox', { name: 'Keyword' }), 'bulk{Enter}');
+    await waitFor(() => expect(campaignReads(calls).at(-1)?.get('keyword')).toBe('bulk'));
+    await user.click(await screen.findByRole('listitem', { name: '2' }));
+    await waitFor(() => expect(campaignReads(calls).at(-1)?.get('page')).toBe('2'));
+
+    await user.click(await screen.findByRole('tab', { name: 'Costs' }));
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Keyword' })).toBeNull());
+    const before = campaignReads(calls).length;
+    await user.click(await screen.findByRole('tab', { name: 'Campaigns' }));
+
+    expect(await screen.findByRole('textbox', { name: 'Keyword' })).toHaveValue('bulk');
+    await waitFor(() => expect(campaignReads(calls).length).toBeGreaterThan(before));
+    const asked = campaignReads(calls).slice(before);
+    expect(asked.every((q) => q.get('keyword') === 'bulk' && q.get('page') === '2')).toBe(true);
+    expect(screen.getByRole('listitem', { name: '2' })).toHaveClass('ant-pagination-item-active');
+  });
+
+  it('starts empty again after the search was reset before the tab was left', async () => {
+    const { calls, user } = await withManyCampaigns();
+    await user.type(screen.getByRole('textbox', { name: 'Keyword' }), 'bulk{Enter}');
+    await waitFor(() => expect(campaignReads(calls).at(-1)?.get('keyword')).toBe('bulk'));
+    await user.click(screen.getByRole('button', { name: /^(Reset|重\s*置)$/ }));
+    await waitFor(() => expect(campaignReads(calls).at(-1)?.has('keyword')).toBe(false));
+    await user.click(await screen.findByRole('tab', { name: 'Costs' }));
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Keyword' })).toBeNull());
+    await user.click(await screen.findByRole('tab', { name: 'Campaigns' }));
+    expect(await screen.findByRole('textbox', { name: 'Keyword' })).toHaveValue('');
+    await waitFor(() => expect(campaignReads(calls).at(-1)?.get('page')).toBe('1'));
+    expect(campaignReads(calls).at(-1)?.has('keyword')).toBe(false);
+  });
+});
+
 describe('the state switch', () => {
   it('sends the new state at once, with no question, and with the whole campaign but not the code and not the token', async () => {
     const { calls, user } = await load();

@@ -388,7 +388,12 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
             </Typography.Text>
           ) : null}
         </Flex>
-        <Form.Item name="link" label={t('notifications.send.link')} rules={[linkTargetRule(intl)]}>
+        <Form.Item
+          name="link"
+          label={t('notifications.send.link')}
+          // The address box of the link control says what is wrong with a web address itself.
+          rules={[linkTargetRule(intl, { quietUrl: true })]}
+        >
           <LinkFieldBox />
         </Form.Item>
         <Form.Item name="push" valuePropName="checked" extra={t('notifications.send.pushHelp')}>

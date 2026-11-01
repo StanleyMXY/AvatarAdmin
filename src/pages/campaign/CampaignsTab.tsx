@@ -7,6 +7,7 @@ import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import { RowActions } from '../../components/RowActions';
+import type { Kept } from '../../hooks/useKeptState';
 import {
   type AttributionCampaign,
   type CampaignFields,
@@ -25,7 +26,13 @@ type Props = {
   campaigns: CampaignList;
   /** `attribution.link_base_url`: a text, null when it is not configured, undefined while it is not known. */
   linkBase: string | null | undefined;
+  /** What the page keeps for the tabs that are drawn again when opened: here the search and the page. */
+  kept: Kept;
 };
+
+/** The search and the page of the list, as they were when the tab was left. */
+type ListState = { search: { keyword?: string; enabled?: string }; page: number; pageSize: number };
+const LIST_KEY = 'campaigns.list';
 
 const DASH = '—';
 const textOrNull = (value: unknown): string | null => (typeof value === 'string' ? value : null);
@@ -66,7 +73,7 @@ function PixelCell({ id, label }: { id: unknown; label: string }) {
  * switch (sent at once), and the dialogs to make, change and generate a link. There is no delete:
  * a campaign is only switched off.
  */
-export function CampaignsTab({ campaigns, linkBase }: Props) {
+export function CampaignsTab({ campaigns, linkBase, kept }: Props) {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
@@ -197,6 +204,11 @@ export function CampaignsTab({ campaigns, linkBase }: Props) {
         rowKey="id"
         columns={columns}
         actionRef={ref}
+        // The tab is drawn again each time it is opened: the search and the page come back with it.
+        initial={kept.current[LIST_KEY] as ListState | undefined}
+        onCommit={(state) => {
+          kept.current[LIST_KEY] = state satisfies ListState;
+        }}
         request={({ page, pageSize, keyword, enabled }) =>
           listCampaigns({
             keyword: trimSpec(typeof keyword === 'string' ? keyword : '') || undefined,

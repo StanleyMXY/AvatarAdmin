@@ -423,9 +423,10 @@ export default {
   'DELETE /api/admin/permissions/:code': guard('PERMISSION:MANAGE', (req) => {
     const node = systemState.nodes.get(req.params.code) ?? notFound('The permission node');
     if (node.builtin || (PERMISSION_CODES as readonly string[]).includes(node.code))
-      throw new MockHttpError(409, 'INVALID_STATE', 'A built-in node cannot be deleted', {
-        status: 'BUILTIN',
-      });
+      // Contract 3353: a built-in node is refused with INVALID_REQUEST (the contract gives no details).
+      throw invalidRequest('A built-in node cannot be deleted', [
+        { ref: 'code', reason: 'OUT_OF_RANGE' },
+      ]);
     if (sortedNodes().some((other) => other.parent === node.code))
       throw new MockHttpError(409, 'PERMISSION_HAS_CHILDREN', 'The node has children');
     systemState.nodes.delete(node.code);

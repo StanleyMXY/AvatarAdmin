@@ -14,3 +14,5 @@
 ## 暂定做法
 
 不阻塞。现在 `ExportButton` 在任何 400 `INVALID_REQUEST` 后，在通用文字后追加"如果范围很大，请缩小日期范围或筛选条件（一次导出有行数上限）"。拿到原因码后，加 `reason.EXPORT_TOO_MANY_ROWS`（带 `{maxRows}`）并去掉这句追加。
+
+核对于 2026-11-01
