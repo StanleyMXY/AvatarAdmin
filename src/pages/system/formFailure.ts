@@ -3,6 +3,7 @@ import { ApiError } from '../../request/errors';
 import { describeFailure } from '../../session/describe';
 import type { Translator } from '../../utils/displayText';
 import { failureToForm as failureToSharedForm, failureWords } from '../../utils/failureToForm';
+import { failureReason, setFieldReasons } from '../../utils/fieldReasons';
 
 /**
  * The words of a failed save, without a form: the text for the bar at the bottom of the dialog (null
@@ -41,7 +42,7 @@ export function failureToForm(
   if (error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE') {
     const field = (error.data as { field?: unknown } | null)?.field;
     if (typeof field === 'string' && fields.includes(field)) {
-      form.setFields([{ name: field, errors: [describeFailure(intl, error).text] }]);
+      setFieldReasons(form, intl, [failureReason(field, error)]);
     }
     return failureView(intl, error, fields);
   }

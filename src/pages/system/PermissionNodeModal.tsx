@@ -10,6 +10,7 @@ import {
   type PermissionType,
   updatePermission,
 } from '../../services/system';
+import { messageReason, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
 import { failureToForm, failureView } from './formFailure';
 import { buildPermissionPatch, codeProblem, nextSortOrder } from './permissionRules';
@@ -101,7 +102,9 @@ export function PermissionNodeModal({ node, nodes, onDone, onClose }: Props) {
           parent,
         });
         if (!built.ok) {
-          form.setFields([{ name: 'parent', errors: [t('system.permissions.field.parentLoop')] }]);
+          setFieldReasons(form, intl, [
+            messageReason('parent', 'system.permissions.field.parentLoop'),
+          ]);
           return;
         }
         await updatePermission(node.code, built.patch, { builtin });

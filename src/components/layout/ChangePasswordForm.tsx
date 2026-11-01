@@ -6,6 +6,7 @@ import { changePassword } from '../../services/auth';
 import { describeFailure } from '../../session/describe';
 import { checkPasswordChange } from '../../session/passwordRules';
 import { useSubmitOnce } from '../../session/useSubmitOnce';
+import { detailReasons, messageReason, setFieldReasons } from '../../utils/fieldReasons';
 
 type Values = { oldPassword: string; newPassword: string; confirm: string };
 type Field = keyof Values;
@@ -67,14 +68,16 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
         await changePassword({ oldPassword: values.oldPassword, newPassword: values.newPassword });
         onDone();
       } catch (failure) {
-        const { error, fields } = describeFailure(intl, failure);
+        const { error } = describeFailure(intl, failure);
         if (error.code === 'ADMIN_INVALID_CREDENTIALS') {
-          form.setFields([{ name: 'oldPassword', errors: [t('auth.password.oldWrong')] }]);
+          setFieldReasons(form, intl, [messageReason('oldPassword', 'auth.password.oldWrong')]);
           return;
         }
-        const named = fields.filter((f) => f.ref === 'oldPassword' || f.ref === 'newPassword');
+        const named = detailReasons(intl, failure, (ref) =>
+          ref === 'oldPassword' || ref === 'newPassword' ? ref : undefined,
+        );
         if (named.length > 0) {
-          form.setFields(named.map((f) => ({ name: f.ref as Field, errors: [f.text] })));
+          setFieldReasons(form, intl, named);
           return;
         }
         // A rule the browser did not know (for example a minimum length it was not told): the
