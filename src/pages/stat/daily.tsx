@@ -2,7 +2,7 @@ import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Select, Spin, Table, Tabs, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
@@ -13,10 +13,10 @@ import {
 import { ProvisionalTag } from '../../components/stat/ProvisionalTag';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { getDaily } from '../../services/stats/reports';
 import type { StatDailyRow } from '../../services/stats/types';
-import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
 import { hasProvisionalDay, isProvisionalDay } from '../../utils/settledDay';
 import { daysBetween, todayUtc } from '../../utils/utcDay';
@@ -61,17 +61,14 @@ export default function DailyReportPage() {
   // The UTC day that was today when the rows were read: the rows are as they were then, so what is
   // marked provisional follows that day and not the clock of every later drawing of the page.
   const [today, setToday] = useState<string>(() => todayUtc());
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const begin = useLatestCall();
-  // The words of a failure follow the language; a switch of language is not a reason to read again.
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
 
   const load = useCallback(async () => {
     const isCurrent = begin();
     const askedOn = todayUtc();
     setRows(null);
-    setFailure(null);
+    clear();
     try {
       const { items } = await getDaily({
         from: applied.range.from,
@@ -84,9 +81,9 @@ export default function DailyReportPage() {
         setRows(items);
       }
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intlRef.current, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [applied, begin]);
+  }, [applied, begin, fail, clear]);
 
   useEffect(() => {
     void load();

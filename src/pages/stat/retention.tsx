@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Select, Spin, Table, Tabs } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
@@ -12,6 +12,7 @@ import { ReportHelper } from '../../components/stat/ReportHelper';
 import { RetentionMatrix } from '../../components/stat/RetentionMatrix';
 import { RetentionTrendChart } from '../../components/stat/RetentionTrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { getReactivation, getRetention } from '../../services/stats/reports';
 import {
@@ -19,7 +20,6 @@ import {
   type ReactivationRow,
   type RetentionRow,
 } from '../../services/stats/types';
-import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount, formatPercent, safeRatio } from '../../utils/ratio';
 import { defaultRange } from '../analytics/defaultRange';
@@ -55,17 +55,14 @@ export default function RetentionReportPage() {
   const [silenceDays, setSilenceDays] = useState<Silence>(7);
   const [retention, setRetention] = useState<RetentionRow[] | null>(null);
   const [reactivation, setReactivation] = useState<ReactivationRow[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const begin = useLatestCall();
-  // The words of a failure follow the language; a switch of language is not a reason to read again.
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
 
   const load = useCallback(async () => {
     const isCurrent = begin();
     setRetention(null);
     setReactivation(null);
-    setFailure(null);
+    clear();
     const { from, to } = applied.range;
     try {
       if (tab === 'reactivation') {
@@ -82,9 +79,9 @@ export default function RetentionReportPage() {
         if (isCurrent()) setRetention(items);
       }
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intlRef.current, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [tab, applied, silenceDays, begin]);
+  }, [tab, applied, silenceDays, begin, fail, clear]);
 
   useEffect(() => {
     void load();
