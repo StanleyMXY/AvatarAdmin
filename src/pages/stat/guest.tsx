@@ -1,5 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Flex, Tabs, Typography } from 'antd';
+import { useState } from 'react';
 import { UtcNotice } from '../../components/stat/UtcNotice';
 import { GuestCohortTab } from './guest/GuestCohortTab';
 import { GuestDailyTab } from './guest/GuestDailyTab';
@@ -13,18 +14,30 @@ import { GuestRetentionTab } from './guest/GuestRetentionTab';
 export default function GuestStatsPage() {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
+  // Landing recomputes the summaries that three tabs show; a tab that was opened before stays
+  // mounted behind the others, so each one reads again when something was landed.
+  const [landedTick, setLandedTick] = useState(0);
+  const tabProps = { landedTick, onLanded: () => setLandedTick((n) => n + 1) };
   return (
     <Flex vertical gap={16}>
       <UtcNotice />
       <Typography.Text type="secondary">{t('stat.guest.devicesNote')}</Typography.Text>
       <Tabs
         items={[
-          { key: 'daily', label: t('stat.guest.tab.daily'), children: <GuestDailyTab /> },
-          { key: 'cohort', label: t('stat.guest.tab.cohort'), children: <GuestCohortTab /> },
+          {
+            key: 'daily',
+            label: t('stat.guest.tab.daily'),
+            children: <GuestDailyTab {...tabProps} />,
+          },
+          {
+            key: 'cohort',
+            label: t('stat.guest.tab.cohort'),
+            children: <GuestCohortTab {...tabProps} />,
+          },
           {
             key: 'retention',
             label: t('stat.guest.tab.retention'),
-            children: <GuestRetentionTab />,
+            children: <GuestRetentionTab {...tabProps} />,
           },
           { key: 'quota', label: t('stat.guest.tab.quota'), children: <GuestQuotaTab /> },
         ]}

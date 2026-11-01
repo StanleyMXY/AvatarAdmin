@@ -18,10 +18,12 @@ import type { StatDailyRow } from '../../services/stats/types';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
 import { hasProvisionalDay, isProvisionalDay } from '../../utils/settledDay';
-import { daysBetween, lastNDaysUtc, todayUtc } from '../../utils/utcDay';
+import { daysBetween, todayUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import {
   buildDailyColumns,
   type ColumnDef,
+  chartRow,
   type DailyViewRow,
   formatDailyCell,
   isBackfilledCell,
@@ -32,7 +34,12 @@ type Filter = { range: DayRange } & PlatformChannelValue;
 
 const DEFAULT_METRICS = ['dau', 'newAccountsRegistered'];
 
-const initialFilter = (): Filter => ({ range: lastNDaysUtc(7), platform: 'ALL', channel: 'ALL' });
+// The first range is 7 days, or fewer when the backend allows fewer, so that the first ask is not refused.
+const initialFilter = (maxDays: number | null | undefined): Filter => ({
+  range: defaultRange(maxDays, 7),
+  platform: 'ALL',
+  channel: 'ALL',
+});
 
 /**
  * 日报 (`STATS:VIEW`): the daily numbers, one row per UTC day. A trend chart of the chosen metrics
@@ -45,8 +52,8 @@ export default function DailyReportPage() {
     intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
   // What is being edited, and what was asked for with Search (the report, the chart and the export).
-  const [draft, setDraft] = useState<Filter>(initialFilter);
-  const [applied, setApplied] = useState<Filter>(initialFilter);
+  const [draft, setDraft] = useState<Filter>(() => initialFilter(meta.statsMaxRangeDays));
+  const [applied, setApplied] = useState<Filter>(draft);
   const [metrics, setMetrics] = useState<string[]>(DEFAULT_METRICS);
   const [tab, setTab] = useState('trend');
   const [rows, setRows] = useState<StatDailyRow[] | null>(null);
@@ -55,6 +62,9 @@ export default function DailyReportPage() {
   const [today, setToday] = useState<string>(() => todayUtc());
   const [failure, setFailure] = useState<string | null>(null);
   const counter = useRef(0);
+  // The words of a failure follow the language; a switch of language is not a reason to read again.
+  const intlRef = useRef(intl);
+  intlRef.current = intl;
 
   const load = useCallback(async () => {
     const mine = ++counter.current;
@@ -73,9 +83,9 @@ export default function DailyReportPage() {
         setRows(items);
       }
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (mine === counter.current) setFailure(describeFailure(intlRef.current, error).text);
     }
-  }, [applied, intl]);
+  }, [applied]);
 
   useEffect(() => {
     void load();
@@ -83,6 +93,7 @@ export default function DailyReportPage() {
 
   const columns = useMemo(() => buildDailyColumns(applied.platform), [applied.platform]);
   const viewRows = useMemo<DailyViewRow[]>(() => (rows ?? []).map(toViewRow), [rows]);
+  const chartRows = useMemo(() => viewRows.map(chartRow), [viewRows]);
   const title = (def: ColumnDef) =>
     def.kind === 'date' ? t('stat.daily.date') : t(`stat.daily.col.${def.key}`);
 
@@ -214,7 +225,7 @@ export default function DailyReportPage() {
                     onChange={setMetrics}
                   />
                   <TrendChart
-                    rows={viewRows}
+                    rows={chartRows}
                     xField="statDate"
                     series={series}
                     from={applied.range.from}

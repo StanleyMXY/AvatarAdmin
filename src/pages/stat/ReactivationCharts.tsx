@@ -6,7 +6,7 @@ import { fillMissingDays } from '../../services/stats/fillMissingDays';
 import type { ReactivationRow } from '../../services/stats/types';
 import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
-import { formatPercent, safeRatio } from '../../utils/ratio';
+import { formatCount, formatPercent, safeRatio } from '../../utils/ratio';
 
 type Props = { rows: ReactivationRow[]; from: string; to: string };
 
@@ -62,6 +62,15 @@ export function ReactivationCharts({ rows, from, to }: Props) {
               labelFormatter: (value: number) => formatPercent(value, intl.locale, 0),
             },
           }}
+          tooltip={{
+            items: [
+              {
+                channel: 'y',
+                name: intl.formatMessage({ id: 'stat.reactivation.chart.rate' }),
+                valueFormatter: (value: number) => formatPercent(value, intl.locale),
+              },
+            ],
+          }}
           height={260}
         />
       </div>
@@ -76,6 +85,15 @@ export function ReactivationCharts({ rows, from, to }: Props) {
           theme={theme.g2Theme}
           scale={{ color: { range: theme.palette } }}
           axis={axis}
+          tooltip={{
+            items: [
+              {
+                channel: 'y',
+                name: intl.formatMessage({ id: 'stat.reactivation.chart.count' }),
+                valueFormatter: (value: number) => formatCount(value, intl.locale),
+              },
+            ],
+          }}
           height={260}
         />
       </div>

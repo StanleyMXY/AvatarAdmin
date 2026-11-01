@@ -3,6 +3,7 @@ import type { StatDailyRow } from '../../services/stats/types';
 import {
   buildDailyColumns,
   type ColumnDef,
+  chartRow,
   formatDailyCell,
   isBackfilledCell,
   toViewRow,
@@ -255,5 +256,19 @@ describe('isBackfilledCell', () => {
         toViewRow(row({ activeSubscriptionsBackfilled: true })),
       ),
     ).toBe(false);
+  });
+});
+
+describe('chartRow', () => {
+  it('rounds the minute figures to one decimal, as the table shows them, and leaves counts and missing values alone', () => {
+    const view = toViewRow(row({ callSecondsTotal: 12300, accountsWithCall: 3, dau: 1234 }));
+    expect(view.callMinutesPerAccount).toBeCloseTo(68.3333333, 5);
+    const chart = chartRow(view);
+    expect(chart.callMinutesPerAccount).toBe(68.3);
+    expect(chart.callMinutesTotal).toBe(205);
+    expect(chart.dau).toBe(1234);
+    const empty = chartRow(toViewRow(row({ callSecondsTotal: 0, accountsWithCall: 0 })));
+    expect(empty.callMinutesPerAccount).toBeNull();
+    expect(empty.callMinutesTotal).toBe(0);
   });
 });

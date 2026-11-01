@@ -70,6 +70,8 @@ const messages: Record<string, string> = {
     'Devices whose used seconds reached the allowance ÷ (devices − devices without an allowance).',
   'stat.guest.quota.avgUsed': 'Average minutes used',
   'stat.guest.quota.avgUsed.tip': 'Average time used by the devices that have an allowance.',
+  'stat.guest.quota.rangeNote':
+    'Devices are picked by the day they first appeared in the range; what they used counts up to now.',
   'stat.guest.quota.configLink': 'Change the guest call allowance in System settings',
   'stat.guest.quota.chart': 'Devices by share of the allowance used',
   'stat.guest.quota.table': 'Conversion by bucket',

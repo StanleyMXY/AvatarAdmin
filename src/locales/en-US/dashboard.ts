@@ -47,7 +47,7 @@ const messages: Record<string, string> = {
   'stat.daily.col.newSubscriptions': 'New subscriptions',
   'stat.daily.col.activeSubscriptions': 'Active subscriptions',
   'stat.daily.col.activeSubscriptions.tip':
-    'Active subscriptions at the end of the day (a day-end snapshot, production only). Today and days without a snapshot show a dash; a value marked Back-filled is an approximation from the current state.',
+    'Active subscriptions at the end of the day (a day-end snapshot, production only). Today and days without a snapshot show a dash; a value marked Back-filled is an approximation from the current state. For a channel package the number is always a dash (the snapshot has no channel), which is not a missing snapshot.',
   'stat.daily.col.creditPurchases': 'Credit purchases',
   'stat.daily.col.creditsSpent': 'Credits spent',
   'stat.daily.col.guestSessionsConnected': 'Guest calls connected',

@@ -11,7 +11,7 @@ import { RetentionTrendChart } from '../../../components/stat/RetentionTrendChar
 import { getGuestRetention } from '../../../services/stats/reports';
 import { RETENTION_DAYS } from '../../../services/stats/types';
 import { useAdminMeta } from '../../../session/useSession';
-import { lastNDaysUtc } from '../../../utils/utcDay';
+import { defaultRange } from '../../analytics/defaultRange';
 import { DeviceCohortMatrix } from './DeviceCohortMatrix';
 import { GuestLandBar } from './GuestLandBar';
 import { ReportState } from './ReportState';
@@ -20,18 +20,28 @@ import { useReport } from './useReport';
 type Filter = { range: DayRange } & PlatformChannelValue;
 
 const DEFAULT_DAYS = [1, 7, 30];
-const initialFilter = (): Filter => ({ range: lastNDaysUtc(30), platform: 'ALL', channel: 'ALL' });
+const initialFilter = (maxDays: number | null | undefined): Filter => ({
+  range: defaultRange(maxDays, 30),
+  platform: 'ALL',
+  channel: 'ALL',
+});
 
 /**
  * 游客留存: the share of the devices that first appeared on a day that were seen again on day N
  * (any client event). The base is devices. The note says what the cohort is.
  */
-export function GuestRetentionTab() {
+export function GuestRetentionTab({
+  landedTick,
+  onLanded,
+}: {
+  landedTick: number;
+  onLanded: () => void;
+}) {
   const intl = useIntl();
   const meta = useAdminMeta();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
-  const [draft, setDraft] = useState<Filter>(initialFilter);
+  const [draft, setDraft] = useState<Filter>(() => initialFilter(meta.statsMaxRangeDays));
   const [applied, setApplied] = useState<Filter>(draft);
   const [days, setDays] = useState<number[]>(DEFAULT_DAYS);
   const fetcher = useCallback(
@@ -44,7 +54,7 @@ export function GuestRetentionTab() {
       }),
     [applied],
   );
-  const { data, failure, reload } = useReport(fetcher);
+  const { data, failure, reload } = useReport(fetcher, landedTick);
   const chosen = [...days].sort((a, b) => a - b);
 
   return (
@@ -86,7 +96,7 @@ export function GuestRetentionTab() {
           }}
         />
       </Flex>
-      <GuestLandBar onLanded={reload} />
+      <GuestLandBar onLanded={onLanded} />
       <Alert type="info" showIcon title={t('stat.guest.retention.note')} />
       <ReportState failure={failure} loading={data === null} onRetry={reload} />
       {data ? (

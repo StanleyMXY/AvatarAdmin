@@ -9,7 +9,7 @@ import { getGuestDaily } from '../../../services/stats/reports';
 import type { GuestDailyRow } from '../../../services/stats/types';
 import { useAdminMeta } from '../../../session/useSession';
 import { DASH, formatCount, formatPercent } from '../../../utils/ratio';
-import { lastNDaysUtc } from '../../../utils/utcDay';
+import { defaultRange } from '../../analytics/defaultRange';
 import { dailyConversionRate } from './conversion';
 import { GuestLandBar } from './GuestLandBar';
 import { ReportState } from './ReportState';
@@ -36,13 +36,19 @@ export function HeaderWithTip({ id, testId }: { id: string; testId: string }) {
  * 游客日报: new guest devices and converted devices per UTC day, and the rate of the day. The rate
  * is today's converted over today's new, which are not the same devices (said in the column hint).
  */
-export function GuestDailyTab() {
+export function GuestDailyTab({
+  landedTick,
+  onLanded,
+}: {
+  landedTick: number;
+  onLanded: () => void;
+}) {
   const intl = useIntl();
   const meta = useAdminMeta();
-  const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getGuestDaily(applied), [applied]);
-  const { data, failure, reload } = useReport(fetcher);
+  const { data, failure, reload } = useReport(fetcher, landedTick);
 
   const columns: ColumnsType<GuestDailyRow> = [
     {
@@ -90,7 +96,7 @@ export function GuestDailyTab() {
           params={{ from: applied.from, to: applied.to }}
         />
       </Flex>
-      <GuestLandBar onLanded={reload} />
+      <GuestLandBar onLanded={onLanded} />
       <ReportState failure={failure} loading={data === null} onRetry={reload} />
       {data ? (
         <Table<GuestDailyRow>

@@ -8,7 +8,7 @@ import { GUEST_COHORT_DAYS } from '../../../services/stats/types';
 import { useAdminMeta } from '../../../session/useSession';
 import { getChartTheme } from '../../../theme/chartTheme';
 import { useThemeMode } from '../../../theme/modes';
-import { lastNDaysUtc } from '../../../utils/utcDay';
+import { defaultRange } from '../../analytics/defaultRange';
 import { buildConversionDistribution, buildConversionStack } from './conversion';
 import { DeviceCohortMatrix } from './DeviceCohortMatrix';
 import { GuestLandBar } from './GuestLandBar';
@@ -20,15 +20,21 @@ import { useReport } from './useReport';
  * D30 (cumulative), how long they took (ring), and the same per cohort day (stacked columns). A
  * column that is not due yet is a dash and is not counted anywhere.
  */
-export function GuestCohortTab() {
+export function GuestCohortTab({
+  landedTick,
+  onLanded,
+}: {
+  landedTick: number;
+  onLanded: () => void;
+}) {
   const intl = useIntl();
   const meta = useAdminMeta();
   const [mode] = useThemeMode();
   const theme = getChartTheme(mode);
-  const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(30));
+  const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 30));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getGuestCohort(applied), [applied]);
-  const { data, failure, reload } = useReport(fetcher);
+  const { data, failure, reload } = useReport(fetcher, landedTick);
   const t = (id: string) => intl.formatMessage({ id });
 
   const ring = useMemo(
@@ -61,7 +67,7 @@ export function GuestCohortTab() {
         </Button>
       </Flex>
 
-      <GuestLandBar onLanded={reload} />
+      <GuestLandBar onLanded={onLanded} />
       <ReportState failure={failure} loading={data === null} onRetry={reload} />
       {data ? (
         <>
