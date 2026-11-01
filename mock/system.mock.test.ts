@@ -534,7 +534,7 @@ describe('the permission tree', () => {
     expect(systemState.roles.get('6')?.permissionCodes).toEqual(['AUDIT:VIEW']);
   });
 
-  it('refuses to delete a node with children: 409 PERMISSION_HAS_CHILDREN; and a built-in node: 409', async () => {
+  it('refuses to delete a node with children: 409 PERMISSION_HAS_CHILDREN; and a built-in node: 400 INVALID_REQUEST (contract 3353)', async () => {
     await create({ code: 'CUSTOM:A' });
     await create({ code: 'CUSTOM:B', parent: 'CUSTOM:A' });
     const parent = await run('DELETE /api/admin/permissions/:code', 'root', {
@@ -544,8 +544,17 @@ describe('the permission tree', () => {
     const builtin = await run('DELETE /api/admin/permissions/:code', 'root', {
       params: { code: 'USER:BAN' },
     });
-    expect(builtin.status).toBe(409);
+    expect([builtin.status, builtin.body.code]).toEqual([400, 'INVALID_REQUEST']);
+    expect(Array.isArray(builtin.body.data.details)).toBe(true);
     expect(systemState.nodes.has('USER:BAN')).toBe(true);
+    // a node the application checks by code is built in too, whatever its flag says
+    const node = systemState.nodes.get('CUSTOM:B');
+    if (node) node.builtin = true;
+    const flagged = await run('DELETE /api/admin/permissions/:code', 'root', {
+      params: { code: 'CUSTOM:B' },
+    });
+    expect([flagged.status, flagged.body.code]).toEqual([400, 'INVALID_REQUEST']);
+    expect(systemState.nodes.has('CUSTOM:B')).toBe(true);
   });
 });
 

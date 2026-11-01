@@ -277,6 +277,21 @@ describe('a custom node', () => {
     expect(await rowOf('CUSTOM:A')).toBeInTheDocument();
   });
 
+  it('shows the general text of INVALID_REQUEST when the backend refuses to delete a node as built in, and keeps the node', async () => {
+    seedChain();
+    const { user } = await load();
+    await user.click(within(await rowOf('CUSTOM:E')).getByRole('button', { name: 'Delete' }));
+    // the node became built in after the page read it (the page offers no delete for such a node)
+    const node = systemState.nodes.get('CUSTOM:E');
+    if (node) node.builtin = true;
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(
+      await screen.findByText('Some input is not valid. Please check the fields and try again.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('A built-in node cannot be deleted')).not.toBeInTheDocument();
+    expect(await rowOf('CUSTOM:E')).toBeInTheDocument();
+  });
+
   it('sends one delete for two presses of the confirmation', async () => {
     seedChain();
     const { user } = await load();
