@@ -84,20 +84,52 @@ describe('what a request does to the service status', () => {
     expect(isServiceUnavailable()).toBe(false);
   });
 
-  it('a success clears it, and so does an answer from the backend that is an error', async () => {
-    markServiceUnavailable();
+  it('a success of the same read clears it, and so does an answer from the backend that is an error', async () => {
+    stubFetch(() => textResponse(504, '<html>Gateway Time-out</html>'));
+    await attempt(apiRequest({ method: 'GET', url: '/users' }));
+    expect(isServiceUnavailable()).toBe(true);
     stubFetch(() => jsonResponse(200, envelope('200', {})));
-    await apiRequest({ method: 'GET', url: '/users' });
+    await apiRequest({ method: 'GET', url: '/users', params: { page: 2 } });
     expect(isServiceUnavailable()).toBe(false);
 
-    markServiceUnavailable();
+    stubFetch(() => textResponse(502, '<html>Bad Gateway</html>'));
+    await attempt(apiRequest({ method: 'GET', url: '/users/9' }));
+    expect(isServiceUnavailable()).toBe(true);
     stubFetch(() => jsonResponse(404, envelope('RESOURCE_NOT_FOUND')));
     await attempt(apiRequest({ method: 'GET', url: '/users/9' }));
     expect(isServiceUnavailable()).toBe(false);
   });
 
+  it('a success of another read does not clear it: the read that met the gateway page has not worked yet', async () => {
+    stubFetch(() => textResponse(504, '<html>Gateway Time-out</html>'));
+    await attempt(apiRequest({ method: 'GET', url: '/stats/daily' }));
+    stubFetch(() => jsonResponse(200, envelope('200', {})));
+    await apiRequest({ method: 'GET', url: '/stats/retention' });
+    await attempt(apiRequest({ method: 'POST', url: '/users/1/ban', body: {} }));
+    stubFetch(() => jsonResponse(404, envelope('RESOURCE_NOT_FOUND')));
+    await attempt(apiRequest({ method: 'GET', url: '/users/404' }));
+    stubFetch(() => jsonResponse(200, envelope('200', {})));
+    expect(isServiceUnavailable()).toBe(true);
+    // two reads failed: it goes when both have worked (or the page is left, or the person retries)
+    stubFetch(() => textResponse(503, '<html>x</html>'));
+    await attempt(apiRequest({ method: 'GET', url: '/stats/guest/daily' }));
+    stubFetch(() => jsonResponse(200, envelope('200', {})));
+    await apiRequest({ method: 'GET', url: '/stats/daily' });
+    expect(isServiceUnavailable()).toBe(true);
+    await apiRequest({ method: 'GET', url: '/stats/guest/daily' });
+    expect(isServiceUnavailable()).toBe(false);
+  });
+
+  it('leaving the page or pressing retry (a clear without a read) clears every read that failed', async () => {
+    stubFetch(() => textResponse(504, '<html>x</html>'));
+    await attempt(apiRequest({ method: 'GET', url: '/stats/daily' }));
+    await attempt(apiRequest({ method: 'GET', url: '/stats/retention' }));
+    markServiceReachable();
+    expect(isServiceUnavailable()).toBe(false);
+  });
+
   it('a timeout, no network or a page that is not an envelope leave it as it was', async () => {
-    markServiceUnavailable();
+    markServiceUnavailable('GET /users');
     stubFetch(() => Promise.reject(new TypeError('offline')));
     await attempt(apiRequest({ method: 'GET', url: '/users' }));
     stubFetch(() => textResponse(200, '<html>x</html>'));

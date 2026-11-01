@@ -209,10 +209,10 @@ export async function apiRequest<T>(o: {
       o.anonymous ? false : o.reportSession,
       o.reportForbidden,
     );
-    markServiceReachable();
+    markServiceReachable(readKey(o.method, url));
     return data;
   } catch (error) {
-    noteServiceStatus(o.method, error);
+    noteServiceStatus(o.method, readKey(o.method, url), error);
     throw error;
   }
 }
@@ -224,11 +224,14 @@ const NO_BACKEND_ANSWER = ['NETWORK_ERROR', 'REQUEST_TIMEOUT', 'INVALID_RESPONSE
  * A read that met the gateway's own "unavailable" page raises the shell's notice (with a retry
  * button, which is only safe for a read); any answer of the backend itself takes it down again.
  */
-function noteServiceStatus(method: Method, error: unknown): void {
+function noteServiceStatus(method: Method, key: string, error: unknown): void {
   if (!(error instanceof ApiError)) return;
   if (error.code === 'GATEWAY_UNAVAILABLE') {
-    if (method === 'GET') markServiceUnavailable();
+    if (method === 'GET') markServiceUnavailable(key);
   } else if (!NO_BACKEND_ANSWER.includes(error.code)) {
-    markServiceReachable();
+    markServiceReachable(key);
   }
 }
+
+/** What the notice remembers a read by: the method and the path, not the query (page 2 of a list is the same read). */
+const readKey = (method: Method, url: string): string => `${method} ${url.split('?')[0]}`;

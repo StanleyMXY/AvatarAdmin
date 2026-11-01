@@ -54,7 +54,7 @@ export function matchPage(pages: PageEntry[], pathname: string): PageEntry | und
   return best?.page;
 }
 
-const BIDI_CONTROLS = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
+const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: the address is user-controlled text
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/g;
 const IDENTIFIER_LIMIT = 20;
