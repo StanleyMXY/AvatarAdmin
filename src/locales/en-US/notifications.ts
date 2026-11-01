@@ -43,7 +43,7 @@ const messages: Record<string, string> = {
   'notifications.detail.titleLabel': 'Title',
   'notifications.detail.bodyLabel': 'Body',
   'notifications.detail.noTexts':
-    'A system event has no text per language: when the recipient reads it, the system makes the text from the template key and parameters in his language.',
+    'A system event has no text per language: when the recipient reads it, the system makes the text from the template key and parameters in their language.',
   'notifications.detail.noTemplate': 'A message sent by an operator uses no template.',
 
   // ---- the send dialog ----

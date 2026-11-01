@@ -133,7 +133,9 @@ export default function RecordsPage() {
     {
       key: 'msgId',
       title: t('sms.records.col.msgId'),
-      render: (_, row) => <span style={{ overflowWrap: 'anywhere' }}>{plainText(row.msgId)}</span>,
+      render: (_, row) => (
+        <EllipsisPopoverText text={plainText(row.msgId)} lines={2} width={180} dir="ltr" />
+      ),
     },
     {
       key: 'vendorMsgId',
@@ -142,7 +144,7 @@ export default function RecordsPage() {
         row.channel === 'PUSH' ? (
           dash
         ) : (
-          <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.vendorMsgId)}</span>
+          <EllipsisPopoverText text={orDash(row.vendorMsgId)} lines={2} width={180} dir="ltr" />
         ),
     },
     {
@@ -183,7 +185,7 @@ export default function RecordsPage() {
       key: 'channelCode',
       title: t('sms.records.col.channelCode'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.channelCode)}</span>
+        <EllipsisPopoverText text={orDash(row.channelCode)} lines={2} width={160} dir="ltr" />
       ),
     },
     {

@@ -34,7 +34,7 @@ import {
   MAX_BODY,
   MAX_TITLE,
 } from './compose';
-import { parseRecipients, recipientsProblem } from './recipients';
+import { parseRecipients, recipientsProblem, visibleId } from './recipients';
 import { reasonText } from './texts';
 
 type Values = { recipients: string; link: LinkTargetValue; push: boolean };
@@ -201,7 +201,9 @@ export function SendModal({ onClose, onSent }: { onClose: () => void; onSent: ()
             }),
           );
         } else if (ids.includes(detail.ref)) {
-          accountLines.push(t('notifications.send.accountLine', { id: detail.ref, reason }));
+          accountLines.push(
+            t('notifications.send.accountLine', { id: visibleId(detail.ref), reason }),
+          );
         } else {
           lines.push(t('notifications.send.detailLine', { field: plainText(detail.ref), reason }));
         }

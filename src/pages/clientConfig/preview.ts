@@ -1,4 +1,5 @@
 import type { ClientConfigItem, ClientConfigValue } from '../../services/clientConfig';
+import { trimSpec } from '../../utils/trimSpec';
 
 /**
  * Where the value the client gets comes from: the language that was asked for (`LANGUAGE`), the
@@ -62,7 +63,7 @@ export function resolvePreview(
   requested: string,
 ): Preview {
   const values = isPlainObject(item.values) ? item.values : {};
-  const wanted = requested.trim();
+  const wanted = trimSpec(requested);
   if (item.localized && wanted !== '') {
     const tags = Object.keys(values).filter((tag) => tag !== '');
     const tag = matchLanguage(tags, wanted);

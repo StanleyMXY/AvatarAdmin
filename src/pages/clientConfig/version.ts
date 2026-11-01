@@ -14,8 +14,8 @@ const contentOf = (item: Pick<ClientConfigItem, 'values'>): string => {
 
 /**
  * Whether the key `current` (read again just before a save) is still the key `opened` (read when
- * the editor opened): the time of the last change when both readings have one, else the values. A
- * key that is no longer in the answer is not the same.
+ * the editor opened): not when the time of the last change moved, and not when the values differ
+ * (also under an unchanged time). A key that is no longer in the answer is not the same.
  */
 export function sameVersion(
   opened: Pick<ClientConfigItem, 'updatedAt' | 'values'>,
@@ -24,6 +24,9 @@ export function sameVersion(
   if (!current) return false;
   const before = timeOf(opened);
   const now = timeOf(current);
-  if (before !== null && now !== null) return before === now;
+  // A time that moved is a change. A time that did not move is not proof of none: the backend may
+  // leave the time of a language row that did not change as it was (contract 17.4 says the time of
+  // the key is that of the latest row), so the values are compared as well.
+  if (before !== null && now !== null && before !== now) return false;
   return contentOf(opened) === contentOf(current);
 }

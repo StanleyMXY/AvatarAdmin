@@ -186,6 +186,19 @@ describe('the list of send records', () => {
     expect((thai.closest('button') as HTMLElement).style.overflowWrap).toBe('anywhere');
   });
 
+  it('keeps a message id, a provider message id and a channel code of 5000 letters without a space inside their columns', async () => {
+    const first = record(0);
+    first.msgId = 'K'.repeat(5000);
+    first.vendorMsgId = 'V'.repeat(5000);
+    first.channelCode = 'C'.repeat(5000);
+    first.channel = 'SMS';
+    await load();
+    for (const letter of ['K', 'V', 'C']) {
+      const long = screen.getByText(letter.repeat(5000));
+      expect((long.closest('button') as HTMLElement).style.overflowWrap).toBe('anywhere');
+    }
+  });
+
   it('draws what it is given even when the values are not what the contract says', async () => {
     backend();
     overrideFetch(async ({ url, method }) =>

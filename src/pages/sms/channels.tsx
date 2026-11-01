@@ -119,7 +119,7 @@ export default function ChannelsPage() {
       key: 'code',
       title: t('sms.channels.col.code'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{plainText(row.channelCode)}</span>
+        <EllipsisPopoverText text={plainText(row.channelCode)} lines={2} width={200} dir="ltr" />
       ),
     },
     {
@@ -131,7 +131,7 @@ export default function ChannelsPage() {
       key: 'provider',
       title: t('sms.channels.col.provider'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{plainText(row.providerCode)}</span>
+        <EllipsisPopoverText text={plainText(row.providerCode)} lines={2} width={160} dir="ltr" />
       ),
     },
     {

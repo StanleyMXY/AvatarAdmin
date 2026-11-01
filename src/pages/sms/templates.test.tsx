@@ -128,6 +128,17 @@ describe('the list of templates', () => {
     expect((long.closest('button') as HTMLElement).style.overflowWrap).toBe('anywhere');
   });
 
+  it('keeps a template code and a provider template id of 5000 letters without a space inside their columns', async () => {
+    const found = template('otp_th');
+    found.templateCode = 'K'.repeat(5000);
+    found.providerTemplateId = 'P'.repeat(5000);
+    await load();
+    for (const letter of ['K', 'P']) {
+      const long = screen.getByText(letter.repeat(5000));
+      expect((long.closest('button') as HTMLElement).style.overflowWrap).toBe('anywhere');
+    }
+  });
+
   it('draws what it is given even when the values are not what the contract says', async () => {
     backend();
     overrideFetch(async ({ url, method }) =>
@@ -556,6 +567,30 @@ describe('deleting a template', () => {
     await waitFor(() => expect(rows().some((tr) => cellsOf(tr)[0] === 'promo_en')).toBe(false));
     expect(writesOf(calls)).toHaveLength(1);
     expect(writesOf(calls)[0].method).toBe('DELETE');
+  });
+
+  it('says what a refusal means when an enabled OTP template that is not the last is deleted with the inline question', async () => {
+    template('otp_th').enabled = true;
+    template('otp_th').smsType = 'OTP';
+    template('otp_en').enabled = true;
+    backend();
+    overrideFetch(async ({ method }) =>
+      method === 'DELETE'
+        ? jsonAnswer(400, 'INVALID_REQUEST', null, 'SECRET BACKEND WORDS')
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<TemplatesPage />);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    await user.click(within(await rowOf('otp_th')).getByRole('button', { name: 'Delete' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(
+      await screen.findByText(
+        /Some input is not valid.*refuses this while phone sign-in is on or phone-number accounts exist/s,
+      ),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
 
   it('asks first when it is the last enabled OTP template, and the delete goes out only when confirmed', async () => {

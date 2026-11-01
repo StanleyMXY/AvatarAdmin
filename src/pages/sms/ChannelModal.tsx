@@ -368,7 +368,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
                 try {
                   parsed = JSON.parse(text);
                 } catch {
-                  throw new Error(t('sms.channels.extNotJson'));
+                  throw new Error(t('pages.json.invalid'));
                 }
                 if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
                   throw new Error(t('sms.channels.extNotObject'));
@@ -446,7 +446,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

@@ -76,17 +76,21 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
     onClose();
   });
 
+  // A save and a restore are both writes of the same template: while one is on its way the dialog
+  // can neither start the other nor be closed.
+  const busy = pending || restore.pending;
+
   return (
     <Modal
       open
       title={t('email.templates.editTitle')}
       width={760}
       mask={{ closable: false }}
-      onCancel={pending ? undefined : onClose}
+      onCancel={busy ? undefined : onClose}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}
-      okButtonProps={{ loading: pending, disabled: pending }}
-      cancelButtonProps={{ disabled: pending }}
+      okButtonProps={{ loading: pending, disabled: busy }}
+      cancelButtonProps={{ disabled: busy }}
       onOk={() => form.submit()}
     >
       <Form
@@ -95,7 +99,7 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
         layout="vertical"
         requiredMark={false}
         initialValues={{ subject: plainText(template.subject), body: plainText(template.body) }}
-        onFinish={(values) => run(values)}
+        onFinish={(values) => (restore.pending ? undefined : run(values))}
       >
         <RevalidateOnLocaleChange />
         <Form.Item label={t('email.templates.field.code')}>
@@ -182,7 +186,7 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
@@ -214,7 +218,7 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
       <Flex align="center" gap={12} wrap>
         <DangerConfirmButton
           confirmText={t('email.templates.restoreAsk')}
-          disabled={!modified || pending}
+          disabled={!modified || busy}
           onConfirm={async () => {
             await restore.run().catch(() => undefined);
           }}

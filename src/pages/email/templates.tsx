@@ -38,8 +38,8 @@ export default function EmailTemplatesPage() {
         const meaning = describe(code);
         return (
           <Flex vertical>
-            <Typography.Text strong data-kind="code" style={{ overflowWrap: 'anywhere' }}>
-              {code}
+            <Typography.Text strong data-kind="code">
+              <EllipsisPopoverText text={code} lines={2} width={240} dir="ltr" />
             </Typography.Text>
             {meaning ? (
               <Typography.Text type="secondary" data-kind="description">

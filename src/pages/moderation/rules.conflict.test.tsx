@@ -89,6 +89,35 @@ describe('saving the rule list after another administrator saved it', { timeout:
   });
 });
 
+describe('the reload after a conflict clears what the failed save left', { timeout: 30000 }, () => {
+  it('takes away the marks on the rows and the banner of rows to correct, together with the edit', async () => {
+    const user = userEvent.setup();
+    const calls = await openPage();
+    const mine = await addRule(user, 'mine');
+    let refuse = true;
+    interceptFetch((url, init) =>
+      refuse && (init.method ?? 'GET') === 'PUT' && url.endsWith('/moderation/text-rules')
+        ? jsonResponse(
+            400,
+            envelope('INVALID_REQUEST', {
+              details: [{ ref: String(mine - 1), reason: 'TOO_LONG' }],
+            }),
+          )
+        : undefined,
+    );
+    await save(user);
+    expect(await screen.findByText(/1 rows need to be corrected first/)).toBeInTheDocument();
+    refuse = false;
+    otherAddsTwoRules();
+    await save(user);
+    expect(await screen.findByText('Modified by someone else')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(screen.queryByText('Modified by someone else')).toBeNull());
+    expect(screen.queryByText(/rows need to be corrected first/)).toBeNull();
+    expect(puts(calls)).toHaveLength(0);
+  });
+});
+
 describe('saving a rule list nobody else changed', { timeout: 30000 }, () => {
   it('reads the list again first and then sends the one write, with no notice of a conflict', async () => {
     const user = userEvent.setup();

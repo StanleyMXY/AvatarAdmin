@@ -27,6 +27,16 @@ describe('sameVersion: is the key as it was when the editor opened', () => {
     expect(sameVersion(item(), item({ updatedAt: '2026-10-20T08:30:00.001Z' }))).toBe(false);
   });
 
+  it('is not the same when the values changed under a time that did not move (a backend that keeps the time of the rows that did not change)', () => {
+    const opened = item();
+    expect(sameVersion(opened, item({ values: { '': 'Join me', th: 'มาใช้แอปด้วยกัน' } }))).toBe(
+      false,
+    );
+    expect(
+      sameVersion(opened, item({ values: { '': 'Join us', th: 'มาใช้แอปด้วยกัน', ar: 'انضم إلي' } })),
+    ).toBe(false);
+  });
+
   it('is not the same when someone reset the key (time to null) or configured it (null to a time)', () => {
     expect(sameVersion(item(), item({ updatedAt: null, configured: false, values: {} }))).toBe(
       false,

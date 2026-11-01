@@ -101,7 +101,6 @@ const messages: Record<string, string> = {
   'sms.channels.apiUrl.NOT_HTTPS': '地址必须以 https:// 开头',
   'sms.channels.apiUrl.HAS_USER_INFO': '地址里不能带用户名或密码',
   'sms.channels.apiUrl.HOST_NOT_ALLOWED': '这个供应商只允许这些主机：{hosts}',
-  'sms.channels.extNotJson': '扩展配置不是合法的 JSON',
   'sms.channels.extNotObject': '扩展配置必须是 JSON 对象',
   'sms.channels.countriesInvalid': '国家码是两位字母，例如 TH',
   'sms.channels.typeRequired': '请选择类型',

@@ -106,6 +106,17 @@ describe('the list of channels', () => {
     expect((long.closest('button') as HTMLElement).style.overflowWrap).toBe('anywhere');
   });
 
+  it('keeps a channel code and a provider code of 5000 letters without a space inside their columns', async () => {
+    const found = channel('gw_th_otp');
+    found.channelCode = 'K'.repeat(5000);
+    found.providerCode = 'P'.repeat(5000);
+    await load();
+    for (const letter of ['K', 'P']) {
+      const long = screen.getByText(letter.repeat(5000));
+      expect((long.closest('button') as HTMLElement).style.overflowWrap).toBe('anywhere');
+    }
+  });
+
   it('shows the notes: how a channel is chosen, and that credentials are write-only', async () => {
     await load();
     expect(
@@ -435,6 +446,28 @@ describe('the question before the last enabled OTP channel is switched off, dele
       url: `/api/admin/sms/channels/${id}`,
     });
     await waitFor(() => expect(rows().some((tr) => cellsOf(tr)[0] === 'gw_es_promo')).toBe(false));
+  });
+
+  it('says what a refusal means when an enabled OTP channel that is not the last is deleted with the inline question', async () => {
+    channel('gw_all_backup').enabled = true;
+    backend();
+    overrideFetch(async ({ method }) =>
+      method === 'DELETE'
+        ? jsonAnswer(400, 'INVALID_REQUEST', null, 'SECRET BACKEND WORDS')
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<ChannelsPage />);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    await user.click(within(await rowOf('gw_th_otp')).getByRole('button', { name: 'Delete' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(
+      await screen.findByText(
+        /Some input is not valid.*refuses this while phone sign-in is on or phone-number accounts exist/s,
+      ),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
 
   it('is asked when the last channel is deleted, and the delete goes out only when the question is confirmed', async () => {

@@ -124,7 +124,7 @@ export default function TemplatesPage() {
       key: 'code',
       title: t('sms.templates.col.code'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{plainText(row.templateCode)}</span>
+        <EllipsisPopoverText text={plainText(row.templateCode)} lines={2} width={200} dir="ltr" />
       ),
     },
     {
@@ -158,7 +158,12 @@ export default function TemplatesPage() {
       key: 'providerTemplateId',
       title: t('sms.templates.col.providerTemplateId'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.providerTemplateId)}</span>
+        <EllipsisPopoverText
+          text={orDash(row.providerTemplateId)}
+          lines={2}
+          width={180}
+          dir="ltr"
+        />
       ),
     },
     {

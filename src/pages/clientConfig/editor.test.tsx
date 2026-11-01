@@ -281,6 +281,61 @@ describe('the editor of a link key', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('lists the refusals that name no tab of the editor, with the words of the reason, and says the key was not saved', async () => {
+    backend();
+    const mocked = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) =>
+        (init.method ?? 'GET').toUpperCase() === 'PUT'
+          ? jsonResponse(
+              400,
+              envelope(
+                'INVALID_REQUEST',
+                {
+                  details: [
+                    { ref: 'values', reason: 'TOO_LONG' },
+                    { ref: 'TH', reason: 'TOO_LONG' },
+                    { ref: 'TH', reason: 'TOO_LONG' },
+                  ],
+                },
+                'SECRET backend sentence',
+              ),
+            )
+          : mocked(input, init),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    type(valueBox(drawer), 'https://example.com/changed');
+    await user.click(save(drawer));
+    const list = await within(drawer).findByTestId('client-config-unplaced');
+    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+      'values: The value is too long.',
+      'TH: The value is too long.',
+      'TH: The value is too long.',
+    ]);
+    expect(
+      within(drawer).getByText('The backend did not accept it; the whole key was not saved.'),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('SECRET backend sentence');
+  });
+
+  it('opens the tab of a language that was added with a U+0085 after its tag', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'privacyPolicyUrl');
+    const box = within(drawer).getByRole('combobox', {
+      name: 'Language tag, for example th or zh-Hans',
+    });
+    fireEvent.change(box, { target: { value: 'it\u0085' } });
+    await user.click(within(drawer).getByRole('button', { name: 'Add language' }));
+    const tab = await within(drawer).findByRole('tab', { name: 'it' });
+    expect(tab).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('shows the words of another refusal and keeps the editor open', async () => {
     backend();
     const mocked = globalThis.fetch;
@@ -338,6 +393,41 @@ describe('the languages of a key', () => {
     expect(puts(calls)[0].body).toEqual({
       values: { '': 'https://example.com/terms', es: 'https://example.com/es/terms' },
     });
+  });
+
+  it('says that a removed language has no value, not that it uses the default, when the key has neither a default row nor a registered default', async () => {
+    clientConfigState.rows.set(
+      'termsOfServiceUrl',
+      new Map([
+        [
+          'th',
+          {
+            value: 'https://example.com/th/t',
+            updatedBy: '1001',
+            updatedAt: '2026-10-20T08:30:00.000Z',
+          },
+        ],
+        [
+          'ar',
+          {
+            value: 'https://example.com/ar/t',
+            updatedBy: '1001',
+            updatedAt: '2026-10-20T08:30:00.000Z',
+          },
+        ],
+      ]),
+    );
+    backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'termsOfServiceUrl');
+    await user.click(within(drawer).getByRole('tab', { name: 'th' }));
+    expect(
+      within(drawer).getAllByText('After saving, this language has no value.').length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(drawer).queryByText('After saving, this language uses the default value.'),
+    ).toBeNull();
   });
 
   it('refuses a tag that is not valid and one that is there already', async () => {
@@ -631,11 +721,28 @@ describe('reset', () => {
     await user.click(within(drawer).getByRole('button', { name: 'Reset' }));
     expect(
       await screen.findByText(
-        'Delete the values of privacyPolicyUrl in every language? The client goes back to the default.',
+        'Delete the values of privacyPolicyUrl in every language? The key is then not configured and has no value.',
       ),
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(writesOf(calls).length).toBe(0);
+  });
+
+  it('says that the client goes back to the default only for a key that has a registered default', async () => {
+    clientConfigState.rows.set(
+      'drivingLookaheadMs',
+      new Map([['', { value: 300, updatedBy: '1001', updatedAt: '2026-10-20T08:30:00.000Z' }]]),
+    );
+    backend();
+    const user = userEvent.setup();
+    renderPage(<ClientConfigPage />);
+    const drawer = await openKey(user, 'drivingLookaheadMs');
+    await user.click(within(drawer).getByRole('button', { name: 'Reset' }));
+    expect(
+      await screen.findByText(
+        'Delete the values of drivingLookaheadMs in every language? The client goes back to the default.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('deletes every language of the key once confirmed: one request, then the list shows it as not configured', async () => {
