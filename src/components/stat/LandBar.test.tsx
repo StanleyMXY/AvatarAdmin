@@ -46,6 +46,26 @@ describe('LandBar', () => {
     });
   });
 
+  it('can name the day and add a hint in its own words, for a summary whose days are not UTC days', () => {
+    renderPage(
+      <LandBar
+        name="daily-event"
+        onLanded={() => {}}
+        dateLabelId="activity.stats.land.date"
+        hintId="activity.stats.land.hint"
+      />,
+    );
+    expect(screen.getByText('Date (local day of the users)')).toBeInTheDocument();
+    expect(screen.getByText('Recomputes the summary of the chosen local day.')).toBeInTheDocument();
+    expect(screen.queryByText('Date (UTC)')).toBeNull();
+  });
+
+  it('says UTC and no hint when it is given no words of its own', () => {
+    renderPage(<LandBar name="daily-event" onLanded={() => {}} />);
+    expect(screen.getByText('Date (UTC)')).toBeInTheDocument();
+    expect(screen.queryByText('Recomputes the summary of the chosen local day.')).toBeNull();
+  });
+
   it('posts the name and the day, then tells the page', async () => {
     const calls = stubFetch(() => jsonResponse(200, envelope('200', null)));
     const onLanded = vi.fn();

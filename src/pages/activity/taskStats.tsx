@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ExportButton } from '../../components/ExportButton';
+import { LandBar } from '../../components/stat/LandBar';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { getTasksDaily, getTasksSummary } from '../../services/stats/reports';
 import type { TaskSummaryRow } from '../../services/stats/types';
@@ -11,7 +12,6 @@ import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { ReportState } from '../stat/guest/ReportState';
 import { useReport } from '../stat/guest/useReport';
-import { LocalDayLandBar } from './LocalDayLandBar';
 import { StatsBar, useAppliedRange } from './StatsBar';
 import { countText, plainOrDash } from './texts';
 
@@ -105,7 +105,9 @@ export default function TaskStatsPage() {
         }
       />
       <Typography.Text type="secondary">{t('activity.stats.taskNote')}</Typography.Text>
-      <LocalDayLandBar
+      <LandBar
+        dateLabelId="activity.stats.land.date"
+        hintId="activity.stats.land.hint"
         name="task-daily"
         onLanded={() => {
           daily.reload();

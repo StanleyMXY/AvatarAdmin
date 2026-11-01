@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { daysIn } from '../../../mock/_core/statRange';
 import { envelope, jsonResponse } from '../../../tests/httpStubs';
 import { renderPage } from '../../../tests/renderPage';
+import { withTimeZone } from '../../../tests/withTimeZone';
 import SigninStatsPage from './signinStats';
 import {
   as,
@@ -161,6 +162,32 @@ describe('the range, Search and the answers that come late', { timeout: 30000 },
       '2026-09-05',
     ]);
   });
+
+  it.each(['Pacific/Kiritimati', 'Etc/GMT+12', 'America/Los_Angeles'])(
+    'sends the days typed as they were typed in %s, to both reports, and the exports and landing follow',
+    async (zone) => {
+      await withTimeZone(zone, async () => {
+        as(['STATS:VIEW', 'STATS:LAND']);
+        const calls = serve(normal);
+        const user = userEvent.setup();
+        renderPage(<SigninStatsPage />);
+        await ready();
+        await setRange(user, '2026-09-01', '2026-09-05');
+        await user.click(screen.getByRole('button', { name: 'Search' }));
+        await waitFor(() => expect(callsTo(calls, 'checkin/daily-users')).toHaveLength(2));
+        for (const path of ['checkin/daily-users', 'checkin/streak-buckets']) {
+          const url = new URL(callsTo(calls, path)[1].url, 'http://x');
+          expect([url.searchParams.get('from'), url.searchParams.get('to')]).toEqual([
+            '2026-09-01',
+            '2026-09-05',
+          ]);
+        }
+        // The landing day is the UTC yesterday of the clock (25 October), whatever day it is here.
+        await user.click(screen.getByRole('button', { name: 'Re-land this day' }));
+        expect(await screen.findByText('Re-landed 2026-10-25')).toBeInTheDocument();
+      });
+    },
+  );
 
   it('offers only the presets "Last 7 days" and "Last 30 days", which do not name UTC', async () => {
     serve(normal);

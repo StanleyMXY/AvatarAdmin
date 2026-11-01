@@ -5,6 +5,7 @@ import activityMock from '../../../mock/activity.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
+import { withTimeZone } from '../../../tests/withTimeZone';
 import SigninConfigPage from './signinConfig';
 import {
   activityState,
@@ -611,6 +612,23 @@ describe('the form: a new activity', { timeout: 30000 }, () => {
     expect(within(dialog).queryByRole('button', { name: /Remove day/ })).toBeNull();
   });
 
+  it('starts a day that was added with a bonus of 0 and an empty reward, as the first day does', async () => {
+    useMockBackend(mock);
+    const user = userEvent.setup();
+    renderPage(<SigninConfigPage />);
+    const dialog = await open(user);
+    await user.click(within(dialog).getByRole('button', { name: /Add a day/ }));
+    await user.click(within(dialog).getByRole('button', { name: /Add a day/ }));
+    for (const day of [1, 2, 3]) {
+      expect(
+        within(dialog).getByRole('spinbutton', { name: `Day ${day} Bonus credits` }),
+      ).toHaveValue('0');
+      expect(
+        within(dialog).getByRole('spinbutton', { name: `Day ${day} Reward credits` }),
+      ).toHaveValue('');
+    }
+  });
+
   it('refuses an empty name, a reward that is missing, a reward below 0 and a reward that is not whole, and sends nothing', async () => {
     const calls = useMockBackend(mock);
     const user = userEvent.setup();
@@ -687,6 +705,35 @@ describe('the form: a new activity', { timeout: 30000 }, () => {
     expect(await screen.findByText('สงกรานต์ 🎉')).toBeInTheDocument();
     expect(activityState.activities.find((a) => a.name === 'สงกรานต์ 🎉')?.status).toBe('DRAFT');
   });
+
+  it.each(['Pacific/Kiritimati', 'Etc/GMT+12', 'America/Los_Angeles'])(
+    'sends the day as it was typed in %s, not a day moved by the time zone',
+    async (zone) => {
+      await withTimeZone(zone, async () => {
+        const calls = useMockBackend(mock);
+        const user = userEvent.setup();
+        renderPage(<SigninConfigPage />);
+        const dialog = await open(user);
+        await user.type(
+          within(dialog).getByRole('textbox', { name: 'Activity name' }),
+          'Zone check',
+        );
+        const [start, end] = within(dialog).getAllByPlaceholderText(/Select date/i);
+        await user.type(start, '2027-04-10{Enter}');
+        await user.type(end, '2027-04-12{Enter}');
+        await user.type(
+          within(dialog).getByRole('spinbutton', { name: 'Day 1 Reward credits' }),
+          '2',
+        );
+        await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+        expect(await screen.findByText('Check-in activity saved')).toBeInTheDocument();
+        expect(writesOf(calls)[0].body).toMatchObject({
+          startDate: '2027-04-10',
+          endDate: '2027-04-12',
+        });
+      });
+    },
+  );
 
   it('a second press on Submit while the request is on its way sends one request', async () => {
     const calls = useMockBackend(mock);
@@ -787,6 +834,33 @@ describe('the form: editing', { timeout: 30000 }, () => {
     expect(writesOf(calls)[0].body).not.toHaveProperty('confirm');
     expect(activityState.activities.find((a) => a.id === '3')?.name).toBe('Renamed draft');
   });
+
+  it.each(['Pacific/Kiritimati', 'Etc/GMT+12', 'America/Los_Angeles'])(
+    'shows the stored days as stored in %s, and a save that does not touch them sends the same days and asks nothing',
+    async (zone) => {
+      await withTimeZone(zone, async () => {
+        const calls = useMockBackend(mock);
+        const user = userEvent.setup();
+        renderPage(<SigninConfigPage />);
+        const stored = activityState.activities.find((a) => a.id === '1');
+        const dialog = await edit(user, AUTUMN);
+        const [start, end] = within(dialog).getAllByPlaceholderText(/Select date/i);
+        expect(start).toHaveValue(stored?.startDate);
+        expect(end).toHaveValue(stored?.endDate);
+        const name = within(dialog).getByRole('textbox', { name: 'Activity name' });
+        await user.clear(name);
+        await user.type(name, 'Autumn zone');
+        await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+        expect(await screen.findByText('Check-in activity saved')).toBeInTheDocument();
+        expect(writesOf(calls)).toHaveLength(1);
+        expect(writesOf(calls)[0].body).toMatchObject({
+          startDate: stored?.startDate,
+          endDate: stored?.endDate,
+        });
+        expect(writesOf(calls)[0].body).not.toHaveProperty('confirm');
+      });
+    },
+  );
 
   it('a live activity whose days are not changed is saved with one PUT that has no confirm', async () => {
     const calls = useMockBackend(mock);

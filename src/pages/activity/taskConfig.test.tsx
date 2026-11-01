@@ -272,7 +272,9 @@ describe('stopping, enabling and deleting', { timeout: 30000 }, () => {
     await user.click(within(await rowOf(OPEN)).getByRole('button', { name: 'Delete' }));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
-      await screen.findByText('This task already has records. Disable it instead of deleting it.'),
+      await screen.findByText(
+        'This task already has records, so it cannot be deleted and its type and target cannot be changed. Disable it instead.',
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText(OPEN)).toBeInTheDocument();
     expect(config('1')).toBeDefined();

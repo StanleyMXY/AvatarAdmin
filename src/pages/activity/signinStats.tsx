@@ -4,6 +4,7 @@ import { Flex, Table, Tabs, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
+import { LandBar } from '../../components/stat/LandBar';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { getCheckinDailyUsers, getCheckinStreakBuckets } from '../../services/stats/reports';
 import type { CheckinDailyUsersRow, StreakBucketRow } from '../../services/stats/types';
@@ -12,7 +13,6 @@ import { useThemeMode } from '../../theme/modes';
 import { DASH } from '../../utils/ratio';
 import { ReportState } from '../stat/guest/ReportState';
 import { useReport } from '../stat/guest/useReport';
-import { LocalDayLandBar } from './LocalDayLandBar';
 import { StatsBar, useAppliedRange } from './StatsBar';
 import { countText, plainOrDash } from './texts';
 
@@ -108,7 +108,12 @@ export default function SigninStatsPage() {
           />
         }
       />
-      <LocalDayLandBar name="checkin-daily" onLanded={reloadAll} />
+      <LandBar
+        name="checkin-daily"
+        onLanded={reloadAll}
+        dateLabelId="activity.stats.land.date"
+        hintId="activity.stats.land.hint"
+      />
       <Tabs
         activeKey={tab}
         onChange={(key) => setTab(key as TabKey)}

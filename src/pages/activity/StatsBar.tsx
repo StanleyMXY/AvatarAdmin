@@ -1,9 +1,9 @@
 import { useIntl } from '@umijs/max';
 import { Button, Flex, Typography } from 'antd';
 import { type ReactNode, useState } from 'react';
+import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { useAdminMeta } from '../../session/useSession';
 import { lastNDaysUtc } from '../../utils/utcDay';
-import { type DayRange, LocalDayRange } from './LocalDayRange';
 
 /**
  * The range of a statistics page: what is being edited, and what was asked for with Query (the
@@ -33,10 +33,11 @@ export function StatsBar({ draft, onDraft, onQuery, exportButton }: Props) {
         {intl.formatMessage({ id: 'activity.stats.localDayNotice' })}
       </Typography.Text>
       <Flex gap={12} wrap align="center">
-        <LocalDayRange
+        <DateRangeUtc
           value={draft}
           onChange={onDraft}
           maxDays={meta.statsMaxRangeDays ?? undefined}
+          localDays
         />
         <Button type="primary" onClick={onQuery}>
           {intl.formatMessage({ id: 'stat.common.query' })}

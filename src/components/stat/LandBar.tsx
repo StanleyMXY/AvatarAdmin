@@ -13,14 +13,21 @@ type Access = { canAccess: (code?: string) => boolean };
 type Props = {
   name: LandName | LandName[];
   onLanded: () => void;
+  /**
+   * Language-file keys for the label of the date and for a hint under it, for a summary whose days
+   * are not UTC days. Without them the date says "(UTC)" and there is no hint.
+   */
+  dateLabelId?: string;
+  hintId?: string;
 };
 
 /**
- * "Re-land this day": recomputes the summary of one UTC day (default: yesterday in UTC). Drawn only
+ * "Re-land this day": recomputes the summary of one UTC day (default: yesterday in UTC; a summary of
+ * local days names its own date label and hint, see `Props`). Drawn only
  * for an administrator with `STATS:LAND`. With several names they are run one after the other and
  * it stops at the first one that fails.
  */
-export function LandBar({ name, onLanded }: Props) {
+export function LandBar({ name, onLanded, dateLabelId = 'stat.common.land.date', hintId }: Props) {
   const intl = useIntl();
   const { message } = App.useApp();
   const access = useAccess() as unknown as Access;
@@ -45,9 +52,7 @@ export function LandBar({ name, onLanded }: Props) {
   if (!access.canAccess('STATS:LAND')) return null;
   return (
     <Flex gap={8} align="center" wrap>
-      <Typography.Text type="secondary">
-        {intl.formatMessage({ id: 'stat.common.land.date' })}
-      </Typography.Text>
+      <Typography.Text type="secondary">{intl.formatMessage({ id: dateLabelId })}</Typography.Text>
       <DatePicker
         allowClear={false}
         value={dayjs(`${day}T00:00:00`)}
@@ -56,6 +61,9 @@ export function LandBar({ name, onLanded }: Props) {
       <Button onClick={() => void run()} loading={pending} disabled={pending}>
         {intl.formatMessage({ id: 'stat.common.land.button' })}
       </Button>
+      {hintId ? (
+        <Typography.Text type="secondary">{intl.formatMessage({ id: hintId })}</Typography.Text>
+      ) : null}
     </Flex>
   );
 }
