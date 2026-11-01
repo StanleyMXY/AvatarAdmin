@@ -2,20 +2,20 @@ import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Select } from 'antd';
 import { useCallback, useState } from 'react';
 import { ExportButton } from '../../../components/ExportButton';
+import { ReadState } from '../../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../../components/stat/DateRangeUtc';
 import {
   PlatformChannelFilter,
   type PlatformChannelValue,
 } from '../../../components/stat/PlatformChannelFilter';
 import { RetentionTrendChart } from '../../../components/stat/RetentionTrendChart';
+import { useLatestRead } from '../../../hooks/useLatestRead';
 import { getGuestRetention } from '../../../services/stats/reports';
 import { RETENTION_DAYS } from '../../../services/stats/types';
 import { useAdminMeta } from '../../../session/useSession';
 import { defaultRange } from '../../analytics/defaultRange';
 import { DeviceCohortMatrix } from './DeviceCohortMatrix';
 import { GuestLandBar } from './GuestLandBar';
-import { ReportState } from './ReportState';
-import { useReport } from './useReport';
 
 type Filter = { range: DayRange } & PlatformChannelValue;
 
@@ -54,7 +54,7 @@ export function GuestRetentionTab({
       }),
     [applied],
   );
-  const { data, failure, reload } = useReport(fetcher, landedTick);
+  const { data, failure, reload } = useLatestRead(fetcher, { refreshKey: landedTick });
   const chosen = [...days].sort((a, b) => a - b);
 
   return (
@@ -98,7 +98,7 @@ export function GuestRetentionTab({
       </Flex>
       <GuestLandBar onLanded={onLanded} />
       <Alert type="info" showIcon title={t('stat.guest.retention.note')} />
-      <ReportState failure={failure} loading={data === null} onRetry={reload} />
+      <ReadState failure={failure} loading={data === null} onRetry={reload} />
       {data ? (
         <>
           <RetentionTrendChart rows={data.items} days={chosen} />

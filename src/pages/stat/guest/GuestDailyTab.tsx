@@ -4,7 +4,9 @@ import { Button, Flex, Table, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useState } from 'react';
 import { ExportButton } from '../../../components/ExportButton';
+import { ReadState } from '../../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../../components/stat/DateRangeUtc';
+import { useLatestRead } from '../../../hooks/useLatestRead';
 import { getGuestDaily } from '../../../services/stats/reports';
 import type { GuestDailyRow } from '../../../services/stats/types';
 import { useAdminMeta } from '../../../session/useSession';
@@ -12,8 +14,6 @@ import { DASH, formatCount, formatPercent } from '../../../utils/ratio';
 import { defaultRange } from '../../analytics/defaultRange';
 import { dailyConversionRate } from './conversion';
 import { GuestLandBar } from './GuestLandBar';
-import { ReportState } from './ReportState';
-import { useReport } from './useReport';
 
 /** A header with a hint icon; the tip is the language key `<id>.tip`. */
 export function HeaderWithTip({ id, testId }: { id: string; testId: string }) {
@@ -48,7 +48,7 @@ export function GuestDailyTab({
   const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getGuestDaily(applied), [applied]);
-  const { data, failure, reload } = useReport(fetcher, landedTick);
+  const { data, failure, reload } = useLatestRead(fetcher, { refreshKey: landedTick });
 
   const columns: ColumnsType<GuestDailyRow> = [
     {
@@ -97,7 +97,7 @@ export function GuestDailyTab({
         />
       </Flex>
       <GuestLandBar onLanded={onLanded} />
-      <ReportState failure={failure} loading={data === null} onRetry={reload} />
+      <ReadState failure={failure} loading={data === null} onRetry={reload} />
       {data ? (
         <Table<GuestDailyRow>
           size="small"

@@ -4,7 +4,9 @@ import { Link, useAccess, useIntl } from '@umijs/max';
 import { Button, Card, Flex, Statistic, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo, useState } from 'react';
+import { ReadState } from '../../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../../components/stat/DateRangeUtc';
+import { useLatestRead } from '../../../hooks/useLatestRead';
 import { getGuestQuota } from '../../../services/stats/reports';
 import type { GuestQuotaBucketKey } from '../../../services/stats/types';
 import { useAdminMeta } from '../../../session/useSession';
@@ -14,8 +16,6 @@ import { DASH, formatCount, formatPercent } from '../../../utils/ratio';
 import { defaultRange } from '../../analytics/defaultRange';
 import { HeaderWithTip } from './GuestDailyTab';
 import { bucketConversionRate, QUOTA_BUCKETS, quotaCards } from './quota';
-import { ReportState } from './ReportState';
-import { useReport } from './useReport';
 
 type Access = { canAccess: (code?: string) => boolean };
 
@@ -34,7 +34,7 @@ export function GuestQuotaTab() {
   const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getGuestQuota(applied), [applied]);
-  const { data: quota, failure, reload } = useReport(fetcher);
+  const { data: quota, failure, reload } = useLatestRead(fetcher);
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const minutes = (n: number | null) =>
@@ -126,7 +126,7 @@ export function GuestQuotaTab() {
         ) : null}
       </Flex>
       <Typography.Text type="secondary">{t('stat.guest.quota.rangeNote')}</Typography.Text>
-      <ReportState failure={failure} loading={quota === null} onRetry={reload} />
+      <ReadState failure={failure} loading={quota === null} onRetry={reload} />
       {quota && cards ? (
         <>
           <Flex gap={12} wrap>

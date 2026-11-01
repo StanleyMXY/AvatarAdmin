@@ -2,7 +2,9 @@ import { Column, Pie } from '@ant-design/plots';
 import { useIntl } from '@umijs/max';
 import { Button, Flex, Typography } from 'antd';
 import { useCallback, useMemo, useState } from 'react';
+import { ReadState } from '../../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../../components/stat/DateRangeUtc';
+import { useLatestRead } from '../../../hooks/useLatestRead';
 import { getGuestCohort } from '../../../services/stats/reports';
 import { GUEST_COHORT_DAYS } from '../../../services/stats/types';
 import { useAdminMeta } from '../../../session/useSession';
@@ -12,8 +14,6 @@ import { defaultRange } from '../../analytics/defaultRange';
 import { buildConversionDistribution, buildConversionStack } from './conversion';
 import { DeviceCohortMatrix } from './DeviceCohortMatrix';
 import { GuestLandBar } from './GuestLandBar';
-import { ReportState } from './ReportState';
-import { useReport } from './useReport';
 
 /**
  * 转化进度队列: for the devices that first appeared on a day, how many have converted by D0, D1 ...
@@ -34,7 +34,7 @@ export function GuestCohortTab({
   const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 30));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getGuestCohort(applied), [applied]);
-  const { data, failure, reload } = useReport(fetcher, landedTick);
+  const { data, failure, reload } = useLatestRead(fetcher, { refreshKey: landedTick });
   const t = (id: string) => intl.formatMessage({ id });
 
   const ring = useMemo(
@@ -68,7 +68,7 @@ export function GuestCohortTab({
       </Flex>
 
       <GuestLandBar onLanded={onLanded} />
-      <ReportState failure={failure} loading={data === null} onRetry={reload} />
+      <ReadState failure={failure} loading={data === null} onRetry={reload} />
       {data ? (
         <>
           <Typography.Text type="secondary">{t('stat.guest.cohort.note')}</Typography.Text>
