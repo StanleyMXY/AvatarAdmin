@@ -1,5 +1,5 @@
 import type { SessionQualityRow } from '../../services/stats/types';
-import { safeRatio } from '../../utils/ratio';
+import { DASH, formatPercent, safeRatio } from '../../utils/ratio';
 
 /** The four connect-time buckets, in the order of the contract (17.6): each call is in exactly one. */
 export const JOIN_BUCKETS = ['joinLe2s', 'joinLe5s', 'joinLe10s', 'joinGt10s'] as const;
@@ -58,15 +58,40 @@ const FIELDS: (keyof QualityCounts)[] = [
 /**
  * The counts of a range added up. Ratios are taken from these totals, not averaged over the days: a
  * day with few calls must not weigh as much as a day with many. No days at all is null: nothing is
- * known, which is not the same as 0.
+ * known, which is not the same as 0. A figure that is missing or not valid (negative, not a number)
+ * on any day makes that total NaN, which every reader here takes as "not known": a total that
+ * quietly leaves a day out would be a number nobody can trust.
  */
 export function sumRows(rows: readonly SessionQualityRow[]): QualityCounts | null {
   if (rows.length === 0) return null;
   const totals = Object.fromEntries(FIELDS.map((f) => [f, 0])) as QualityCounts;
   for (const row of rows) {
-    for (const field of FIELDS) totals[field] += valid(row[field]) ?? 0;
+    for (const field of FIELDS) {
+      const figure = valid(row[field]);
+      totals[field] = figure === null ? Number.NaN : totals[field] + figure;
+    }
   }
   return totals;
+}
+
+/** The days that have a figure which is missing or not valid. */
+export function invalidDays(rows: readonly SessionQualityRow[]): string[] {
+  return rows
+    .filter((row) => FIELDS.some((field) => valid(row[field]) === null))
+    .map((row) => row.statDate);
+}
+
+/**
+ * A ratio as a percentage next to its limit: one digit, and more digits while the figure would read
+ * the same as the limit (94.96% is not "95%" beside a limit of 95%). A figure that is not known is a dash.
+ */
+export function percentAgainst(value: number | null, limit: number, locale: string): string {
+  if (value === null || !Number.isFinite(value)) return DASH;
+  for (let digits = 1; digits <= 6; digits++) {
+    const shown = formatPercent(value, locale, digits);
+    if (value === limit || shown !== formatPercent(limit, locale, digits)) return shown;
+  }
+  return formatPercent(value, locale, 6);
 }
 
 export type QualityLimits = { minSuccessRate: number; maxSlowShare: number };

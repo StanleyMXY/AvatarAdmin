@@ -72,6 +72,8 @@ const messages: Record<string, string> = {
     '通话总秒数 ÷ 60 ÷ 通话人数。没有人通话时显示“—”。',
   'sessions.analytics.col.callsPerCaller': '人均通话次数',
   'sessions.analytics.col.callsPerCaller.tip': '通话次数 ÷ 通话人数。没有人通话时显示“—”。',
+  'sessions.analytics.invalidNote':
+    '有些日子的数字不是合法的计数（{days}）。这些数字显示为“—”，这里的“—”不表示没有发生。',
   'sessions.analytics.chart.y': '次数 / 分钟',
 
   'stat.sessionQuality.helper.title': '如何阅读此报表',
@@ -91,6 +93,8 @@ const messages: Record<string, string> = {
   'sessions.quality.card.limitReached.tip': '因通话额度用完而被拒绝的发起次数。不算服务失败。',
   'sessions.quality.card.notJoined': '用户未进入次数',
   'sessions.quality.card.notJoined.tip': '用户一直没有进入房间而被丢弃的通话次数。不算服务失败。',
+  'sessions.quality.invalidNote':
+    '有些日子的数字缺失或不合法（{days}）。表里照原样显示，需要它们的合计和比率显示为“—”。',
   'sessions.quality.card.limitMin': '低于 {limit} 时红框',
   'sessions.quality.card.limitMax': '高于 {limit} 时红框',
 

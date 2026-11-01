@@ -50,11 +50,15 @@ export default function DailyReportPage() {
   const [metrics, setMetrics] = useState<string[]>(DEFAULT_METRICS);
   const [tab, setTab] = useState('trend');
   const [rows, setRows] = useState<StatDailyRow[] | null>(null);
+  // The UTC day that was today when the rows were read: the rows are as they were then, so what is
+  // marked provisional follows that day and not the clock of every later drawing of the page.
+  const [today, setToday] = useState<string>(() => todayUtc());
   const [failure, setFailure] = useState<string | null>(null);
   const counter = useRef(0);
 
   const load = useCallback(async () => {
     const mine = ++counter.current;
+    const askedOn = todayUtc();
     setRows(null);
     setFailure(null);
     try {
@@ -64,7 +68,10 @@ export default function DailyReportPage() {
         platform: applied.platform,
         channel: applied.channel,
       });
-      if (mine === counter.current) setRows(items);
+      if (mine === counter.current) {
+        setToday(askedOn);
+        setRows(items);
+      }
     } catch (error) {
       if (mine === counter.current) setFailure(describeFailure(intl, error).text);
     }
@@ -74,7 +81,6 @@ export default function DailyReportPage() {
     void load();
   }, [load]);
 
-  const today = todayUtc();
   const columns = useMemo(() => buildDailyColumns(applied.platform), [applied.platform]);
   const viewRows = useMemo<DailyViewRow[]>(() => (rows ?? []).map(toViewRow), [rows]);
   const title = (def: ColumnDef) =>

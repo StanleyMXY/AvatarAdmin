@@ -199,12 +199,42 @@ describe('the other reports', () => {
     expect(row.joinLe2s + row.joinLe5s + row.joinLe10s + row.joinGt10s).toBe(row.connected);
   });
 
-  it('push rows can be limited to one trigger reason', async () => {
-    const rows = (await get('push', 'support', { ...range, triggerReason: 'recall' })).body.data
-      .items;
+  it('session quality has a clearly bad day in any seven days, so that the red frames of the page can be seen on the fake backend', async () => {
+    // Any run of seven days: the success rate of the total is under 95% and the share of connects
+    // slower than 10 seconds is over 5% (the limits of the build by default).
+    for (const start of [-30, -17, -8, -3]) {
+      const week = { from: addDays(today, start), to: addDays(today, start + 6) };
+      const items = (await get('session-quality', 'support', week)).body.data.items as {
+        connected: number;
+        agentUnavailable: number;
+        joinGt10s: number;
+      }[];
+      const sum = (key: 'connected' | 'agentUnavailable' | 'joinGt10s') =>
+        items.reduce((total, row) => total + row[key], 0);
+      expect(
+        sum('connected') / (sum('connected') + sum('agentUnavailable')),
+        String(start),
+      ).toBeLessThan(0.95);
+      expect(sum('joinGt10s') / sum('connected'), String(start)).toBeGreaterThan(0.05);
+    }
+  });
+
+  it('push rows can be limited to one trigger reason of the contract', async () => {
+    const rows = (await get('push', 'support', { ...range, triggerReason: 'daily_recall' })).body
+      .data.items;
+    expect(rows.length).toBeGreaterThan(0);
     expect(new Set(rows.map((r: { triggerReason: string }) => r.triggerReason))).toEqual(
-      new Set(['recall']),
+      new Set(['daily_recall']),
     );
+  });
+
+  it('push rows use the four trigger reasons of the contract, and refuse a value that is not one', async () => {
+    const all = (await get('push', 'support', range)).body.data.items;
+    expect(new Set(all.map((r: { triggerReason: string }) => r.triggerReason))).toEqual(
+      new Set(['daily_recall', 'streak_at_risk', 'admin', 'system_event']),
+    );
+    const bad = await get('push', 'support', { ...range, triggerReason: 'recall' });
+    expect(bad.status).toBe(400);
   });
 
   it('task summary has one row per task, with names in several scripts and a null rate for no records', async () => {

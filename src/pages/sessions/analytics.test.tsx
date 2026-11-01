@@ -214,6 +214,13 @@ describe('the call analytics page: the trend chart', () => {
     ]);
   });
 
+  it('draws 0 accounts with a call for a day without a row, like the calls and the minutes', async () => {
+    await ready(() => [
+      drow('2026-10-22', { sessionsConnected: 10, accountsWithCall: 4, callSecondsTotal: 6000 }),
+    ]);
+    expect(seriesOf('Accounts with a call').map((d) => d.value)).toEqual([0, 0, 4, 0, 0, 0, 0]);
+  });
+
   it('does not draw a column that is null as 0', async () => {
     await ready(() => [
       drow('2026-10-26', {
@@ -284,6 +291,22 @@ describe('the call analytics page: the detail table', () => {
     const cells = cellsOf(bodyRows()[0]).slice(1);
     expect(cells.some((c) => c?.includes('-'))).toBe(false);
     expect(cells).toContain('—');
+  });
+
+  it('says which day has a count that cannot be right, so a dash is not mistaken for "no data"', async () => {
+    await ready(() => [
+      drow('2026-10-25'),
+      drow('2026-10-26', { sessionsConnected: -5, accountsWithCall: 4, callSecondsTotal: 6000 }),
+    ]);
+    expect(screen.getByTestId('analytics-invalid-note').textContent).toContain('2026-10-26');
+    expect(screen.getByTestId('analytics-invalid-note').textContent).not.toContain('2026-10-25');
+  });
+
+  it('says nothing about invalid counts when a column is only missing or null', async () => {
+    await ready(() => [
+      drow('2026-10-26', { sessionsConnected: null, accountsWithCall: 4, callSecondsTotal: null }),
+    ]);
+    expect(screen.queryByTestId('analytics-invalid-note')).toBeNull();
   });
 
   it('formats the numbers for the language of the interface', async () => {

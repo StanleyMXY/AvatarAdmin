@@ -11,7 +11,7 @@ import { getDaily } from '../../services/stats/reports';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
-import { type CallDay, emptyCallDay, toCallDay } from './analyticsRows';
+import { brokenDays, type CallDay, emptyCallDay, toCallDay } from './analyticsRows';
 import { DayLineChart, type LinePoint } from './charts';
 import { formatDecimal } from './format';
 import { useStatRead } from './useStatRead';
@@ -57,6 +57,8 @@ export default function CallAnalyticsPage() {
         : null,
     [data],
   );
+
+  const broken = useMemo(() => (data ? brokenDays(data.items) : []), [data]);
 
   const chart = ((): LinePoint[] => {
     if (!days) return [];
@@ -136,6 +138,17 @@ export default function CallAnalyticsPage() {
         />
       ) : null}
       {days === null && !failure ? <Spin /> : null}
+      {days && broken.length > 0 ? (
+        <Alert
+          type="warning"
+          showIcon
+          data-testid="analytics-invalid-note"
+          title={t('sessions.analytics.invalidNote', {
+            days:
+              broken.slice(0, 5).join(', ') + (broken.length > 5 ? ` +${broken.length - 5}` : ''),
+          })}
+        />
+      ) : null}
       {days ? (
         <>
           <DayLineChart data={chart} yTitle={t('sessions.analytics.chart.y')} />

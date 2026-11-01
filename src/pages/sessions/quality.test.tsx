@@ -21,6 +21,25 @@ vi.mock('../../buildVars', async (importOriginal) => {
   return { buildVars: live };
 });
 
+// The chart stand-in prints only what survives JSON; the formatters are functions, so the last
+// props the line chart was given are kept here.
+const plots = vi.hoisted(() => ({
+  line: null as null | {
+    axis?: { y?: { labelFormatter?: (v: number) => string } };
+    tooltip?: { items?: { valueFormatter?: (v: number) => string }[] };
+  },
+}));
+vi.mock('@ant-design/plots', async () => {
+  const stub = await import('../../../tests/stubs/plots');
+  return {
+    ...stub,
+    Line: (props: NonNullable<typeof plots.line>) => {
+      plots.line = props;
+      return stub.Line(props as never);
+    },
+  };
+});
+
 const NOW = '2026-10-26T20:00:00Z';
 
 const as = (permissions: string[]) =>
@@ -387,6 +406,70 @@ describe('the call quality page: the red frame and the limits of the build', () 
   });
 });
 
+describe('the call quality page: a figure next to its limit tells which side it is on', () => {
+  it('shows the success rate with the digits that tell it from the limit: 94.96% is not written 95%', async () => {
+    await ready(() => [qrow('2026-10-26', { connected: 9496, agentUnavailable: 504 })]);
+    expect(cardValue('successRate')).toBe('94.96%');
+    expect(framed('successRate')).toBe(true);
+    // the limit itself keeps the digits it has
+    expect(within(card('successRate')).getByText(/95%/)).toBeInTheDocument();
+  });
+
+  it('shows the slow share the same way: 5.04% is not written 5%', async () => {
+    await ready(() => [
+      qrow('2026-10-26', { connected: 10000, joinLe2s: 9496, joinGt10s: 504, agentUnavailable: 0 }),
+    ]);
+    expect(cardValue('gt10')).toBe('5.04%');
+    expect(framed('gt10')).toBe(true);
+  });
+
+  it('keeps one digit when the figure is clearly on one side of the limit', async () => {
+    await ready(() => [qrow('2026-10-26', { connected: 99, agentUnavailable: 1 })]);
+    expect(cardValue('successRate')).toBe('99%');
+  });
+
+  it('writes a limit that has more digits with all of them', async () => {
+    vars.qualityMinSuccessRate = 0.9525;
+    await ready(() => [qrow('2026-10-26', { connected: 90, agentUnavailable: 10 })]);
+    expect(within(card('successRate')).getByText(/95\.25%/)).toBeInTheDocument();
+  });
+});
+
+describe('the call quality page: a day whose figure cannot be right', () => {
+  const badDays = () => [
+    qrow('2026-10-25', { connected: -50, agentUnavailable: 0 }),
+    qrow('2026-10-26', { connected: 90, agentUnavailable: 10 }),
+  ];
+
+  it('shows the figure as it is in the table and a dash for the day rate', async () => {
+    await ready(badDays);
+    await waitFor(() => expect(bodyRows()).toHaveLength(2));
+    const cells = cellsOf(bodyRows()[0]);
+    expect(cells[1]).toBe('-50');
+    expect(cells[3]).toBe('—');
+  });
+
+  it('does not add the day up as 0: the totals that need it are dashes, with no frame', async () => {
+    await ready(badDays);
+    expect(cardValue('successRate')).toBe('—');
+    expect(cardValue('avgJoin')).toBe('—');
+    expect(cardValue('le2')).toBe('—');
+    expect(framed('successRate')).toBe(false);
+  });
+
+  it('names the day that has a figure that is not valid', async () => {
+    await ready(badDays);
+    const note = screen.getByTestId('quality-invalid-note');
+    expect(note.textContent).toContain('2026-10-25');
+    expect(note.textContent).not.toContain('2026-10-26');
+  });
+
+  it('says nothing about invalid figures for good data', async () => {
+    await ready();
+    expect(screen.queryByTestId('quality-invalid-note')).toBeNull();
+  });
+});
+
 describe('the call quality page: the charts', () => {
   it('draws the success rate of each day on one line chart with a gap for a day without a row', async () => {
     await ready(() => [
@@ -407,6 +490,14 @@ describe('the call quality page: the charts', () => {
     ]);
     // no row, a row without a denominator: not known (a gap), never 0%
     expect(data.map((d) => d.value)).toEqual([null, null, 0.9, null, null, 0.75, null]);
+  });
+
+  it('writes the success rate line as percentages: on the axis and in the tooltip, not as 0.9496', async () => {
+    await ready(() => [qrow('2026-10-26', { connected: 9496, agentUnavailable: 504 })]);
+    const axisLabel = plots.line?.axis?.y?.labelFormatter;
+    const tip = plots.line?.tooltip?.items?.[0]?.valueFormatter;
+    expect(axisLabel?.(0.9)).toBe('90%');
+    expect(tip?.(0.9496)).toBe('94.96%');
   });
 
   it('names the units on the axes', async () => {
@@ -446,6 +537,24 @@ describe('the call quality page: the figures of today are provisional', () => {
   it('marks every card whose total includes a row of today as provisional', async () => {
     await ready(); // TWO_DAYS: 10-25 and 10-26
     for (const name of CARDS) expect(tagOf(name), name).toHaveTextContent('Provisional');
+  });
+
+  it('keeps the mark of the day that was today when the data was read, after midnight passes while the page stays open and nothing is read again', async () => {
+    vi.setSystemTime(new Date('2026-10-25T23:58:00Z'));
+    await ready(() => [qrow('2026-10-24'), qrow('2026-10-25')]);
+    for (const name of CARDS) expect(tagOf(name), name).toHaveTextContent('Provisional');
+    // midnight (UTC) passes; the page is drawn again by a change of the dates being edited, no new read
+    vi.setSystemTime(new Date('2026-10-26T00:02:00Z'));
+    const user = userEvent.setup();
+    const [start] = [...document.querySelectorAll<HTMLInputElement>('.ant-picker-input input')];
+    await user.click(start);
+    await user.click(await screen.findByText('Yesterday (UTC)'));
+    // the presets were made when the page opened (23:58 of the 25th), so "yesterday" is the 24th
+    await waitFor(() =>
+      expect(document.querySelectorAll('.ant-picker-input input')[0]).toHaveValue('2026-10-24'),
+    );
+    for (const name of CARDS) expect(tagOf(name), name).toHaveTextContent('Provisional');
+    expect(screen.getByTestId('provisional-chart-note')).toBeInTheDocument();
   });
 
   it('marks no card when every row is of a day that is over', async () => {
@@ -590,6 +699,31 @@ describe('the call quality page: the detail table', () => {
       '0',
       '0',
     ]);
+  });
+});
+
+describe('the call quality page: the hints of the table columns', () => {
+  const icon = (id: string) =>
+    document.querySelector(`.ant-table-thead [data-testid="${id}"]`) as HTMLElement;
+
+  it('says in the table too that a call blocked by a limit and a user who never joined are not a failure of the service', async () => {
+    await ready();
+    const user = userEvent.setup();
+    await user.hover(icon('tip-limitReached'));
+    expect(
+      await screen.findByText(/Start attempts refused because the call allowance was used up/),
+    ).toBeInTheDocument();
+    await user.unhover(icon('tip-limitReached'));
+    await user.hover(icon('tip-notJoined'));
+    expect(
+      await screen.findByText(/Calls dropped because the user never entered the room/),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the hints of the success rate and the average connect time', async () => {
+    await ready();
+    expect(icon('tip-successRate')).toBeTruthy();
+    expect(icon('tip-avgJoin')).toBeTruthy();
   });
 });
 

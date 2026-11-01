@@ -84,7 +84,7 @@ export function DayLineChart({
               items: [
                 {
                   channel: 'y',
-                  valueFormatter: (value: number) => formatPercent(value, intl.locale, 1),
+                  valueFormatter: (value: number) => formatPercent(value, intl.locale, 2),
                 },
               ],
             }

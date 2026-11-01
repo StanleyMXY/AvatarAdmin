@@ -109,13 +109,17 @@ export default {
     return ok({
       items: daysIn(from, to).map((day) => {
         const connected = between(500, 1500, 'conn', day);
-        const le2 = Math.round(connected * 0.5);
-        const le5 = Math.round(connected * 0.3);
+        // Every fourth day (by the calendar, so any seven days have one) is a bad one: a third of
+        // the attempts fail and a fifth of the connects are slow. The total of a week then passes
+        // both limits of the build, and the red frames of the page can be looked at.
+        const bad = Math.floor(Date.parse(`${day}T00:00:00Z`) / 86_400_000) % 4 === 0;
+        const le2 = Math.round(connected * (bad ? 0.4 : 0.5));
+        const le5 = Math.round(connected * (bad ? 0.25 : 0.3));
         const le10 = Math.round(connected * 0.15);
         return {
           statDate: day,
           connected,
-          agentUnavailable: between(0, 60, 'au', day),
+          agentUnavailable: bad ? Math.round(connected * 0.5) : between(0, 60, 'au', day),
           limitReached: between(0, 40, 'lr', day),
           discardedUserNotJoined: between(0, 30, 'du', day),
           joinLe2s: le2,

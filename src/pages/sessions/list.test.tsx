@@ -560,7 +560,7 @@ describe('the session list: the details drawer', { timeout: 30000 }, () => {
     expect(alert.textContent).toContain(enUS['error.RESOURCE_NOT_FOUND']);
   });
 
-  it('never lets the answer of a session opened before replace the one opened after', async () => {
+  it('shows the session that was opened last when one is closed with its answer still on the way and another is opened', async () => {
     let releaseFirst: () => void = () => {};
     const slow = new Promise<void>((resolve) => {
       releaseFirst = resolve;
@@ -603,6 +603,45 @@ describe('the session list: the details drawer', { timeout: 30000 }, () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(screen.queryByText('tier-first')).toBeNull();
     expect(screen.getByText('tier-second')).toBeInTheDocument();
+  });
+
+  it('reads the session again each time it is opened: a drawer closed and opened for the same session shows what the backend says now', async () => {
+    let tier = 'tier-before';
+    const reads: string[] = [];
+    stubFetch(async ({ url }) => {
+      if (url.startsWith('/api/admin/sessions?'))
+        return jsonResponse(
+          200,
+          envelope('200', {
+            items: [
+              { id: 's-one', accountId: 'a', deviceId: null, requestedAt: '2026-10-01T00:00:00Z' },
+            ],
+            total: 1,
+          }),
+        );
+      reads.push(url);
+      return jsonResponse(
+        200,
+        envelope('200', {
+          id: 's-one',
+          accountId: 'a',
+          deviceId: null,
+          requestedAt: '2026-10-01T00:00:00Z',
+          modelTier: tier,
+        }),
+      );
+    });
+    const user = userEvent.setup();
+    renderPage(<SessionListPage />);
+    await user.click(await idButton('s-one'));
+    await screen.findByText('tier-before');
+    await user.click(await screen.findByRole('button', { name: /close/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    tier = 'tier-after';
+    await user.click(await idButton('s-one'));
+    await screen.findByText('tier-after');
+    expect(reads).toHaveLength(2);
+    expect(screen.queryByText('tier-before')).toBeNull();
   });
 
   it('keeps a 5000 character text and every language inside the drawer', async () => {

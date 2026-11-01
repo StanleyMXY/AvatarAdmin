@@ -67,7 +67,8 @@ export const channelOf = (req: MockReq): string => {
   return value;
 };
 
-export const TRIGGERS = ['recall', 'announcement', 'notification', 'activity', 'admin'];
+// The trigger reasons of the push statistics (contract 18, `triggerReason`).
+export const TRIGGERS = ['daily_recall', 'streak_at_risk', 'admin', 'system_event'];
 
 export const LAND_NAMES = [
   'daily-event',

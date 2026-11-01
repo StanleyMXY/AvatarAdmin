@@ -32,7 +32,9 @@ import { formatDecimal } from './format';
 import {
   averageJoinSeconds,
   bucketShare,
+  invalidDays,
   JOIN_BUCKETS,
+  percentAgainst,
   qualityFlags,
   successRate,
   sumRows,
@@ -40,11 +42,15 @@ import {
 import { useStatRead } from './useStatRead';
 
 /** A column title with the hint icon beside it (the definition of the figure). */
-const headerWithTip = (title: string, tip: string) => (
+const headerWithTip = (title: string, tip: string, testId?: string) => (
   <span>
     {title}
     <Tooltip title={tip}>
-      <QuestionCircleOutlined aria-hidden={false} style={{ marginInlineStart: 4 }} />
+      <QuestionCircleOutlined
+        data-testid={testId}
+        aria-hidden={false}
+        style={{ marginInlineStart: 4 }}
+      />
     </Tooltip>
   </span>
 );
@@ -110,7 +116,12 @@ export default function SessionQualityPage() {
   // What is being edited, and what was asked for with Search (the cards, the charts, the export).
   const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(7));
   const [applied, setApplied] = useState<DayRange>(draft);
-  const fetcher = useCallback(() => getSessionQuality(applied), [applied]);
+  // The UTC day that was today when the rows were asked for goes with them: they are as they were
+  // then, so what is provisional follows that day and not the clock of every later drawing.
+  const fetcher = useCallback(async () => {
+    const askedOn = todayUtc();
+    return { ...(await getSessionQuality(applied)), askedOn };
+  }, [applied]);
   const { data, failure, reload } = useStatRead(fetcher);
   const rows = useMemo(() => (data ? [...data.items].sort(byDate) : null), [data]);
 
@@ -127,7 +138,7 @@ export default function SessionQualityPage() {
     t(`sessions.quality.bucket.${bucket}`);
 
   // The totals include today when a row of today is there: they are provisional (UTC, settledDay.ts).
-  const today = todayUtc();
+  const today = data?.askedOn ?? todayUtc();
   const provisional =
     rows !== null &&
     hasProvisionalDay(
@@ -138,6 +149,8 @@ export default function SessionQualityPage() {
   const rate = totals ? successRate(totals) : null;
   const slow = totals ? bucketShare(totals, 'joinGt10s') : null;
   const flags = qualityFlags({ successRate: rate, slowShare: slow }, limits);
+  // The days that have a figure that cannot be right (their totals are not known, and are said so).
+  const badDays = rows ? invalidDays(rows) : [];
 
   const lineData = ((): LinePoint[] => {
     if (!rows) return [];
@@ -194,6 +207,7 @@ export default function SessionQualityPage() {
       title: headerWithTip(
         t('sessions.quality.col.successRate'),
         t('sessions.quality.card.successRate.tip'),
+        'tip-successRate',
       ),
       align: 'end',
       render: (_: unknown, row) => percent(successRate(row)),
@@ -203,6 +217,7 @@ export default function SessionQualityPage() {
       title: headerWithTip(
         t('sessions.quality.col.avgJoin'),
         t('sessions.quality.card.avgJoin.tip'),
+        'tip-avgJoin',
       ),
       align: 'end',
       render: (_: unknown, row) => seconds(averageJoinSeconds(row)),
@@ -215,13 +230,21 @@ export default function SessionQualityPage() {
     })),
     {
       key: 'limitReached',
-      title: t('sessions.quality.col.limitReached'),
+      title: headerWithTip(
+        t('sessions.quality.col.limitReached'),
+        t('sessions.quality.card.limitReached.tip'),
+        'tip-limitReached',
+      ),
       align: 'end',
       render: (_: unknown, row) => count(row.limitReached),
     },
     {
       key: 'notJoined',
-      title: t('sessions.quality.col.notJoined'),
+      title: headerWithTip(
+        t('sessions.quality.col.notJoined'),
+        t('sessions.quality.card.notJoined.tip'),
+        'tip-notJoined',
+      ),
       align: 'end',
       render: (_: unknown, row) => count(row.discardedUserNotJoined),
     },
@@ -262,16 +285,28 @@ export default function SessionQualityPage() {
       {rows === null && !failure ? <Spin /> : null}
       {rows ? (
         <>
+          {badDays.length > 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              data-testid="quality-invalid-note"
+              title={t('sessions.quality.invalidNote', {
+                days:
+                  badDays.slice(0, 5).join(', ') +
+                  (badDays.length > 5 ? ` +${badDays.length - 5}` : ''),
+              })}
+            />
+          ) : null}
           <Flex gap={12} wrap>
             <QualityCard
               provisional={provisional}
               name="successRate"
               title={t('sessions.quality.card.successRate')}
               tip={t('sessions.quality.card.successRate.tip')}
-              value={percent(rate)}
+              value={percentAgainst(rate, limits.minSuccessRate, intl.locale)}
               alert={flags.lowSuccessRate}
               limit={t('sessions.quality.card.limitMin', {
-                limit: percent(limits.minSuccessRate),
+                limit: percent(limits.minSuccessRate, 4),
               })}
             />
             <QualityCard
@@ -295,10 +330,10 @@ export default function SessionQualityPage() {
               name="gt10"
               title={t('sessions.quality.card.gt10')}
               tip={t('sessions.quality.card.gt10.tip')}
-              value={percent(slow)}
+              value={percentAgainst(slow, limits.maxSlowShare, intl.locale)}
               alert={flags.highSlowShare}
               limit={t('sessions.quality.card.limitMax', {
-                limit: percent(limits.maxSlowShare),
+                limit: percent(limits.maxSlowShare, 4),
               })}
             />
             <QualityCard

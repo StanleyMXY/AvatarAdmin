@@ -301,6 +301,33 @@ describe('the daily report: the value of today is provisional', () => {
     expect(firstCell).toContain('Provisional');
   });
 
+  it('keeps the mark on the day that was today when the data was read, after midnight passes while the page stays open and nothing is read again', async () => {
+    vi.setSystemTime(new Date('2026-10-25T23:58:00Z'));
+    backend({
+      rows: (q) =>
+        daysIn(q.get('from') ?? '', q.get('to') ?? '').map(
+          (day) => dailyRow(day, 'ALL', 'ALL', '2026-10-25') as unknown as StatDailyRow,
+        ),
+    });
+    const user = userEvent.setup();
+    renderPage(<DailyPage />);
+    await openDetail(user);
+    await waitFor(() => expect(bodyRows()).toHaveLength(7));
+    const taggedDates = () =>
+      [...bodyRows()]
+        .filter((row) => within(row as HTMLElement).queryByTestId('provisional-row'))
+        .map((row) => row.querySelector('td')?.textContent ?? '');
+    expect(taggedDates()).toHaveLength(1);
+    expect(taggedDates()[0]).toContain('2026-10-25');
+    // midnight (UTC) passes; the page is drawn again (another tab and back), nothing is read again
+    vi.setSystemTime(new Date('2026-10-26T00:02:00Z'));
+    await user.click(await screen.findByRole('tab', { name: 'Trend chart' }));
+    await openDetail(user);
+    await waitFor(() => expect(bodyRows()).toHaveLength(7));
+    expect(taggedDates()).toHaveLength(1);
+    expect(taggedDates()[0]).toContain('2026-10-25');
+  });
+
   it('writes the mark in Chinese when the language is Chinese', async () => {
     backend();
     renderPage(<DailyPage />, 'zh-CN');
