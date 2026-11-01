@@ -92,12 +92,12 @@ describe('failureToForm', () => {
     expect(failureToForm(intl, form, refusal([]), ['name']).unplaced).toEqual([]);
   });
 
-  it('gives the error code of the failure, and the code of a network failure for anything else', () => {
+  it('gives the error code of the failure, and the unknown code for anything that is not an ApiError', () => {
     const form = formWith();
     expect(failureToForm(intl, form, refusal([], 409, 'INVALID_STATE'), []).code).toBe(
       'INVALID_STATE',
     );
-    expect(failureToForm(intl, form, new Error('x'), []).code).toBe('NETWORK_ERROR');
+    expect(failureToForm(intl, form, new Error('x'), []).code).toBe('UNKNOWN');
   });
 
   it('shows the reason code of a reason the language file does not know, unless it is told to say "not valid"', () => {

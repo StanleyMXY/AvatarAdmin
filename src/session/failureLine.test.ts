@@ -34,7 +34,7 @@ describe('failureLine', () => {
     expect(line.split(' / ')).toHaveLength(3);
   });
 
-  it('treats a failure that is not an ApiError like any other unknown failure, without throwing', () => {
-    expect(failureLine(intl, new TypeError('boom'))).toBe(enUS['error.NETWORK_ERROR']);
+  it('treats a failure that is not an ApiError as the unknown error (not a network failure), without throwing', () => {
+    expect(failureLine(intl, new TypeError('boom'))).toBe(enUS['error.UNKNOWN']);
   });
 });

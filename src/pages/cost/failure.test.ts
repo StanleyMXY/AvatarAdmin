@@ -55,7 +55,7 @@ describe('failureLines: the words of the codes, never the backend words', () => 
     expect(JSON.stringify(lines)).not.toContain('raw backend words');
   });
 
-  it('shows a failure that is not an ApiError as a network failure', () => {
-    expect(failureLines(intl, new Error('boom')).text).toBe(enUS['error.NETWORK_ERROR']);
+  it('shows a failure that is not an ApiError as the unknown error, not as a network failure', () => {
+    expect(failureLines(intl, new Error('boom')).text).toBe(enUS['error.UNKNOWN']);
   });
 });

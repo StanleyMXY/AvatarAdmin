@@ -71,8 +71,8 @@ describe('actionFailure', () => {
     expect(actionFailure(en, conflict(undefined))).toBe(enUS['error.INVALID_STATE']);
     expect(actionFailure(en, conflict({ nested: true }))).toBe(enUS['error.INVALID_STATE']);
   });
-  it('treats anything that is not an ApiError as a network failure', () => {
-    expect(actionFailure(en, new Error('x'))).toBe(enUS['error.NETWORK_ERROR']);
+  it('treats anything that is not an ApiError as the unknown error, not as a network failure', () => {
+    expect(actionFailure(en, new Error('x'))).toBe(enUS['error.UNKNOWN']);
   });
 });
 

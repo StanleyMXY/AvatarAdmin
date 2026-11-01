@@ -66,10 +66,10 @@ describe('failureToForm of the system pages', () => {
     expect(result.unplaced).toEqual([enUS['error.INVALID_REQUEST']]);
   });
 
-  it('shows a failure that is not an answer of the backend as a network failure', () => {
+  it('shows a failure that is not an answer of the backend as the unknown error, not as a network failure', () => {
     const { form, set } = formWith();
     const result = failureToForm(intl, form, new Error('x'), ['name']);
-    expect(result).toEqual({ text: enUS['error.NETWORK_ERROR'], unplaced: [] });
+    expect(result).toEqual({ text: enUS['error.UNKNOWN'], unplaced: [] });
     expect(set).toEqual([]);
   });
 });
