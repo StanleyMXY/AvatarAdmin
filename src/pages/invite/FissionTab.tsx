@@ -48,7 +48,7 @@ type Props = {
 type ChainState =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'failed'; text: string }
+  | { kind: 'failed'; error: unknown }
   | { kind: 'loaded'; chain: InviteChain };
 
 type FormProblem = 'account' | 'depth' | null;
@@ -78,12 +78,10 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
         if (isCurrent()) setState({ kind: 'loaded', chain });
       },
       (error) => {
-        if (isCurrent()) {
-          setState({ kind: 'failed', text: chainFailureText(intl, error) });
-        }
+        if (isCurrent()) setState({ kind: 'failed', error });
       },
     );
-  }, [applied, intl, begin]);
+  }, [applied, begin]);
 
   const submit = () => {
     if (trimSpec(form.accountId) === '') return setProblem('account');
@@ -276,7 +274,7 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
             <Typography.Text type="secondary">{t('invite.chain.idle')}</Typography.Text>
           ) : null}
           <ReadState
-            failure={state.kind === 'failed' ? state.text : null}
+            failure={state.kind === 'failed' ? chainFailureText(intl, state.error) : null}
             loading={state.kind === 'loading'}
             onRetry={onLoadChain}
           />
