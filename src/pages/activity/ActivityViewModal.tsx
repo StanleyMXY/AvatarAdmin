@@ -12,7 +12,7 @@ import { lifecycleOptions } from './texts';
 
 type State =
   | { kind: 'loading' }
-  | { kind: 'failed'; text: string }
+  | { kind: 'failed'; error: unknown }
   | { kind: 'loaded'; detail: CheckinActivityDetail };
 
 type Props = {
@@ -38,12 +38,10 @@ export function ActivityViewModal({ id, open, onClose }: Props) {
         const detail = await getCheckinActivity(target);
         if (isCurrent()) setState({ kind: 'loaded', detail });
       } catch (error) {
-        if (isCurrent()) {
-          setState({ kind: 'failed', text: describeFailure(intl, error).text });
-        }
+        if (isCurrent()) setState({ kind: 'failed', error });
       }
     },
-    [intl, begin],
+    [begin],
   );
 
   useEffect(() => {
@@ -73,7 +71,7 @@ export function ActivityViewModal({ id, open, onClose }: Props) {
         <Alert
           type="error"
           showIcon
-          title={t('pages.common.loadFailed', { message: state.text })}
+          title={t('pages.common.loadFailed', { message: describeFailure(intl, state.error).text })}
           action={
             <Button size="small" onClick={() => id !== null && void load(id)}>
               {t('pages.common.retry')}

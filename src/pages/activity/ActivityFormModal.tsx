@@ -15,6 +15,7 @@ import {
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -71,7 +72,7 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
   const probe = useOverlapFlow();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const row = target === null || target === 'new' ? null : target;
   const rowId = row?.id ?? null;
 
@@ -131,7 +132,7 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
   }, [detail]);
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     const body: ActivityBody = {
       name: trimSpec(values.name),
       startDate: values.startDate ? pickedDay(values.startDate) : null,
@@ -142,7 +143,10 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
         bonusCredits: step.bonusCredits ?? 0,
       })),
     };
-    const show = (error: unknown) => setFailure(failureToForm(intl, form, error, FIELDS).text);
+    const show = (error: unknown) => {
+      failureToForm(intl, form, error, FIELDS);
+      fail(error);
+    };
     if (detail && row) {
       const rangeChanged = body.startDate !== detail.startDate || body.endDate !== detail.endDate;
       // The state read when the dialog opened decides, not the row of the list (it can be older).
