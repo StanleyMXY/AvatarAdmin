@@ -48,9 +48,16 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
     },
   });
 
+  // The text of the error code, and for a rejected request the reasons the server gave, each in its
+  // own translation. The server's own sentence is never added: a known code is shown by its text.
   const alertText = (failure: unknown) => {
     const { error, text } = describeFailure(intl, failure);
-    return error.code === 'INVALID_REQUEST' && error.message ? `${text}: ${error.message}` : text;
+    if (error.code !== 'INVALID_REQUEST') return text;
+    const reasons = error.details
+      .map((detail) => `reason.${detail.reason}`)
+      .filter((id) => intl.messages[id])
+      .map((id) => t(id));
+    return reasons.length > 0 ? `${text} ${[...new Set(reasons)].join(' ')}` : text;
   };
 
   const submit = (values: Values) =>
@@ -70,8 +77,8 @@ export function ChangePasswordForm({ username, minLength, onDone, onCancel }: Pr
           form.setFields(named.map((f) => ({ name: f.ref as Field, errors: [f.text] })));
           return;
         }
-        // The backend's own sentence is the only place the reason is spelled out for a rule the
-        // browser did not know (for example a minimum length it was not told).
+        // A rule the browser did not know (for example a minimum length it was not told): the
+        // bar says the input was refused, with the reasons that have a translation.
         setAlert({ failure });
       }
     });

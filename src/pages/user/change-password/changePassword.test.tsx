@@ -137,7 +137,7 @@ describe('the forced password change page', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('leaves the length to the server and shows its sentence when the minimum is unknown', async () => {
+  it('leaves the length to the server and shows the text of the error code, not its sentence, when the minimum is unknown', async () => {
     setTestInitialState({ me: me({ passwordMinLength: undefined }) });
     stubFetch(() =>
       jsonResponse(
@@ -155,8 +155,9 @@ describe('the forced password change page', () => {
     await fillAll(user, 'old', 'short-one', 'short-one');
     await user.click(screen.getByRole('button', { name: 'Change password' }));
     expect(
-      await screen.findByText(/newPassword must have at least 14 characters/),
+      await screen.findByText('Some input is not valid. Please check the fields and try again.'),
     ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('newPassword must have at least 14 characters');
     expect(getToken()).toBe('tok');
   });
 
