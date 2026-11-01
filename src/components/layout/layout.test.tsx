@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLocale, history, resetUmiStub } from '../../../tests/stubs/umi-max';
 import { currentLocale, resetActiveLocaleForTests } from '../../locales/activeLocale';
 import { getToken, setToken } from '../../request/session';
-import { resetThemeModeForTests, THEME_STORAGE_KEY } from '../../theme/modes';
+import { contrastRatio } from '../../theme/contrast';
+import { getModeTokens, resetThemeModeForTests, THEME_STORAGE_KEY } from '../../theme/modes';
 import { HeaderDropdown } from './HeaderDropdown';
 import { LangSwitch } from './LangSwitch';
 import { signOut } from './signOut';
@@ -151,6 +152,28 @@ describe('HeaderDropdown', () => {
     expect(document.activeElement).toBe(trigger);
     fireEvent.click(trigger);
     expect(await screen.findByRole('menu')).toBeInTheDocument();
+  });
+
+  it('draws the letter of the avatar in the text colour of a primary button on the primary colour, readable (4.5:1) in every theme', () => {
+    for (const mode of ['dim', 'deep', 'light'] as const) {
+      localStorage.setItem(THEME_STORAGE_KEY, mode);
+      resetThemeModeForTests();
+      const { unmount } = render(
+        wrap(<HeaderDropdown username="ploy" onChangePassword={vi.fn()} onLogout={vi.fn()} />),
+      );
+      const tokens = getModeTokens(mode);
+      const avatar = screen.getByTestId('header-avatar');
+      expect(avatar).toHaveStyle({
+        color: tokens.colorTextOnPrimary,
+        backgroundColor: tokens.colorPrimary,
+      });
+      expect(contrastRatio(tokens.colorTextOnPrimary, tokens.colorPrimary)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+      unmount();
+    }
+    localStorage.clear();
+    resetThemeModeForTests();
   });
 
   it('shows the user name next to the avatar', () => {
