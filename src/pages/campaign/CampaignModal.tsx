@@ -10,9 +10,10 @@ import {
   updateCampaign,
 } from '../../services/campaign';
 import { type ChannelRow, getChannels } from '../../services/channels/getChannels';
+import { failureToForm } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
+import { UTM_VALUE } from './links';
 
 type Values = {
   code: string;
@@ -40,7 +41,6 @@ type Props = {
 
 const CODE = /^[a-z0-9_-]{3,32}$/;
 // Contract 10.4: what a link takes as a UTM value; anything else is dropped from the link.
-const UTM_VALUE = /^[A-Za-z0-9._-]{1,64}$/;
 const FIELDS = [
   'code',
   'name',
@@ -125,7 +125,7 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
       if (campaign) await updateCampaign(campaign.id, fields);
       else await createCampaign({ ...fields, code: trimSpec(values.code) });
     } catch (error) {
-      setFailure(failureToForm(intl, form, error, FIELDS));
+      setFailure(failureToForm(intl, form, error, FIELDS).text);
       return;
     }
     message.success(t('campaign.campaigns.saved'));

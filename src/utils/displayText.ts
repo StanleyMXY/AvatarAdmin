@@ -1,6 +1,6 @@
-import { formatInstant } from '../../utils/format';
-import { plainText } from '../../utils/plainText';
-import { DASH, formatCount } from '../../utils/ratio';
+import { formatInstant } from './format';
+import { plainText } from './plainText';
+import { DASH, formatCount } from './ratio';
 
 /** The part of `useIntl()` this needs (Umi's copy of react-intl and ours have different types). */
 export type Translator = {

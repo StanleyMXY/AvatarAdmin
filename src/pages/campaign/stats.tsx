@@ -4,24 +4,24 @@ import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ExportButton } from '../../components/ExportButton';
+import { HeaderTip } from '../../components/HeaderTip';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
 import { ReportHelper } from '../../components/stat/ReportHelper';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getPerformance, type PerformanceRow, readCostSettings } from '../../services/campaign';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { countText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
 import { CampaignSelect } from './CampaignSelect';
 import { FailureBar } from './FailureBar';
 import { moneyText, numberOf, rateText, shareText, unitCostText } from './figures';
-import { HeaderTip } from './HeaderTip';
-import { countText, orDash } from './texts';
 import { useCampaigns } from './useCampaigns';
-import { useRead } from './useRead';
 
 type Filter = { range: DayRange; campaignId: string | undefined };
 type Row = PerformanceRow & { rowKey: string; unattributed?: boolean };
@@ -44,7 +44,7 @@ export default function CampaignStatsPage() {
   const meta = useAdminMeta();
   const campaigns = useCampaigns();
   // The currency of every cost; an administrator who may not read the setting gets no currency in the heads.
-  const settings = useRead(readCostSettings);
+  const settings = useLatestRead(readCostSettings);
   const currency = settings.data?.currency ?? null;
 
   // What is being edited, and what was asked for with Search (the reports, the chart and the export).
@@ -194,13 +194,15 @@ export default function CampaignStatsPage() {
               <span data-testid="unattributed-count">
                 {countText(locale, row.unattributedInstalls)}
               </span>
-              <Typography.Text
-                type="secondary"
-                data-testid="unattributed-share"
-                style={{ maxWidth: 220, textAlign: 'end' }}
-              >
-                {t('campaign.stats.unattributed.share', { share })}
-              </Typography.Text>
+              <Tooltip title={t('campaign.stats.unattributed.share', { share })}>
+                <Typography.Text
+                  type="secondary"
+                  data-testid="unattributed-share"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  {t('campaign.stats.unattributed.shareShort', { share })}
+                </Typography.Text>
+              </Tooltip>
             </Flex>
           ) : (
             countText(locale, row.installs)

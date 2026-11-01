@@ -345,7 +345,9 @@ function readRecords(text: string): { records: CsvRecord[]; unclosedAt: number |
 function readCsv(text: string, limits: CostBatchLimits | undefined): CostBatchResult {
   const { records, unclosedAt } = readRecords(withoutMark(text));
   if (unclosedAt !== null) return { rows: [], errors: [{ line: unclosedAt, reason: 'CSV_QUOTE' }] };
-  if (records.length <= 1) return finish([], [], limits);
+  // Nothing at all is empty. A single line is read as the header: a line of data without one is
+  // then a header problem (the columns are missing), not an empty file; a good header alone is empty.
+  if (records.length === 0) return finish([], [], limits);
 
   const [header, ...data] = records;
   const names = header.fields.map((name) => trimSpec(name).toLowerCase());

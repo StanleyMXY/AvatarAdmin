@@ -11,12 +11,12 @@ import {
   createCost,
   updateCost,
 } from '../../services/campaign';
+import { failureToForm } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { pickedDay, todayUtc } from '../../utils/utcDay';
 import { numberOf } from './figures';
-import { failureToForm } from './formFailure';
 
 type Values = {
   campaignId: string | undefined;
@@ -76,7 +76,7 @@ export function CostModal({ cost, campaigns, currency, onClose, onSaved }: Props
       if (editing) await updateCost(cost.id, body);
       else await createCost(body);
     } catch (error) {
-      setFailure(failureToForm(intl, form, error, FIELDS));
+      setFailure(failureToForm(intl, form, error, FIELDS).text);
       return;
     }
     message.success(t('campaign.costs.saved'));

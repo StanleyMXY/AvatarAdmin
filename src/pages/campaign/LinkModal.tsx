@@ -10,7 +10,7 @@ import {
 } from '../../services/campaign';
 import { describeFailure } from '../../session/describe';
 import { plainText } from '../../utils/plainText';
-import { landingAddress, PLATFORM_FIELDS, writeClipboard } from './links';
+import { landingAddress, PLATFORM_FIELDS, UTM_VALUE, writeClipboard } from './links';
 
 type Props = {
   campaign: AttributionCampaign;
@@ -46,6 +46,13 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
     setLink(null);
     setProblem(null);
   };
+
+  // A UTM value the backend would leave out of the link (contract 10.4) is flagged, not refused: the
+  // link that comes back shows what was really used.
+  const utmWarning = (value: string) =>
+    value.trim() !== '' && !UTM_VALUE.test(value.trim())
+      ? { validateStatus: 'warning' as const, help: t('campaign.campaigns.f.utmRule') }
+      : {};
 
   const blocked = linkBase === null;
 
@@ -109,7 +116,11 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
             ))}
           </Radio.Group>
         </Form.Item>
-        <Form.Item label={t('campaign.link.utmSource')} htmlFor="campaign-link-source">
+        <Form.Item
+          label={t('campaign.link.utmSource')}
+          htmlFor="campaign-link-source"
+          {...utmWarning(utmSource)}
+        >
           <Input
             id="campaign-link-source"
             dir="ltr"
@@ -117,7 +128,11 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
             onChange={(event) => change(() => setUtmSource(event.target.value))}
           />
         </Form.Item>
-        <Form.Item label={t('campaign.link.utmMedium')} htmlFor="campaign-link-medium">
+        <Form.Item
+          label={t('campaign.link.utmMedium')}
+          htmlFor="campaign-link-medium"
+          {...utmWarning(utmMedium)}
+        >
           <Input
             id="campaign-link-medium"
             dir="ltr"
@@ -126,7 +141,11 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
             onChange={(event) => change(() => setUtmMedium(event.target.value))}
           />
         </Form.Item>
-        <Form.Item label={t('campaign.link.utmCampaign')} htmlFor="campaign-link-campaign">
+        <Form.Item
+          label={t('campaign.link.utmCampaign')}
+          htmlFor="campaign-link-campaign"
+          {...utmWarning(utmCampaign)}
+        >
           <Input
             id="campaign-link-campaign"
             dir="ltr"

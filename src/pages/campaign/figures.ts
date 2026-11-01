@@ -14,13 +14,17 @@ export function numberOf(value: unknown): number | null {
   return null;
 }
 
-/** An amount with two decimals, the thousands written as the language of the page does. */
-export function moneyText(value: unknown, locale: string): string {
+/**
+ * An amount with two decimals, the thousands written as the language of the page does. A cost that a
+ * third party reported can have more digits (`0.004`): `maxDecimals` keeps up to that many, and a
+ * number that needs fewer still has two.
+ */
+export function moneyText(value: unknown, locale: string, maxDecimals = 2): string {
   const n = numberOf(value);
   if (n === null) return DASH;
   return new Intl.NumberFormat(locale, {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: Math.max(2, maxDecimals),
   }).format(n);
 }
 

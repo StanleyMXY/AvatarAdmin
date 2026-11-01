@@ -59,12 +59,16 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
   );
   const ready = result !== null && result.errors.length === 0 && result.rows.length > 0;
 
+  // In a CSV the number is the line of the file; in JSON it is the place in the array (the text may
+  // be on one line, so "line" would send the person looking for something that is not there).
   const reasonText = (error: BatchError): string => {
-    const id = `campaign.batch.reason.${error.reason}`;
+    const unit = kind === 'json' ? 'item' : 'line';
+    const own = `campaign.batch.reason.${error.reason}.${unit}`;
+    const id = intl.messages[own] ? own : `campaign.batch.reason.${error.reason}`;
     const words = intl.messages[id] ? t(id, error.values) : error.reason;
     return error.line === 0
       ? words
-      : t('campaign.batch.errors.line', { line: error.line, reason: words });
+      : t(`campaign.batch.errors.${unit}`, { line: error.line, reason: words });
   };
 
   const readFile = async (chosen: File) => {

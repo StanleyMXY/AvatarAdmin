@@ -3,6 +3,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Button, Flex, Tag, Tooltip, Typography } from 'antd';
 import { useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import { RowActions } from '../../components/RowActions';
 import {
@@ -11,12 +12,11 @@ import {
   listCampaigns,
   updateCampaign,
 } from '../../services/campaign';
+import { instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { CampaignModal } from './CampaignModal';
 import { LinkModal } from './LinkModal';
-import { StatusSwitch } from './StatusSwitch';
-import { instantText } from './texts';
 import type { CampaignList } from './useCampaigns';
 
 type Props = {
@@ -156,7 +156,7 @@ export function CampaignsTab({ campaigns, linkBase }: Props) {
         false: { text: t('campaign.campaigns.status.disabled') },
       },
       render: (_, row) => (
-        <StatusSwitch
+        <EnabledSwitch
           checked={row.enabled === true}
           disabled={!canManage}
           label={t('campaign.campaigns.switchOf', { code: plainText(row.code) })}

@@ -19,3 +19,12 @@ export function lengthWithin(s: string, min: number, max: number): boolean {
   const length = countCodePoints(trimSpec(s));
   return length >= min && length <= max;
 }
+
+/**
+ * `s` cut to at most `max` code points, with an ellipsis after it when something was cut (so a
+ * name of any length can stand inside a sentence). A surrogate pair is never cut in the middle.
+ */
+export function clipCodePoints(s: string, max: number): string {
+  const points = [...s];
+  return points.length > max ? `${points.slice(0, max).join('')}…` : s;
+}
