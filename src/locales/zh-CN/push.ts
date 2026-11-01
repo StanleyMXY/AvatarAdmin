@@ -83,7 +83,6 @@ const messages: Record<string, string> = {
   'push.templates.localeRequired': '请填写语言标签',
   'push.templates.fixed': '模板建好后，触发原因和语言不能改。',
   'push.templates.enabled': '启用',
-  'push.templates.empty': '还没有模板。',
 
   // ---- 手动推送任务 ----
   'push.tasks.note': '一次性推送给一批受众，立即发或定时发。任务只有在等待中才能取消。',
@@ -93,7 +92,7 @@ const messages: Record<string, string> = {
   'push.tasks.col.sent': '已发数',
   'push.tasks.col.failed': '失败数',
   'push.tasks.col.createdBy': '创建人',
-  'push.tasks.col.scheduledAt': '计划时间',
+  'push.tasks.col.scheduledAt': '计划时间（本机时区）',
   'push.tasks.col.actions': '操作',
   'push.tasks.new': '新建任务',
   'push.tasks.newTitle': '新建推送任务',
@@ -124,7 +123,7 @@ const messages: Record<string, string> = {
   'push.schedules.col.dates': '起止日期',
   'push.schedules.col.enabled': '启用',
   'push.schedules.col.audience': '受众',
-  'push.schedules.col.nextRunAt': '下次生成时间',
+  'push.schedules.col.nextRunAt': '下次生成时间（本机时区）',
   'push.schedules.col.actions': '操作',
   'push.schedules.new': '新建周期推送',
   'push.schedules.newTitle': '新建周期推送',

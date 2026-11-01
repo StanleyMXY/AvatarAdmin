@@ -23,14 +23,41 @@ export function recallRuleOf(error: unknown): RecallRule | null {
 }
 
 /**
+ * The words of the error code and, when the backend names what is wrong (`details`), the words of
+ * each reason the page has words for, once each. A reason without words is left out: the backend's
+ * own sentence is never shown.
+ */
+function withReasons(intl: Translator, error: unknown): string {
+  const text = describeFailure(intl, error).text;
+  if (!(error instanceof ApiError)) return text;
+  const reasons = [
+    ...new Set(
+      error.details
+        .map((detail) => `reason.${detail.reason}`)
+        .filter((key) => Object.hasOwn(intl.messages, key))
+        .map((key) => intl.formatMessage({ id: key })),
+    ),
+  ];
+  return reasons.length === 0 ? text : `${text} (${reasons.join(' ')})`;
+}
+
+/**
  * The words of a failed template write. The backend has three messages for this refusal that data
  * cannot tell apart, so one text says what is true in each: the reason needs an enabled template in
  * the default language; enable or keep it first, then change the other languages. The backend's own
- * message is never shown. Any other failure gets the words of its error code.
+ * message is never shown. Any other failure gets the words of its error code, and with `reasons`
+ * (a place that has no field to put them under: a switch or a delete in the list) the words of the
+ * reasons it names.
  */
-export function templateFailureText(intl: Translator, error: unknown): string {
+export function templateFailureText(
+  intl: Translator,
+  error: unknown,
+  options: { reasons?: boolean } = {},
+): string {
   const rule = recallRuleOf(error);
-  if (rule === null) return describeFailure(intl, error).text;
+  if (rule === null) {
+    return options.reasons ? withReasons(intl, error) : describeFailure(intl, error).text;
+  }
   return intl.formatMessage(
     { id: 'push.templates.defaultLanguageRequired' },
     {

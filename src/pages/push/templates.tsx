@@ -107,7 +107,7 @@ export default function TemplatesPage() {
               enabled: next,
             });
           }}
-          failureText={(error) => templateFailureText(intl, error)}
+          failureText={(error) => templateFailureText(intl, error, { reasons: true })}
           onDone={reload}
         />
       ),
@@ -160,7 +160,7 @@ export default function TemplatesPage() {
                     await deleteTemplate(row.id);
                     message.success(t('push.templates.deleted'));
                   } catch (error) {
-                    message.error(templateFailureText(intl, error));
+                    message.error(templateFailureText(intl, error, { reasons: true }));
                   }
                   reload();
                 },

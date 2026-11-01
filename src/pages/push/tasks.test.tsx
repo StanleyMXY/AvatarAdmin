@@ -8,6 +8,7 @@ import { fileOf, pngBytes } from '../../../tests/imageBytes';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { setTestAccess } from '../../../tests/stubs/umi-max';
+import { withTimeZone } from '../../../tests/withTimeZone';
 import access from '../../access';
 import TasksPage from './tasks';
 import {
@@ -76,6 +77,44 @@ describe('the manual task page: the list', { timeout: 30000 }, () => {
     const cancelled = await rowOf(titleOf('6'));
     expect(within(cancelled).getByText('Cancelled')).toBeInTheDocument();
     expect(within(cancelled).getByText('Guests only')).toBeInTheDocument();
+  });
+
+  it('says in the header that the planned time is shown in the time zone of this computer, while the form takes UTC', async () => {
+    backend();
+    renderPage(<TasksPage />);
+    await rowOf(titleOf('4'));
+    expect(
+      screen.getByRole('columnheader', { name: 'Planned time (time zone of this computer)' }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the planned time in the time zone of this computer: the same moment as the UTC time that was typed', async () => {
+    await withTimeZone('Asia/Singapore', async () => {
+      stubFetch(() =>
+        jsonResponse(
+          200,
+          envelope('200', {
+            items: [
+              {
+                id: 't1',
+                title: 'Later',
+                audience: 'ALL',
+                status: 'PENDING',
+                sentCount: 0,
+                failedCount: 0,
+                createdBy: '1',
+                createdByUsername: 'root',
+                scheduledAt: '2031-01-05T10:00:00.000Z',
+              },
+            ],
+            total: 1,
+          }),
+        ),
+      );
+      renderPage(<TasksPage />);
+      const row = await rowOf('Later');
+      expect(row.textContent).toContain('18:00');
+    });
   });
 
   it('marks a task that was cancelled as missed, and shows the id of a creator who was deleted', async () => {

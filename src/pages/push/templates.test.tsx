@@ -10,6 +10,7 @@ import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { setTestAccess } from '../../../tests/stubs/umi-max';
 import access from '../../access';
+import enUS from '../../locales/en-US';
 import TemplatesPage from './templates';
 import {
   chooseOption,
@@ -509,14 +510,11 @@ describe('the template page: the picture', { timeout: 60000 }, () => {
     return { user, dialog };
   };
 
-  it('hides the native file box that the form style would show beside the button', async () => {
+  it('has no native file box beside the button: the file input of the shared control is hidden by its own style', async () => {
     backend();
     const { dialog } = await openForm();
-    const box = dialog.querySelector('.push-upload-box') as HTMLElement;
-    expect(box.querySelector('input[type="file"]')).not.toBeNull();
-    expect(box.querySelector('style')?.textContent).toMatch(
-      /input\[type="file"\] \{ display: none !important/,
-    );
+    const input = within(dialog).getByTestId('upload-input') as HTMLInputElement;
+    expect(input.style.display).toBe('none');
   });
 
   it('takes JPEG and PNG only and says so beside the control; a GIF is stopped before any upload', async () => {
@@ -527,6 +525,22 @@ describe('the template page: the picture', { timeout: 60000 }, () => {
     choose(fileOf(gif, 'anim.png'));
     expect(await within(dialog).findByText(/Wrong file type/)).toBeInTheDocument();
     expect(uploads).toHaveLength(0);
+  });
+
+  it('sends no picture when a picture was uploaded and then replaced by a file that was refused: the id of the first one is not carried along', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<TemplatesPage />);
+    const dialog = await openNew(user);
+    await fillNew(user, dialog);
+    choose(png());
+    await within(dialog).findByText(/Uploaded: banner\.png/);
+    const gif = Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0, 0, 0]);
+    choose(fileOf(gif, 'anim.png'));
+    expect(await within(dialog).findByText(/Wrong file type/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('imageUploadId');
   });
 
   it('shows the size limit from meta and stops a larger file before any upload', async () => {
@@ -766,6 +780,37 @@ describe('the template page: the rule of the default language', { timeout: 60000
           .getAttribute('aria-checked'),
       ).toBe('false'),
     );
+  });
+
+  it('says in the list which reason the backend named when it refuses a switch for another cause than the rule of the default language', async () => {
+    backend();
+    const real = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) =>
+        (init.method ?? 'GET').toUpperCase() === 'PUT'
+          ? jsonResponse(
+              400,
+              envelope(
+                'INVALID_REQUEST',
+                {
+                  details: [
+                    { ref: 'enabled', reason: 'OUT_OF_RANGE' },
+                    { ref: 'x', reason: 'NEW' },
+                  ],
+                },
+                'raw backend words',
+              ),
+            )
+          : real(input, init),
+      ),
+    );
+    renderPage(<TemplatesPage />);
+    const row = await rowOf('ขอบคุณสำหรับความช่วยเหลือของคุณ');
+    fireEvent.click(within(row).getByRole('switch'));
+    const shown = await screen.findByText(/The value is outside the allowed range\./);
+    expect(shown.textContent).toContain(enUS['error.INVALID_REQUEST']);
+    expect(document.body.textContent).not.toContain('raw backend words');
   });
 
   it('refuses in the list to switch off or delete the default language template while another language is on, and keeps the row on', async () => {
