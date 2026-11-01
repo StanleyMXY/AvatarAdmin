@@ -92,6 +92,26 @@ export function requestUrl(url: string, params?: RequestParams): string {
   return path.includes('?') && query !== '' ? `${path}&${query.slice(1)}` : `${path}${query}`;
 }
 
+/**
+ * The request body as JSON text. A body that cannot be written (it contains itself, holds a BigInt,
+ * a `toJSON` that throws, or is a function or symbol, which write to nothing) is a mistake in the
+ * caller, found before anything is sent: a `TypeError`, like a bad address, and not a network
+ * failure, which would tell a page that a write may have been carried out. The message is fixed:
+ * the body can hold a password, so neither it nor the reason `JSON.stringify` gave is repeated.
+ */
+export function serializeBody(body: unknown): string {
+  let text: string | undefined;
+  try {
+    text = JSON.stringify(body);
+  } catch {
+    text = undefined;
+  }
+  if (typeof text !== 'string') {
+    throw new TypeError('the request body cannot be written as JSON');
+  }
+  return text;
+}
+
 /** The headers every request carries, and the token they were built with. */
 export function buildHeaders(
   json: boolean,
@@ -136,7 +156,7 @@ export function throwIfAborted(deadline: Deadline): void {
   if (deadline.signal.aborted && !deadline.timedOut()) throw abortError();
 }
 
-/** Unwraps an answer and reports its session signals. */
+/** Unwraps an answer and reports its session signals (`reportSession` is false for an anonymous request). */
 export function unwrapAndReport<T>(
   httpStatus: number,
   text: string,
@@ -163,23 +183,22 @@ export async function apiRequest<T>(o: {
   /** The cache mode of `fetch`; left out, the browser's default. `no-store` for an answer that must be asked for again every time. */
   cache?: RequestCache;
   /**
-   * False for a request whose 401 ADMIN_INVALID_TOKEN is about something other than the session
-   * token (the enrollment token of the authenticator setup): the session layer is not told.
-   */
-  reportSession?: boolean;
-  /**
    * False for the read of the account itself (`GET /me`): a 403 there cannot be answered by reading
    * the permissions again, which is what the session layer would do. A lost token is still reported.
    */
   reportForbidden?: boolean;
   /**
    * True for a request made before there is a session (sign-in, authenticator setup): the token
-   * held from an earlier session is not sent with it, and its answers say nothing about that session.
+   * held from an earlier session is not sent with it, and its answers say nothing about that
+   * session (a 401 ADMIN_INVALID_TOKEN there is about the setup token, not the session token), so
+   * the session layer is not told. This is the only way to keep an answer from the session layer.
    */
   anonymous?: boolean;
 }): Promise<T> {
   const url = requestUrl(o.url, o.params);
   const hasBody = o.body !== undefined;
+  // Before the token is read and the time limit starts: a body that cannot be written costs nothing.
+  const bodyText = hasBody ? serializeBody(o.body) : undefined;
   const { headers, sentToken } = buildHeaders(hasBody, o.anonymous);
 
   const deadline = startDeadline(o.timeoutMs ?? DEFAULT_TIMEOUT_MS, o.signal);
@@ -190,7 +209,7 @@ export async function apiRequest<T>(o: {
     const response = await fetch(url, {
       method: o.method,
       headers,
-      body: hasBody ? JSON.stringify(o.body) : undefined,
+      body: bodyText,
       signal: deadline.signal,
       ...(o.cache ? { cache: o.cache } : {}),
     });
@@ -202,13 +221,7 @@ export async function apiRequest<T>(o: {
     deadline.dispose();
   }
   try {
-    const data = unwrapAndReport<T>(
-      status,
-      text,
-      sentToken,
-      o.anonymous ? false : o.reportSession,
-      o.reportForbidden,
-    );
+    const data = unwrapAndReport<T>(status, text, sentToken, !o.anonymous, o.reportForbidden);
     markServiceReachable(readKey(o.method, url));
     return data;
   } catch (error) {

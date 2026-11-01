@@ -81,6 +81,17 @@ describe('apiRequest: success', () => {
     expect(onExpired).not.toHaveBeenCalled();
   });
 
+  it('has no second way to keep a 401 from ending the session: only `anonymous` does (a leftover `reportSession: false` is ignored)', async () => {
+    setToken('tok-123');
+    stubFetch(() => jsonResponse(401, envelope('ADMIN_INVALID_TOKEN', null, 'void')));
+    await expect(
+      // @ts-expect-error `reportSession` is not an option of apiRequest
+      apiRequest({ method: 'GET', url: '/me', reportSession: false }),
+    ).rejects.toMatchObject({ code: 'ADMIN_INVALID_TOKEN' });
+    expect(onExpired).toHaveBeenCalledTimes(1);
+    expect(getToken()).toBeNull();
+  });
+
   it('puts relative urls under /api/admin and leaves /api/... urls alone', async () => {
     const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
     await apiRequest({ method: 'GET', url: '/users/42/devices' });
@@ -223,6 +234,81 @@ describe('the address of a request', () => {
     const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
     await expect(apiRequest({ method: 'GET', url: 'users' })).rejects.toThrow(TypeError);
     expect(calls).toEqual([]);
+  });
+
+  describe('a body that cannot be written as JSON', () => {
+    const cyclic = () => {
+      const body: Record<string, unknown> = { name: 'ploy', password: 'hunter2-secret' };
+      body.self = body;
+      return body;
+    };
+    const cases: [string, () => unknown][] = [
+      ['an object that contains itself', cyclic],
+      ['a BigInt', () => ({ amount: 10n, note: 'ยอดเงิน' })],
+      [
+        'a toJSON that throws',
+        () => ({
+          toJSON() {
+            throw new Error('token=hunter2-secret');
+          },
+        }),
+      ],
+      ['a function (writes to nothing)', () => () => 1],
+      ['a symbol (writes to nothing)', () => Symbol('x')],
+    ];
+
+    it.each(cases)(
+      'stops with a TypeError that says so, and sends nothing, for %s',
+      async (_name, make) => {
+        setToken('tok');
+        const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+        const failure = await apiRequest({ method: 'POST', url: '/x', body: make() }).then(
+          () => null,
+          (e: unknown) => e,
+        );
+        expect(failure).toBeInstanceOf(TypeError);
+        expect(failure).not.toBeInstanceOf(ApiError);
+        const text = (failure as TypeError).message;
+        expect(text).toMatch(/JSON/);
+        expect(text).not.toMatch(/hunter2|network/i);
+        expect((failure as TypeError).cause).toBeUndefined();
+        expect(calls).toEqual([]);
+        expect(onExpired).not.toHaveBeenCalled();
+        expect(onForbidden).not.toHaveBeenCalled();
+      },
+    );
+
+    it('is not an outcome-unknown network error (the page must not say the write may have happened)', async () => {
+      stubFetch(() => jsonResponse(200, envelope('200', {})));
+      const failure = await apiRequest({ method: 'PUT', url: '/x', body: cyclic() }).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect((failure as { code?: string }).code).not.toBe('NETWORK_ERROR');
+      expect(failure).not.toBeInstanceOf(ApiError);
+    });
+
+    it('starts no timer for it', async () => {
+      vi.useFakeTimers();
+      try {
+        stubFetch(() => jsonResponse(200, envelope('200', {})));
+        await expect(apiRequest({ method: 'POST', url: '/x', body: cyclic() })).rejects.toThrow(
+          TypeError,
+        );
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('still writes an ordinary body, also with text of every language, null, and false', async () => {
+      const calls = stubFetch(() => jsonResponse(200, envelope('200', {})));
+      const body = { a: 'ข้อความ', b: 'نص', c: 'teks', d: null, e: false, f: 0, g: '' };
+      await apiRequest({ method: 'POST', url: '/x', body });
+      await apiRequest({ method: 'POST', url: '/x', body: null });
+      await apiRequest({ method: 'POST', url: '/x', body: false });
+      expect(calls.map((c) => c.init.body)).toEqual([JSON.stringify(body), 'null', 'false']);
+    });
   });
 });
 
