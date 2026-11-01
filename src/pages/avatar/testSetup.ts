@@ -1,7 +1,7 @@
 // Shared by the page tests of the avatar and complaint modules: signs in as one of the preset
 // administrators of the mock backend, tells the Umi stand-in who that is, and lets the upload
 // control reach the mock backend through `fetch` (the real upload uses XMLHttpRequest).
-import { within as scoped, screen, waitFor } from '@testing-library/react';
+import { configure, within as scoped, screen, waitFor } from '@testing-library/react';
 import type userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { resetAvatarStore } from '../../../mock/_core/avatarData';
@@ -13,6 +13,10 @@ import { resetUmiStub, setTestAccess, setTestInitialState } from '../../../tests
 import access from '../../access';
 import { resetChannelsCache } from '../../components/ChannelSelect';
 import { apiRequest } from '../../request/apiClient';
+
+// These pages are big (a table, a drawer, dialogs); when many test files run at once a page can take
+// longer than the one second a query waits by default, which failed a different test on each run.
+configure({ asyncUtilTimeout: 8000 });
 
 /** The shared values of `GET /meta` with a few supported languages. */
 export const META = { ...META_DEFAULTS, supportedLocales: ['en', 'zh-Hans', 'th'] };

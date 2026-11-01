@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
-import { type CosmeticItem, grantCosmetic, listCosmetics } from '../../services/avatar';
+import { type CosmeticItem, grantCosmetic, listAllCosmetics } from '../../services/avatar';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
 import { trimSpec } from '../../utils/trimSpec';
@@ -13,8 +13,6 @@ import { pickText } from './localized';
 import { codeText } from './texts';
 
 const REASON_MAX = 500;
-/** `GET /cosmetics` takes at most this many rows in a page; the catalog is read in one page. */
-const CATALOG_PAGE_SIZE = 200;
 
 type Props = {
   accountId: string;
@@ -53,8 +51,7 @@ export function GrantCosmeticModal({
     setLoadFailure(null);
     setForbidden(false);
     try {
-      const page = await listCosmetics({ page: 1, pageSize: CATALOG_PAGE_SIZE });
-      setItems(page.items);
+      setItems(await listAllCosmetics());
     } catch (error) {
       if (error instanceof ApiError && error.httpStatus === 403) setForbidden(true);
       else setLoadFailure(describeFailure(intl, error).text);

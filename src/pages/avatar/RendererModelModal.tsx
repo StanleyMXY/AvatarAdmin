@@ -8,7 +8,6 @@ import { createRendererModel, PLATFORMS, type Platform } from '../../services/av
 import { trimSpec } from '../../utils/trimSpec';
 import { failureToForm } from './formFailure';
 import { codeText } from './texts';
-import { UploadBox } from './UploadBox';
 import { useUploadSlot } from './uploadSlot';
 
 type Values = {
@@ -127,14 +126,12 @@ export function RendererModelModal({ open, onClose, onSaved }: Props) {
       >
         <RevalidateOnLocaleChange />
         <Form.Item label={t('avatar.models.file')} extra={t('avatar.models.fileHint')}>
-          <UploadBox>
-            <UploadField<{ uploadId: string }>
-              kind="rendererModel"
-              onBusyChange={file.fieldProps.onBusyChange}
-              onUploaded={file.fieldProps.onUploaded}
-              onCleared={file.fieldProps.onCleared}
-            />
-          </UploadBox>
+          <UploadField<{ uploadId: string }>
+            kind="rendererModel"
+            onBusyChange={file.fieldProps.onBusyChange}
+            onUploaded={file.fieldProps.onUploaded}
+            onCleared={file.fieldProps.onCleared}
+          />
           {fileProblem ? <Alert type="error" title={fileProblem} showIcon /> : null}
         </Form.Item>
         <Form.Item

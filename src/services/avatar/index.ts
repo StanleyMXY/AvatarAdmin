@@ -39,7 +39,8 @@ async function listPage<T>(
   url: string,
   params: { page: number; pageSize: number } & Record<string, unknown>,
 ): Promise<Page<T>> {
-  const data = await apiRequest<unknown>({ method: 'GET', url, params });
+  // The rows carry addresses that are signed for a short time: always ask again, never reuse an answer.
+  const data = await apiRequest<unknown>({ method: 'GET', url, params, cache: 'no-store' });
   return readPage<T>(data, params.page, params.pageSize);
 }
 
@@ -47,6 +48,25 @@ async function listPage<T>(
 
 export const listCosmetics = (params: CosmeticQuery): Promise<Page<CosmeticItem>> =>
   listPage('/cosmetics', params);
+
+const ALL_PAGE_SIZE = 200;
+/** The pages stop here even when the backend keeps saying there is more. */
+const ALL_MAX_PAGES = 50;
+
+/**
+ * Every item of the catalog, for the list in the grant dialog. It reads page after page (200 rows,
+ * the most the backend gives) until it has `total` rows, and stops at an empty page, so a wrong
+ * total cannot make it loop.
+ */
+export async function listAllCosmetics(): Promise<CosmeticItem[]> {
+  const rows: CosmeticItem[] = [];
+  for (let page = 1; page <= ALL_MAX_PAGES; page += 1) {
+    const answer = await listCosmetics({ page, pageSize: ALL_PAGE_SIZE });
+    rows.push(...answer.items);
+    if (answer.items.length === 0 || rows.length >= answer.total) break;
+  }
+  return rows;
+}
 
 export const createCosmetic = (body: CosmeticCreate): Promise<CosmeticItem> =>
   apiRequest({ method: 'POST', url: '/cosmetics', body });
@@ -129,7 +149,7 @@ export const listGenerationTasks = (params: {
 
 /** Not paged: newest first. */
 export const listDefaultAvatars = (): Promise<{ items: DefaultAvatar[] }> =>
-  apiRequest({ method: 'GET', url: '/default-avatars' });
+  apiRequest({ method: 'GET', url: '/default-avatars', cache: 'no-store' });
 
 export const createDefaultAvatar = (body: DefaultAvatarCreate): Promise<DefaultAvatar> =>
   apiRequest({ method: 'POST', url: '/default-avatars', body });
@@ -155,7 +175,7 @@ export const deleteDefaultAvatar = (id: string): Promise<unknown> =>
  * short time; the call is written to the audit log. Read again on every visit.
  */
 export const getAccountAvatars = (id: string): Promise<AccountAvatars> =>
-  apiRequest({ method: 'GET', url: `/accounts/${enc(id)}/avatars` });
+  apiRequest({ method: 'GET', url: `/accounts/${enc(id)}/avatars`, cache: 'no-store' });
 
 /** `POST /accounts/{id}/cosmetics` (`COSMETIC:GRANT`): gives the account a cosmetic for good (source ADMIN_GRANT). */
 export const grantCosmetic = (

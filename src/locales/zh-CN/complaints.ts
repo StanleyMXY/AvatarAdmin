@@ -33,7 +33,7 @@ const messages: Record<string, string> = {
   'complaints.evidence.file': '文件 {n}',
   'complaints.evidence.notFound': '证据不存在。',
   'complaints.evidence.badAddress': '文件地址不是可以打开的地址。',
-  'complaints.evidence.open': '打开文件',
+  'complaints.evidence.unsupported': '这种类型的文件不能在这里查看。',
 
   'complaints.event.title': '处理记录',
   'complaints.event.time': '时间',

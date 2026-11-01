@@ -22,7 +22,6 @@ import { cleanTexts, type Texts } from './localized';
 import { SurfacesPicker } from './SurfacesPicker';
 import { Thumb } from './Thumb';
 import { codeText } from './texts';
-import { UploadBox } from './UploadBox';
 import { useUploadSlot } from './uploadSlot';
 
 type Values = {
@@ -181,14 +180,12 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
         <Form.Item label={t('avatar.col.icon')}>
           <Flex vertical gap={8}>
             {action ? <Thumb url={action.iconUrl} alt={action.key} size={64} /> : null}
-            <UploadBox>
-              <UploadField<{ uploadId: string }>
-                kind="catalogImage"
-                onBusyChange={icon.fieldProps.onBusyChange}
-                onUploaded={icon.fieldProps.onUploaded}
-                onCleared={icon.fieldProps.onCleared}
-              />
-            </UploadBox>
+            <UploadField<{ uploadId: string }>
+              kind="catalogImage"
+              onBusyChange={icon.fieldProps.onBusyChange}
+              onUploaded={icon.fieldProps.onUploaded}
+              onCleared={icon.fieldProps.onCleared}
+            />
             {iconProblem ? <Alert type="error" title={iconProblem} showIcon /> : null}
           </Flex>
         </Form.Item>

@@ -21,7 +21,7 @@ export function isOpenableAddress(url: unknown): url is string {
   }
 }
 
-/** The file by its media type: a picture, a PDF, a video or a sound in its own player; anything else as a link. */
+/** The file by its media type: a picture, a PDF, a video or a sound in its own player; any other type is not shown (no link to its address). */
 function EvidenceFile({ evidence, label }: { evidence: ComplaintEvidence; label: string }) {
   const intl = useIntl();
   if (!isOpenableAddress(evidence.url)) {
@@ -56,10 +56,14 @@ function EvidenceFile({ evidence, label }: { evidence: ComplaintEvidence; label:
     // biome-ignore lint/a11y/useMediaCaption: evidence files have no captions
     return <audio src={evidence.url} controls />;
   }
+  // No player for this type: the address is not offered as a link, because a link can be copied
+  // and opened apart, and this address is the signed address of a person's file.
   return (
-    <a href={evidence.url} target="_blank" rel="noopener noreferrer">
-      {intl.formatMessage({ id: 'complaints.evidence.open' })}
-    </a>
+    <Alert
+      type="info"
+      showIcon
+      title={intl.formatMessage({ id: 'complaints.evidence.unsupported' })}
+    />
   );
 }
 
