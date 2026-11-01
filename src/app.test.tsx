@@ -9,8 +9,16 @@ import {
   setTestInitialState,
   setTestLocation,
 } from '../tests/stubs/umi-max';
-import { getInitialState, innerProvider, layout, render as renderHook, rootContainer } from './app';
+import {
+  getInitialState,
+  innerProvider,
+  layout,
+  render as renderHook,
+  rootContainer,
+  locale as umiLocale,
+} from './app';
 import { buildVars } from './buildVars';
+import { adoptLocale, rememberLocale, resetActiveLocaleForTests } from './locales/activeLocale';
 import { applyInitialLocale } from './locales/initLocale';
 import { apiRequest } from './request/apiClient';
 import { resetThemeModeForTests } from './theme/modes';
@@ -273,6 +281,42 @@ describe('the language', () => {
     languages(['zh']);
     expect(() => applyInitialLocale()).not.toThrow();
     expect(getLocale()).toBe('zh-CN');
+  });
+
+  it("answers Umi's question which language is in use from the app, not from localStorage", () => {
+    resetActiveLocaleForTests();
+    languages(['en']);
+    expect(umiLocale.getLocale()).toBe('en-US');
+    applyInitialLocale();
+    adoptLocale('en-US');
+    rememberLocale('zh-CN');
+    expect(umiLocale.getLocale()).toBe('zh-CN');
+    resetActiveLocaleForTests();
+  });
+
+  it('holds on to the language it started in, whatever storage or the browser say later', () => {
+    resetActiveLocaleForTests();
+    languages(['zh']);
+    applyInitialLocale();
+    expect(umiLocale.getLocale()).toBe('zh-CN');
+    languages(['en']);
+    expect(umiLocale.getLocale()).toBe('zh-CN');
+    resetActiveLocaleForTests();
+  });
+
+  it('keeps what the person chose when the browser refuses all storage', () => {
+    resetActiveLocaleForTests();
+    languages(['en']);
+    const denied = () => {
+      throw new DOMException('denied', 'SecurityError');
+    };
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(denied);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(denied);
+    applyInitialLocale();
+    expect(umiLocale.getLocale()).toBe('en-US');
+    expect(() => rememberLocale('zh-CN')).not.toThrow();
+    expect(umiLocale.getLocale()).toBe('zh-CN');
+    resetActiveLocaleForTests();
   });
 
   it('sends the current language in Accept-Language: the request layer asks Umi', async () => {

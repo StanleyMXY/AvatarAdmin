@@ -1,5 +1,6 @@
 import { defineConfig } from '@umijs/max';
 import { buildVars, toDefine } from './buildVars';
+import { localeConfig } from './localeConfig';
 import proxy from './proxy';
 import routes from './routes';
 
@@ -16,12 +17,8 @@ export default defineConfig({
   layout: {
     title: buildVars.ADMIN_PRODUCT_NAME,
   },
-  locale: {
-    // Initial language is resolved by the app itself; Umi only provides the intl plumbing.
-    default: 'en-US',
-    antd: true,
-    baseNavigator: false,
-  },
+  // Initial language is resolved by the app itself; Umi only provides the intl plumbing.
+  locale: localeConfig,
   antd: {},
   define: toDefine(buildVars),
   proxy,

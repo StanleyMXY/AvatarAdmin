@@ -8,6 +8,7 @@ import { LangSwitch } from './components/layout/LangSwitch';
 import { pageTitleRender } from './components/layout/pageTitle';
 import { TabManager } from './components/layout/TabManager';
 import { ThemeSwitch } from './components/layout/ThemeSwitch';
+import { currentLocale } from './locales/activeLocale';
 import { applyInitialLocale } from './locales/initLocale';
 import { Forbidden } from './pages/403';
 import NotFoundPage from './pages/404';
@@ -23,6 +24,13 @@ import { LAYOUT } from './theme/tokens';
 // matches what the user sees. (The call happens later; Umi's plugin manager does not exist yet while
 // this file is being loaded, so nothing here may call getLocale() at load time.)
 setLocaleProvider(() => getLocale());
+
+/**
+ * Umi asks the app which language is in use (it does not read localStorage itself, see
+ * `config/localeConfig.ts`), so the language it shows, the drop-down and `Accept-Language` agree
+ * even when the browser refuses storage.
+ */
+export const locale = { getLocale: currentLocale };
 
 /** Umi calls this once, with its plugins ready, before the first page is drawn: choose the language now. */
 export function render(oldRender: () => void): void {

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLocale, history, resetUmiStub } from '../../../tests/stubs/umi-max';
+import { currentLocale, resetActiveLocaleForTests } from '../../locales/activeLocale';
 import { getToken, setToken } from '../../request/session';
 import { resetThemeModeForTests, THEME_STORAGE_KEY } from '../../theme/modes';
 import { HeaderDropdown } from './HeaderDropdown';
@@ -74,6 +75,22 @@ describe('LangSwitch', () => {
     );
     expect(getLocale()).toBe('zh-CN');
     expect(document.documentElement.lang).toBe('zh-CN');
+  });
+
+  it('records the choice for the app even when the browser refuses to save it, so the drop-down and the requests agree with the page', async () => {
+    resetActiveLocaleForTests();
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+    render(wrap(<LangSwitch />));
+    fireEvent.mouseDown(screen.getByRole('combobox'));
+    fireEvent.click(
+      await screen.findByText('简体中文', { selector: '.ant-select-item-option-content' }),
+    );
+    expect(currentLocale()).toBe('zh-CN');
+    expect(document.documentElement.lang).toBe('zh-CN');
+    resetActiveLocaleForTests();
+    vi.restoreAllMocks();
   });
 
   it('offers exactly the two interface languages, each in its own language', async () => {
