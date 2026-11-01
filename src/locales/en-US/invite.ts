@@ -89,6 +89,8 @@ const messages: Record<string, string> = {
   'invite.share.step.linkClick': 'Link click',
   'invite.share.step.downloadClick': 'Download click',
   'invite.share.step.registered': 'Sign-up',
+  'invite.share.funnelStepFirst': '{stage}: {value}',
+  'invite.share.funnelStepRatio': '{stage}: {value}, {ratio} of the step before',
   'invite.share.linesTitle': 'The four steps by day',
   'invite.share.noRows': 'No day has a row in this range.',
   'invite.share.detail': 'Details',

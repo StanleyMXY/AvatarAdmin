@@ -7,6 +7,7 @@ import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import enUS from '../../locales/en-US';
+import zhCN from '../../locales/zh-CN';
 import ShareStatsPage from './shareStats';
 import { clickExport, signIn, withExportSheet } from './testSetup';
 
@@ -259,6 +260,38 @@ describe('the share statistics page: the funnel', { timeout: 30000 }, () => {
       'Download click  60  (40%)',
       'Sign-up  15  (25%)',
     ]);
+  });
+
+  it('writes the number and the ratio of every step as plain text under the chart, where small blocks cannot hide them', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<ShareStatsPage />);
+    await card('sharePv');
+    await tab(user, 'Funnel');
+    const lines = within(screen.getByTestId('invite-share-funnel-steps'))
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(lines).toEqual([
+      'Share: 400',
+      'Link click: 150, 37.5% of the step before',
+      'Download click: 60, 40% of the step before',
+      'Sign-up: 15, 25% of the step before',
+    ]);
+  });
+
+  it('writes a dash in the text under the chart for a step whose previous step is 0, and in Chinese too', async () => {
+    backend({
+      funnel: [funnelRow('2026-10-24', { linkClickPv: 0, downloadClickPv: 5, registered: 2 })],
+    });
+    const user = userEvent.setup();
+    renderPage(<ShareStatsPage />, 'zh-CN');
+    await screen.findByTestId('invite-share-card-sharePv');
+    await user.click(screen.getByRole('tab', { name: zhCN['invite.share.tab.funnel'] }));
+    const lines = within(screen.getByTestId('invite-share-funnel-steps'))
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(lines[2]).toBe('下载点击：5，相对上一步 —');
+    expect(lines[3]).toBe('注册：2，相对上一步 40%');
   });
 
   it('writes a dash as the ratio of a step whose previous step is 0', async () => {

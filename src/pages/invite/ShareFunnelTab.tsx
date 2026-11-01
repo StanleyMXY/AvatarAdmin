@@ -41,6 +41,14 @@ export function ShareFunnelTab({ rows, from, to }: Props) {
       stage,
       value: sums[index] ?? 0,
       caption: index === 0 ? `${stage}  ${shown}` : `${stage}  ${shown}  (${ratio})`,
+      field: STEPS[index].field,
+      line:
+        index === 0
+          ? intl.formatMessage({ id: 'invite.share.funnelStepFirst' }, { stage, value: shown })
+          : intl.formatMessage(
+              { id: 'invite.share.funnelStepRatio' },
+              { stage, value: shown, ratio },
+            ),
     };
   });
   const cell = (value: unknown) => formatCount(count(value), intl.locale);
@@ -64,6 +72,18 @@ export function ShareFunnelTab({ rows, from, to }: Props) {
             }}
             height={220}
           />
+        )}
+        {sums.every((sum) => sum === null) ? null : (
+          // The labels inside the blocks of the chart are crowded where a step is far smaller than
+          // the one before it; the same numbers and ratios are written out here as plain text.
+          <ul
+            data-testid="invite-share-funnel-steps"
+            style={{ margin: '8px 0 0', paddingInlineStart: 20 }}
+          >
+            {funnel.map((one) => (
+              <li key={one.field}>{one.line}</li>
+            ))}
+          </ul>
         )}
       </Card>
       <Card

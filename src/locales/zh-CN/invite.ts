@@ -86,6 +86,8 @@ const messages: Record<string, string> = {
   'invite.share.step.linkClick': '链接点击',
   'invite.share.step.downloadClick': '下载点击',
   'invite.share.step.registered': '注册',
+  'invite.share.funnelStepFirst': '{stage}：{value}',
+  'invite.share.funnelStepRatio': '{stage}：{value}，相对上一步 {ratio}',
   'invite.share.linesTitle': '四个步骤的逐日趋势',
   'invite.share.noRows': '这个范围内没有任何一天有数据行。',
   'invite.share.detail': '明细',
