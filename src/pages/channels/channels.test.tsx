@@ -543,23 +543,30 @@ describe('the enabled switch', { timeout: 60000 }, () => {
     must(channelsState.channels.get('direct')).enabled = false;
     const { calls, user } = await load();
     const rowBefore = await rowOf('direct');
-    const present: boolean[] = [];
-    const watcher = new MutationObserver(() => {
-      present.push(rows().some((tr) => tr.getAttribute('data-row-key') === 'direct'));
+    // From now on the read of the list is held, so that the page is in the middle of reading again.
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
     });
-    watcher.observe(document.body, { childList: true, subtree: true });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) => {
+        const url = new URL(String(input), 'http://localhost');
+        if ((init.method ?? 'GET') === 'GET' && url.pathname === '/api/admin/channels') {
+          await gate;
+        }
+        return real(input, init);
+      }),
+    );
     await user.click(within(rowBefore).getByRole('switch'));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    await waitFor(() =>
-      expect(
-        calls.filter((c) => c.method === 'GET' && c.url.startsWith('/api/admin/channels')).length,
-      ).toBeGreaterThan(1),
-    );
     await settled();
-    watcher.disconnect();
-    expect(present.length).toBeGreaterThan(0);
-    expect(present.every(Boolean)).toBe(true);
     expect(rowBefore.isConnected).toBe(true);
+    expect(rows().some((tr) => tr.getAttribute('data-row-key') === 'direct')).toBe(true);
+    release();
+    await settled();
+    expect(rows().some((tr) => tr.getAttribute('data-row-key') === 'direct')).toBe(true);
   });
 
   it('does nothing when the question is answered with Cancel', async () => {

@@ -94,3 +94,48 @@ describe('useLatestRead: an old answer never replaces a new one', () => {
     expect(result.current.loading).toBe(true);
   });
 });
+
+describe('useLatestRead: keepWhileReading', () => {
+  /** A read whose answers are given one by one, in the order the reads are made. */
+  const readsOf = () => {
+    const answers = [deferred<string>(), deferred<string>()];
+    let n = 0;
+    return { answers, fetcher: () => answers[n++ % answers.length].promise };
+  };
+
+  it('keeps the last answer while a new read is under way', async () => {
+    const { answers, fetcher } = readsOf();
+    const { result } = renderHook(() => useLatestRead(fetcher, { keepWhileReading: true }), {
+      wrapper,
+    });
+    await act(async () => answers[0].resolve('first'));
+    await waitFor(() => expect(result.current.data).toBe('first'));
+    act(() => result.current.reload());
+    expect(result.current.data).toBe('first');
+    expect(result.current.loading).toBe(true);
+    await act(async () => answers[1].resolve('second'));
+    await waitFor(() => expect(result.current.data).toBe('second'));
+  });
+
+  it('clears the last answer when a new read starts, without the option', async () => {
+    const { answers, fetcher } = readsOf();
+    const { result } = renderHook(() => useLatestRead(fetcher), { wrapper });
+    await act(async () => answers[0].resolve('first'));
+    await waitFor(() => expect(result.current.data).toBe('first'));
+    act(() => result.current.reload());
+    expect(result.current.data).toBeNull();
+  });
+
+  it('clears the kept answer when the new read fails', async () => {
+    const { answers, fetcher } = readsOf();
+    const { result } = renderHook(() => useLatestRead(fetcher, { keepWhileReading: true }), {
+      wrapper,
+    });
+    await act(async () => answers[0].resolve('first'));
+    await waitFor(() => expect(result.current.data).toBe('first'));
+    act(() => result.current.reload());
+    await act(async () => answers[1].reject(failureOf('raw words')));
+    await waitFor(() => expect(result.current.failure).not.toBeNull());
+    expect(result.current.data).toBeNull();
+  });
+});

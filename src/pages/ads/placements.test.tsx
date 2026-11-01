@@ -389,24 +389,30 @@ describe('the enabled switch', { timeout: 30000 }, () => {
   it('keeps the table on the page while it reads again after a change (the rows do not vanish and come back)', async () => {
     const { calls, user } = await load();
     const rowBefore = await rowOf('app_open');
-    const present: boolean[] = [];
-    const watcher = new MutationObserver(() => {
-      present.push(tableRows().some((r) => r.textContent?.includes('app_open')));
+    // From now on the read of the placements is held, so that the page is in the middle of reading again.
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
     });
-    watcher.observe(document.body, { childList: true, subtree: true });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) => {
+        const url = new URL(String(input), 'http://localhost');
+        if ((init.method ?? 'GET') === 'GET' && url.pathname === '/api/admin/ads/placements') {
+          await gate;
+        }
+        return real(input, init);
+      }),
+    );
     await user.click(within(rowBefore).getByRole('switch'));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    await waitFor(() =>
-      expect(
-        calls.filter((c) => c.method === 'GET' && c.url.startsWith('/api/admin/ads/placements'))
-          .length,
-      ).toBeGreaterThan(1),
-    );
     await settled();
-    watcher.disconnect();
-    expect(present.length).toBeGreaterThan(0);
-    expect(present.every(Boolean)).toBe(true);
     expect(rowBefore.isConnected).toBe(true);
+    expect(tableRows().some((r) => r.textContent?.includes('app_open'))).toBe(true);
+    release();
+    await settled();
+    expect(tableRows().some((r) => r.textContent?.includes('app_open'))).toBe(true);
   });
 
   it('sends one request when it is pressed twice', async () => {

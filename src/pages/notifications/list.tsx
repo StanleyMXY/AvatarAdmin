@@ -5,6 +5,8 @@ import type { Dayjs } from 'dayjs';
 import { useState } from 'react';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   listNotifications,
   NOTIFICATION_CATEGORIES,
@@ -16,10 +18,8 @@ import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { pickedDay, utcDayRangeToInstants } from '../../utils/utcDay';
 import { NotificationDrawer } from './NotificationDrawer';
-import { PagedTable } from './PagedTable';
 import { SendModal } from './SendModal';
 import { adminText, codeText, instantText } from './texts';
-import { useServerPage } from './useServerPage';
 
 type Range = { from: string; to: string } | null;
 type Filters = {

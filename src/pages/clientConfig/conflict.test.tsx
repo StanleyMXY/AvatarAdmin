@@ -195,7 +195,10 @@ describe('the reload offered after a conflict', () => {
     ).toBeInTheDocument();
     refuse = false;
     await user.click(within(drawer).getByRole('tab', { name: /^Default/ }));
-    simulateOtherAdminEdit('privacyPolicyUrl', { '': 'https://example.com/theirs' });
+    simulateOtherAdminEdit('privacyPolicyUrl', {
+      '': 'https://example.com/theirs',
+      th: 'https://example.com/th/theirs',
+    });
     type(valueBox(drawer), 'https://example.com/mine-again');
     await user.click(save(drawer));
     await within(drawer).findByText('Modified by someone else');

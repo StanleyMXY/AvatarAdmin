@@ -3,12 +3,12 @@ import { Alert, Button, Flex, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { FailureBar } from '../../components/FailureBar';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { type EmailTemplate, listEmailTemplates } from '../../services/email';
 import { plainText } from '../../utils/plainText';
-import { FailureBar } from './FailureBar';
 import { TemplateEditor } from './TemplateEditor';
 import { adminText, instantText } from './texts';
-import { useLatestRead } from './useLatestRead';
 
 const isRecord = (row: unknown): row is EmailTemplate => typeof row === 'object' && row !== null;
 

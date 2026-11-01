@@ -1,8 +1,8 @@
 import { useIntl } from '@umijs/max';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DEFAULT_PAGE_SIZE } from '../../components/PagedListTable';
-import type { Page } from '../../request/errors';
-import { describeFailure } from '../../session/describe';
+import { DEFAULT_PAGE_SIZE } from '../components/PagedListTable';
+import type { Page } from '../request/errors';
+import { describeFailure } from '../session/describe';
 
 export type ServerPage<T> = {
   rows: T[];

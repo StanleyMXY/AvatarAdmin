@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal, Typography } from 'antd';
 import { useCallback, useState } from 'react';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { getSmsMeta, type SmsChannel, sendTestSms } from '../../services/sms';
@@ -8,7 +9,6 @@ import { describeFailure } from '../../session/describe';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { countText } from './texts';
-import { useLatestRead } from './useLatestRead';
 
 type Props = { channel: SmsChannel; onClose: () => void };
 

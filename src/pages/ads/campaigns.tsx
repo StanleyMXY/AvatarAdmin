@@ -4,8 +4,10 @@ import { Alert, App, Button, Flex, Input, Select, Tooltip, Typography } from 'an
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AdCampaign,
   CAMPAIGN_STATUSES,
@@ -21,10 +23,8 @@ import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { CampaignModal } from './CampaignModal';
 import { Checklist } from './Checklist';
-import { PagedTable } from './PagedTable';
 import { adminText, countText, instantText } from './texts';
 import { useOptions } from './useOptions';
-import { useServerPage } from './useServerPage';
 
 type Filters = { name: string; status: string };
 const NO_FILTERS: Filters = { name: '', status: '' };

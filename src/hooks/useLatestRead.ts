@@ -6,10 +6,16 @@ import { describeFailure } from '../session/describe';
  * Reads whenever `fetcher` changes (give it a stable function: `useCallback` over what is asked) and
  * again on `reload`. The answer, or the failure, of a read that was overtaken by a newer one (or by
  * leaving the page) is dropped, so an old answer never replaces a new one. `data` is null while a
- * read is under way and `loading` is true. `failure` is the words of the error code, never the
- * backend's own words.
+ * read is under way and `loading` is true, unless `keepWhileReading` is set: then what was read
+ * before stays until the new answer arrives (a table that is read again after a save does not
+ * vanish and come back); a failed read clears it either way. `failure` is the words of the error
+ * code, never the backend's own words.
  */
-export function useLatestRead<T>(fetcher: () => Promise<T>) {
+export function useLatestRead<T>(
+  fetcher: () => Promise<T>,
+  options: { keepWhileReading?: boolean } = {},
+) {
+  const keep = options.keepWhileReading === true;
   const intl = useIntl();
   const intlRef = useRef(intl);
   intlRef.current = intl;
@@ -20,7 +26,7 @@ export function useLatestRead<T>(fetcher: () => Promise<T>) {
 
   const reload = useCallback(async () => {
     const mine = ++counter.current;
-    setData(null);
+    if (!keep) setData(null);
     setFailure(null);
     setLoading(true);
     try {
@@ -30,10 +36,11 @@ export function useLatestRead<T>(fetcher: () => Promise<T>) {
       setLoading(false);
     } catch (caught) {
       if (mine !== counter.current) return;
+      setData(null);
       setFailure(describeFailure(intlRef.current, caught).text);
       setLoading(false);
     }
-  }, [fetcher]);
+  }, [fetcher, keep]);
 
   useEffect(() => {
     void reload();

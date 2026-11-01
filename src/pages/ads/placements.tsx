@@ -3,6 +3,7 @@ import { Alert, App, Button, Card, Flex, Spin, Switch, Table, Typography } from 
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { FailureBar } from '../../components/FailureBar';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdPlacement, listPlacements, updatePlacement } from '../../services/ads';
 import { describeFailure } from '../../session/describe';
@@ -12,7 +13,6 @@ import { DASH } from '../../utils/ratio';
 import { ConfigForm } from '../config/ConfigForm';
 import { AdsWarnings } from './AdsWarnings';
 import { Checklist } from './Checklist';
-import { FailureBar } from './FailureBar';
 import { PlacementModal } from './PlacementModal';
 import { dailyMax } from './placementRows';
 import { codeText, countText } from './texts';

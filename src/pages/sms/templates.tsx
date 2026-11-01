@@ -3,8 +3,11 @@ import { Alert, App, Button, Flex } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   deleteTemplate,
   listTemplates,
@@ -15,14 +18,11 @@ import {
 } from '../../services/sms';
 import { plainText } from '../../utils/plainText';
 import { isLastEnglishFallbackTemplate, isLastOtpTemplate } from './lastOtp';
-import { PagedTable } from './PagedTable';
 import { StatusSwitch } from './StatusSwitch';
 import { TemplateModal } from './TemplateModal';
 import { templateFailureText } from './templateFailure';
 import { orDash } from './texts';
 import { useLastOtpPrompt } from './useLastOtpPrompt';
-import { useLatestRead } from './useLatestRead';
-import { useServerPage } from './useServerPage';
 
 const NO_FILTERS: Record<string, never> = {};
 /** An enabled OTP row: when the backend refuses to delete or switch it off, the reason is the rule of contract 23.4, last or not (the page may not have known that it was the last). */

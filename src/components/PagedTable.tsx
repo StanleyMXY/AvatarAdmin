@@ -1,9 +1,9 @@
 import { Flex, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { HTMLAttributes } from 'react';
-import { PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
+import type { ServerPage } from '../hooks/useServerPage';
 import { FailureBar } from './FailureBar';
-import type { ServerPage } from './useServerPage';
+import { PAGE_SIZE_OPTIONS } from './PagedListTable';
 
 type Props<T> = {
   state: ServerPage<T>;

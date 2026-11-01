@@ -3,8 +3,11 @@ import { Alert, App, Button, Flex, Select, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AppVersion,
   deleteAppVersion,
@@ -23,10 +26,7 @@ import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { ActivateModal } from './ActivateModal';
 import { distributionOf } from './distribution';
-import { PagedTable } from './PagedTable';
 import { adminText, codeText, instantText, orDash } from './texts';
-import { useLatestRead } from './useLatestRead';
-import { useServerPage } from './useServerPage';
 import { VersionModal } from './VersionModal';
 
 type Filters = { channelCode: string; platform: string; status: string };

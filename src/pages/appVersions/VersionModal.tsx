@@ -13,6 +13,7 @@ import {
   Typography,
 } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { FailureBar } from '../../components/FailureBar';
 import { UploadField } from '../../components/UploadField';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -33,7 +34,6 @@ import { trimSpec } from '../../utils/trimSpec';
 import { isUploadIdRejection } from '../../utils/uploadErrors';
 import { ChangelogField } from './ChangelogField';
 import { distributionOf } from './distribution';
-import { FailureBar } from './FailureBar';
 import { validateStoreUrl } from './storeUrl';
 import { codeText } from './texts';
 import { useUploadSlot } from './uploadSlot';

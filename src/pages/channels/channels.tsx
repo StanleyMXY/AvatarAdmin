@@ -3,6 +3,8 @@ import { Alert, App, Button, Flex, Popconfirm, Switch, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { FailureBar } from '../../components/FailureBar';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type ChannelPackage,
@@ -11,9 +13,7 @@ import {
 } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
 import { DASH } from '../../utils/ratio';
-import { FailureBar } from '../appVersions/FailureBar';
 import { codeText, instantText } from '../appVersions/texts';
-import { useLatestRead } from '../appVersions/useLatestRead';
 import { ChannelModal } from './ChannelModal';
 
 /**
