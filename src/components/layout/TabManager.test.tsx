@@ -298,6 +298,85 @@ describe('TabManager: closing', () => {
   });
 });
 
+describe('TabManager: the tab menu without a mouse', () => {
+  const tabButton = (name: string) => tab(name).querySelector('[role="tab"]') as HTMLElement;
+
+  it('opens with the menu key of the keyboard on the focused tab', async () => {
+    const ui = render(<Shell />);
+    visit('/users/list', ui);
+    fireEvent.keyDown(tabButton('User list'), { key: 'ContextMenu' });
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByText('Close others')).toBeInTheDocument();
+  });
+
+  it('opens with Shift+F10, and the entry chosen acts on the tab it was opened from', async () => {
+    const ui = render(<Shell />);
+    visit('/users/list', ui);
+    visit('/users/abuse', ui);
+    fireEvent.keyDown(tabButton('User list'), { key: 'F10', shiftKey: true });
+    const menu = await screen.findByRole('menu');
+    fireEvent.click(within(menu).getByText('Close'));
+    expect(tabLabels()).toEqual(['Overview', 'Multi-account']);
+  });
+
+  it('does not open for F10 alone or for other keys', () => {
+    const ui = render(<Shell />);
+    visit('/users/list', ui);
+    fireEvent.keyDown(tabButton('User list'), { key: 'F10' });
+    fireEvent.keyDown(tabButton('User list'), { key: 'a', shiftKey: true });
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  describe('with a finger', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('opens after the finger has stayed on the tab for half a second', async () => {
+      const ui = render(<Shell />);
+      visit('/users/list', ui);
+      fireEvent.touchStart(tabButton('User list'), { touches: [{ clientX: 5, clientY: 5 }] });
+      await act(async () => {
+        vi.advanceTimersByTime(499);
+      });
+      expect(screen.queryByRole('menu')).toBeNull();
+      await act(async () => {
+        vi.advanceTimersByTime(2);
+      });
+      expect(screen.getByRole('menu')).toBeInTheDocument();
+    });
+
+    it('does not open when the finger is lifted or moves before that, which is an ordinary tap or a scroll', async () => {
+      const ui = render(<Shell />);
+      visit('/users/list', ui);
+      fireEvent.touchStart(tabButton('User list'), { touches: [{ clientX: 5, clientY: 5 }] });
+      fireEvent.touchEnd(tabButton('User list'));
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.queryByRole('menu')).toBeNull();
+      fireEvent.touchStart(tabButton('User list'), { touches: [{ clientX: 5, clientY: 5 }] });
+      fireEvent.touchMove(tabButton('User list'), { touches: [{ clientX: 40, clientY: 5 }] });
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.queryByRole('menu')).toBeNull();
+    });
+
+    it('does not take the lift after a long press for a tap on the tab', async () => {
+      const ui = render(<Shell />);
+      visit('/dashboard', ui);
+      visit('/users/list', ui);
+      history.push.mockClear();
+      fireEvent.touchStart(tabButton('Overview'), { touches: [{ clientX: 5, clientY: 5 }] });
+      await act(async () => {
+        vi.advanceTimersByTime(600);
+      });
+      const lifted = fireEvent.touchEnd(tabButton('Overview'));
+      expect(lifted).toBe(false); // the default action (the click that would open the tab) is cancelled
+    });
+  });
+});
+
 describe('TabManager: refresh', () => {
   it('remounts the open page when its tab is refreshed', async () => {
     const ui = render(<Shell />);

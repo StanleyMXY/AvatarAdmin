@@ -72,14 +72,34 @@ describe('layout', () => {
     expect(screen.getByText('Page not found')).toBeInTheDocument();
   });
 
-  it('draws no menu or header only while the account could not be read and the token is still held', () => {
+  it('draws no menu or header unless an account is known: not while it loads, not when signed out, not when it could not be read', () => {
     expect(layout({ initialState: { unavailable: true } }).pure).toBe(true);
+    expect(layout({ initialState: {} }).pure).toBe(true);
+    expect(layout({ initialState: undefined }).pure).toBe(true);
     expect(layout({ initialState: { me: signedIn(false, []), unavailable: true } }).pure).toBe(
       false,
     );
-    expect(layout({ initialState: {} }).pure).toBe(false);
-    expect(layout({ initialState: undefined }).pure).toBe(false);
     expect(layout({ initialState: { me: signedIn(false, []) } }).pure).toBe(false);
+  });
+
+  it('keeps the tab bar above the 403 page, as it is above every other page', () => {
+    setTestInitialState({ me: signedIn(false, []) });
+    setTestLocation({ pathname: '/users/list', search: '' });
+    const c = config(signedIn(false, []));
+    render(
+      <IntlProvider
+        locale="en-US"
+        messages={{
+          'pages.403.title': 'No permission',
+          'menu.dashboard.overview': 'Overview',
+        }}
+        onError={() => {}}
+      >
+        {c.unAccessible}
+      </IntlProvider>,
+    );
+    expect(screen.getByText('No permission')).toBeInTheDocument();
+    expect(screen.getByText('Overview', { selector: '.ant-tabs-tab *' })).toBeInTheDocument();
   });
 
   it('writes the identifier of a parameter page in the window title, and leaves the others alone', () => {

@@ -57,9 +57,10 @@ export const layout = ({ initialState }: { initialState?: InitialState }) => {
     title: buildVars.productName,
     logo: buildVars.logoUrl,
     layout: 'mix' as const,
-    // The account could not be read (token still held): nothing of the shell (menu,
-    // header) belongs to a person we cannot name yet, so the notice fills the whole page.
-    pure: !me && initialState?.unavailable === true,
+    // Nothing of the shell (menu, header) belongs to a person we cannot name: not while the account
+    // is being read, not when nobody is signed in (the gate is sending them to sign-in), and not
+    // when it could not be read (token still held; the notice fills the whole page).
+    pure: !me,
     fixedHeader: true,
     fixSiderbar: true,
     siderWidth: LAYOUT.siderWidth,
@@ -69,9 +70,13 @@ export const layout = ({ initialState }: { initialState?: InitialState }) => {
     pageTitleRender,
     actionsRender: () => [<LangSwitch key="lang" />, <ThemeSwitch key="theme" />],
     avatarProps: { render: () => <AccountMenu /> },
+    // The 403 page sits under the tab bar like every other page: the tabs are not unmounted and
+    // read back from storage when a limited account opens a page it may not see.
     unAccessible: (
       <SessionGate>
-        <Forbidden />
+        <TabManager routes={appRoutes} can={can} locale={getLocale()}>
+          <Forbidden />
+        </TabManager>
       </SessionGate>
     ),
     noFound: <NotFoundPage />,

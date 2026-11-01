@@ -1,6 +1,6 @@
 import { history, useIntl, useLocation } from '@umijs/max';
 import { Dropdown, Tabs } from 'antd';
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AdminRoute } from '../../access/canAccess';
 import { markServiceReachable } from '../../request/serviceStatus';
 import { indexPages, matchPage, pageIdentifier, titleWithIdentifier } from './pageIndex';
@@ -10,6 +10,11 @@ export const TABS_STORAGE_KEY = 'avatar-admin.tabs';
 
 /** The overview tab: always the first, never closed. */
 const PINNED = '/dashboard';
+
+/** How long a finger stays on a tab before the menu opens (a touch screen has no right click). */
+const LONG_PRESS_MS = 500;
+/** A finger that moves further than this many pixels is scrolling, not pressing. */
+const LONG_PRESS_SLOP = 10;
 
 type Props = {
   routes: AdminRoute[];
@@ -65,6 +70,16 @@ export function TabManager({ routes, can, locale, children }: Props) {
     return allowed(PINNED) ? [PINNED, ...kept] : kept;
   });
   const [refreshKeys, setRefreshKeys] = useState<Record<string, number>>({});
+  // The tab whose menu is open. Besides the right click, the menu key of the keyboard, Shift+F10 and
+  // a long press open it, so the entries (refresh, close others ...) do not need a mouse.
+  const [menuPath, setMenuPath] = useState<string | null>(null);
+  const press = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+  const pressed = useRef(false);
+  const cancelPress = useCallback(() => {
+    if (press.current) clearTimeout(press.current.timer);
+    press.current = null;
+  }, []);
+  useEffect(() => cancelPress, [cancelPress]);
 
   // A page that is opened gets a tab.
   useEffect(() => {
@@ -162,12 +177,72 @@ export function TabManager({ routes, can, locale, children }: Props) {
         items={items}
         renderTabBar={(props, DefaultTabBar) => (
           <DefaultTabBar {...props}>
-            {(node) => (
-              // The wrapper has no box of its own; it only lets a right click anywhere on the tab open the menu.
-              <Dropdown key={node.key} trigger={['contextMenu']} menu={menuFor(String(node.key))}>
-                <span style={{ display: 'contents' }}>{node}</span>
-              </Dropdown>
-            )}
+            {(node) => {
+              const path = String(node.key);
+              return (
+                <Dropdown
+                  key={node.key}
+                  trigger={['contextMenu']}
+                  open={menuPath === path}
+                  onOpenChange={(open) =>
+                    setMenuPath((current) => (open ? path : current === path ? null : current))
+                  }
+                  menu={menuFor(path)}
+                >
+                  {/* The wrapper has no box of its own; it only lets a right click anywhere on the tab open
+                      the menu, and receives the keys and touches that bubble up from the tab itself. */}
+                  {/* biome-ignore lint/a11y/noStaticElementInteractions: the interactive element is the tab inside it; this only listens to what bubbles up */}
+                  <span
+                    style={{ display: 'contents' }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                        event.preventDefault();
+                        setMenuPath(path);
+                      }
+                    }}
+                    onTouchStart={(event) => {
+                      cancelPress();
+                      pressed.current = false;
+                      const touch = event.touches[0];
+                      if (event.touches.length !== 1 || !touch) return;
+                      press.current = {
+                        x: touch.clientX,
+                        y: touch.clientY,
+                        timer: setTimeout(() => {
+                          press.current = null;
+                          pressed.current = true;
+                          setMenuPath(path);
+                        }, LONG_PRESS_MS),
+                      };
+                    }}
+                    onTouchMove={(event) => {
+                      const touch = event.touches[0];
+                      const start = press.current;
+                      if (
+                        start &&
+                        touch &&
+                        Math.hypot(touch.clientX - start.x, touch.clientY - start.y) >
+                          LONG_PRESS_SLOP
+                      ) {
+                        cancelPress();
+                      }
+                    }}
+                    onTouchEnd={(event) => {
+                      cancelPress();
+                      // The lift after a long press must not also count as a tap on the tab.
+                      if (pressed.current && event.cancelable) event.preventDefault();
+                      pressed.current = false;
+                    }}
+                    onTouchCancel={() => {
+                      cancelPress();
+                      pressed.current = false;
+                    }}
+                  >
+                    {node}
+                  </span>
+                </Dropdown>
+              );
+            }}
           </DefaultTabBar>
         )}
         onChange={open}
