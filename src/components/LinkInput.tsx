@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { Input, Typography } from 'antd';
+import { Form, Input, Typography } from 'antd';
 import type { Rule } from 'antd/es/form';
 import { useState } from 'react';
 import { type LinkReasonKey, validateServerLink } from '../utils/linkRule';
@@ -51,8 +51,11 @@ export function LinkInput({
   const intl = useIntl();
   // An empty required box is not marked before the person has typed in it or left it.
   const [touched, setTouched] = useState(false);
+  // A form that refused the box (a send pressed with the box empty) counts as having been there:
+  // a rule that stays quiet because this box says the reason must not leave it unsaid.
+  const { status } = Form.Item.useStatus();
   const check =
-    value === '' && (!required || !touched)
+    value === '' && (!required || !(touched || status === 'error'))
       ? ({ ok: true } as const)
       : validateServerLink(value, { maxLength });
   return (
