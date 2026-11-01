@@ -65,7 +65,7 @@ export type TemplateFields = {
   linkTarget: string;
   enabled: boolean;
   /** The id of the picture uploaded first. Leave out to keep the picture; an address is never sent. */
-  imageUploadId?: string;
+  uploadId?: string;
 };
 
 export type TemplateCreate = TemplateFields & { triggerReason: string; locale: string };
@@ -86,7 +86,7 @@ export type ContentFields = {
   body: string;
   linkType: LinkType;
   linkTarget: string;
-  imageUploadId?: string;
+  uploadId?: string;
 };
 
 // ---- manual tasks (PUSH:SEND) ----

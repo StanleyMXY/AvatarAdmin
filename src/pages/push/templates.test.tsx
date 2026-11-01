@@ -390,7 +390,8 @@ describe('the template page: new template', { timeout: 60000 }, () => {
       linkTarget: '',
       enabled: false,
     });
-    expect(String((posted.body as { imageUploadId: string }).imageUploadId)).toMatch(/^up-img-/);
+    expect(String((posted.body as { uploadId: string }).uploadId)).toMatch(/^up-img-/);
+    expect(Object.keys(posted.body as object)).not.toContain('imageUploadId');
     expect(JSON.stringify(posted.body)).not.toMatch(/imageUrl|mock-files|http/);
     await dialogsClosed();
     // the new row is in the list (a button with the whole text in a popover), next to the field of the closing dialog
@@ -409,7 +410,7 @@ describe('the template page: new template', { timeout: 60000 }, () => {
     await fillNew(user, dialog);
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('imageUploadId');
+    expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('uploadId');
   });
 
   it('sends one request when the form is submitted again while the first request is still on its way', async () => {
@@ -540,7 +541,7 @@ describe('the template page: the picture', { timeout: 60000 }, () => {
     expect(await within(dialog).findByText(/Wrong file type/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('imageUploadId');
+    expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('uploadId');
   });
 
   it('shows the size limit from meta and stops a larger file before any upload', async () => {
@@ -766,7 +767,7 @@ describe('the template page: the rule of the default language', { timeout: 60000
         enabled: true,
       },
     });
-    expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('imageUploadId');
+    expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('uploadId');
     expect(await screen.findByText(RULE_EN)).toBeInTheDocument();
     // refused: the switch is back off
     await waitFor(async () =>

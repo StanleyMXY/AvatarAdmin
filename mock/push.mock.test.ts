@@ -126,7 +126,7 @@ describe('templates', () => {
     const id = await upload();
     const r = await send(
       TEMPLATE_CREATE,
-      template({ imageUploadId: id, imageUrl: 'https://evil.example/x.png' }),
+      template({ uploadId: id, imageUrl: 'https://evil.example/x.png' }),
     );
     expect(r.status).toBe(200);
     expect(r.body.data.imageUrl).toMatch(/mock-files/);
@@ -176,15 +176,15 @@ describe('templates', () => {
     expect(url.body.data.details).toEqual([{ ref: 'linkTarget', reason: 'NOT_HTTPS' }]);
     const none = await send(TEMPLATE_CREATE, template({ linkType: 'NONE', linkTarget: 'store' }));
     expect(none.body.data.details).toEqual([{ ref: 'linkTarget', reason: 'OUT_OF_RANGE' }]);
-    const missing = await send(TEMPLATE_CREATE, template({ imageUploadId: 'nope' }));
+    const missing = await send(TEMPLATE_CREATE, template({ uploadId: 'nope' }));
     expect(missing.status).toBe(404);
     expect(missing.body.code).toBe('RESOURCE_NOT_FOUND');
   });
 
   it('uses an upload once: the second use is 409 INVALID_STATE', async () => {
     const id = await upload();
-    expect((await send(TEMPLATE_CREATE, template({ imageUploadId: id }))).status).toBe(200);
-    const again = await send(TEMPLATE_CREATE, template({ locale: 'fr', imageUploadId: id }));
+    expect((await send(TEMPLATE_CREATE, template({ uploadId: id }))).status).toBe(200);
+    const again = await send(TEMPLATE_CREATE, template({ locale: 'fr', uploadId: id }));
     expect(again.status).toBe(409);
     expect(again.body.code).toBe('INVALID_STATE');
   });
@@ -386,7 +386,7 @@ describe('templates', () => {
     it('does not use the upload of a refused write', async () => {
       const id = await upload();
       refusal(
-        await send(TEMPLATE_UPDATE, update({ imageUploadId: id }), {
+        await send(TEMPLATE_UPDATE, update({ uploadId: id }), {
           id: find('streak_at_risk', 'th').id,
         }),
       );

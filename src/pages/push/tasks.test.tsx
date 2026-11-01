@@ -468,9 +468,7 @@ describe('the manual task page: new task', { timeout: 60000 }, () => {
     await within(dialog).findByText(/Uploaded: promo\.png/);
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect(String((writesOf(calls)[0].body as { imageUploadId: string }).imageUploadId)).toMatch(
-      /^up-img-/,
-    );
+    expect(String((writesOf(calls)[0].body as { uploadId: string }).uploadId)).toMatch(/^up-img-/);
     expect(JSON.stringify(writesOf(calls)[0].body)).not.toMatch(/imageUrl|mock-files|http/);
   });
 

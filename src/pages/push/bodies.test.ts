@@ -38,7 +38,7 @@ describe('contentFields', () => {
     // U+3000 is in the contract's set and goes; U+200B is not and stays.
     expect(body.title).toBe(`Hola ${String.fromCharCode(0x200b)}`);
     expect(body).toEqual({ title: body.title, body: 'cuerpo', linkType: 'NONE', linkTarget: '' });
-    expect('imageUploadId' in body).toBe(false);
+    expect('uploadId' in body).toBe(false);
     expect('imageUrl' in body).toBe(false);
   });
 
@@ -50,7 +50,7 @@ describe('contentFields', () => {
     expect(body).toMatchObject({
       linkType: 'URL',
       linkTarget: 'https://example.com/a',
-      imageUploadId: 'up-1',
+      uploadId: 'up-1',
     });
     expect(Object.keys(body)).not.toContain('imageUrl');
   });
