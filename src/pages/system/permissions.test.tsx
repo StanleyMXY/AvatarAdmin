@@ -130,6 +130,17 @@ describe('the page of the permission tree', () => {
     expect(keys.indexOf('USER:BAN')).toBeGreaterThan(keys.indexOf('USER:VIEW'));
   });
 
+  it('pins the actions column to the right edge, header and cells, while the other columns scroll', async () => {
+    await load();
+    const header = [...document.querySelectorAll('.ant-table-thead th')].find(
+      (th) => th.textContent === 'Actions',
+    );
+    expect(header?.className).toContain('ant-table-cell-fix-end');
+    const cells = (await rowOf('USER:VIEW')).querySelectorAll('td');
+    expect(cells[cells.length - 1].className).toContain('ant-table-cell-fix-end');
+    expect(cells[0].className).not.toContain('ant-table-cell-fix-end');
+  });
+
   it('names the nodes by the interface language, then the other language, then the code', async () => {
     custom('CUSTOM:ZH_ONLY', null, { nameEn: null, nameZh: '只有中文' });
     custom('CUSTOM:EN_ONLY', null, { nameZh: '', nameEn: 'English only' });

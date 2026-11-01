@@ -64,14 +64,6 @@ function actionsColumnsOf(file: string): Found[] {
   return found;
 }
 
-// The pages of the system management are changed by other work at the moment; they follow once
-// that is finished (roles and admins already pin the column, permissions does not yet).
-const LATER = new Set([
-  'src/pages/system/admins.tsx',
-  'src/pages/system/permissions.tsx',
-  'src/pages/system/roles.tsx',
-]);
-
 describe('the actions column of a table', () => {
   it('stays at the right edge when the table scrolls sideways (Ant Design needs scroll.x for it)', () => {
     const { container } = render(
@@ -95,9 +87,7 @@ describe('the actions column of a table', () => {
     const all = files('src').flatMap(actionsColumnsOf);
     // The scan must still see the columns (a guard against a scan that finds nothing).
     expect(all.length).toBeGreaterThanOrEqual(30);
-    const missing = all
-      .filter((found) => !found.shared && !LATER.has(found.where.replace(/:\d+$/, '')))
-      .map((found) => found.where);
+    const missing = all.filter((found) => !found.shared).map((found) => found.where);
     expect(missing).toEqual([]);
   });
 });

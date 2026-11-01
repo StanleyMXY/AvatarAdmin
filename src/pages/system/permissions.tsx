@@ -2,6 +2,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { useLatestRead } from '../../hooks/useLatestRead';
@@ -124,6 +125,7 @@ export default function PermissionsPage() {
     ...(canWrite
       ? [
           {
+            ...ACTIONS_COLUMN,
             key: 'actions',
             title: t('system.permissions.col.actions'),
             render: (_: unknown, row: Row) => <RowActions actions={actionsOf(row.node)} />,

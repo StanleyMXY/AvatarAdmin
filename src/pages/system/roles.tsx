@@ -2,6 +2,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import type { TableColumnsType } from 'antd';
 import { Alert, App, Button, Flex } from 'antd';
 import { useCallback, useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { type AdminRole, deleteRole, listRoles } from '../../services/system';
@@ -84,9 +85,9 @@ export default function RolesPage() {
     ...(canManage
       ? [
           {
+            ...ACTIONS_COLUMN,
             title: t('system.roles.col.actions'),
             key: 'actions',
-            fixed: 'right' as const,
             render: (_: unknown, row: AdminRole) => <RowActions actions={actionsOf(row)} />,
           },
         ]
