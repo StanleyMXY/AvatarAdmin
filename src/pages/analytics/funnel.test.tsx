@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { analyticsStore } from '../../../mock/_core/analyticsData';
+import { analyticsStore, FUNNEL_RATE_LIMIT_STEP } from '../../../mock/_core/analyticsData';
 import * as analyticsMock from '../../../mock/analytics.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
@@ -500,6 +500,19 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(busyMarks()).toBeNull();
     expect(funnelCalls(calls)).toHaveLength(3);
+  });
+
+  it('gets the 429 of the fake backend with a step that is named for it, which is how it is looked at with dev:mock (the count of funnels in flight cannot be raised there)', async () => {
+    const { user, calls } = await openPage();
+    await choose(user, presetName(0));
+    await screen.findByTestId('funnel-result');
+    expect(analyticsStore.funnelInFlight).toBe(0);
+    await addStep(user, FUNNEL_RATE_LIMIT_STEP);
+    await user.click(queryButton());
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(enUS['error.RATE_LIMITED']);
+    expect(lastFunnel(calls).searchParams.get('steps')).toContain(FUNNEL_RATE_LIMIT_STEP);
+    expect(queryButton()).toBeEnabled();
   });
 
   it('disables Query while a query runs (a second press would take another place of the backend), and enables it again after the answer and after a 429', async () => {

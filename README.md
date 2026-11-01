@@ -41,6 +41,8 @@ husky hooks.
 
 `npm run dev:mock` serves `/api/admin/**` from `mock/` (Umi's mock loader, development server only, never part of the build). The state is in memory; it survives saving a mock file (the loader reads the files again, the state stays) and starts again when the dev server restarts. There is no proxy in this mode: an endpoint that has no mock is answered with the app's HTML page (the request layer reports `INVALID_RESPONSE`) instead of reaching whatever listens on `ADMIN_API_PROXY_TARGET`. `npm run dev:api` turns it off (`MOCK=none`) and proxies `/api` to `ADMIN_API_PROXY_TARGET`; the front end code is the same in both modes. The loader skips `mock/_core/**` (helpers) and `mock/**/*.test.ts`.
 
+The mock answers at once, so some answers the real backend gives under load cannot come by themselves. For the funnel page, add the step `mock:rate-limited` (type it in the steps box) and press Query: the fake backend answers 429 `RATE_LIMITED`, as when `analytics.funnel_max_concurrency` funnels are already being computed, so the error and its retry can be looked at. The name is a development switch of the mock (`FUNNEL_RATE_LIMIT_STEP` in `mock/_core/analyticsData.ts`); it is checked after the steps, the window and the range, like the limit. The build has no mock, so the name does nothing there (see the `dist/` check below).
+
 **The accounts, passwords and the verification code below exist only in the mock backend. They are fakes, not secrets, and the real backend does not know them.**
 
 | User name | Password | State | Permissions |
@@ -94,7 +96,7 @@ npm run check:config-keys -- <contract path>
 
 The spec and the contract are the snapshots in `docs/shared-snapshots/` (see the README there);
 `check:codes` reads the exclusions from `docs/superpowers/handoff/permission-code-exclusions.txt`.
-`grep -r "mock-password" dist/` must find nothing: the fake backend is not part of the build.
+`grep -r "mock-password" dist/` and `grep -r "mock:rate-limited" dist/` must find nothing: the fake backend is not part of the build.
 
 ### Dependency audit
 

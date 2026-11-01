@@ -3,6 +3,7 @@ import { trimSpec } from '../src/utils/trimSpec';
 import {
   type AnalyticsEventRow,
   analyticsStore,
+  FUNNEL_RATE_LIMIT_STEP,
   maskIp,
   type SavedFunnelRow,
 } from './_core/analyticsData';
@@ -236,7 +237,10 @@ export default {
     );
     const range = liveRange(req);
     const limit = currentValue('analytics.funnel_max_concurrency');
-    if (analyticsStore.funnelInFlight >= (typeof limit === 'number' ? limit : 2)) {
+    if (
+      steps.includes(FUNNEL_RATE_LIMIT_STEP) ||
+      analyticsStore.funnelInFlight >= (typeof limit === 'number' ? limit : 2)
+    ) {
       return fail(429, 'RATE_LIMITED', 'Too many funnels are being computed');
     }
     const depths = [...subjectsOf(inRange(analyticsStore.events, range)).values()].map((list) =>
