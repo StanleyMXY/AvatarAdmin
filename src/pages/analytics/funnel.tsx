@@ -7,6 +7,7 @@ import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ReadState } from '../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import {
@@ -85,21 +86,21 @@ export default function FunnelPage() {
 
   // The query: the newest one is what is shown, whichever answer arrives first.
   const [result, setResult] = useState<FunnelStepResult[] | null>(null);
-  const [queryFailure, setQueryFailure] = useState<string | null>(null);
+  const { text: queryFailure, fail, clear } = useFailure();
   const [querying, setQuerying] = useState(false);
   const begin = useLatestCall();
   /** Asks for `asked` (the form as it is by default). */
   const query = async (asked: { steps: string[]; windowHours: number } = body()) => {
     const isCurrent = begin();
     setQuerying(true);
-    setQueryFailure(null);
+    clear();
     try {
       const answer = await getFunnel({ ...asked, ...range });
       if (isCurrent()) setResult(answer.steps);
     } catch (error) {
       if (isCurrent()) {
         setResult(null);
-        setQueryFailure(describeFailure(intl, error).text);
+        fail(error);
       }
     } finally {
       if (isCurrent()) setQuerying(false);
@@ -114,7 +115,7 @@ export default function FunnelPage() {
   const dropResult = () => {
     begin();
     setResult(null);
-    setQueryFailure(null);
+    clear();
     setQuerying(false);
   };
 
