@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { App, Button, Popover, Space } from 'antd';
-import type { CSSProperties } from 'react';
+import { type CSSProperties, useState } from 'react';
 
 type Props = {
   text: string | null | undefined;
@@ -38,6 +38,7 @@ async function writeClipboard(text: string): Promise<void> {
 export function EllipsisPopoverText({ text, lines = 2, width = 240, dir = 'auto' }: Props) {
   const intl = useIntl();
   const { message } = App.useApp();
+  const [open, setOpen] = useState(false);
   if (text === null || text === undefined || text === '') return <span>—</span>;
 
   const copy = async () => {
@@ -61,11 +62,11 @@ export function EllipsisPopoverText({ text, lines = 2, width = 240, dir = 'auto'
   );
 
   return (
-    <Popover trigger="click" content={full}>
+    <Popover trigger="click" open={open} onOpenChange={setOpen} content={full}>
       <button
         type="button"
         dir={dir}
-        aria-haspopup="dialog"
+        aria-expanded={open}
         title={intl.formatMessage({ id: 'pages.common.expand' })}
         data-lines={lines}
         style={{

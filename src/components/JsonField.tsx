@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Input, Typography } from 'antd';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { trimSpec } from '../utils/trimSpec';
 
 /** The parsed value of `text`, or `{ ok: false }` when it is not JSON. */
@@ -27,11 +27,15 @@ export function JsonField({ value = '', onChange, onValidityChange, allowEmpty, 
   const intl = useIntl();
   const empty = trimSpec(value) === '';
   const valid = empty ? Boolean(allowEmpty) : parseJson(value).ok;
+  // The parent often passes a new function on every render: it is called through a ref, so the
+  // report is made when the validity changes and not each time the parent draws again.
+  const report = useRef(onValidityChange);
+  report.current = onValidityChange;
   useEffect(() => {
-    onValidityChange?.(valid);
-  }, [valid, onValidityChange]);
+    report.current?.(valid);
+  }, [valid]);
   // A box that is gone cannot hold the form back.
-  useEffect(() => () => onValidityChange?.(true), [onValidityChange]);
+  useEffect(() => () => report.current?.(true), []);
   return (
     <div>
       <Input.TextArea

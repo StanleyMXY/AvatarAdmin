@@ -93,4 +93,20 @@ describe('EllipsisPopoverText', () => {
     renderPage(<EllipsisPopoverText text="Hello there" />);
     expect(screen.getByRole('button', { name: 'Hello there' })).toBeInTheDocument();
   });
+
+  it('tells assistive technology whether the whole text is open, and claims no popup kind it is not', async () => {
+    const user = userEvent.setup();
+    renderPage(<EllipsisPopoverText text="Hello there" />);
+    const cell = screen.getByRole('button', { name: 'Hello there' });
+    expect(cell).toHaveAttribute('aria-expanded', 'false');
+    // The popover antd draws is a tooltip (it has a copy button but no dialog semantics of its own)
+    expect(cell).not.toHaveAttribute('aria-haspopup', 'dialog');
+    await user.click(cell);
+    await screen.findByTestId('full-text');
+    expect(cell).toHaveAttribute('aria-expanded', 'true');
+    // the cell is described by the popover once it is open, and the copy button can be reached by name
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    await user.click(cell);
+    await waitFor(() => expect(cell).toHaveAttribute('aria-expanded', 'false'));
+  });
 });

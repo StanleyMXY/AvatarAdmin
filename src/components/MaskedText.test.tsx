@@ -26,12 +26,24 @@ describe('MaskedText', () => {
     as([]);
     const { unmount } = renderPage(<MaskedText value="***" needsCode="USER:EMAIL_VIEW" />);
     expect(
-      screen.getByText(/USER:EMAIL_VIEW|permission to see the full value/),
+      screen.getByText('Needs the View full email addresses permission to see the full value'),
     ).toBeInTheDocument();
     unmount();
     as(['USER:EMAIL_VIEW']);
     renderPage(<MaskedText value="***" needsCode="USER:EMAIL_VIEW" />);
     expect(screen.queryByText(/permission to see the full value/)).toBeNull();
+  });
+
+  it('names the permission in the language of the page, and by its code when the code has no name', () => {
+    as([]);
+    const zh = renderPage(<MaskedText value="***" needsCode="USER:EMAIL_VIEW" />, 'zh-CN');
+    expect(screen.getByText('需要 查看完整邮箱 权限才能看完整值')).toBeInTheDocument();
+    zh.unmount();
+    // a code the language files do not name is shown as the code, not as "undefined" or nothing
+    renderPage(<MaskedText value="***" needsCode={'NO:SUCH_CODE' as never} />);
+    expect(
+      screen.getByText('Needs the NO:SUCH_CODE permission to see the full value'),
+    ).toBeInTheDocument();
   });
 
   it('keeps a long value without spaces inside its box and works for any script', () => {
