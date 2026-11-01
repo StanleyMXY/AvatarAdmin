@@ -21,7 +21,7 @@ import { useAdminMeta } from '../../session/useSession';
 import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { formatCount, formatPercent } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from './defaultRange';
 import { FunnelNameModal } from './FunnelNameModal';
 import {
   DEFAULT_WINDOW_HOURS,
@@ -59,7 +59,7 @@ export default function FunnelPage() {
   const [mode] = useThemeMode();
   const chartTheme = getChartTheme(mode);
 
-  const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [range, setRange] = useState<DayRange>(() => defaultRange(meta.analyticsLiveMaxRangeDays));
   const [steps, setSteps] = useState<string[]>([]);
   const [windowHours, setWindowHours] = useState<number | null>(DEFAULT_WINDOW_HOURS);
   const [touched, setTouched] = useState(false);
@@ -105,6 +105,18 @@ export default function FunnelPage() {
     }
   };
 
+  /**
+   * The form changed: the result on the screen (or the answer still on its way) belongs to the form
+   * as it was, so it goes. The numbers of another window next to the steps of this form would be read as
+   * the numbers of this form.
+   */
+  const dropResult = () => {
+    counter.current += 1;
+    setResult(null);
+    setQueryFailure(null);
+    setQuerying(false);
+  };
+
   /** The Query button and Retry: the form as it is, if it can be asked. */
   const ask = () => {
     if (valid && !querying) void query(body());
@@ -114,6 +126,7 @@ export default function FunnelPage() {
     setSelectedId(id);
     const funnel = savedList.find((f) => f.id === id);
     if (funnel) {
+      dropResult();
       setSteps(funnel.steps);
       setWindowHours(funnel.windowHours);
       setTouched(true);
@@ -203,6 +216,7 @@ export default function FunnelPage() {
               onChange={(values: string[]) => {
                 setSteps(values);
                 setTouched(true);
+                dropResult();
               }}
             />
           </div>
@@ -219,6 +233,7 @@ export default function FunnelPage() {
               onChange={(value) => {
                 setWindowHours(typeof value === 'number' ? value : null);
                 setTouched(true);
+                dropResult();
               }}
               style={{ width: 160 }}
             />
@@ -227,7 +242,10 @@ export default function FunnelPage() {
             <Flex gap={12} wrap align="center">
               <DateRangeUtc
                 value={range}
-                onChange={setRange}
+                onChange={(next) => {
+                  setRange(next);
+                  dropResult();
+                }}
                 maxDays={meta.analyticsLiveMaxRangeDays ?? undefined}
               />
               <UtcNotice />

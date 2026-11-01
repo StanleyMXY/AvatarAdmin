@@ -7,7 +7,7 @@ import { UtcNotice } from '../../components/stat/UtcNotice';
 import { type EventSummaryRow, getEventSummary } from '../../services/analytics';
 import { useAdminMeta } from '../../session/useSession';
 import { formatCount } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from './defaultRange';
 import { ReadState } from './ReadState';
 import { useRead } from './useRead';
 
@@ -23,7 +23,7 @@ export default function EventSummaryPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
-  const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.analyticsLiveMaxRangeDays));
   // `asked` is a new object at every press of Query, so pressing it again reads again.
   const [asked, setAsked] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getEventSummary(asked), [asked]);

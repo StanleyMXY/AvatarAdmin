@@ -12,7 +12,7 @@ import { useAdminMeta } from '../../session/useSession';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from './defaultRange';
 import { ReadState } from './ReadState';
 import { useRead } from './useRead';
 
@@ -72,7 +72,7 @@ export default function EventDetailPage() {
     intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
   const [form] = Form.useForm<Filters>();
-  const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [range, setRange] = useState<DayRange>(() => defaultRange(meta.analyticsLiveMaxRangeDays));
   const [asked, setAsked] = useState<{ range: DayRange; filters: Filters }>({
     range,
     filters: { accountId: '', deviceId: '', eventName: '' },

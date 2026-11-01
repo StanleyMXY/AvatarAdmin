@@ -11,7 +11,7 @@ const messages: Record<string, string> = {
   'analytics.summary.total': '共 {count} 个事件名',
   'analytics.summary.empty': '这个范围内没有事件',
   'analytics.summary.tip':
-    '现查事件日志，没有落地条。触发次数数每一条事件；去重账号数里每个已登录的账号只算一次。',
+    '现查事件日志，没有落地条。触发次数数每一条事件；去重账号数里每个账号只算一次。',
 
   'analytics.detail.accountId': '账号 ID',
   'analytics.detail.deviceId': '设备 ID',
@@ -19,7 +19,7 @@ const messages: Record<string, string> = {
   'analytics.detail.col.account': '账号',
   'analytics.detail.col.device': '设备',
   'analytics.detail.col.receivedAt': '接收时间',
-  'analytics.detail.col.clientTime': '客户端时间',
+  'analytics.detail.col.clientTime': '客户端时间（自报）',
   'analytics.detail.col.platform': '平台',
   'analytics.detail.col.appVersion': 'App 版本',
   'analytics.detail.col.country': '国家',
@@ -68,7 +68,7 @@ const messages: Record<string, string> = {
   'analytics.funnel.help.days':
     '去重人数不跨日聚合：选多日范围时，结果就是整个范围内的去重账号数。',
   'analytics.funnel.help.anonymous':
-    '没有账号的事件（注册之前）会按同一台设备串到它之后登录的账号上。',
+    '按谁来数：事件的账号；事件没有账号时，取同一台设备在窗口内带账号的事件的账号；仍没有就用设备本身。',
 };
 
 export default messages;
