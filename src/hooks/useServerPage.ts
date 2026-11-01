@@ -21,11 +21,14 @@ export type ServerPage<T> = {
 /**
  * A list that the backend pages: reads the page for `filters` (the ones asked for with Search, a
  * plain object) and starts again from page 1 when they change. When two reads overlap, the answer
- * of the newest read is the one that is shown, whichever arrives first.
+ * of the newest read is the one that is shown, whichever arrives first. With `backToLastPage`, a
+ * page past the end that comes back empty (its last row was deleted) while the list still has rows
+ * goes to the last page that has rows instead of showing "no data".
  */
 export function useServerPage<T, F extends Record<string, unknown>>(
   fetcher: (query: F & { page: number; pageSize: number }) => Promise<Page<T>>,
   filters: F,
+  options: { backToLastPage?: boolean } = {},
 ): ServerPage<T> {
   const intl = useIntl();
   const intlRef = useRef(intl);
@@ -34,6 +37,8 @@ export function useServerPage<T, F extends Record<string, unknown>>(
   fetcherRef.current = fetcher;
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
+  const backToLastPage = useRef(options.backToLastPage === true);
+  backToLastPage.current = options.backToLastPage === true;
   const key = JSON.stringify(filters);
 
   const [paging, setPagingState] = useState({ key, page: 1, pageSize: DEFAULT_PAGE_SIZE });
@@ -58,6 +63,17 @@ export function useServerPage<T, F extends Record<string, unknown>>(
         setRows(answer.items);
         setTotal(answer.total);
         setFailure(null);
+        const last = Math.max(1, Math.ceil(answer.total / pageSize));
+        if (
+          backToLastPage.current &&
+          answer.items.length === 0 &&
+          answer.total > 0 &&
+          last < page
+        ) {
+          // The read of that page follows from the change of the page; it is still loading.
+          setPagingState({ key, page: last, pageSize });
+          return;
+        }
         setLoading(false);
       })
       .catch((error) => {

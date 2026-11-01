@@ -139,3 +139,95 @@ describe('useLatestRead: keepWhileReading', () => {
     expect(result.current.data).toBeNull();
   });
 });
+
+describe('useLatestRead: error', () => {
+  it('keeps the error itself, so a page can tell "not found" from the rest, with the words and not the backend message', async () => {
+    const fetcher = async (): Promise<string> => {
+      throw new ApiError({
+        code: 'RESOURCE_NOT_FOUND',
+        httpStatus: 404,
+        message: 'backend words',
+        data: null,
+      });
+    };
+    const { result } = renderHook(() => useLatestRead(fetcher), { wrapper });
+    expect(result.current.error).toBeNull();
+    await waitFor(() => expect(result.current.failure).not.toBeNull());
+    expect((result.current.error as ApiError).code).toBe('RESOURCE_NOT_FOUND');
+    expect(result.current.failure).toBe(enUS['error.RESOURCE_NOT_FOUND']);
+    expect(result.current.data).toBeNull();
+  });
+
+  it('forgets the error when the next read starts and when it succeeds', async () => {
+    let calls = 0;
+    const second = deferred<string>();
+    const fetcher = () => {
+      calls += 1;
+      return calls === 1 ? Promise.reject(failureOf('x')) : second.promise;
+    };
+    const { result } = renderHook(() => useLatestRead(fetcher), { wrapper });
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    act(() => result.current.reload());
+    expect(result.current.error).toBeNull();
+    await act(async () => second.resolve('ok'));
+    expect(result.current.error).toBeNull();
+    expect(result.current.data).toBe('ok');
+  });
+
+  it('does not show the error of an older read that arrives after a newer one', async () => {
+    const first = deferred<string>();
+    const second = deferred<string>();
+    const fetchers = [() => first.promise, () => second.promise];
+    const { result, rerender } = renderHook(({ n }) => useLatestRead(fetchers[n]), {
+      wrapper,
+      initialProps: { n: 0 },
+    });
+    rerender({ n: 1 });
+    await act(async () => second.resolve('B'));
+    await act(async () => first.reject(failureOf('late')));
+    expect(result.current.error).toBeNull();
+    expect(result.current.data).toBe('B');
+  });
+});
+
+describe('useLatestRead: refreshKey', () => {
+  it('reads again when the key changes, with the same fetcher, and not otherwise', async () => {
+    let calls = 0;
+    const fetcher = async () => {
+      calls += 1;
+      return calls;
+    };
+    const { result, rerender } = renderHook(
+      ({ key }) => useLatestRead(fetcher, { refreshKey: key }),
+      {
+        wrapper,
+        initialProps: { key: 0 },
+      },
+    );
+    await waitFor(() => expect(result.current.data).toBe(1));
+    rerender({ key: 0 });
+    expect(calls).toBe(1);
+    rerender({ key: 1 });
+    await waitFor(() => expect(result.current.data).toBe(2));
+    expect(calls).toBe(2);
+  });
+
+  it('shows the answer of the read the key started and not of the one it overtook', async () => {
+    const first = deferred<string>();
+    const second = deferred<string>();
+    const answers = [first, second];
+    let n = 0;
+    const fetcher = () => answers[n++].promise;
+    const { result, rerender } = renderHook(
+      ({ key }) => useLatestRead(fetcher, { refreshKey: key }),
+      {
+        wrapper,
+        initialProps: { key: 0 },
+      },
+    );
+    rerender({ key: 1 });
+    await act(async () => second.resolve('new'));
+    await act(async () => first.resolve('old'));
+    expect(result.current.data).toBe('new');
+  });
+});

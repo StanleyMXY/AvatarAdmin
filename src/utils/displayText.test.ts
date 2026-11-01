@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { codeText, countText, instantText, orDash } from './displayText';
+import { adminText, codeText, countText, instantText, orDash } from './displayText';
 
 const intl = {
   messages: { 'x.OPEN': 'Open' } as Record<string, unknown>,
@@ -14,6 +14,26 @@ describe('codeText', () => {
     expect(codeText(intl, 'x', 5)).toBe('');
     expect(codeText(intl, 'x', null)).toBe('');
   });
+
+  it('writes a code that is not text out as text only when it is told to', () => {
+    const out = { writeOut: true };
+    expect(codeText(intl, 'x', 5, out)).toBe('5');
+    expect(codeText(intl, 'x', { a: 1 }, out)).toBe('{"a":1}');
+    expect(codeText(intl, 'x', null, out)).toBe('');
+    expect(codeText(intl, 'x', undefined, out)).toBe('');
+    expect(codeText(intl, 'x', 'OPEN', out)).toBe('Open');
+    expect(codeText(intl, 'x', 'NEW_KIND', out)).toBe('NEW_KIND');
+    // A number whose digits are a known code takes the text of that code.
+    expect(codeText({ ...intl, messages: { 'x.5': 'Five' } }, 'x', 5, out)).toBe('x.5');
+  });
+
+  it('does not take the name of an object property for a known code', () => {
+    expect(codeText(intl, 'x', 'constructor')).toBe('constructor');
+    expect(codeText(intl, 'x', '__proto__')).toBe('__proto__');
+    expect(codeText(intl, '', 'constructor')).toBe('constructor');
+    // An empty code is nothing, even where the language file has a text for the bare prefix.
+    expect(codeText({ ...intl, messages: { 'x.': 'Bare' } }, 'x', '')).toBe('');
+  });
 });
 
 describe('countText', () => {
@@ -23,6 +43,11 @@ describe('countText', () => {
     expect(countText('en-US', '12')).toBe('—');
     expect(countText('en-US', null)).toBe('—');
     expect(countText('en-US', undefined)).toBe('—');
+    for (const value of [{}, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(countText('en-US', value)).toBe('—');
+    }
+    expect(countText('th-TH', 1234567)).toBe('1,234,567');
+    expect(countText('es-ES', 12345)).toBe('12.345');
   });
 });
 
@@ -43,5 +68,17 @@ describe('orDash', () => {
     expect(orDash('')).toBe('—');
     expect(orDash(null)).toBe('—');
     expect(orDash(undefined)).toBe('—');
+    expect(orDash(0)).toBe('0');
+  });
+});
+
+describe('adminText', () => {
+  it('writes the name, else the first eight characters of the id, else a dash', () => {
+    expect(adminText('Aroon สมชาย', 'abcdef0123456789')).toBe('Aroon สมชาย');
+    expect(adminText(null, 'abcdef0123456789')).toBe('abcdef01');
+    expect(adminText('', 'abcdef0123456789')).toBe('abcdef01');
+    expect(adminText(undefined, 12345678901)).toBe('12345678');
+    expect(adminText('', '')).toBe('—');
+    expect(adminText(null, null)).toBe('—');
   });
 });
