@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Modal } from 'antd';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useFailureView } from '../../hooks/useFailure';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { failureLines } from './failure';
 
@@ -34,13 +35,13 @@ export function ActionModal({
   refTexts,
 }: Props) {
   const intl = useIntl();
-  const [failure, setFailure] = useState<{ text: string; reasons: string[] } | null>(null);
+  const { view: failure, show, clear } = useFailureView<{ text: string; reasons: string[] }>();
   const { run, pending } = useSingleFlight(async () => {
-    setFailure(null);
+    clear();
     try {
       await onSubmit();
     } catch (error) {
-      setFailure(failureLines(intl, error, refTexts));
+      show((words) => failureLines(words, error, refTexts));
     }
   });
   return (
@@ -50,7 +51,7 @@ export function ActionModal({
       destroyOnHidden
       mask={{ closable: false }}
       onCancel={pending ? undefined : onClose}
-      afterClose={() => setFailure(null)}
+      afterClose={clear}
       okText={okText}
       cancelText={intl.formatMessage({ id: 'pages.common.cancel' })}
       okButtonProps={{ loading: pending, disabled: pending || okDisabled }}
