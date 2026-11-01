@@ -102,8 +102,12 @@ describe('POST /auth/login', () => {
       ]);
     }
     const locked = await login(body);
-    expect([locked.status, locked.body.code]).toEqual([429, 'RATE_LIMITED']);
-    expect(locked.body.data.retryAfterSeconds).toBeGreaterThanOrEqual(1);
+    // contract 1.4 and 2.3: this lock of 429 has no data and no Retry-After
+    expect([locked.status, locked.body.code, locked.body.data]).toEqual([
+      429,
+      'RATE_LIMITED',
+      null,
+    ]);
   });
 
   it('asks for the code first when the stored secret cannot be decrypted: nothing is decrypted without a code', async () => {
@@ -173,7 +177,7 @@ describe('POST /auth/login', () => {
     ).toBe(401);
   });
 
-  it('locks the user name after repeated wrong codes with 429 RATE_LIMITED and retryAfterSeconds', async () => {
+  it('locks the user name after repeated wrong codes with 429 RATE_LIMITED and no data (contract 1.4 lists no waiting time for it)', async () => {
     for (let i = 1; i < TOTP_MAX_FAILURES; i++) {
       expect(
         (await login({ username: 'root', password: mockPassword('root'), totp: '111111' })).status,
@@ -184,8 +188,11 @@ describe('POST /auth/login', () => {
       password: mockPassword('root'),
       totp: '111111',
     });
-    expect([locked.status, locked.body.code]).toEqual([429, 'RATE_LIMITED']);
-    expect(locked.body.data.retryAfterSeconds).toBeGreaterThanOrEqual(1);
+    expect([locked.status, locked.body.code, locked.body.data]).toEqual([
+      429,
+      'RATE_LIMITED',
+      null,
+    ]);
     const correctButLocked = await login({
       username: 'root',
       password: mockPassword('root'),
@@ -560,7 +567,7 @@ describe('the lock after wrong codes', () => {
     for (let i = 0; i < TOTP_MAX_FAILURES; i++) await wrong();
   };
 
-  it('lasts 5 minutes: retryAfterSeconds is about 300', async () => {
+  it('lasts 5 minutes, and the answer carries no waiting time', async () => {
     expect(TOTP_LOCKOUT_MINUTES).toBe(5);
     expect(TOTP_MAX_FAILURES).toBe(5);
     await lock();
@@ -569,8 +576,10 @@ describe('the lock after wrong codes', () => {
       password: mockPassword('root'),
       totp: FAKE_TOTP_CODE,
     });
-    expect(body.data.retryAfterSeconds).toBeGreaterThan(290);
-    expect(body.data.retryAfterSeconds).toBeLessThanOrEqual(300);
+    expect(body.data).toBeNull();
+    const left = adminOf('root').lockedUntil - Date.now();
+    expect(left).toBeGreaterThan(290_000);
+    expect(left).toBeLessThanOrEqual(300_000);
   });
 
   it('ends: after the time has passed the right code signs in', async () => {

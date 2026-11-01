@@ -233,6 +233,24 @@ describe('the sign-in page', () => {
     expect(history.replace).not.toHaveBeenCalled();
   });
 
+  it('shows the text of the code for a lock of the verification code that gives no waiting time, with no countdown and no failure of its own (contract 1.4 lists none for it)', async () => {
+    stubFetch((call) =>
+      bodyOf(call.init)?.totp
+        ? jsonResponse(429, envelope('RATE_LIMITED'))
+        : jsonResponse(401, envelope('ADMIN_TOTP_REQUIRED')),
+    );
+    const user = userEvent.setup();
+    renderPage(<Login />);
+    await fill(user, 'ploy', 'pw');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.type(await screen.findByLabelText('Verification code'), '000000');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Too many requests. Please try again later.');
+    expect(alert.textContent).not.toMatch(/minute|NaN|undefined/);
+    expect(history.replace).not.toHaveBeenCalled();
+  });
+
   it('goes to the setup page for ENROLL_REQUIRED, with the token in memory and not in the address or any storage', async () => {
     stubFetch(() =>
       jsonResponse(

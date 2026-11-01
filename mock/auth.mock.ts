@@ -33,9 +33,8 @@ function lockedFor(admin: MockAdmin, now: number): number {
 function rejectLocked(admin: MockAdmin, now = Date.now()): void {
   const seconds = lockedFor(admin, now);
   if (seconds > 0) {
-    throw new MockHttpError(429, 'RATE_LIMITED', 'Too many wrong verification codes', {
-      retryAfterSeconds: seconds,
-    });
+    // Contract 1.4 lists no waiting time for this lock (2270): no data, no Retry-After.
+    throw new MockHttpError(429, 'RATE_LIMITED', 'Too many wrong verification codes');
   }
 }
 
