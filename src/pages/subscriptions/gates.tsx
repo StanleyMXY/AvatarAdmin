@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -24,7 +25,6 @@ import {
   saveGateCreditCost,
   saveGateDefault,
 } from '../../services/subscriptions';
-import { describeFailure } from '../../session/describe';
 import { failureLine } from '../../session/failureLine';
 import { ConfigForm } from '../config/ConfigForm';
 import { FailureAlert } from './FailureAlert';
@@ -169,7 +169,7 @@ export default function GatesPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [gates, setGates] = useState<FeatureGate[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [editing, setEditing] = useState<FeatureGate | null>(null);
 
   const begin = useLatestCall();
@@ -181,11 +181,11 @@ export default function GatesPage() {
       const { items } = await listFeatureGates();
       if (!isCurrent()) return;
       setGates(items);
-      setFailure(null);
+      clear();
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [intl, begin]);
+  }, [begin, fail, clear]);
 
   useEffect(() => {
     void load();

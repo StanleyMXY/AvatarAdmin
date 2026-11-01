@@ -3,9 +3,9 @@ import { Alert, Button, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography
 import { useCallback, useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { type StatusOption, StatusTag } from '../../components/StatusTag';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { getSubscription, type SubscriptionDetail } from '../../services/subscriptions';
-import { describeFailure } from '../../session/describe';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
 import { sortTimeline } from './featureRules';
@@ -58,7 +58,7 @@ export function SubscriptionDrawer({ id, onClose }: Props) {
     intl.formatMessage({ id: key }, values);
   const states = useStateOptions();
   const [detail, setDetail] = useState<SubscriptionDetail | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const begin = useLatestCall();
 
   const load = useCallback(
@@ -67,15 +67,15 @@ export function SubscriptionDrawer({ id, onClose }: Props) {
       // replace the one that is shown now.
       const isCurrent = begin();
       setDetail(null);
-      setFailure(null);
+      clear();
       try {
         const answer = await getSubscription(subscriptionId);
         if (isCurrent()) setDetail(answer);
       } catch (error) {
-        if (isCurrent()) setFailure(describeFailure(intl, error).text);
+        if (isCurrent()) fail(error);
       }
     },
-    [intl, begin],
+    [begin, fail, clear],
   );
 
   useEffect(() => {

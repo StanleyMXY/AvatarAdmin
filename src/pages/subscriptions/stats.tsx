@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { getSubscriptionStats, type SubscriptionStatRow } from '../../services/subscriptions';
-import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
@@ -77,20 +77,20 @@ export default function SubscriptionStatsPage() {
   const meta = useAdminMeta();
   const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
   const [rows, setRows] = useState<SubscriptionStatRow[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const begin = useLatestCall();
 
   const load = useCallback(async () => {
     const isCurrent = begin();
     setRows(null);
-    setFailure(null);
+    clear();
     try {
       const { items } = await getSubscriptionStats(range);
       if (isCurrent()) setRows(items);
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [range, intl, begin]);
+  }, [range, begin, fail, clear]);
 
   useEffect(() => {
     void load();

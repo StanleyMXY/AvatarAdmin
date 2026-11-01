@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -67,8 +68,20 @@ function FeaturesDrawer({
     intl.formatMessage({ id }, values);
   const initial = valuesOf(def);
   const [draft, setDraft] = useState<Record<string, FeatureValue>>(initial);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  // What is wrong with a value, by gate key: the reason checked here (a reason code) or the reason
+  // the backend gave (read from `failure` when drawn, not kept as words), until that value is edited.
+  const [problems, setProblems] = useState<Record<string, string>>({});
+  const [edited, setEdited] = useState<string[]>([]);
   const [failure, setFailure] = useState<unknown>(null);
+  const serverFields = failure ? describeFailure(intl, failure).fields : [];
+  const errors: Record<string, string> = {
+    ...Object.fromEntries(
+      serverFields.filter((f) => !edited.includes(f.ref)).map((f) => [f.ref, f.text]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(problems).map(([key, code]) => [key, t(`reason.${code}`)]),
+    ),
+  };
 
   const rows = def.features
     .map((f) => gates.find((g) => g.key === f.featureKey))
@@ -77,13 +90,14 @@ function FeaturesDrawer({
   const { run, pending } = useSingleFlight(async () => {
     setFailure(null);
     const changed = rows.filter((g) => !sameValue(draft[g.key], initial[g.key]));
+    setEdited([]);
     const found: Record<string, string> = {};
     for (const g of changed) {
       const value = draft[g.key];
       const problem = value?.mode === 'VALUE' ? valueProblem(g.kind, value.value) : null;
-      if (problem) found[g.key] = t(`reason.${problem}`);
+      if (problem) found[g.key] = problem;
     }
-    setErrors(found);
+    setProblems(found);
     if (Object.keys(found).length > 0) return;
     if (changed.length === 0) {
       message.info(t('subscriptions.nothingChanged'));
@@ -95,8 +109,7 @@ function FeaturesDrawer({
         changed.map((g) => ({ featureKey: g.key, value: draft[g.key] ?? { mode: 'UNSET' } })),
       );
     } catch (error) {
-      const { fields } = describeFailure(intl, error);
-      setErrors(Object.fromEntries(fields.map((f) => [f.ref, f.text])));
+      setProblems({});
       setFailure(error);
       return;
     }
@@ -149,10 +162,11 @@ function FeaturesDrawer({
               label={gate.key}
               onChange={(next) => {
                 setDraft((previous) => ({ ...previous, [gate.key]: next }));
-                setErrors((previous) => {
+                setProblems((previous) => {
                   const { [gate.key]: _gone, ...rest } = previous;
                   return rest;
                 });
+                setEdited((previous) => [...previous, gate.key]);
               }}
             />
             {errors[gate.key] ? (
@@ -284,7 +298,7 @@ export default function EntitlementsPage() {
     intl.formatMessage({ id }, values);
   const [defs, setDefs] = useState<EntitlementDef[] | null>(null);
   const [gates, setGates] = useState<FeatureGate[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [features, setFeatures] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ def: EntitlementDef | null } | null>(null);
   const canConfig = access.canAccess('SUBSCRIPTION:CONFIG');
@@ -299,11 +313,11 @@ export default function EntitlementsPage() {
       if (!isCurrent()) return;
       setDefs(defList.items);
       setGates(gateList.items);
-      setFailure(null);
+      clear();
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [intl, begin]);
+  }, [begin, fail, clear]);
 
   useEffect(() => {
     void load();

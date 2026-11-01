@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -260,7 +261,7 @@ export default function ProductsPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [dialog, setDialog] = useState<{ product: SubscriptionProduct | null } | null>(null);
   const canConfig = access.canAccess('SUBSCRIPTION:CONFIG');
 
@@ -277,11 +278,11 @@ export default function ProductsPage() {
       ]);
       if (!isCurrent()) return;
       setLoaded({ products: products.items, defs: defs.items, gates: gates.items });
-      setFailure(null);
+      clear();
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [intl, begin]);
+  }, [begin, fail, clear]);
 
   useEffect(() => {
     void load();

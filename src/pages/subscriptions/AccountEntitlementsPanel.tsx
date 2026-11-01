@@ -19,6 +19,7 @@ import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { RowActions } from '../../components/RowActions';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -191,7 +192,7 @@ export function AccountEntitlementsPanel({
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [data, setData] = useState<AccountEntitlements | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [granting, setGranting] = useState(false);
   const canGrant = access.canAccess('SUBSCRIPTION:GRANT');
   const when = (iso: string | null) => (iso ? formatInstant(iso, intl.locale) : DASH);
@@ -205,11 +206,11 @@ export function AccountEntitlementsPanel({
       const answer = await getAccountEntitlements(accountId);
       if (!isCurrent()) return;
       setData(answer);
-      setFailure(null);
+      clear();
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
-  }, [accountId, intl, begin]);
+  }, [accountId, begin, fail, clear]);
 
   useEffect(() => {
     setData(null);
