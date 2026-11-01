@@ -3,10 +3,8 @@
 import { configure } from '@testing-library/react';
 import { resetMonitorStore } from '../../../mock/_core/monitorData';
 import { resetStore } from '../../../mock/_core/store';
-import { adminOf } from '../../../mock/_core/testing';
-import { signInAs } from '../../../tests/mockBackend';
-import { resetUmiStub, setTestAccess, setTestInitialState } from '../../../tests/stubs/umi-max';
-import access from '../../access';
+import { signInAsAdmin } from '../../../tests/signInAsAdmin';
+import { resetUmiStub } from '../../../tests/stubs/umi-max';
 
 // The pages draw big tables and the machine may be busy with other work: wait longer than the default second for what a page shows.
 configure({ asyncUtilTimeout: 8000 });
@@ -16,17 +14,5 @@ export function signIn(username: string, codes?: string[]) {
   resetUmiStub();
   resetStore();
   resetMonitorStore();
-  const admin = adminOf(username);
-  if (codes) admin.permissions = codes as typeof admin.permissions;
-  signInAs(username);
-  const me = {
-    id: admin.id,
-    username,
-    superAdmin: admin.superAdmin,
-    mustChangePassword: false,
-    permissions: admin.permissions,
-  };
-  setTestAccess(access({ me }));
-  setTestInitialState({ me, meta: {} });
-  return admin;
+  return signInAsAdmin(username, { codes, meta: {} });
 }
