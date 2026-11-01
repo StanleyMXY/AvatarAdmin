@@ -2,8 +2,8 @@ import { Line } from '@ant-design/plots';
 import { Link, useAccess, useIntl } from '@umijs/max';
 import { Alert, Button, Card, Empty, Flex, Segmented, Select, Spin, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { getPipeline, type PipelinePoint } from '../../services/monitor';
-import { describeFailure } from '../../session/describe';
 import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 
@@ -61,7 +61,7 @@ export default function PipelinePage() {
   const [known, setKnown] = useState<string[]>([]);
   const [points, setPoints] = useState<PipelinePoint[] | null>(null);
   const [truncated, setTruncated] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -76,20 +76,20 @@ export default function PipelinePage() {
         if (!live) return;
         setPoints(answer.items);
         setTruncated(answer.truncated === true);
-        setFailure(null);
+        clear();
         setKnown((before) =>
           [...new Set([...before, ...answer.items.map((p) => p.source)])].sort(),
         );
       })
       .catch((error) => {
         if (!live) return;
-        setFailure(describeFailure(intl, error).text);
+        fail(error);
         setPoints([]);
       });
     return () => {
       live = false;
     };
-  }, [range, source, reload, intl]);
+  }, [range, source, reload, fail, clear]);
 
   const refresh = useCallback(() => setReload((n) => n + 1), []);
 
