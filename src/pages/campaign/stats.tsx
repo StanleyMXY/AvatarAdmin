@@ -53,17 +53,16 @@ export default function CampaignStatsPage() {
   const [applied, setApplied] = useState<Filter>(initialFilter);
   const [campaignRows, setCampaignRows] = useState<PerformanceRow[] | null>(null);
   const [dayRows, setDayRows] = useState<PerformanceRow[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  // What the backend refused about the dates, by field (`from`, `to`): shown next to the dates.
-  const [rangeRefusals, setRangeRefusals] = useState<string[]>([]);
+  // The failed read itself (boxed: a thrown value can be anything); its words, and what the backend
+  // refused about the dates, are made when the page is drawn, so they follow the language.
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
   const begin = useLatestCall();
 
   const load = useCallback(async () => {
     const isCurrent = begin();
     setCampaignRows(null);
     setDayRows(null);
-    setFailure(null);
-    setRangeRefusals([]);
+    setFailed(null);
     const query = {
       from: applied.range.from,
       to: applied.range.to,
@@ -78,30 +77,28 @@ export default function CampaignStatsPage() {
       setCampaignRows(byCampaign.items);
       setDayRows(byDay.items);
     } catch (error) {
-      if (isCurrent()) {
-        const described = describeFailure(intl, error);
-        setFailure(described.text);
-        // A range error names `from` or `to` (the same for every statistics page): say which
-        // date, with the words of the reason and of the field.
-        setRangeRefusals(
-          described.fields.flatMap((field) =>
-            field.ref === 'from' || field.ref === 'to'
-              ? [
-                  intl.formatMessage(
-                    { id: 'campaign.stats.range.line' },
-                    {
-                      field: intl.formatMessage({ id: `campaign.stats.range.${field.ref}` }),
-                      reason: field.text,
-                      hint: intl.formatMessage({ id: `campaign.stats.range.${field.ref}.hint` }),
-                    },
-                  ),
-                ]
-              : [],
-          ),
-        );
-      }
+      if (isCurrent()) setFailed({ error });
     }
-  }, [applied, intl, begin]);
+  }, [applied, begin]);
+
+  const described = failed === null ? null : describeFailure(intl, failed.error);
+  const failure = described === null ? null : described.text;
+  // A range error names `from` or `to` (the same for every statistics page): say which date, with
+  // the words of the reason and of the field.
+  const rangeRefusals = (described?.fields ?? []).flatMap((field) =>
+    field.ref === 'from' || field.ref === 'to'
+      ? [
+          intl.formatMessage(
+            { id: 'campaign.stats.range.line' },
+            {
+              field: intl.formatMessage({ id: `campaign.stats.range.${field.ref}` }),
+              reason: field.text,
+              hint: intl.formatMessage({ id: `campaign.stats.range.${field.ref}.hint` }),
+            },
+          ),
+        ]
+      : [],
+  );
 
   useEffect(() => {
     void load();

@@ -1,7 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, DatePicker, Form, Input, Modal, Select, Typography } from 'antd';
 import dayjs from 'dayjs';
-import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -57,12 +57,12 @@ export function CostModal({ cost, campaigns, currency, onClose, onSaved }: Props
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const editing = cost !== null;
   const campaignOf = (id: unknown) => campaigns.find((c) => c.id === String(id));
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     const campaignId = editing ? cost.campaignId : (values.campaignId as string);
     const statDate = editing ? cost.statDate : pickedDay(values.statDate as dayjs.Dayjs);
     const body: CostBody = {
@@ -76,7 +76,8 @@ export function CostModal({ cost, campaigns, currency, onClose, onSaved }: Props
       if (editing) await updateCost(cost.id, body);
       else await createCost(body);
     } catch (error) {
-      setFailure(failureToForm(intl, form, error, FIELDS).text);
+      failureToForm(intl, form, error, FIELDS);
+      fail(error);
       return;
     }
     message.success(t('campaign.costs.saved'));

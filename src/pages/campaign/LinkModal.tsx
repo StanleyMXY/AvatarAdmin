@@ -1,6 +1,7 @@
 import { Link, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Radio, Typography } from 'antd';
 import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -9,7 +10,6 @@ import {
   LINK_PLATFORMS,
   type LinkPlatform,
 } from '../../services/campaign';
-import { describeFailure } from '../../session/describe';
 import { plainText } from '../../utils/plainText';
 import { landingAddress, PLATFORM_FIELDS, UTM_VALUE, writeClipboard } from './links';
 
@@ -37,7 +37,7 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
   const [utmMedium, setUtmMedium] = useState('');
   const [utmCampaign, setUtmCampaign] = useState('');
   const [link, setLink] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
+  const { text: problem, fail, failWith, clear } = useFailure();
 
   // A change of the fields overtakes the read that is on its way: an answer for fields that were
   // changed since is dropped.
@@ -46,7 +46,7 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
     begin();
     apply();
     setLink(null);
-    setProblem(null);
+    clear();
   };
 
   // A UTM value the backend would leave out of the link (contract 10.4) is flagged, not refused: the
@@ -59,11 +59,11 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
   const blocked = linkBase === null;
 
   const { run, pending } = useSingleFlight(async () => {
-    setProblem(null);
+    clear();
     setLink(null);
     const isCurrent = begin();
     if (!campaign[PLATFORM_FIELDS[platform].pixel]) {
-      setProblem(t('campaign.link.noPixel'));
+      failWith((words) => words.formatMessage({ id: 'campaign.link.noPixel' }));
       return;
     }
     try {
@@ -75,7 +75,7 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
       });
       if (isCurrent()) setLink(typeof answer.url === 'string' ? answer.url : null);
     } catch (error) {
-      if (isCurrent()) setProblem(describeFailure(intl, error).text);
+      if (isCurrent()) fail(error);
     }
   });
 

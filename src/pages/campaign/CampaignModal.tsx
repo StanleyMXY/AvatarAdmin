@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Divider, Form, Input, Modal, Spin, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -78,7 +79,7 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const editing = campaign !== null;
   const initialCodes = Array.isArray(campaign?.channelCodes)
     ? campaign.channelCodes.filter((c) => typeof c === 'string')
@@ -104,7 +105,7 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
   }, []);
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     const token = trimSpec(values.facebookAccessToken ?? '');
     const fields: CampaignFields = {
       name: trimSpec(values.name),
@@ -126,7 +127,8 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
       if (campaign) await updateCampaign(campaign.id, fields);
       else await createCampaign({ ...fields, code: trimSpec(values.code) });
     } catch (error) {
-      setFailure(failureToForm(intl, form, error, FIELDS).text);
+      failureToForm(intl, form, error, FIELDS);
+      fail(error);
       return;
     }
     message.success(t('campaign.campaigns.saved'));
