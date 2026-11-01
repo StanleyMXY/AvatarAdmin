@@ -36,17 +36,18 @@ export function DecisionModal({ record, decision, onSubmit, onClose }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<{ note: string }>();
-  const [failure, setFailure] = useState<string | null>(null);
+  // The failed decision itself (boxed): its words are made when drawn, so they follow the language.
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
   // The body of a dialog that is closing is not drawn again, so its handlers read the decision from
   // a ref: a press on the button while it fades out must not send the decision a second time.
   const current = useRef(decision);
   current.current = decision;
   const { run, pending } = useSingleFlight(async (chosen: ModerationDecision, note: string) => {
-    setFailure(null);
+    setFailed(null);
     try {
       await onSubmit(chosen, note);
     } catch (error) {
-      setFailure(failureText(error));
+      setFailed({ error });
     }
   });
 
@@ -69,6 +70,7 @@ export function DecisionModal({ record, decision, onSubmit, onClose }: Props) {
     return describeFailure(intl, error).text;
   }
 
+  const failure = failed === null ? null : failureText(failed.error);
   const rejecting = decision === 'REJECT';
   return (
     <Modal
@@ -81,7 +83,7 @@ export function DecisionModal({ record, decision, onSubmit, onClose }: Props) {
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        setFailed(null);
       }}
       okText={
         rejecting ? t('moderation.decision.confirmReject') : t('moderation.decision.confirmApprove')

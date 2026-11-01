@@ -12,9 +12,10 @@ import {
   Table,
   Typography,
 } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
+import { useFailure } from '../../hooks/useFailure';
 import { useLeaveGuard } from '../../hooks/useLeaveGuard';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -43,7 +44,21 @@ import {
   toRows,
 } from './ruleRows';
 
-type Load = { phase: 'loading' } | { phase: 'ready' } | { phase: 'failed'; text: string };
+type Load = { phase: 'loading' } | { phase: 'ready' } | { phase: 'failed'; error: unknown };
+
+/**
+ * The last save the backend refused, kept as the failure itself (not as words, which would stay in
+ * the language they were made in): `foldsEmpty` are the rows whose pattern is empty once it is
+ * normalised and folded (decided when the save was refused), `edited` the rows typed in since.
+ */
+type Refusal = {
+  error: unknown;
+  rowCount: number;
+  foldsEmpty: number[];
+  edited: number[];
+  /** A row was removed: the marks on the rows and the table go, the bar stays. */
+  cleared: boolean;
+};
 
 /**
  * 文本规则 (`MODERATION:CONFIG`): the rule list that text moderation runs before it calls the
@@ -55,16 +70,13 @@ export default function ModerationRulesPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const { message } = App.useApp();
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
 
   const [load, setLoad] = useState<Load>({ phase: 'loading' });
   const [saved, setSaved] = useState<RuleRow[]>([]);
   const [rows, setRows] = useState<RuleRow[]>([]);
   // Problems the backend named, by row index; cleared for a row when that row is edited.
-  const [rowErrors, setRowErrors] = useState<Map<number, string[]>>(new Map());
-  const [tableErrors, setTableErrors] = useState<string[]>([]);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const failed = useFailure();
   const [checked, setChecked] = useState(false);
   const [conflict, setConflict] = useState(false);
 
@@ -77,7 +89,7 @@ export default function ModerationRulesPage() {
       setRows(fresh.map((row) => ({ ...row })));
       setLoad({ phase: 'ready' });
     } catch (error) {
-      setLoad({ phase: 'failed', text: describeFailure(intlRef.current, error).text });
+      setLoad({ phase: 'failed', error });
     }
   }, []);
 
@@ -86,20 +98,18 @@ export default function ModerationRulesPage() {
   }, [fetchRules]);
 
   const clearErrors = () => {
-    setRowErrors(new Map());
-    setTableErrors([]);
-    setFailure(null);
+    setRefusal(null);
+    failed.clear();
   };
 
   const edit = (key: string, change: Partial<RuleRow>) => {
     const index = rows.findIndex((row) => row.key === key);
     setRows((current) => current.map((row) => (row.key === key ? { ...row, ...change } : row)));
-    setRowErrors((current) => {
-      if (!current.has(index)) return current;
-      const next = new Map(current);
-      next.delete(index);
-      return next;
-    });
+    setRefusal((current) =>
+      current === null || current.edited.includes(index)
+        ? current
+        : { ...current, edited: [...current.edited, index] },
+    );
   };
 
   const { run: save, pending } = useSingleFlight(async () => {
@@ -107,12 +117,13 @@ export default function ModerationRulesPage() {
     setChecked(true);
     const bad = rows.filter((row) => hasProblem(rowProblem(row))).length;
     if (bad > 0) {
-      setFailure(t('moderation.rules.fixRows', { count: bad }));
+      setRefusal(null);
+      failed.failWith((words) =>
+        words.formatMessage({ id: 'moderation.rules.fixRows' }, { count: bad }),
+      );
       return;
     }
-    setFailure(null);
-    setTableErrors([]);
-    setRowErrors(new Map());
+    clearErrors();
     // The list is saved as a whole, so a save over a newer list would delete the rules another
     // administrator added. Read the list again; if it is no longer the one that was loaded, stop.
     try {
@@ -121,7 +132,7 @@ export default function ModerationRulesPage() {
         return;
       }
     } catch (error) {
-      setFailure(describeFailure(intlRef.current, error).text);
+      failed.fail(error);
       return;
     }
     try {
@@ -132,23 +143,14 @@ export default function ModerationRulesPage() {
       setChecked(false);
       message.success(t('moderation.rules.saved'));
     } catch (error) {
-      const described = describeFailure(intlRef.current, error);
-      // A text that is not blank but empty once normalised and folded is refused as empty: say why.
-      const fields = described.fields.map((field, at) => {
-        const detail = described.error.details[at];
-        const row = detail && /^\d+$/.test(detail.ref) ? rows[Number(detail.ref)] : undefined;
-        return detail?.reason === 'EMPTY_NOT_ALLOWED' && row && !rowProblem(row).pattern
-          ? { ...field, text: t('moderation.rules.patternFoldsEmpty') }
-          : field;
+      failed.clear();
+      setRefusal({
+        error,
+        rowCount: rows.length,
+        foldsEmpty: rows.flatMap((row, at) => (rowProblem(row).pattern ? [] : [at])),
+        edited: [],
+        cleared: false,
       });
-      const { byRow, table, other } = sortDetails(fields, rows.length);
-      setRowErrors(byRow);
-      setTableErrors(table);
-      setFailure(
-        byRow.size > 0
-          ? t('moderation.rules.fixRows', { count: byRow.size })
-          : t('moderation.rules.saveFailed', { message: [described.text, ...other].join(' ') }),
-      );
     }
   });
 
@@ -163,12 +165,18 @@ export default function ModerationRulesPage() {
       setChecked(false);
       setConflict(false);
     } catch (error) {
-      setFailure(describeFailure(intlRef.current, error).text);
+      failed.fail(error);
     }
   });
 
   const dirty = isDirty(rows, saved);
   useLeaveGuard(dirty);
+
+  // What the backend refused, in the words of the language at this drawing.
+  const refused = refusal === null ? null : refusalView(intl, t, refusal);
+  const failure = refused === null ? failed.text : refused.failure;
+  const rowErrors = refused === null ? new Map<number, string[]>() : refused.byRow;
+  const tableErrors = refused === null ? [] : refused.table;
 
   if (load.phase === 'loading') {
     return <Spin />;
@@ -178,7 +186,9 @@ export default function ModerationRulesPage() {
       <Alert
         type="error"
         showIcon
-        title={t('moderation.rules.loadFailed', { message: load.text })}
+        title={t('moderation.rules.loadFailed', {
+          message: describeFailure(intl, load.error).text,
+        })}
         action={
           <Button size="small" onClick={() => void fetchRules()}>
             {t('pages.common.retry')}
@@ -380,8 +390,9 @@ export default function ModerationRulesPage() {
                   confirmText={t('moderation.rules.removeConfirm')}
                   onConfirm={async () => {
                     setRows((current) => current.filter((r) => r.key !== row.key));
-                    setRowErrors(new Map());
-                    setTableErrors([]);
+                    setRefusal((current) =>
+                      current === null ? null : { ...current, cleared: true },
+                    );
                   }}
                 >
                   {t('moderation.rules.remove')}
@@ -400,4 +411,30 @@ export default function ModerationRulesPage() {
       </Card>
     </Flex>
   );
+}
+
+function refusalView(
+  intl: ReturnType<typeof useIntl>,
+  t: (id: string, values?: Record<string, string | number>) => string,
+  refusal: Refusal,
+) {
+  const described = describeFailure(intl, refusal.error);
+  // A text that is not blank but empty once normalised and folded is refused as empty: say why.
+  const fields = described.fields.map((field, at) => {
+    const detail = described.error.details[at];
+    return detail?.reason === 'EMPTY_NOT_ALLOWED' &&
+      /^\d+$/.test(detail.ref) &&
+      refusal.foldsEmpty.includes(Number(detail.ref))
+      ? { ...field, text: t('moderation.rules.patternFoldsEmpty') }
+      : field;
+  });
+  const { byRow, table, other } = sortDetails(fields, refusal.rowCount);
+  const failure =
+    byRow.size > 0
+      ? t('moderation.rules.fixRows', { count: byRow.size })
+      : t('moderation.rules.saveFailed', { message: [described.text, ...other].join(' ') });
+  const shown = new Map(
+    [...byRow].filter(([index]) => !refusal.cleared && !refusal.edited.includes(index)),
+  );
+  return { byRow: shown, table: refusal.cleared ? [] : table, failure };
 }

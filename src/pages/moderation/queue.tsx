@@ -31,7 +31,7 @@ type Filters = {
 type Oldest =
   | { state: 'loading' }
   | { state: 'ready'; seconds: number | null }
-  | { state: 'failed'; message: string };
+  | { state: 'failed'; error: unknown };
 
 /**
  * 审核队列 (`MODERATION:VIEW`): the records of the automatic check, of reports and of complaints.
@@ -53,11 +53,9 @@ export default function ModerationQueuePage() {
       const stats = await getModerationStats({ from: day, to: day });
       if (isCurrent()) setOldest({ state: 'ready', seconds: stats.oldestPendingSeconds });
     } catch (error) {
-      if (isCurrent()) {
-        setOldest({ state: 'failed', message: describeFailure(intl, error).text });
-      }
+      if (isCurrent()) setOldest({ state: 'failed', error });
     }
-  }, [intl, begin]);
+  }, [begin]);
 
   // The table asks for the list when the page opens and each time the list changes, and asks for
   // this value with each of those; the retry button of the banner asks for it alone.
@@ -165,7 +163,9 @@ export default function ModerationQueuePage() {
         <Alert
           type="warning"
           showIcon
-          title={t('moderation.queue.oldestFailed', { message: oldest.message })}
+          title={t('moderation.queue.oldestFailed', {
+            message: describeFailure(intl, oldest.error).text,
+          })}
           action={
             <Button size="small" onClick={() => void loadOldest()}>
               {t('pages.common.retry')}

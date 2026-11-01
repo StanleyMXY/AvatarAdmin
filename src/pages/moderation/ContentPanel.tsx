@@ -8,7 +8,7 @@ import {
   type ModerationContent,
   type ModerationRecord,
 } from '../../services/moderation';
-import { describeFailure } from '../../session/describe';
+import { describeFailure, failureCode } from '../../session/describe';
 
 type Phase = 'loading' | 'ready' | 'notStored' | 'failed';
 
@@ -84,8 +84,6 @@ export function ContentPanel({
   canReview: boolean;
 }) {
   const intl = useIntl();
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const blocked = record.status === 'BLOCKED';
@@ -93,7 +91,9 @@ export function ContentPanel({
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [content, setContent] = useState<ModerationContent | null>(null);
-  const [failure, setFailure] = useState('');
+  // The failed read itself (boxed): its words are made when drawn, so they follow the language.
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
+  const failure = failed === null ? '' : describeFailure(intl, failed.error).text;
   const [mediaFailed, setMediaFailed] = useState(false);
   const retried = useRef(false);
   const begin = useLatestCall();
@@ -110,10 +110,9 @@ export function ContentPanel({
       setPhase('ready');
     } catch (error) {
       if (!isCurrent()) return;
-      const described = describeFailure(intlRef.current, error);
       setContent(null);
-      setFailure(described.text);
-      setPhase(described.error.code === 'CONTENT_NOT_STORED' ? 'notStored' : 'failed');
+      setFailed({ error });
+      setPhase(failureCode(error) === 'CONTENT_NOT_STORED' ? 'notStored' : 'failed');
     }
   }, [id, begin]);
 
