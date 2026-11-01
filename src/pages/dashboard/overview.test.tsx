@@ -231,6 +231,25 @@ describe('the overview: which requests are made, and which cards show', () => {
     expect(callsTo(calls, '/alerts')).toHaveLength(0);
   });
 
+  it('reads fewer than 90 days when the backend allows a shorter range, so that the cards do not all fail on a refused range', async () => {
+    setTestInitialState({ meta: { statsMaxRangeDays: 31 } });
+    const calls = backend();
+    renderPage(<Overview />);
+    await waitForValue('dau');
+    const from = '2026-09-26'; // 31 days up to and including 2026-10-26
+    expect(queryOf(dailyCalls(calls, 'ALL')[0]).get('from')).toBe(from);
+    expect(queryOf(callsTo(calls, '/stats/retention')[0]).get('from')).toBe(from);
+    expect(queryOf(dailyCalls(calls, 'ALL')[0]).get('to')).toBe(TODAY);
+  });
+
+  it('keeps 90 days when the backend allows more, and when it does not say', async () => {
+    setTestInitialState({ meta: { statsMaxRangeDays: 366 } });
+    const calls = backend();
+    renderPage(<Overview />);
+    await waitForValue('dau');
+    expect(queryOf(dailyCalls(calls, 'ALL')[0]).get('from')).toBe(WINDOW_FROM);
+  });
+
   it('adds one request for MODERATION:VIEW and one for MONITOR:VIEW, and sends none without them', async () => {
     as(ALL_PERMISSIONS);
     const calls = backend();
@@ -398,10 +417,44 @@ describe('the overview: the numbers on the cards', () => {
     expect(text('dashboard-vs-yesterday-dau')).toBe('+20%');
     expect(text('dashboard-vs-yesterday-newAccounts')).toBe('-10%');
     expect(screen.getByTestId('dashboard-vs-7d-dau').getAttribute('style')).toBeNull();
-    expect(screen.getByTestId('dashboard-vs-yesterday-dau')).toHaveAttribute(
-      'title',
-      'One of the two days is not over yet (UTC), so this change is shown in grey and is not judged as a rise or a fall.',
-    );
+  });
+
+  const WHY =
+    'One of the two days is not over yet (UTC), so this change is shown in grey and is not judged as a rise or a fall.';
+
+  it('explains the grey in a tooltip that a mouse hover opens, and not in a title attribute that opens for neither a finger nor a keyboard', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<Overview />);
+    await waitForValue('dau');
+    const change = screen.getByTestId('dashboard-vs-yesterday-dau');
+    expect(change).not.toHaveAttribute('title');
+    expect(change).toHaveAttribute('tabindex', '0');
+    await user.hover(change);
+    expect(await screen.findByText(WHY)).toBeInTheDocument();
+  });
+
+  it('opens the same tooltip when the keyboard focus reaches the grey change', async () => {
+    backend();
+    renderPage(<Overview />);
+    await waitForValue('dau');
+    fireEvent.focus(screen.getByTestId('dashboard-vs-yesterday-dau'));
+    expect(await screen.findByText(WHY)).toBeInTheDocument();
+  });
+
+  it('gives a change of complete days neither the tooltip nor a stop in the tab order', async () => {
+    backend({
+      cohorts: {
+        '2026-10-24': { cohortSize: 200, d1: 60 },
+        '2026-10-23': { cohortSize: 200, d1: 50 },
+        '2026-10-17': { cohortSize: 200, d1: 40 },
+      },
+    });
+    renderPage(<Overview />);
+    await waitForValue('d1');
+    const settled = screen.getByTestId('dashboard-vs-yesterday-d1');
+    expect(settled).not.toHaveAttribute('data-tone', 'provisional');
+    expect(settled).not.toHaveAttribute('tabindex');
   });
 
   it('writes the change of a D1 that is still being counted in grey too, and says so in Chinese', async () => {
@@ -415,10 +468,11 @@ describe('the overview: the numbers on the cards', () => {
     await waitForValue('d1');
     expect(text('dashboard-vs-yesterday-d1')).toBe('+5 个百分点');
     expect(screen.getByTestId('dashboard-vs-yesterday-d1').getAttribute('style')).toBeNull();
-    expect(screen.getByTestId('dashboard-vs-yesterday-d1')).toHaveAttribute(
-      'title',
-      '其中一天（UTC）还没结束，涨跌只作参考，用灰色显示，不判断好坏。',
-    );
+    const change = screen.getByTestId('dashboard-vs-yesterday-d1');
+    await userEvent.hover(change);
+    expect(
+      await screen.findByText('其中一天（UTC）还没结束，涨跌只作参考，用灰色显示，不判断好坏。'),
+    ).toBeInTheDocument();
   });
 
   it('does not say anything about provisional values on a change that cannot be told', async () => {
@@ -541,6 +595,14 @@ describe('the overview: the numbers on the cards', () => {
   it('shows a dash, not a made-up number, when the alert count is not a number', async () => {
     as(['MONITOR:VIEW']);
     backend({ alertsTotal: 'many' });
+    renderPage(<Overview />);
+    await waitForValue('alerts');
+    expect(text('dashboard-value-alerts')).toBe('—');
+  });
+
+  it('shows a dash, not a negative number, when the alert count is below 0', async () => {
+    as(['MONITOR:VIEW']);
+    backend({ alertsTotal: -3 });
     renderPage(<Overview />);
     await waitForValue('alerts');
     expect(text('dashboard-value-alerts')).toBe('—');
@@ -975,7 +1037,31 @@ describe('the overview: the trend chart', () => {
     await waitForValue('d1');
   });
 
-  it('draws D1 without the daily numbers being needed for it, and says what failed when retention fails', async () => {
+  it('draws the metrics that were read when another one could not be: D1 fails, the daily metrics are drawn, and what failed is named with a retry', async () => {
+    const calls = backend({ fail: ['retention'] });
+    const user = userEvent.setup();
+    renderPage(<Overview />);
+    await waitFor(() => expect(screen.getByTestId('chart-dual-axes')).toBeInTheDocument());
+    await user.click(screen.getByRole('combobox', { name: 'Metrics' }));
+    await waitFor(() => expect(optionOf('D1 retention')).toBeDefined());
+    await user.click(optionOf('D1 retention') as HTMLElement);
+    const note = await screen.findByTestId('dashboard-trend-partial');
+    expect(note.textContent).toContain('D1 retention');
+    expect(note.textContent).toContain('Server error');
+    expect(note.textContent).not.toContain('raw backend words');
+    // the chart is still there, with the daily metrics and without D1
+    expect(screen.queryByTestId('dashboard-error-trend')).toBeNull();
+    expect(seriesIn(solid())).toEqual(
+      expect.arrayContaining(['Daily active users', 'New accounts']),
+    );
+    expect(seriesIn(solid())).not.toContain('D1 retention');
+    // Retry asks again for the retention only
+    const before = callsTo(calls, '/stats/retention').length;
+    await user.click(within(note).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(callsTo(calls, '/stats/retention').length).toBe(before + 1));
+  });
+
+  it('shows the failure in place of the chart when every chosen metric needs the request that failed', async () => {
     backend({ fail: ['retention'] });
     const user = userEvent.setup();
     renderPage(<Overview />);
@@ -983,7 +1069,21 @@ describe('the overview: the trend chart', () => {
     await user.click(screen.getByRole('combobox', { name: 'Metrics' }));
     await waitFor(() => expect(optionOf('D1 retention')).toBeDefined());
     await user.click(optionOf('D1 retention') as HTMLElement);
+    await screen.findByTestId('dashboard-trend-partial');
+    for (const title of ['Daily active users', 'New accounts']) {
+      await user.click(screen.getByRole('combobox', { name: 'Metrics' }));
+      await waitFor(() => expect(optionOf(title)).toBeDefined());
+      await user.click(optionOf(title) as HTMLElement);
+    }
     await waitFor(() => expect(screen.getByTestId('dashboard-error-trend')).toBeInTheDocument());
+    expect(screen.queryByTestId('chart-dual-axes')).toBeNull();
+  });
+
+  it('shows the failure of the daily request on the chart when D1 is not chosen, as before', async () => {
+    backend({ fail: ['daily'] });
+    renderPage(<Overview />);
+    await waitFor(() => expect(screen.getByTestId('dashboard-error-trend')).toBeInTheDocument());
+    expect(screen.queryByTestId('dashboard-trend-partial')).toBeNull();
   });
 });
 

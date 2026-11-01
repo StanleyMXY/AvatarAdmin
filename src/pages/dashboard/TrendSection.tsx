@@ -44,19 +44,20 @@ export function TrendSection({ daily, retention }: Props) {
   const range =
     preset === 'custom' ? (custom ?? { from: today, to: today }) : rangeOfPreset(preset, today);
 
-  const needsDaily = metrics.some((m) => m !== 'd1');
-  const needsRetention = metrics.includes('d1');
-  const needed = [needsDaily ? daily : null, needsRetention ? retention : null].filter(
-    (source): source is Source<DailyData> | Source<RetentionData> => source !== null,
-  );
-  const failed = needed.filter((source) => source.status === 'failed');
+  // A metric whose request failed is left out of the chart and named; the others are still drawn.
+  const sourceOf = (metric: TrendMetric): Source<DailyData> | Source<RetentionData> =>
+    metric === 'd1' ? retention : daily;
+  const drawable = metrics.filter((metric) => sourceOf(metric).status !== 'failed');
+  const failedMetrics = metrics.filter((metric) => sourceOf(metric).status === 'failed');
+  const failed = [...new Set(failedMetrics.map(sourceOf))];
+  const needed = [...new Set(drawable.map(sourceOf))];
   const ready = needed.every((source) => source.status === 'ready');
 
   const theme = getChartTheme(mode);
   const buildChart = () => {
     if (!ready || range === null) return null;
     const points = Object.fromEntries(
-      metrics.map((metric) => [
+      drawable.map((metric) => [
         metric,
         trendPoints({
           metric,
@@ -70,7 +71,7 @@ export function TrendSection({ daily, retention }: Props) {
     ) as Partial<Record<TrendMetric, ReturnType<typeof trendPoints>>>;
     const label = (metric: TrendMetric) => intl.formatMessage({ id: `dashboard.metric.${metric}` });
     return buildTrendChart({
-      metrics,
+      metrics: drawable,
       points,
       metricLabel: label,
       lastWeekLabel: (metric) =>
@@ -142,11 +143,20 @@ export function TrendSection({ daily, retention }: Props) {
         />
       </Flex>
       {failed.length > 0 ? (
-        <div data-testid="dashboard-error-trend">
+        <div
+          data-testid={drawable.length === 0 ? 'dashboard-error-trend' : 'dashboard-trend-partial'}
+        >
           <Typography.Text type="danger">
-            {t('dashboard.card.loadFailed', {
-              message: describeFailure(intl, failed[0].error).text,
-            })}
+            {drawable.length === 0
+              ? t('dashboard.card.loadFailed', {
+                  message: describeFailure(intl, failed[0].error).text,
+                })
+              : t('dashboard.trend.partialFailed', {
+                  metrics: failedMetrics
+                    .map((metric) => t(`dashboard.metric.${metric}`))
+                    .join(', '),
+                  message: describeFailure(intl, failed[0].error).text,
+                })}
           </Typography.Text>{' '}
           <Button
             size="small"
@@ -157,8 +167,9 @@ export function TrendSection({ daily, retention }: Props) {
             {t('pages.common.retry')}
           </Button>
         </div>
-      ) : chart ? (
-        <DualAxes key={`${range?.from === range?.to}-${metrics.join()}`} {...chart} />
+      ) : null}
+      {drawable.length === 0 ? null : chart ? (
+        <DualAxes key={`${range?.from === range?.to}-${drawable.join()}`} {...chart} />
       ) : (
         <Skeleton active paragraph={{ rows: 6 }} />
       )}

@@ -93,6 +93,7 @@ const messages: Record<string, string> = {
   'dashboard.card.loadFailed': '加载失败：{message}',
   'dashboard.change.vsYesterday': '较昨日',
   'dashboard.change.vs7Days': '较 7 天前',
+  'dashboard.trend.partialFailed': '有些指标没有读到，图里没画：{metrics}。{message}',
   'dashboard.trend.title': '趋势',
   'dashboard.trend.metrics': '指标',
   'dashboard.trend.lastWeek': '{metric}（上周同期）',

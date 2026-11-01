@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import enUS from '../../locales/en-US';
-import zhCN from '../../locales/zh-CN';
+import enUS from '../locales/en-US';
+import zhCN from '../locales/zh-CN';
 import { formatDuration, secondsSince } from './duration';
 
 const en = (id: string, values: Record<string, string | number> = {}) =>

@@ -98,6 +98,8 @@ const messages: Record<string, string> = {
   'dashboard.card.loadFailed': 'Failed to load: {message}',
   'dashboard.change.vsYesterday': 'vs yesterday',
   'dashboard.change.vs7Days': 'vs 7 days ago',
+  'dashboard.trend.partialFailed':
+    'Not shown, because they could not be read: {metrics}. {message}',
   'dashboard.trend.title': 'Trend',
   'dashboard.trend.metrics': 'Metrics',
   'dashboard.trend.lastWeek': '{metric} (same period last week)',

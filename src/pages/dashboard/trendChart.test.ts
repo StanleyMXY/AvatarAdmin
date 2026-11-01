@@ -115,3 +115,24 @@ describe('buildTrendChart: the values of a day that is not over', () => {
     }
   });
 });
+
+describe('buildTrendChart: the tooltip of the percentage axis', () => {
+  type WithTooltip = Child & {
+    tooltip?: { items?: { channel?: string; valueFormatter?: (v: number) => string }[] };
+  };
+  const tooltipOf = (children: Child[]) =>
+    (children as WithTooltip[]).find((c) => c.type === 'line' && c.tooltip)?.tooltip;
+
+  it('writes the D1 values as percentages with one decimal and a percent sign', () => {
+    const tip = tooltipOf(build({ metrics: ['d1'] }));
+    const format = tip?.items?.[0]?.valueFormatter as (v: number) => string;
+    expect(format(30)).toBe('30%');
+    expect(format(30.123456)).toBe('30.1%');
+    expect(format(0)).toBe('0%');
+    expect(format(99.96)).toBe('100%');
+  });
+
+  it('has no such tooltip on the count axis', () => {
+    expect(tooltipOf(build({ metrics: ['dau'] }))).toBeUndefined();
+  });
+});

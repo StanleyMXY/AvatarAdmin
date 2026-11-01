@@ -1,9 +1,9 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { Col, Empty, Flex, Row, Typography } from 'antd';
 import { useAdminMeta } from '../../session/useSession';
+import { formatDuration } from '../../utils/duration';
 import { DASH, formatCount, formatPercent } from '../../utils/ratio';
 import { isProvisionalDay } from '../../utils/settledDay';
-import { formatDuration } from '../moderation/duration';
 import {
   type CardChange,
   type ChangeKind,
@@ -67,8 +67,8 @@ export default function OverviewPage() {
   const canModeration = access.canAccess('MODERATION:VIEW');
   const canMonitor = access.canAccess('MONITOR:VIEW');
 
-  const daily = useSource<DailyData>(loadDaily, canStats);
-  const retention = useSource<RetentionData>(loadRetention, canStats);
+  const daily = useSource<DailyData>(() => loadDaily(meta.statsMaxRangeDays), canStats);
+  const retention = useSource<RetentionData>(() => loadRetention(meta.statsMaxRangeDays), canStats);
   const android = useSource(() => loadPlatformDau('ANDROID'), canStats);
   const ios = useSource(() => loadPlatformDau('IOS'), canStats);
   const oldestPending = useSource(loadOldestPending, canModeration);

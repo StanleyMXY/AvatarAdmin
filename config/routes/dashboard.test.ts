@@ -44,10 +44,10 @@ describe('the overview route (spec 5.0 and 5.1)', () => {
     expect(matchPage(index, '/dashboard')?.titleKey).toBe(`menu.dashboard.${pages[0].name}`);
   });
 
-  it('has quick links that ask for the permission of their target page, for every target that is in the table', () => {
+  it('has quick links that ask for the permission of their target page, and every target is in the table (a link that opens the 404 page is a defect)', () => {
     const table = flattenPages(routes);
     const found = QUICK_LINKS.filter((link) => table.some((page) => page.path === link.to));
-    expect(found.length).toBeGreaterThan(0);
+    expect(found.map((link) => link.to)).toEqual(QUICK_LINKS.map((link) => link.to));
     for (const link of found) {
       expect(table.find((page) => page.path === link.to)?.access, link.to).toBe(link.code);
     }
