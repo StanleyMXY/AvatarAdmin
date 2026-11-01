@@ -4,7 +4,7 @@ import { Flex, Typography } from 'antd';
 import { useMemo } from 'react';
 import { fillMissingDays } from '../../services/stats/fillMissingDays';
 import type { ReactivationRow } from '../../services/stats/types';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { formatCount, formatPercent, safeRatio } from '../../utils/ratio';
 
@@ -39,8 +39,8 @@ export function ReactivationCharts({ rows, from, to }: Props) {
     [days],
   );
   const axis = {
-    x: { labelFill: theme.textColor },
-    y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+    x: { ...axisTextStyle(theme) },
+    y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
   };
 
   return (

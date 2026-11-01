@@ -4,7 +4,7 @@ import { Alert, Button, Card, Empty, Flex, Segmented, Select, Spin, Typography }
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getPipeline, type PipelinePoint } from '../../services/monitor';
 import { describeFailure } from '../../session/describe';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 
 const HOUR_MS = 3600_000;
@@ -170,10 +170,10 @@ export default function PipelinePage() {
                   scale={{ x: { type: 'time' }, color: { range: theme.palette } }}
                   axis={{
                     x: {
-                      labelFill: theme.textColor,
+                      ...axisTextStyle(theme),
                       labelFormatter: (value: number | Date) => time.format(value),
                     },
-                    y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+                    y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
                   }}
                   height={240}
                 />

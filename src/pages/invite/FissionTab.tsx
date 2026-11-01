@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ReadState } from '../../components/ReadState';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import { getDepthStats, getInviteChain, type InviteChain } from '../../services/invite';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { formatInstant } from '../../utils/format';
 import { DASH, formatCount } from '../../utils/ratio';
@@ -204,13 +204,13 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
                 theme={theme.g2Theme}
                 scale={{ color: { range: theme.palette } }}
                 axis={{
-                  x: { labelFill: theme.textColor },
+                  x: { ...axisTextStyle(theme) },
                   y: {
                     title: t('invite.fission.people'),
                     // people are whole numbers: no tick at 0.5
                     labelFormatter: (value: number) =>
                       Number.isInteger(value) ? String(value) : '',
-                    labelFill: theme.textColor,
+                    ...axisTextStyle(theme),
                     gridStroke: theme.gridColor,
                   },
                 }}

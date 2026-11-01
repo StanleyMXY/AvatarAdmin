@@ -14,7 +14,7 @@ import {
   type SummaryGroup,
   type SummaryRow,
 } from '../../services/campaign';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { codeText, countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
@@ -163,8 +163,8 @@ export function SummaryTab({ kept }: { kept: Kept }) {
                 theme={theme.g2Theme}
                 scale={{ color: { range: theme.palette } }}
                 axis={{
-                  x: { labelFill: theme.textColor },
-                  y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+                  x: { ...axisTextStyle(theme) },
+                  y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
                 }}
                 height={Math.max(240, 28 * chart.data.length)}
               />

@@ -10,7 +10,7 @@ import { TrendChart } from '../../components/stat/TrendChart';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import { getCheckinDailyUsers, getCheckinStreakBuckets } from '../../services/stats/reports';
 import type { CheckinDailyUsersRow, StreakBucketRow } from '../../services/stats/types';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { countText, orDash } from '../../utils/displayText';
 import { DASH } from '../../utils/ratio';
@@ -175,8 +175,8 @@ export default function SigninStatsPage() {
                       theme={theme.g2Theme}
                       scale={{ color: { range: theme.palette } }}
                       axis={{
-                        x: { labelFill: theme.textColor },
-                        y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+                        x: { ...axisTextStyle(theme) },
+                        y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
                       }}
                       height={280}
                     />

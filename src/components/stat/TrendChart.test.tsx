@@ -14,6 +14,21 @@ const configOf = () =>
   JSON.parse(screen.getByTestId('chart-line').getAttribute('data-config') ?? '{}');
 
 describe('TrendChart', () => {
+  it('draws the text of both axes at full opacity (the default is 45%, about 2:1)', () => {
+    renderPage(
+      <TrendChart
+        rows={[]}
+        xField="statDate"
+        series={[{ field: 'dau', label: 'DAU' }]}
+        from="2026-10-01"
+        to="2026-10-01"
+      />,
+    );
+    const axis = configOf().axis;
+    expect(axis.x.labelOpacity).toBe(1);
+    expect(axis.y.labelOpacity).toBe(1);
+  });
+
   const series = [
     { field: 'dau', label: 'DAU' },
     { field: 'wau', label: 'WAU', dashed: true },

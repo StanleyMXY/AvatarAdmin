@@ -1,7 +1,7 @@
 import { Line } from '@ant-design/plots';
 import { useMemo } from 'react';
 import { fillMissingDays } from '../../services/stats/fillMissingDays';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { hollowPointsMark, provisionalPoints } from './provisionalChart';
 import { wholeNumberTicks } from './wholeNumberTicks';
@@ -76,8 +76,8 @@ export function TrendChart<T extends { statDate: string }>({
       }}
       annotations={hollow.length > 0 ? [hollowPointsMark(hollow, theme.background)] : undefined}
       axis={{
-        x: { labelFill: theme.textColor },
-        y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+        x: { ...axisTextStyle(theme) },
+        y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
       }}
       height={300}
     />

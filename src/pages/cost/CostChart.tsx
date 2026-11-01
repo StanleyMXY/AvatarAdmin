@@ -2,7 +2,7 @@ import { Column } from '@ant-design/plots';
 import { useIntl } from '@umijs/max';
 import { useMemo } from 'react';
 import { toDecimalString } from '../../services/cost';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import type { ChartPoint } from './costRows';
 import { legendLabels } from './labels';
@@ -37,7 +37,7 @@ export function CostChart({ currency, points }: { currency: string; points: Char
       text: p.text,
     }));
   }, [points]);
-  const axisText = { labelFill: theme.textColor, titleFill: theme.textColor };
+  const axisText = axisTextStyle(theme);
   return (
     <Column
       data={data}

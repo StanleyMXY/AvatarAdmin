@@ -30,3 +30,17 @@ export function getChartTheme(mode: ThemeMode): ChartThemeConfig {
     background: tokens.colorBgContainer,
   };
 }
+
+/**
+ * The text of an axis (its labels and its title). G2 draws it at 45% opacity unless told otherwise,
+ * which leaves the colour at about 2:1 on the page; at full opacity it is the colour that was chosen
+ * (4.5:1 or more in every mode). Every chart takes the text of its axes from here.
+ */
+export function axisTextStyle(theme: ChartThemeConfig) {
+  return {
+    labelFill: theme.textColor,
+    labelOpacity: 1,
+    titleFill: theme.textColor,
+    titleOpacity: 1,
+  };
+}

@@ -2,7 +2,7 @@ import { Line } from '@ant-design/plots';
 import { useIntl } from '@umijs/max';
 import { useMemo } from 'react';
 import type { RetentionRow } from '../../services/stats/types';
-import { getChartTheme } from '../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { formatPercent, safeRatio } from '../../utils/ratio';
 
@@ -50,9 +50,9 @@ export function RetentionTrendChart({
       theme={theme.g2Theme}
       scale={{ color: { range: theme.palette }, y: { domainMin: 0 } }}
       axis={{
-        x: { labelFill: theme.textColor },
+        x: { ...axisTextStyle(theme) },
         y: {
-          labelFill: theme.textColor,
+          ...axisTextStyle(theme),
           gridStroke: theme.gridColor,
           labelFormatter: (value: number) => formatPercent(value, intl.locale),
         },

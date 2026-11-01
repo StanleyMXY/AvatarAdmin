@@ -8,7 +8,7 @@ import { useLatestRead } from '../../../hooks/useLatestRead';
 import { getGuestCohort } from '../../../services/stats/reports';
 import { GUEST_COHORT_DAYS } from '../../../services/stats/types';
 import { useAdminMeta } from '../../../session/useSession';
-import { getChartTheme } from '../../../theme/chartTheme';
+import { axisTextStyle, getChartTheme } from '../../../theme/chartTheme';
 import { useThemeMode } from '../../../theme/modes';
 import { defaultRange } from '../../analytics/defaultRange';
 import { buildConversionDistribution, buildConversionStack } from './conversion';
@@ -114,8 +114,8 @@ export function GuestCohortTab({
                 theme={theme.g2Theme}
                 scale={{ color: { range: theme.palette } }}
                 axis={{
-                  x: { labelFill: theme.textColor },
-                  y: { labelFill: theme.textColor, gridStroke: theme.gridColor },
+                  x: { ...axisTextStyle(theme) },
+                  y: { ...axisTextStyle(theme), gridStroke: theme.gridColor },
                 }}
                 height={300}
               />
