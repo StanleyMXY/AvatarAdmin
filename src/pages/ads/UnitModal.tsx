@@ -13,6 +13,7 @@ import {
   updateUnit,
 } from '../../services/ads';
 import { describeFailure } from '../../session/describe';
+import { detailReason, type FieldReason, setFieldReasons } from '../../utils/fieldReasons';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { Picker } from './Picker';
@@ -56,12 +57,12 @@ function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknow
   const { text, fields } = describeFailure(intl, error);
   const forTargeting: Partial<Record<TargetingKey, string>> = {};
   const more: string[] = [];
-  const forForm: { name: string; errors: string[] }[] = [];
-  for (const detail of fields) {
+  const forForm: FieldReason[] = [];
+  for (const [index, detail] of fields.entries()) {
     const key = targetingKeyOf(detail.ref);
     if (key) forTargeting[key] = detail.text;
     else if ((FIELDS as readonly string[]).includes(detail.ref)) {
-      forForm.push({ name: detail.ref, errors: [detail.text] });
+      forForm.push(detailReason(intl, error, detail.ref, index));
     } else more.push(detail.text);
   }
   return { text, forTargeting, more, forForm };
@@ -137,7 +138,7 @@ export function UnitModal({
       }
     } catch (error) {
       const { forForm } = splitRefusal(intl, error);
-      if (forForm.length > 0) (form as FormInstance).setFields(forForm);
+      setFieldReasons(form as FormInstance, intl, forForm);
       setRefusal({ error, targetingEdited: false });
       return;
     }

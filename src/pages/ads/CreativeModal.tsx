@@ -36,6 +36,7 @@ import {
 } from '../../services/ads';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { detailReason, type FieldReason, setFieldReasons } from '../../utils/fieldReasons';
 import { formatBytes } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
@@ -100,11 +101,11 @@ const DEEP_LINK_MAX = 2048;
 /** What the backend refused, sorted by where it goes: under a form field or in the bar. */
 function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknown) {
   const { text, fields } = describeFailure(intl, error);
-  const forForm: { name: string; errors: string[] }[] = [];
+  const forForm: FieldReason[] = [];
   const more: string[] = [];
-  for (const detail of fields) {
+  for (const [index, detail] of fields.entries()) {
     if ((FIELDS as readonly string[]).includes(detail.ref)) {
-      forForm.push({ name: detail.ref, errors: [detail.text] });
+      forForm.push(detailReason(intl, error, detail.ref, index));
     } else more.push(detail.text);
   }
   return { text, more, forForm };
@@ -247,7 +248,7 @@ export function CreativeModal({
           });
     } catch (error) {
       const { forForm } = splitRefusal(intl, error);
-      if (forForm.length > 0) (form as FormInstance).setFields(forForm);
+      setFieldReasons(form as FormInstance, intl, forForm);
       if (uploadRefused(error)) {
         slot.reset();
         setRejected(true);

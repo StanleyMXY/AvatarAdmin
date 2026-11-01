@@ -31,6 +31,12 @@ import {
 import type { ChannelPackage } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
 import { codeText } from '../../utils/displayText';
+import {
+  detailReason,
+  type FieldReason,
+  failureReason,
+  setFieldReasons,
+} from '../../utils/fieldReasons';
 import { formatBytes } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
@@ -120,18 +126,18 @@ function uploadRefused(error: unknown, carriedNewUpload: boolean): boolean {
 /** What the backend refused, sorted by where it goes: under a form field or in the bar. */
 function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknown) {
   const described = describeFailure(intl, error);
-  const forForm: { name: string; errors: string[] }[] = [];
+  const forForm: FieldReason[] = [];
   const more: string[] = [];
-  for (const detail of described.fields) {
+  for (const [index, detail] of described.fields.entries()) {
     if ((FIELDS as readonly string[]).includes(detail.ref) && detail.ref !== 'apkUploadId') {
-      forForm.push({ name: detail.ref, errors: [detail.text] });
+      forForm.push(detailReason(intl, error, detail.ref, index));
     } else more.push(detail.text);
   }
   // A duplicate names the field in `data.field`.
   if (error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE') {
     const field = (error.data as { field?: unknown } | null)?.field;
     if (typeof field === 'string' && (FIELDS as readonly string[]).includes(field)) {
-      forForm.push({ name: field, errors: [described.text] });
+      forForm.push(failureReason(field, error));
     }
   }
   return { text: described.text, more, forForm };
@@ -231,7 +237,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
       else await createAppVersion({ ...fields, channelCode: values.channelCode as string });
     } catch (error) {
       const { forForm } = splitRefusal(intl, error);
-      if (forForm.length > 0) (form as FormInstance).setFields(forForm);
+      setFieldReasons(form as FormInstance, intl, forForm);
       if (kind === 'DIRECT' && uploadRefused(error, slot.uploadId !== undefined)) {
         slot.reset();
         setRejected(true);
