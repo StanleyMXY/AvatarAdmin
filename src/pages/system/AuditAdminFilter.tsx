@@ -1,7 +1,7 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { Input, Select } from 'antd';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { loadAllAdmins } from '../../services/system';
-import { useRead } from './useRead';
 
 type Props = { value?: string; onChange?: (value: string | undefined) => void };
 
@@ -19,8 +19,8 @@ export function AuditAdminFilter({ value, onChange }: Props) {
 
 function PickByName({ value, onChange }: Props) {
   const intl = useIntl();
-  const admins = useRead(loadAllAdmins);
-  if (admins.state.status === 'failed') {
+  const admins = useLatestRead(loadAllAdmins, { keepWhileReading: true });
+  if (admins.failure !== null) {
     return (
       <Input
         aria-label={intl.formatMessage({ id: 'system.audit.filter.adminId' })}
@@ -37,9 +37,9 @@ function PickByName({ value, onChange }: Props) {
       allowClear
       optionFilterProp="label"
       value={value === '' ? undefined : value}
-      loading={admins.state.status === 'loading'}
+      loading={admins.loading}
       placeholder={intl.formatMessage({ id: 'system.audit.filter.adminPick' })}
-      options={(admins.state.data ?? []).map((admin) => ({
+      options={(admins.data ?? []).map((admin) => ({
         value: admin.id,
         label: String(admin.username),
       }))}

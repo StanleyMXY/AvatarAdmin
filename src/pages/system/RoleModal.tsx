@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Spin, Typography } from 'antd';
 import { useMemo, useState } from 'react';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -17,7 +18,6 @@ import { failureToForm } from './formFailure';
 import { PermissionTreeSelect } from './PermissionTreeSelect';
 import { ancestorsOf, buildIndex, codesNotHeld, isSelectable } from './permissionTree';
 import { withScopeHint } from './texts';
-import { useRead } from './useRead';
 
 type Values = { name: string; remark: string };
 
@@ -47,8 +47,8 @@ export function RoleModal({ role, onDone, onClose }: Props) {
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
   const [failure, setFailure] = useState<{ text: string; unplaced: string[] } | null>(null);
-  const tree = useRead(listPermissions);
-  const nodes: PermissionNode[] | null = tree.state.status === 'ok' ? tree.state.data : null;
+  const tree = useLatestRead(listPermissions, { keepWhileReading: true });
+  const nodes: PermissionNode[] | null = !tree.loading && tree.failure === null ? tree.data : null;
   const [picked, setPicked] = useState<string[] | null>(null);
   // What the signed-in administrator holds. Only a help for the boxes: `GET /me` is not known to list
   // exactly the codes the backend counts as held, so the backend stays the last word (a 403).
@@ -185,18 +185,18 @@ export function RoleModal({ role, onDone, onClose }: Props) {
       <Typography.Paragraph strong style={{ marginBottom: 4 }}>
         {t('system.roles.field.permissions')}
       </Typography.Paragraph>
-      {tree.state.status === 'loading' && nodes === null ? (
+      {tree.loading && nodes === null ? (
         <Flex gap={8} align="center">
           <Spin size="small" />
           <span>{t('system.roles.treeLoading')}</span>
         </Flex>
       ) : null}
-      {tree.state.status === 'failed' ? (
+      {tree.failure !== null ? (
         <Alert
           type="error"
           showIcon
           title={t('system.roles.treeFailed', {
-            message: describeFailure(intl, tree.state.error).text,
+            message: describeFailure(intl, tree.error).text,
           })}
           action={
             <Button size="small" onClick={tree.reload}>

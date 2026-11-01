@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import {
   type AdminUser,
   deleteAdmin,
@@ -14,14 +15,14 @@ import {
   setAdminStatus,
 } from '../../services/system';
 import { useSession } from '../../session/useSession';
+import { instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { AdminFormModal } from './AdminFormModal';
 import { isClosedTo, type RowProtection, rowProtection } from './adminRules';
 import { PagedTable } from './PagedTable';
 import { ResetPasswordModal } from './ResetPasswordModal';
-import { instantText, protectedFailureText } from './texts';
-import { useRead } from './useRead';
+import { protectedFailureText } from './texts';
 
 type Dialog =
   | { kind: 'create' }
@@ -54,8 +55,8 @@ export default function AdminsPage() {
   const reloadRef = useRef<(() => void) | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   // Every administrator, for "the last enabled super administrator" (the table shows one page only).
-  const everyone = useRead(loadAllAdmins);
-  const all = everyone.state.data?.filter(isRecord) ?? null;
+  const everyone = useLatestRead(loadAllAdmins, { keepWhileReading: true });
+  const all = everyone.data?.filter(isRecord) ?? null;
   const refresh = () => {
     reloadRef.current?.();
     everyone.reload();

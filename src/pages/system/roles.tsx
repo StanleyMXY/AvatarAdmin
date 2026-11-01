@@ -6,10 +6,11 @@ import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { type AdminRole, deleteRole, listRoles } from '../../services/system';
 import { describeFailure } from '../../session/describe';
+import { instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { PagedTable } from './PagedTable';
 import { RoleModal } from './RoleModal';
-import { instantText, withScopeHint } from './texts';
+import { withScopeHint } from './texts';
 
 /**
  * 角色 (`ROLE:MANAGE`): the roles with the permissions they give. A role is made and changed in a

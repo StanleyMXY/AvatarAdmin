@@ -4,12 +4,12 @@ import { Alert, Flex } from 'antd';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { type AuditLog, listAuditLogs } from '../../services/system';
+import { adminText, instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { utcDayRangeToInstants } from '../../utils/utcDay';
 import { AuditAdminFilter } from './AuditAdminFilter';
 import { detailText } from './auditDetail';
-import { adminLabel, instantText, orDash } from './texts';
 
 // What the backend takes in these filters; longer text is answered 400, so the boxes stop at the limit.
 const MAX_ACTION = 64;
@@ -48,7 +48,7 @@ export default function AuditPage() {
       search: false,
       render: (_, row) => (
         <EllipsisPopoverText
-          text={adminLabel(row.adminUsername, row.adminId)}
+          text={adminText(row.adminUsername, row.adminId)}
           lines={2}
           width={200}
         />

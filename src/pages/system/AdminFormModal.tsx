@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Select, Switch, Typography } from 'antd';
 import { useState } from 'react';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
@@ -18,7 +19,6 @@ import { trimSpec } from '../../utils/trimSpec';
 import { checkNewPassword, type RowProtection } from './adminRules';
 import { failureToForm } from './formFailure';
 import { withScopeHint } from './texts';
-import { useRead } from './useRead';
 
 type Values = {
   username: string;
@@ -62,7 +62,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
   const [failure, setFailure] = useState<string | null>(null);
-  const roles = useRead(loadAllRoles);
+  const roles = useLatestRead(loadAllRoles, { keepWhileReading: true });
   const creating = admin === null;
   const minLength = me?.passwordMinLength;
   const canSetSuper = me?.superAdmin === true;
@@ -78,7 +78,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
   const chosenRoles = Form.useWatch('roleIds', form) ?? original;
   const chosenSuper = Form.useWatch('superAdmin', form) ?? admin?.superAdmin ?? false;
 
-  const rolesReadable = roles.state.status === 'ok';
+  const rolesReadable = !roles.loading && roles.failure === null;
   const rolesLocked = protection.own || !rolesReadable;
   const flagLocked = protection.own || !canSetSuper || protection.lastSuper;
   const rolesChanged = !rolesLocked && !sameSet(chosenRoles, original);
@@ -86,14 +86,13 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
   const nothingToSave = !creating && !rolesChanged && !flagChanged;
 
   const forbidden =
-    roles.state.status === 'failed' &&
-    roles.state.error instanceof ApiError &&
-    (roles.state.error.httpStatus === 403 || roles.state.error.code === 'ADMIN_FORBIDDEN');
+    roles.error instanceof ApiError &&
+    (roles.error.httpStatus === 403 || roles.error.code === 'ADMIN_FORBIDDEN');
 
   const options = [
-    ...(roles.state.data ?? []).map((role) => ({ value: role.id, label: role.name })),
+    ...(roles.data ?? []).map((role) => ({ value: role.id, label: role.name })),
     ...adminRoles
-      .filter((r) => !(roles.state.data ?? []).some((role) => role.id === r.id))
+      .filter((r) => !(roles.data ?? []).some((role) => role.id === r.id))
       .map((role) => ({ value: role.id, label: role.name })),
   ];
 
@@ -238,18 +237,18 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
           name="roleIds"
           label={t('system.admins.field.roles')}
           extra={
-            roles.state.status === 'loading' && roles.state.data === null ? (
+            roles.loading && roles.data === null ? (
               t('system.admins.field.rolesLoading')
             ) : forbidden ? (
               t('system.admins.field.rolesForbidden', {
                 permission: t(`permission.${ROLE_LIST_CODE}`),
                 code: ROLE_LIST_CODE,
               })
-            ) : roles.state.status === 'failed' ? (
+            ) : roles.failure !== null ? (
               <Flex gap={8} align="center" wrap>
                 <span>
                   {t('system.admins.field.rolesFailed', {
-                    message: describeFailure(intl, roles.state.error).text,
+                    message: describeFailure(intl, roles.error).text,
                   })}
                 </span>
                 <Button size="small" onClick={roles.reload}>
@@ -265,7 +264,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
             optionFilterProp="label"
             options={options}
             disabled={rolesLocked}
-            loading={roles.state.status === 'loading'}
+            loading={roles.loading}
             placeholder={t('system.admins.field.rolesPlaceholder')}
           />
         </Form.Item>

@@ -1,6 +1,8 @@
 import type { FormInstance } from 'antd';
+import { ApiError } from '../../request/errors';
 import { describeFailure } from '../../session/describe';
-import type { Translator } from './texts';
+import type { Translator } from '../../utils/displayText';
+import { failureToForm as failureToSharedForm } from '../../utils/failureToForm';
 
 /**
  * Puts a failed save into the form. Field details (400 `INVALID_REQUEST`) go under their field when
@@ -16,24 +18,22 @@ export function failureToForm(
   error: unknown,
   fields: readonly string[],
 ): { text: string | null; unplaced: string[] } {
-  const { error: failure, text } = describeFailure(intl, error);
-  if (failure.code === 'DUPLICATE_RESOURCE') {
-    const field = (failure.data as { field?: unknown } | null)?.field;
+  if (error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE') {
+    const { text } = describeFailure(intl, error);
+    const field = (error.data as { field?: unknown } | null)?.field;
     if (typeof field === 'string' && fields.includes(field)) {
       form.setFields([{ name: field, errors: [text] }]);
       return { text: null, unplaced: [] };
     }
     return { text, unplaced: [] };
   }
-  const general = intl.formatMessage({ id: 'error.INVALID_REQUEST' });
-  const named = failure.details.map((detail) => ({
-    ref: detail.ref,
-    text: intl.messages[`reason.${detail.reason}`]
-      ? intl.formatMessage({ id: `reason.${detail.reason}` })
-      : general,
-  }));
-  const mine = named.filter((d) => fields.includes(d.ref));
-  if (mine.length > 0) form.setFields(mine.map((d) => ({ name: d.ref, errors: [d.text] })));
-  const unplaced = named.filter((d) => !fields.includes(d.ref)).map((d) => d.text);
+  const { text, unplaced } = failureToSharedForm(
+    intl,
+    form,
+    error,
+    fields,
+    {},
+    { generalReason: true },
+  );
   return { text, unplaced };
 }
