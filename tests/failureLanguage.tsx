@@ -114,3 +114,103 @@ export async function expectFailureFollowsLanguage(
   await new Promise((resolve) => setTimeout(resolve, 100));
   expect(requests, 'the switch of the language made a request').toBe(0);
 }
+
+/**
+ * Makes the requests that `match` picks refused with a 400 that names fields (`details`, each
+ * `{ ref, reason }`): a dialog puts these reasons under its fields. Call it after `useMockBackend`.
+ */
+export function refuseRequests(
+  match: RegExp | ((path: string, method: string) => boolean),
+  details: { ref: string; reason: string }[],
+) {
+  return overrideFetch(({ url, method }) => {
+    const hit =
+      typeof match === 'function'
+        ? match(url.pathname, method)
+        : match.test(`${method} ${url.pathname}`);
+    return hit ? jsonAnswer(400, 'INVALID_REQUEST', { details }) : undefined;
+  });
+}
+
+/** The reason of a field in each language (a reason the language file knows, such as `TOO_LONG`). */
+export const reasonWords = (reason: string) => ({
+  en: (enUS as Record<string, string>)[`reason.${reason}`],
+  zh: (zhCN as Record<string, string>)[`reason.${reason}`],
+});
+
+const reasonsUnderFields = () =>
+  [...document.querySelectorAll<HTMLElement>('.ant-form-item-explain-error')].map(
+    (node) => node.textContent ?? '',
+  );
+
+/** What the person has typed or chosen in the page now: one entry per input, in order. */
+const typedValues = () =>
+  [...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')].map(
+    (node) => `${node.type}:${node.value}:${'checked' in node ? node.checked : ''}`,
+  );
+
+/**
+ * The reasons a dialog shows under its fields (the backend refused the save and named fields) follow
+ * the language: they are in English under the fields, and after the switch every one of them is
+ * Chinese (no Latin letter, `allowed` lists what may stay), the English words are nowhere on the
+ * page, the switch made no request, and what the person typed is still in the boxes. Antd keeps
+ * these words in the form, not in the page, so the page cannot make them again by itself.
+ */
+export async function expectFieldReasonsFollowLanguage(
+  view: Switcher,
+  options: {
+    reason?: string;
+    /** The words under the field, in each language, when they are not those of a reason. */
+    words?: { en: string; zh: string };
+    allowed?: RegExp;
+    fields?: number;
+  } = {},
+) {
+  const words = options.words ?? reasonWords(options.reason ?? 'TOO_LONG');
+  await waitFor(() =>
+    expect(
+      reasonsUnderFields().filter((text) => text.includes(words.en)),
+      'the reason is not under a field',
+    ).not.toEqual([]),
+  );
+  if (options.fields !== undefined) {
+    expect(reasonsUnderFields().filter((text) => text.includes(words.en))).toHaveLength(
+      options.fields,
+    );
+  }
+  const typed = typedValues();
+  let requests = 0;
+  const inner = globalThis.fetch;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((...args: Parameters<typeof fetch>) => {
+      requests += 1;
+      return inner(...args);
+    }),
+  );
+  await view.switchTo('zh-CN');
+  await waitFor(() =>
+    expect(
+      reasonsUnderFields().filter((text) => text.includes(words.zh)),
+      'the reason under the field is not in Chinese',
+    ).not.toEqual([]),
+  );
+  await waitFor(() =>
+    expect(reasonsUnderFields().filter((text) => text.includes(words.en))).toEqual([]),
+  );
+  for (const text of reasonsUnderFields()) {
+    expect(
+      text.replace(options.allowed ?? /(?!)/g, ''),
+      'a reason under a field is still English',
+    ).not.toMatch(/[A-Za-z]/);
+  }
+  if (options.fields !== undefined) {
+    expect(reasonsUnderFields().filter((text) => text.includes(words.zh))).toHaveLength(
+      options.fields,
+    );
+  }
+  expect(document.body.textContent).not.toContain(words.en);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(requests, 'the switch of the language made a request').toBe(0);
+  expect(typedValues(), 'what the person typed was lost').toEqual(typed);
+}

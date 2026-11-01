@@ -1,5 +1,6 @@
 import type { FormInstance } from 'antd';
 import { describeFailure } from '../session/describe';
+import { setFieldReasons } from './fieldReasons';
 import { isUploadIdRejection } from './uploadErrors';
 
 /** The part of `useIntl()` this needs (Umi's copy of react-intl and ours have different types). */
@@ -57,9 +58,10 @@ export function failureWords(
  * the `uploadId` the request carried (the form must ask for the file again; call it for a request
  * that carries one). `aliases` maps a name the backend uses to the form field that holds it
  * (`linkTarget` to `link`). `unplaced` is the text of each detail that no field of the form took,
- * for the bar. `code` is the error code of the failure. These words are in the language of this
- * moment: a page that keeps them in its state shows them in that language for good, so it keeps
- * the failure and calls `failureWords` when it draws.
+ * for the bar. `code` is the error code of the failure. `text` and `unplaced` are in the language
+ * of this moment: a page that keeps them in its state shows them in that language for good, so it
+ * keeps the failure and calls `failureWords` when it draws. The words under the fields are written
+ * again when the language is switched (`setFieldReasons`; the form holds `RevalidateOnLocaleChange`).
  */
 export function failureToForm(
   intl: Translator,
@@ -70,6 +72,14 @@ export function failureToForm(
   options: Options = {},
 ): { text: string; uploadRejected: boolean; unplaced: string[]; code: string } {
   const { text, mine, unplaced, code } = failureWords(intl, error, fields, aliases, options);
-  if (mine.length > 0) form.setFields(mine.map((d) => ({ name: d.ref, errors: [d.text] })));
+  setFieldReasons(
+    form,
+    intl,
+    mine.map((d, index) => ({
+      name: d.ref,
+      write: (other) =>
+        failureWords(other, error, fields, aliases, options).mine[index]?.text ?? d.text,
+    })),
+  );
   return { text, uploadRejected: isUploadIdRejection(error), unplaced, code };
 }
