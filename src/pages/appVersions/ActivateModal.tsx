@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Flex, Modal, Typography } from 'antd';
 import { useState } from 'react';
+import { type FailureLines, useFailureView } from '../../hooks/useFailure';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AppVersion, setAppVersionStatus } from '../../services/appVersions';
 import type { ChannelPackage } from '../../services/channelPackages';
@@ -35,7 +36,7 @@ export function ActivateModal({ version, channels, rows, onClose, onDone }: Prop
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [live, setLive] = useState(false);
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  const { view: failure, show, clear } = useFailureView<FailureLines>();
   const channelCode = plainText(version.channelCode);
   const kind = distributionOf(version, channels);
   const channel = channels.find((c) => c.code === channelCode);
@@ -62,12 +63,14 @@ export function ActivateModal({ version, channels, rows, onClose, onDone }: Prop
 
   const needsBox = kind === 'STORE';
   const { run, pending } = useSingleFlight(async () => {
-    setFailure(null);
+    clear();
     try {
       await setAppVersionStatus(plainText(version.id), 'ACTIVE', needsBox ? true : undefined);
     } catch (error) {
-      const described = describeFailure(intl, error);
-      setFailure({ text: described.text, more: described.fields.map((f) => f.text) });
+      show((words) => {
+        const described = describeFailure(words, error);
+        return { text: described.text, more: described.fields.map((f) => f.text) };
+      });
       return;
     }
     message.success(t('appVersions.activated', { name: plainText(version.versionName) }));
