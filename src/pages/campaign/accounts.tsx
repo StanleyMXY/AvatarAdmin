@@ -35,7 +35,7 @@ export default function AccountsPage() {
         {
           key: 'campaigns',
           label: intl.formatMessage({ id: 'campaign.accounts.tab.campaigns' }),
-          children: <CampaignsTab campaigns={campaigns} linkBase={linkBase} />,
+          children: <CampaignsTab campaigns={campaigns} linkBase={linkBase} kept={kept} />,
         },
         {
           key: 'costs',

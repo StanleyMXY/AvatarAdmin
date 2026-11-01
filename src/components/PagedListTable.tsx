@@ -1,7 +1,7 @@
 import { type ActionType, type ProColumns, ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Skeleton } from 'antd';
-import { type ReactNode, useRef, useState, useSyncExternalStore } from 'react';
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLatestCall } from '../hooks/useLatestCall';
 import type { Page } from '../request/errors';
 import { isServiceUnavailable, subscribeServiceStatus } from '../request/serviceStatus';
@@ -25,6 +25,17 @@ type Props<T extends Record<string, any>, F extends Record<string, unknown>> = {
   defaultCollapsed?: boolean;
   /** Lets the page reload the table after a write. */
   actionRef?: React.MutableRefObject<ActionType | undefined>;
+  /**
+   * Where the table starts, for a tab that is drawn again when it is opened: the values of the search
+   * form, the page and the page size it had. Read once, when the table is first drawn; the first
+   * request already asks for exactly this. Without it the table starts empty, on page 1.
+   */
+  initial?: { search?: Partial<F>; page?: number; pageSize?: number };
+  /**
+   * Called with what every request asks for (the search that was sent, not what is only typed; the
+   * page and its size), so that the page can keep it for `initial` of the next time.
+   */
+  onCommit?: (state: { search: Partial<F>; page: number; pageSize: number }) => void;
 };
 
 /** Whether ProTable would draw a filter for this column (the form is left out when none would be drawn). */
@@ -46,7 +57,16 @@ export function PagedListTable<
   // biome-ignore lint/suspicious/noExplicitAny: ProTable's own row constraint, so that `interface` rows work
   T extends Record<string, any>,
   F extends Record<string, unknown> = Record<string, never>,
->({ rowKey, columns, request, toolbar, defaultCollapsed = true, actionRef }: Props<T, F>) {
+>({
+  rowKey,
+  columns,
+  request,
+  toolbar,
+  defaultCollapsed = true,
+  actionRef,
+  initial,
+  onCommit,
+}: Props<T, F>) {
   const intl = useIntl();
   const innerRef = useRef<ActionType | undefined>(undefined);
   const ref = actionRef ?? innerRef;
@@ -60,17 +80,27 @@ export function PagedListTable<
   const [loadedOnce, setLoadedOnce] = useState(false);
   const noticeUp = useSyncExternalStore(subscribeServiceStatus, isServiceUnavailable);
   const begin = useLatestCall();
+  // Read once: the start values belong to the first drawing only.
+  const [start] = useState(initial);
+  const [started, setStarted] = useState(false);
+  useEffect(() => setStarted(true), []);
+  const commitRef = useRef(onCommit);
+  commitRef.current = onCommit;
 
   // ProTable cancels the older of two overlapping requests itself; the counter only makes sure the
   // error shown is the error of the newest request.
   const load = async (params: Record<string, unknown>) => {
     const { current, pageSize, ...search } = params;
     const isCurrent = begin();
+    const asked = {
+      page: Number(current ?? 1),
+      pageSize: Number(pageSize ?? DEFAULT_PAGE_SIZE),
+    };
+    commitRef.current?.({ search: search as Partial<F>, ...asked });
     try {
       const page = await request({
         ...(search as Record<string, unknown>),
-        page: Number(current ?? 1),
-        pageSize: Number(pageSize ?? DEFAULT_PAGE_SIZE),
+        ...asked,
       } as { page: number; pageSize: number } & F);
       if (isCurrent()) setFailed(null);
       return { data: page.items, total: page.total, success: true };
@@ -126,8 +156,12 @@ export function PagedListTable<
           ),
         }}
         scroll={{ x: 'max-content' }}
+        // The search form starts with the start values; once it has, its "initial values" are empty
+        // again, so that its Reset means "nothing typed" and not "back to the start values".
+        form={start?.search ? { initialValues: started ? {} : start.search } : undefined}
         pagination={{
-          defaultPageSize: DEFAULT_PAGE_SIZE,
+          defaultCurrent: start?.page ?? 1,
+          defaultPageSize: start?.pageSize ?? DEFAULT_PAGE_SIZE,
           pageSizeOptions: PAGE_SIZE_OPTIONS,
           showSizeChanger: true,
         }}
