@@ -164,7 +164,7 @@ g1 的其它句子：0 字节拒绝（M4 变红）、方向字符（M5 变红）
 | 4 `describeFailure` 与 `describeError` 不一致 | `6bcbed5` | `describeFailure` 对非 `ApiError` 返回 `unknownError()`（新，`src/request/errors.ts`，码 `UNKNOWN`，固定消息，`httpStatus` 0，所以 `isOutcomeUnknown` 仍为真，与之前的 `networkError()` 一样保守），文字因此是 `error.UNKNOWN`，与 `describeError` 相同。`AbortError` 没有特殊处理：和 `describeError` 一样给 `UNKNOWN`（调用方在显示前本来就过滤取消）。注释已改。 | 新增 `src/session/describe.test.ts` 14 条红，另有 4 个旧测试（`failureLine`、`users/text`、`cost/failure`、`system/formFailure`）原来把“网络错误”写成期望，改成 `error.UNKNOWN` 后红；`failureToForm.test.tsx` 的 `code` 期望由 `NETWORK_ERROR` 改成 `UNKNOWN`（全仓库没有按这个码分支的代码，已 `grep`） | 把 `unknownError()` 换回 `networkError()`：15 红 |
 | 5 无调用方的 `reportSession` | `38f57ee` | 从 `apiRequest` 的选项里删除，`anonymous` 是唯一不报告会话的做法（`unwrapAndReport` 的内部参数改由 `!o.anonymous` 决定）；过时注释改成说明 `anonymous` 的含义；`review7.test.tsx` 里唯一的用法改成 `anonymous: true`。 | 新增 1 条测试，带 `@ts-expect-error`（选项不存在）并断言遗留的 `reportSession:false` 被忽略、`onExpired` 被调用 1 次：修之前红 | 把 `!o.anonymous` 改成 `true`：2 红 |
 | 6 权限码 `.`、`..` | `c41fb7d` | `codeProblem`（`permissionRules.ts`）新增结果 `dots`：去空白后以 `.` 开头或结尾（含只由点组成）。字符集仍是原来的（不含空白、控制符、格式符、分隔符，不超过 100 码点）：评审说明里没有给出别的字符集，泰语、阿拉伯语、中文等的码和中间有点的码（`a.b`、`v1.2.3`）照常放行。检查顺序：必填、字符、点、重复。新增中英文提示 `system.permissions.field.code.dots`。 | 17 条红（单元 + 对话框里 4 条：`.`、`..`、`.hidden`、`trailing.`） | 3 处：只查开头、只查结尾、只拒绝 `..`：4、4、11 条红 |
-| 7 审计详情遮蔽 | `89a8f75` | 见下 | 59 条红（其中 2 条是我写错的断言：`tokenVersion`、`mustChangePassword` 的字符串值本来就会被遮，已从“不遮”清单里删掉） | 31 处，全部变红；其中 3 处第一次存活（见下） |
+| 7 审计详情遮蔽 | `89a8f75`（测试里的例子地址在 `c135a30` 改过） | 见下 | 59 条红（其中 2 条是我写错的断言：`tokenVersion`、`mustChangePassword` 的字符串值本来就会被遮，已从“不遮”清单里删掉） | 31 处，全部变红；其中 3 处第一次存活（见下） |
 
 ### 第 7 条：补了什么、没有误遮什么
 
@@ -186,7 +186,9 @@ g1 的其它句子：0 字节拒绝（M4 变红）、方向字符（M5 变红）
 
 ### 验证
 
-提交前按要求跑的：见本节最后一行（结果出来后补写）。`npx tsc --noEmit` 没有报错；`npx biome check` 对我改的文件没有报错；每次提交的钩子（lint-staged、暂存文件的类型检查）都通过，没有 `--no-verify`。
+提交前按要求跑的：`src/request src/session src/pages/user src/pages/system src/services mock/auth* mock/system* tests/noHardcodedText.test.ts src/locales`，另加受第 4 条影响的 `src/utils src/components src/hooks src/pages/users src/pages/cost`，`--testTimeout=60000`：153 个文件、3058 条，第一次跑 3057 条通过、1 条红（`tests/noHardcodedText.test.ts` 的“没有公共 CDN 地址”：我在审计详情测试里用了 `cdn.example.com` 做链接例子）；换成 `files.example.com` 后该文件和 `auditDetail.test.ts` 合跑 241 条全部通过（提交 `Use a host name …`）。其余文件没有再跑第二遍。
+
+`npx tsc --noEmit` 没有报错；`npx biome check` 对我改的文件没有报错；每次提交的钩子（lint-staged、暂存文件的类型检查）都通过，没有 `--no-verify`。
 
 ### 没有做、需要说明
 
