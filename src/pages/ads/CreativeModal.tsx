@@ -40,7 +40,7 @@ import { SCREEN_TARGETS } from '../../utils/screenTargets';
 import { trimSpec } from '../../utils/trimSpec';
 import { isUploadIdRejection } from '../../utils/uploadErrors';
 import { AdMediaUpload } from './AdMediaUpload';
-import { checkMediaSpec } from './mediaSpec';
+import { bytesProblemTexts, checkMediaSpec } from './mediaSpec';
 import { Picker } from './Picker';
 import { Thumb } from './Thumb';
 import { UploadBox } from './UploadBox';
@@ -352,12 +352,7 @@ export function CreativeModal({
                 <li key={p.code}>
                   {t(`ads.creatives.spec.${p.code}`, {
                     ...p.values,
-                    ...(p.code === 'bytes'
-                      ? {
-                          actual: formatBytes(p.values.actual as number, intl.locale),
-                          wanted: formatBytes(p.values.wanted as number, intl.locale),
-                        }
-                      : {}),
+                    ...(p.code === 'bytes' ? bytesProblemTexts(p.values, intl.locale) : {}),
                   })}
                 </li>
               ))}

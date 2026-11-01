@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkMediaSpec, DEFAULT_TOLERANCE_PERCENT } from './mediaSpec';
+import { bytesProblemTexts, checkMediaSpec, DEFAULT_TOLERANCE_PERCENT } from './mediaSpec';
 
 const SPEC = { creativeAspect: '9:16', creativeMinShortSide: 720, creativeMaxBytes: 10_485_760 };
 const media = (width: number, height: number, bytes = 1000) => ({ width, height, bytes });
@@ -63,5 +63,20 @@ describe('checkMediaSpec', () => {
     expect(checkMediaSpec(media(1080, 1940), SPEC, null).fits).toBe(true);
     expect(checkMediaSpec(media(1080, 1940), SPEC, Number.NaN).fits).toBe(true);
     expect(checkMediaSpec(media(1080, 2200), SPEC, null).fits).toBe(false);
+  });
+});
+
+describe('bytesProblemTexts', () => {
+  it('writes the size of the file and the limit in the language of the page', () => {
+    expect(bytesProblemTexts({ actual: 12_582_912, wanted: 10_485_760 }, 'en-US')).toEqual({
+      actual: '12 MB',
+      wanted: '10 MB',
+    });
+  });
+
+  it('does not write a file that is one byte over the limit with the same text as the limit', () => {
+    const texts = bytesProblemTexts({ actual: 10_485_761, wanted: 10_485_760 }, 'en-US');
+    expect(texts.actual).not.toBe(texts.wanted);
+    expect(texts).toEqual({ actual: '10,485,761 B', wanted: '10,485,760 B' });
   });
 });

@@ -1,5 +1,6 @@
 // What the page says about a file against the spec of a placement (contract 22.2 and 22.9). The
 // server decides; this tells the person why a file would be refused before the form is sent.
+import { formatBytesPair } from '../../utils/format';
 
 /** `ads.creative_aspect_tolerance_percent` when it cannot be read (contract 22.2). */
 export const DEFAULT_TOLERANCE_PERCENT = 3;
@@ -86,4 +87,13 @@ export function checkMediaSpec(
     problems.push({ code: 'bytes', values: { actual: bytes, wanted: spec.creativeMaxBytes } });
   }
   return { fits: problems.length === 0, problems };
+}
+
+/** The file size and the limit of a `bytes` problem as text; two different sizes never read the same. */
+export function bytesProblemTexts(
+  values: SpecProblem['values'],
+  locale: string,
+): { actual: string; wanted: string } {
+  const [actual, wanted] = formatBytesPair(Number(values.actual), Number(values.wanted), locale);
+  return { actual, wanted };
 }
