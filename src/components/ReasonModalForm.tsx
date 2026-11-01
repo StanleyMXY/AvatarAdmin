@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Form, Input, Modal } from 'antd';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { RevalidateOnLocaleChange } from '../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../hooks/useSingleFlight';
 import { describeFailure } from '../session/describe';
@@ -37,15 +37,24 @@ export function ReasonModalForm({
 }: Props) {
   const intl = useIntl();
   const [form] = Form.useForm<{ reason: string }>();
-  const [failure, setFailure] = useState<string | null>(null);
+  // The failure itself, not its words: they are written when drawn, so they follow a language switch.
+  const [failure, setFailure] = useState<{ error: unknown } | null>(null);
+  // The body of a dialog that is closing is not drawn again, so what its handlers read has to be a
+  // ref: the props they were drawn with are those of the last time the dialog was open.
+  const isOpen = useRef(open);
+  isOpen.current = open;
   const { run, pending } = useSingleFlight(async (reason: string) => {
     setFailure(null);
     try {
       await onSubmit(reason);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      setFailure({ error });
     }
   });
+
+  const described = failure ? describeFailure(intl, failure.error) : null;
+  // What each field was refused for, each reason once.
+  const reasons = [...new Set(described?.fields.map((field) => field.text) ?? [])];
 
   const validate = async (_: unknown, value: string | undefined) => {
     const length = countCodePoints(trimSpec(value ?? ''));
@@ -75,7 +84,8 @@ export function ReasonModalForm({
       <Form
         form={form}
         layout="vertical"
-        onFinish={(values) => run(trimSpec(values.reason))}
+        // A dialog that is closing (its parent closed it after the submit went through) sends nothing.
+        onFinish={(values) => (isOpen.current ? run(trimSpec(values.reason)) : undefined)}
         requiredMark={false}
       >
         <RevalidateOnLocaleChange />
@@ -87,7 +97,14 @@ export function ReasonModalForm({
         >
           <Input.TextArea rows={4} autoFocus />
         </Form.Item>
-        {failure ? <Alert type="error" title={failure} showIcon /> : null}
+        {described ? (
+          <Alert
+            type="error"
+            title={described.text}
+            description={reasons.length > 0 ? reasons.join(' ') : undefined}
+            showIcon
+          />
+        ) : null}
       </Form>
     </Modal>
   );
