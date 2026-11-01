@@ -3,13 +3,13 @@ import { useIntl } from '@umijs/max';
 import { Button, Card, Flex, Statistic, Table, Tooltip } from 'antd';
 import { useCallback, useMemo } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { ReadState } from '../../components/ReadState';
 import { TrendChart } from '../../components/stat/TrendChart';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getInviteStats } from '../../services/invite';
 import { plainText } from '../../utils/plainText';
 import { DASH, formatCount, formatPercent } from '../../utils/ratio';
 import { count, rateOf } from './numbers';
-import { ReadState } from './ReadState';
-import { useRead } from './useRead';
 
 export type StatsQuery = { from: string; to: string; limit: number };
 
@@ -24,7 +24,7 @@ export function InviteOverview({ query, onViewFission }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const fetcher = useCallback(() => getInviteStats(query), [query]);
-  const { data, failure, loading, reload } = useRead(fetcher);
+  const { data, failure, loading, reload } = useLatestRead(fetcher);
 
   const daily = useMemo(
     () =>

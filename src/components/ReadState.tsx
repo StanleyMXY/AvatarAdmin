@@ -1,7 +1,10 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Spin } from 'antd';
 
-/** The failure bar (with a retry) or the spinner of something that is being read. */
+/**
+ * The failure bar (with a retry) or the spinner of something that is being read. `failure` is the
+ * words of the error code from `useLatestRead`; nothing is drawn once the read has succeeded.
+ */
 export function ReadState({
   failure,
   loading,

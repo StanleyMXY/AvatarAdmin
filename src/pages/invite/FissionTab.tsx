@@ -15,6 +15,8 @@ import {
   Typography,
 } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ReadState } from '../../components/ReadState';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getDepthStats, getInviteChain, type InviteChain } from '../../services/invite';
 import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
@@ -24,8 +26,6 @@ import { trimSpec } from '../../utils/trimSpec';
 import { chainFailureText, checkDepth } from './chainRules';
 import { descendantsOf, levelsBelow, type TreeRow, treeRows } from './chainTree';
 import { count } from './numbers';
-import { ReadState } from './ReadState';
-import { useRead } from './useRead';
 
 /** What the chain form holds, and the query that was last sent (a new object for each press, so the same query can be sent again). */
 export type ChainForm = {
@@ -61,7 +61,7 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
   const theme = getChartTheme(mode);
 
   const depthFetcher = useCallback(() => getDepthStats({ from, to }), [from, to]);
-  const depth = useRead(depthFetcher);
+  const depth = useLatestRead(depthFetcher);
 
   // ---- the chain ----
   const [state, setState] = useState<ChainState>({ kind: 'idle' });

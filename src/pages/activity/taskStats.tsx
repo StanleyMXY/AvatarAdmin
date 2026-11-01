@@ -4,14 +4,14 @@ import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ExportButton } from '../../components/ExportButton';
+import { ReadState } from '../../components/ReadState';
 import { LandBar } from '../../components/stat/LandBar';
 import { TrendChart } from '../../components/stat/TrendChart';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getTasksDaily, getTasksSummary } from '../../services/stats/reports';
 import type { TaskSummaryRow } from '../../services/stats/types';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
-import { ReportState } from '../stat/guest/ReportState';
-import { useReport } from '../stat/guest/useReport';
 import { StatsBar, useAppliedRange } from './StatsBar';
 import { countText, plainOrDash } from './texts';
 
@@ -39,8 +39,8 @@ export default function TaskStatsPage() {
 
   const readDaily = useCallback(() => getTasksDaily(applied), [applied]);
   const readSummary = useCallback(() => getTasksSummary(applied), [applied]);
-  const daily = useReport(readDaily);
-  const summary = useReport(readSummary);
+  const daily = useLatestRead(readDaily);
+  const summary = useLatestRead(readSummary);
 
   const days = useMemo(
     () =>
@@ -114,7 +114,7 @@ export default function TaskStatsPage() {
           summary.reload();
         }}
       />
-      <ReportState failure={daily.failure} loading={daily.data === null} onRetry={daily.reload} />
+      <ReadState failure={daily.failure} loading={daily.loading} onRetry={daily.reload} />
       {daily.data ? (
         <>
           <Typography.Text strong>{t('activity.taskStats.chart')}</Typography.Text>
@@ -131,11 +131,7 @@ export default function TaskStatsPage() {
           />
         </>
       ) : null}
-      <ReportState
-        failure={summary.failure}
-        loading={summary.data === null}
-        onRetry={summary.reload}
-      />
+      <ReadState failure={summary.failure} loading={summary.loading} onRetry={summary.reload} />
       {summary.data ? (
         <>
           <Typography.Text strong>{t('activity.taskStats.table')}</Typography.Text>

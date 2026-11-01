@@ -4,15 +4,15 @@ import { Flex, Table, Tabs, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
+import { ReadState } from '../../components/ReadState';
 import { LandBar } from '../../components/stat/LandBar';
 import { TrendChart } from '../../components/stat/TrendChart';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getCheckinDailyUsers, getCheckinStreakBuckets } from '../../services/stats/reports';
 import type { CheckinDailyUsersRow, StreakBucketRow } from '../../services/stats/types';
 import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { DASH } from '../../utils/ratio';
-import { ReportState } from '../stat/guest/ReportState';
-import { useReport } from '../stat/guest/useReport';
 import { StatsBar, useAppliedRange } from './StatsBar';
 import { countText, plainOrDash } from './texts';
 
@@ -37,8 +37,8 @@ export default function SigninStatsPage() {
 
   const readDaily = useCallback(() => getCheckinDailyUsers(applied), [applied]);
   const readStreak = useCallback(() => getCheckinStreakBuckets(applied), [applied]);
-  const daily = useReport(readDaily);
-  const streak = useReport(readStreak);
+  const daily = useLatestRead(readDaily);
+  const streak = useLatestRead(readStreak);
 
   const dailyRows = useMemo(
     () =>
@@ -123,11 +123,7 @@ export default function SigninStatsPage() {
             label: t('activity.signinStats.tab.daily'),
             children: (
               <Flex vertical gap={16}>
-                <ReportState
-                  failure={daily.failure}
-                  loading={daily.data === null}
-                  onRetry={daily.reload}
-                />
+                <ReadState failure={daily.failure} loading={daily.loading} onRetry={daily.reload} />
                 {daily.data ? (
                   <>
                     <Typography.Text strong>
@@ -162,9 +158,9 @@ export default function SigninStatsPage() {
             label: t('activity.signinStats.tab.streak'),
             children: (
               <Flex vertical gap={16}>
-                <ReportState
+                <ReadState
                   failure={streak.failure}
-                  loading={streak.data === null}
+                  loading={streak.loading}
                   onRetry={streak.reload}
                 />
                 {streak.data ? (
