@@ -129,3 +129,55 @@
 ## 浏览器与进程
 
 开发服务器 `npm run dev:mock` 在草稿目录拷贝里启动（端口 8461），用完按监听进程的进程号（4971）停掉，之后端口已无监听；没有用 `pkill`，没有杀过 vitest；Chromium 由脚本自己关。
+
+## 追加：记录项 1（表单字段下面的原因跟着界面语言）已修
+
+立即修未修 0、记录项 0（上面的记录项 1 已修）、未运行 1（`npm run build`，约定留到全部任务做完后跑）、阻塞 0
+
+### 做法（一个集中的机制，页面不各改各的）
+
+- 新增 `src/utils/fieldReasons.ts`。`setFieldReasons(form, intl, reasons)` 取代页面里裸写的 `form.setFields(...)`：它照旧把文字写到字段下面，同时在这个表单实例上（`WeakMap`，随表单消失）登记“字段 + 怎么用某种语言写出这条文字”（`FieldReason.write(intl)`）和当前显示的文字。登记的是写法，不是文字：来自失败的原因按“同一个失败的第几条细节”重写（`detailReason`、`detailReasons`），整条失败的文字（重复资源）用 `failureReason`，页面自己的检查用语言文件的键（`messageReason`）。
+- `rewriteFieldReasons(form, intl)` 由 `useRevalidateOnLocaleChange`（`RevalidateOnLocaleChange` 就是它）在语言切换时调用：字段下面仍然恰好显示着登记时的那条文字，就用新语言重写并更新登记；已经不是那条文字（用户改了该字段使规则通过、重新提交把它清了、表单被重置）就忘掉登记，不会再冒出来。被重写的字段不再走原来的“重新校验后原样放回”流程，其余字段（规则自己的提示）仍按原来的办法重新校验。没有规则的字段同样覆盖（判断依据是字段下面现在显示的是什么，不是有没有规则）。
+- `failureToForm`（`src/utils/failureToForm.ts`）和 `system/formFailure.ts` 的 `failureToForm` 改为走 `setFieldReasons`，约 20 个对话框因此不用改页面。手写 `setFields` 的 13 处改成同一个机制：`ads/UnitModal`、`ads/CreativeModal`、`appVersions/VersionModal`、`channels/ChannelModal`（各自的 `splitRefusal` 现在产出 `FieldReason`，提示条仍用 `describeFailure` 现算）、`credits/ProductModal`、`credits/AdjustRequestModal`、`subscriptions/products.tsx`（含“已映射”的自查）、`entitlements.tsx`（含重复）、`AccountEntitlementsPanel`、`memory/ModelForm`、`system/PermissionNodeModal`（父节点成环）、`components/layout/ChangePasswordForm`（旧密码错误、新密码细节）。
+- 没有改请求次数和其它界面行为：切换语言不发请求，输入框里的值不动。
+
+### 覆盖确认
+
+- 全仓库 `grep setFields`：`src` 里非测试代码只剩 `src/utils/fieldReasons.ts` 和 `src/hooks/useRevalidateOnLocaleChange.tsx` 两个机制文件。调用 `failureToForm`/`setFieldReasons` 的 34 个文件，每个都在自己的 `<Form>` 里挂了 `RevalidateOnLocaleChange`（都是原来就有，没有需要新补的表单）。
+- 覆盖测试 `src/utils/fieldReasons.scan.test.ts`（扫描器 `tests/fieldReasons.scan.ts`，按语法树）：禁止任何裸 `.setFields(`（机制文件除外）；调用 `failureToForm`/`setFieldReasons` 的文件必须有 `<RevalidateOnLocaleChange />` 并且它在某个 `<Form>` 里面（或调用 `useRevalidateOnLocaleChange`）；调用方少于 30 个时失败（防扫描什么都找不到）；另有 5 条对扫描器自身的自测。
+
+### 测试
+
+- 共用助手（`tests/failureLanguage.tsx` 里新增）：`refuseRequests`（让指定请求回 400 并带字段细节）、`reasonWords`、`expectFieldReasonsFollowLanguage`。断言：英文原因在字段下面；切到中文；字段下面每一条都是中文且无拉丁字母；英文文字整页消失；切换后没有新请求；输入框里的值（含泰语等）一个都没丢。
+- 对话框测试（`fieldReasonLanguage.test.tsx`，共 18 条，分在 campaign、ads、channels、credits、memory、system、subscriptions、components/layout）：campaign 编辑（两个字段）、成本；ads 的投放位（共用写法）、广告单元与创意（各自的 `splitRefusal`）；渠道包；积分包与调整申请（`describeFailure` 写法）；记忆模型（字段改名）；系统的管理员、重置密码、角色；订阅的产品（“已映射”自查与后端拒绝）、权益（409 重复与后端拒绝）；修改密码的新密码细节与旧密码错误。
+- 机制测试 `src/utils/fieldReasons.test.tsx`（7 条）：有规则/无规则的表单切换来回都跟着；用户改了字段后切换不会让原因回来；表单重置后不回来；新的失败只留新的；页面自己的键；规则自己的提示仍重新写、输入值不动。
+- 红绿：先写测试，实现前 14 条对话框测试全部红（字段下面仍是英文）；实现后全部绿。
+- 变异检查（每次改后恢复，用 `diff` 核对）：（1）去掉登记：对话框测试 4 条与机制测试 4 条红；（2）去掉重写：6 条红；（3）不清登记（去掉“字段已不再显示它就忘掉”）：3 条红（用户改了字段、表单重置、新的失败）；（4）去掉 `CampaignModal` 里的 `<RevalidateOnLocaleChange />`：扫描测试与该对话框的测试红；（5）把 `failureToForm` 还原成裸 `setFields`：扫描测试与 campaign 的 2 条对话框测试红。
+- 只覆盖英文和简体中文两种界面语言（项目只有这两种）；输入的值含泰语。
+
+### 真实浏览器（Playwright Chromium）
+
+草稿目录拷贝里起 `dev:mock`（端口 8461），拷贝的 `src/app.tsx` 末尾临时挂了 `window.__switchLocale = switchLocale`（只在拷贝里，不在仓库），用它在对话框带遮罩时切换语言；用页面路由让写请求回 400（字段 `name`、`remark`、`TOO_LONG`）：
+
+- campaign/accounts 活动编辑对话框：字段下面两条 “The value is too long.” 与底部 “Some input is not valid…” → 切中文后两条 “内容过长” 与 “输入内容不合法，请检查后重试”；输入框的值不变；切换后 0 个新请求；切回英文又变回英文。
+- campaign 成本编辑对话框：字段下面 “The value is too long.” → “内容过长”，底部提示条同步。
+- 控制台的错误只有被我拦成 400 的那两个请求本身。进程：监听 8461 的进程号 17529，用完按进程号停掉，之后端口已无监听；没有用 pkill，没有杀过 vitest。
+
+### 说明
+
+- 登记的判断依据是“字段下面现在显示的文字是否仍是登记时的那条”。所以一个没有规则的字段，用户改了它的值而后端的原因还留在屏幕上时，切换语言会继续把它换成新语言（它本来就还显示着），不会被丢掉；这与屏幕上看到的一致。
+- `useRevalidateOnLocaleChange` 的依赖里新增了 `intl`（有 `shown` 保护，只在语言真的变了时才做事）。
+
+### 提交
+
+- `b098ab4` 机制（`fieldReasons.ts`、`useRevalidateOnLocaleChange`、`failureToForm`）、共用测试助手、机制测试、campaign 对话框测试
+- `fd38934` ads、appVersions（`VersionModal`）、channels
+- `43d945a` credits、memory、subscriptions
+- `a55d57c` system、`ChangePasswordForm`
+- `588387d` 覆盖扫描测试
+
+### 检查
+
+- 相关目录测试（ads、appVersions、channels、credits、memory、subscriptions、system、campaign、components/layout、utils、hooks、session、tests；`--testTimeout=60000`）：136 个文件、2354 条全部成功。`npx tsc --noEmit` 0 个错误，`npx biome check .` 0 条诊断；提交前钩子每次都成功。全量测试没有再跑（约定留到全部任务做完后）。
+- 跑相关测试时，输出开头出现 3 段 `ECONNREFUSED 127.0.0.1:3000`（某个测试文件在启动时连了本机 3000 端口），测试结果不受影响；我没有查是哪个文件、是否早就存在，列在这里，不算已查清。
+- `appVersions/VersionModal.tsx` 已改成同一机制并受扫描测试覆盖，但没有单独的“切语言”对话框测试（该模块没有现成的编辑流程可复用）；`AccountEntitlementsPanel` 同样没有单独的切语言测试。
