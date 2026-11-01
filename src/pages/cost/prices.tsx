@@ -2,7 +2,7 @@ import { history, useAccess, useIntl, useLocation } from '@umijs/max';
 import { Card, Flex, Tabs } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Can } from '../../components/Can';
-import { forgetKept, type Kept } from '../../hooks/useKeptState';
+import type { Kept } from '../../hooks/useKeptState';
 import { getAdminMeta } from '../../services/auth';
 import { useAdminMeta } from '../../session/useSession';
 import { ConfigForm } from '../config/ConfigForm';
@@ -82,11 +82,7 @@ export default function PricesPage() {
               <ManualTab
                 allowedCurrencies={allowedCurrencies}
                 kept={kept}
-                onSaved={() => {
-                  // A saved batch is not entered again by accident: the next form starts empty.
-                  forgetKept(kept, 'manual.');
-                  openTab('current');
-                }}
+                onSaved={() => openTab('current')}
               />
             ),
           },

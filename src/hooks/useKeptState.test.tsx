@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { forgetKept, type Kept, useKeptState } from './useKeptState';
+import { type Kept, useKeptState } from './useKeptState';
 
 const box = (): Kept => ({ current: {} });
 
@@ -60,18 +60,5 @@ describe('useKeptState', () => {
     const second = renderHook(() => useKeptState(kept, 'k', lazy));
     expect(second.result.current[0]).toBe('kept');
     expect(calls).toBe(0);
-  });
-
-  it('forgets the keys with a prefix and only those', () => {
-    const kept = box();
-    const a = renderHook(() => useKeptState(kept, 'manual.model', ''));
-    const b = renderHook(() => useKeptState(kept, 'models.type', ''));
-    act(() => a.result.current[1]('m'));
-    act(() => b.result.current[1]('t'));
-    forgetKept(kept, 'manual.');
-    expect(kept.current).toEqual({ 'models.type': 't' });
-    a.unmount();
-    const again = renderHook(() => useKeptState(kept, 'manual.model', ''));
-    expect(again.result.current[0]).toBe('');
   });
 });

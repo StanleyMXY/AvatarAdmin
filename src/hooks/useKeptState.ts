@@ -33,10 +33,3 @@ export function useKeptState<T>(
   );
   return [value, set];
 }
-
-/** Forgets what was kept under keys that start with `prefix` (after a form was saved, say). */
-export function forgetKept(kept: Kept, prefix: string): void {
-  for (const key of Object.keys(kept.current)) {
-    if (key.startsWith(prefix)) delete kept.current[key];
-  }
-}
