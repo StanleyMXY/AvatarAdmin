@@ -18,6 +18,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
@@ -108,7 +109,12 @@ function FeaturesDrawer({
       size={760}
       destroyOnHidden
       onClose={onClose}
-      title={t('subscriptions.entitlements.featuresTitle', { name: def.name })}
+      title={
+        // the name is typed by an operator and can be one long word: it wraps instead of widening the drawer
+        <span style={{ overflowWrap: 'anywhere' }}>
+          {t('subscriptions.entitlements.featuresTitle', { name: def.name })}
+        </span>
+      }
       footer={
         <Can code="SUBSCRIPTION:CONFIG">
           <Button type="primary" loading={pending} disabled={pending} onClick={() => void run()}>
@@ -159,6 +165,7 @@ function FeaturesDrawer({
 }
 
 type DefForm = { key: string; name: string; priority: number | null };
+const DEF_FIELDS: (keyof DefForm)[] = ['key', 'name', 'priority'];
 
 /** The dialog that creates an entitlement, or changes the name and the priority of one (the key stays). */
 function DefDialog({
@@ -192,15 +199,16 @@ function DefDialog({
       if (def) await updateEntitlementDef(def.key, input);
       else await createEntitlementDef({ key: trimSpec(values.key), ...input });
     } catch (error) {
-      const { fields } = describeFailure(intl, error);
+      const known = (name: unknown): name is keyof DefForm => DEF_FIELDS.includes(name as never);
       const duplicate =
         error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE'
           ? (error.data as { field?: unknown } | null)?.field
           : undefined;
-      if (typeof duplicate === 'string') {
-        form.setFields([
-          { name: duplicate as keyof DefForm, errors: [t('error.DUPLICATE_RESOURCE')] },
-        ]);
+      const fields = describeFailure(intl, error).fields.filter((f) => known(f.ref));
+      // A refusal is put beside the field of the form it names; one that names anything else is
+      // shown above the form, so that it is never swallowed.
+      if (known(duplicate)) {
+        form.setFields([{ name: duplicate, errors: [t('error.DUPLICATE_RESOURCE')] }]);
       } else if (fields.length > 0) {
         form.setFields(fields.map((f) => ({ name: f.ref as keyof DefForm, errors: [f.text] })));
       } else {
@@ -280,16 +288,21 @@ export default function EntitlementsPage() {
   const [dialog, setDialog] = useState<{ def: EntitlementDef | null } | null>(null);
   const canConfig = access.canAccess('SUBSCRIPTION:CONFIG');
 
+  const begin = useLatestCall();
+
   const load = useCallback(async () => {
+    // Only the newest read counts: after two quick changes the first reload may arrive last.
+    const isCurrent = begin();
     try {
       const [defList, gateList] = await Promise.all([listEntitlementDefs(), listFeatureGates()]);
+      if (!isCurrent()) return;
       setDefs(defList.items);
       setGates(gateList.items);
       setFailure(null);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setFailure(describeFailure(intl, error).text);
     }
-  }, [intl]);
+  }, [intl, begin]);
 
   useEffect(() => {
     void load();

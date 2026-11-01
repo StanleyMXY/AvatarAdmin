@@ -3,6 +3,7 @@ import { Alert, Button, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography
 import { useCallback, useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { type StatusOption, StatusTag } from '../../components/StatusTag';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { getSubscription, type SubscriptionDetail } from '../../services/subscriptions';
 import { describeFailure } from '../../session/describe';
 import { formatInstant } from '../../utils/format';
@@ -58,18 +59,23 @@ export function SubscriptionDrawer({ id, onClose }: Props) {
   const states = useStateOptions();
   const [detail, setDetail] = useState<SubscriptionDetail | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const begin = useLatestCall();
 
   const load = useCallback(
     async (subscriptionId: string) => {
+      // Only the newest read counts: a slow answer for a subscription opened before must not
+      // replace the one that is shown now.
+      const isCurrent = begin();
       setDetail(null);
       setFailure(null);
       try {
-        setDetail(await getSubscription(subscriptionId));
+        const answer = await getSubscription(subscriptionId);
+        if (isCurrent()) setDetail(answer);
       } catch (error) {
-        setFailure(describeFailure(intl, error).text);
+        if (isCurrent()) setFailure(describeFailure(intl, error).text);
       }
     },
-    [intl],
+    [intl, begin],
   );
 
   useEffect(() => {

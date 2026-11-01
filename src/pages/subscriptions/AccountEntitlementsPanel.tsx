@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { RowActions } from '../../components/RowActions';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -194,14 +195,20 @@ export function AccountEntitlementsPanel({
   const canGrant = access.canAccess('SUBSCRIPTION:GRANT');
   const when = (iso: string | null) => (iso ? formatInstant(iso, intl.locale) : DASH);
 
+  const begin = useLatestCall();
+
   const load = useCallback(async () => {
+    // Only the newest read counts: an answer for the account shown before must not replace this one.
+    const isCurrent = begin();
     try {
-      setData(await getAccountEntitlements(accountId));
+      const answer = await getAccountEntitlements(accountId);
+      if (!isCurrent()) return;
+      setData(answer);
       setFailure(null);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setFailure(describeFailure(intl, error).text);
     }
-  }, [accountId, intl]);
+  }, [accountId, intl, begin]);
 
   useEffect(() => {
     setData(null);

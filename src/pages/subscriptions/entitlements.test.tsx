@@ -1,9 +1,11 @@
+import './testSetup';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetStore } from '../../../mock/_core/store';
 import { resetSubscriptionsStore, subscriptionsState } from '../../../mock/_core/subscriptionsData';
 import * as subscriptionsMock from '../../../mock/subscriptions.mock';
+import { holdRequests } from '../../../tests/heldRequests';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { signInAs, useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
@@ -406,6 +408,98 @@ describe('creating and editing an entitlement', { timeout: 30000 }, () => {
     ) as HTMLElement;
     expect(within(item).getByLabelText('Priority')).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('sends one request while the save of the dialog is under way, however often Save is clicked then', async () => {
+    useMockBackend(subscriptionsMock);
+    const held = holdRequests((_, method) => method === 'POST');
+    const user = userEvent.setup();
+    renderPage(<EntitlementsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New entitlement' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Key'), { target: { value: 'gold_vn' } });
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Gold' } });
+    fireEvent.change(within(dialog).getByLabelText('Priority'), { target: { value: '50' } });
+    const save = within(dialog).getByRole('button', { name: /Save/ });
+    fireEvent.click(save);
+    await waitFor(() => expect(held.started()).toBe(1));
+    fireEvent.click(save);
+    fireEvent.click(save);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(held.started()).toBe(1);
+    held.release();
+  });
+
+  it('shows a refusal that names no field of the dialog above the form instead of swallowing it', async () => {
+    useMockBackend(subscriptionsMock);
+    const real = globalThis.fetch;
+    let answer: Response = jsonResponse(
+      400,
+      envelope('INVALID_REQUEST', { details: [{ ref: 'somethingElse', reason: 'OUT_OF_RANGE' }] }),
+    );
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) =>
+      init?.method === 'POST' ? answer.clone() : real(input, init),
+    );
+    const user = userEvent.setup();
+    renderPage(<EntitlementsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New entitlement' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Key'), { target: { value: 'gold_vn' } });
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Gold' } });
+    fireEvent.change(within(dialog).getByLabelText('Priority'), { target: { value: '50' } });
+    await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+    expect(await within(dialog).findByText('somethingElse')).toBeInTheDocument();
+    expect(within(dialog).getByText('The value is outside the allowed range.')).toBeInTheDocument();
+    // a taken value on a field that is not one of the three is shown the same way
+    answer = jsonResponse(409, envelope('DUPLICATE_RESOURCE', { field: 'unheardOf' }));
+    await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+    expect(
+      await within(dialog).findByText('An item with the same unique value already exists.'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('somethingElse')).not.toBeInTheDocument();
+  });
+
+  it('shows the list the last read brought when the answer of an earlier read arrives late', async () => {
+    useMockBackend(subscriptionsMock);
+    // the 2nd read of the entitlements (after the first one was created) is held; the 3rd is not
+    const held = holdRequests(
+      (url, method) => method === 'GET' && url.endsWith('/entitlement-defs'),
+      2,
+    );
+    const user = userEvent.setup();
+    renderPage(<EntitlementsPage />);
+    const create = async (key: string, priority: string) => {
+      await user.click(await screen.findByRole('button', { name: 'New entitlement' }));
+      const dialog = await screen.findByRole('dialog');
+      fireEvent.change(within(dialog).getByLabelText('Key'), { target: { value: key } });
+      fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: key } });
+      fireEvent.change(within(dialog).getByLabelText('Priority'), { target: { value: priority } });
+      await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+    };
+    await create('first_new', '61');
+    await waitFor(() => expect(held.started()).toBe(2));
+    await create('second_new', '62');
+    await waitFor(() =>
+      expect(subscriptionsState().defs.some((d) => d.key === 'second_new')).toBe(true),
+    );
+    held.release();
+    await new Promise((r) => setTimeout(r, 200));
+    // the held read knew only the first: the second must not vanish from the list
+    expect(await rowOf('first_new')).toBeInTheDocument();
+    expect(await rowOf('second_new')).toBeInTheDocument();
+  });
+
+  it('keeps a title of the feature values drawer inside the drawer when the name is 5000 characters without spaces', async () => {
+    useMockBackend(subscriptionsMock);
+    const long = 'ก'.repeat(5000);
+    const basic = subscriptionsState().defs.find((d) => d.key === 'basic');
+    if (basic) basic.name = long;
+    renderPage(<EntitlementsPage />);
+    const { drawer } = await openFeatures('basic');
+    const title = drawer.querySelector('.ant-drawer-title') as HTMLElement;
+    expect(title.textContent).toContain(long);
+    const inner = title.querySelector('span') as HTMLElement;
+    expect(inner.style.overflowWrap).toBe('anywhere');
   });
 
   it('asks for a key, a name and a priority before sending', async () => {

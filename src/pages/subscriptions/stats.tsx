@@ -157,7 +157,7 @@ export default function SubscriptionStatsPage() {
           </Flex>
           <Table<SubscriptionStatRow>
             size="small"
-            rowKey={(r) => `${r.statDate}|${r.store}|${r.productId}`}
+            rowKey={(r) => `${r.statDate}|${r.store}|${r.productId}|${r.listPriceCurrency ?? ''}`}
             dataSource={rows}
             scroll={{ x: 'max-content' }}
             pagination={{

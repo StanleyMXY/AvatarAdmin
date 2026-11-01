@@ -1,3 +1,4 @@
+import './testSetup';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,6 +58,34 @@ describe('the subscription list', { timeout: 30000 }, () => {
     await waitFor(() =>
       expect(document.querySelectorAll('tbody tr.ant-table-row')).toHaveLength(expected),
     );
+  });
+
+  it('offers the stores to choose from, so that the filter cannot be typed in a spelling the backend does not know', async () => {
+    const calls = useMockBackend(subscriptionsMock);
+    const user = userEvent.setup();
+    renderPage(<SubscriptionListPage />);
+    await screen.findAllByText('Details');
+    const store = screen.getByLabelText('Store');
+    expect(store.closest('.ant-select')).not.toBeNull();
+    await user.click(store);
+    await user.click(await screen.findByTitle('GOOGLE'));
+    await user.click(screen.getByRole('button', { name: /查 询|Search/ }));
+    await waitFor(() => expect(calls.some((c) => c.url.includes('store=GOOGLE'))).toBe(true));
+    const expected = subscriptionsState().subscriptions.filter((s) => s.store === 'GOOGLE').length;
+    await waitFor(() =>
+      expect(document.querySelectorAll('tbody tr.ant-table-row').length).toBe(
+        Math.min(expected, 20),
+      ),
+    );
+  });
+
+  it('shows all four filters at once, the store and the product among them', async () => {
+    useMockBackend(subscriptionsMock);
+    renderPage(<SubscriptionListPage />);
+    await screen.findAllByText('Details');
+    for (const label of ['Account ID', 'Status', 'Store', 'Product']) {
+      expect(screen.getByLabelText(label), label).toBeVisible();
+    }
   });
 
   it('links the account to the user page only for an administrator who may open it', async () => {
@@ -219,5 +248,35 @@ describe('the subscription detail drawer', { timeout: 30000 }, () => {
     await user.click(buttons[0]);
     const dialog = await screen.findByRole('dialog');
     expect(await within(dialog).findByText(/Failed to load/)).toBeInTheDocument();
+  });
+  it('keeps the subscription that was opened last when the answer for an earlier one arrives late', async () => {
+    useMockBackend(subscriptionsMock);
+    const user = userEvent.setup();
+    renderPage(<SubscriptionListPage />);
+    const buttons = await screen.findAllByRole('button', { name: 'Details' });
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let detailReads = 0;
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) => {
+      if (/\/subscriptions\/[^/?]+$/.test(String(input))) {
+        detailReads += 1;
+        if (detailReads === 1) await held;
+      }
+      return real(input, init);
+    });
+    await user.click(buttons[0]);
+    await user.click(await screen.findByRole('button', { name: 'Close' }));
+    await user.click(buttons[1]);
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findAllByTestId('timeline-event');
+    const second = within(dialog).getAllByRole('row')[0].closest('table')?.textContent;
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(
+      within(screen.getByRole('dialog')).getAllByRole('row')[0].closest('table')?.textContent,
+    ).toBe(second);
   });
 });

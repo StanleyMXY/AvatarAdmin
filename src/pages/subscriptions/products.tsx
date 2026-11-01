@@ -17,6 +17,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -25,10 +26,12 @@ import {
   listEntitlementDefs,
   listFeatureGates,
   listSubscriptionProducts,
+  SUBSCRIPTION_STORES,
   type SubscriptionProduct,
   saveSubscriptionProduct,
 } from '../../services/subscriptions';
 import { describeFailure } from '../../session/describe';
+import { failureLine } from '../../session/failureLine';
 import { countCodePoints } from '../../utils/codePoints';
 import { trimSpec } from '../../utils/trimSpec';
 import { FailureAlert } from './FailureAlert';
@@ -37,7 +40,7 @@ import { QuotaWarnings } from './QuotaWarnings';
 
 // Contract 15.3: the stores are Apple and Google today; the list of stores can grow, so a store
 // that is not one of these is still shown as it is.
-const STORES = ['APPLE', 'GOOGLE'];
+const STORES: readonly string[] = SUBSCRIPTION_STORES;
 
 const keyOf = (p: SubscriptionProduct) => `${p.store}|${p.productId}`;
 
@@ -230,7 +233,7 @@ function EnabledSwitch({
     try {
       await saveSubscriptionProduct({ ...product, enabled });
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      message.error(failureLine(intl, error));
       return;
     }
     onSaved();
@@ -260,19 +263,24 @@ export default function ProductsPage() {
   const [dialog, setDialog] = useState<{ product: SubscriptionProduct | null } | null>(null);
   const canConfig = access.canAccess('SUBSCRIPTION:CONFIG');
 
+  const begin = useLatestCall();
+
   const load = useCallback(async () => {
+    // Only the newest read counts: after two quick changes the first reload may arrive last.
+    const isCurrent = begin();
     try {
       const [products, defs, gates] = await Promise.all([
         listSubscriptionProducts(),
         listEntitlementDefs(),
         listFeatureGates(),
       ]);
+      if (!isCurrent()) return;
       setLoaded({ products: products.items, defs: defs.items, gates: gates.items });
       setFailure(null);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setFailure(describeFailure(intl, error).text);
     }
-  }, [intl]);
+  }, [intl, begin]);
 
   useEffect(() => {
     void load();

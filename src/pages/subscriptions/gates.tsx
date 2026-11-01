@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type FeatureGate,
@@ -24,6 +25,7 @@ import {
   saveGateDefault,
 } from '../../services/subscriptions';
 import { describeFailure } from '../../session/describe';
+import { failureLine } from '../../session/failureLine';
 import { ConfigForm } from '../config/ConfigForm';
 import { FailureAlert } from './FailureAlert';
 import { FeatureValueEditor } from './FeatureValueEditor';
@@ -133,7 +135,7 @@ function CreditCostCell({
     try {
       await saveGateCreditCost(gate.key, draft);
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      message.error(failureLine(intl, error));
       return;
     }
     message.success(t('subscriptions.saved'));
@@ -170,15 +172,20 @@ export default function GatesPage() {
   const [failure, setFailure] = useState<string | null>(null);
   const [editing, setEditing] = useState<FeatureGate | null>(null);
 
+  const begin = useLatestCall();
+
   const load = useCallback(async () => {
+    // Only the newest read counts: after two quick changes the first reload may arrive last.
+    const isCurrent = begin();
     try {
       const { items } = await listFeatureGates();
+      if (!isCurrent()) return;
       setGates(items);
       setFailure(null);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setFailure(describeFailure(intl, error).text);
     }
-  }, [intl]);
+  }, [intl, begin]);
 
   useEffect(() => {
     void load();

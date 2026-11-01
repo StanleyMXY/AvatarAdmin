@@ -2,6 +2,9 @@
 // the reply of 2026-10-21, points 2 to 4); a field that is not named there is a column of the
 // entity in contract 15.3.
 
+/** The stores of contract 15.3 today; the list can grow, so a store outside it is still shown as it is. */
+export const SUBSCRIPTION_STORES = ['APPLE', 'GOOGLE'] as const;
+
 /** The three states of a feature value: a number or text or switch, "no limit", or "not configured". */
 export type FeatureValue =
   | { mode: 'VALUE'; value: unknown }
