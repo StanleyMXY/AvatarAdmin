@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, InputNumber, type TableColumnsType, Tabs, Typography } from 'antd';
 import { useCallback, useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { StatusTag } from '../../components/StatusTag';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import {
@@ -65,6 +66,7 @@ function ClusterAccounts({ by, clusterKey }: { by: AbuseBy; clusterKey: string }
       render: (_, row) => labelOf(intl, 'users.method', row.registerMethod),
     },
     {
+      ...ACTIONS_COLUMN,
       title: t('users.common.actions'),
       render: (_, row) =>
         row.paid !== false ? null : (

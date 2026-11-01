@@ -2,6 +2,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Popconfirm, Switch, Table } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { FailureBar } from '../../components/FailureBar';
 import { useLatestRead } from '../../hooks/useLatestRead';
@@ -134,7 +135,7 @@ export default function ChannelsPage() {
       key: 'actions',
       title: t('channels.col.actions'),
       // Stays in sight when the table is wider than its box and scrolls.
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) =>
         canWrite ? (
           <Button type="link" size="small" onClick={() => setEditing(row)}>

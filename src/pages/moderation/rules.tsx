@@ -13,6 +13,7 @@ import {
   Typography,
 } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { useLeaveGuard } from '../../hooks/useLeaveGuard';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -373,7 +374,7 @@ export default function ModerationRulesPage() {
             },
             {
               title: t('moderation.rules.actions'),
-              fixed: 'right',
+              ...ACTIONS_COLUMN,
               render: (_, row) => (
                 <DangerConfirmButton
                   confirmText={t('moderation.rules.removeConfirm')}

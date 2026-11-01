@@ -3,6 +3,7 @@ import { Alert, Button, DatePicker, Flex, Input, Select, Tag, Typography } from 
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedTable } from '../../components/PagedTable';
@@ -124,6 +125,7 @@ export default function NotificationsPage() {
       render: (_, row) => instantText(intl.locale, row.createdAt),
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('notifications.col.actions'),
       render: (_, row) => (

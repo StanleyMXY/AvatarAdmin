@@ -2,6 +2,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { App, Button, Switch } from 'antd';
 import { useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -88,7 +89,7 @@ export default function CreditProductsPage() {
       title: t('credits.common.actions'),
       search: false,
       valueType: 'option',
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) => (
         <Button type="link" size="small" onClick={() => setEditing(row)}>
           {t('credits.products.editButton')}

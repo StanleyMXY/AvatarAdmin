@@ -2,6 +2,7 @@ import type { ProColumns } from '@ant-design/pro-components';
 import { Link, useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Typography } from 'antd';
 import { useCallback, useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { StatusTag } from '../../components/StatusTag';
@@ -148,6 +149,7 @@ export default function ModerationQueuePage() {
       render: (_, row) => formatInstant(row.createdAt, intl.locale),
     },
     {
+      ...ACTIONS_COLUMN,
       title: t('moderation.queue.view'),
       valueType: 'option',
       search: false,

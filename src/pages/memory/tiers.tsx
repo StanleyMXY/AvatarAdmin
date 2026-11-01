@@ -1,6 +1,7 @@
 import { useAccess, useIntl } from '@umijs/max';
 import { Alert, Button, Descriptions, Drawer, Flex, Spin, Table } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { getTier, listTiers, type MemoryTier } from '../../services/memory';
 import { describeFailure } from '../../session/describe';
 import { TierForm } from './TierForm';
@@ -86,6 +87,7 @@ export default function TiersPage() {
             dataIndex: 'consolidationThreshold',
           },
           {
+            ...ACTIONS_COLUMN,
             title: t('memory.tier.col.actions'),
             key: 'actions',
             render: (_, row) => (

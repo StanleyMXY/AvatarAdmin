@@ -2,6 +2,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Select, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
@@ -265,7 +266,7 @@ export default function AppVersionsPage() {
       key: 'actions',
       title: t('appVersions.col.actions'),
       // Stays in sight when the table is wider than its box and scrolls.
-      fixed: 'right',
+      ...ACTIONS_COLUMN,
       render: (_, row) => {
         const actions = actionsOf(row);
         return actions.length === 0 ? DASH : <RowActions actions={actions} />;

@@ -99,6 +99,18 @@ describe('the list of e-mail templates', () => {
     );
   });
 
+  it('keeps the Actions column at the right edge, and does not let the description of a template stretch the table', async () => {
+    await load();
+    const header = [...document.querySelectorAll('.ant-table-thead th')].find(
+      (th) => th.textContent === 'Actions',
+    );
+    expect(header?.className).toContain('ant-table-cell-fix-end');
+    const description = document.querySelector('[data-kind="description"]') as HTMLElement;
+    // A text that cannot wrap makes the table as wide as its longest sentence.
+    expect(description.style.maxWidth).toBe('320px');
+    expect(description.style.whiteSpace).toBe('normal');
+  });
+
   it('describes the sixth template, the notice that a sign-in method was added, in the words of the language', async () => {
     await load();
     expect(cellsOf(await rowOf('LOGIN_METHOD_ADDED'))[0]).toContain(

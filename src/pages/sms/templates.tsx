@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedTable } from '../../components/PagedTable';
@@ -184,6 +185,7 @@ export default function TemplatesPage() {
       ),
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('sms.common.actions'),
       render: (_, row) => <RowActions actions={actionsOf(row)} />,

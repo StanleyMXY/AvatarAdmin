@@ -2,6 +2,7 @@ import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Button, Card, Flex, Statistic, Table, Tooltip } from 'antd';
 import { useCallback, useMemo } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ReadState } from '../../components/ReadState';
 import { TrendChart } from '../../components/stat/TrendChart';
@@ -146,6 +147,7 @@ export function InviteOverview({ query, onViewFission }: Props) {
                 render: (value: number | null) => formatCount(value, intl.locale),
               },
               {
+                ...ACTIONS_COLUMN,
                 title: t('invite.stats.actions'),
                 key: 'actions',
                 render: (_: unknown, row: { accountId: string }) => (

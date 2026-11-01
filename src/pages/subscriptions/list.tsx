@@ -2,6 +2,7 @@ import type { ProColumns } from '@ant-design/pro-components';
 import { Link, useAccess, useIntl } from '@umijs/max';
 import { Button, Tag } from 'antd';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { StatusTag } from '../../components/StatusTag';
@@ -88,6 +89,7 @@ export default function SubscriptionListPage() {
       render: (_, row) => when(row.purchasedAt),
     },
     {
+      ...ACTIONS_COLUMN,
       title: t('subscriptions.list.actions'),
       valueType: 'option',
       render: (_, row) => [

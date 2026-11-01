@@ -15,6 +15,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { type Kept, useKeptState } from '../../hooks/useKeptState';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import {
@@ -216,6 +217,7 @@ export function ModelsTab({
     ...(canPrice
       ? [
           {
+            ...ACTIONS_COLUMN,
             key: 'actions',
             title: t('cost.common.actions'),
             render: (_: unknown, m: UsageModel) => (

@@ -2,6 +2,7 @@ import { Link, useAccess, useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { FailureBar } from '../../components/FailureBar';
 import { PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
 import type { ClientConfigItem } from '../../services/clientConfig';
@@ -98,6 +99,7 @@ export default function ClientConfigPage() {
       render: (_, row) => <span style={sentence}>{keyText(intl, row.key, 'usage')}</span>,
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('clientConfig.col.actions'),
       render: (_, row) => (

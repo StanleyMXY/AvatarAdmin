@@ -2,6 +2,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Select, Switch, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedTable } from '../../components/PagedTable';
 import { ReasonModalForm } from '../../components/ReasonModalForm';
@@ -261,6 +262,7 @@ export default function CreativesPage() {
       render: (_, row) => countText(intl.locale, row.weight),
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('ads.common.actions'),
       render: (_, row) =>

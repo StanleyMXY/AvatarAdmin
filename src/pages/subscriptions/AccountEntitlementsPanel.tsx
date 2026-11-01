@@ -15,6 +15,7 @@ import {
   Typography,
 } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { RowActions } from '../../components/RowActions';
@@ -356,6 +357,7 @@ export function AccountEntitlementsPanel({
                 render: (_, row) => row.subscriptionId ?? DASH,
               },
               {
+                ...ACTIONS_COLUMN,
                 title: t('subscriptions.list.actions'),
                 render: (_, row) => (
                   <RowActions

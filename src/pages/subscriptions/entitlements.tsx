@@ -16,6 +16,7 @@ import {
   Typography,
 } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { useLatestCall } from '../../hooks/useLatestCall';
@@ -354,6 +355,7 @@ export default function EntitlementsPage() {
           },
           { title: t('subscriptions.entitlements.priority'), dataIndex: 'priority' },
           {
+            ...ACTIONS_COLUMN,
             title: t('subscriptions.list.actions'),
             render: (_, def) => (
               <Space size={0}>

@@ -2,6 +2,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Flex, Input, Select, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
+import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
@@ -209,6 +210,7 @@ export default function UnitsPage() {
       ),
     },
     {
+      ...ACTIONS_COLUMN,
       key: 'actions',
       title: t('ads.common.actions'),
       render: (_, row) => <RowActions actions={actionsOf(row)} />,
