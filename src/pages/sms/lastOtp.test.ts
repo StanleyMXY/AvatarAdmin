@@ -16,6 +16,31 @@ const ch = (id: string, countries: string[] | null, over: Partial<Coverage> = {}
   ...over,
 });
 
+describe('the blanks around a country, a language or a country of a template', () => {
+  const NEL = String.fromCharCode(0x85);
+  const IDEOGRAPHIC = String.fromCharCode(0x3000);
+
+  it('are those of the contract, so that U+0085 and the ideographic space do not make a different country', () => {
+    const padded = (code: string) => `${NEL}${code}${IDEOGRAPHIC}`;
+    expect(
+      isLastOtpChannel(ch('1', [padded('th')]), [ch('1', [padded('th')]), ch('2', ['TH'])]),
+    ).toBe(false);
+  });
+
+  it('are those of the contract for the language and the country of a template', () => {
+    const template = (locale: string, country: string) => ({
+      id: '1',
+      enabled: true,
+      smsType: 'OTP',
+      locale,
+      country,
+    });
+    expect(isLastEnglishFallbackTemplate(template(`${NEL}EN${IDEOGRAPHIC}`, `${NEL}`), [])).toBe(
+      true,
+    );
+  });
+});
+
 describe('the last enabled OTP channel that covers a country', () => {
   it('is the only enabled OTP channel', () => {
     expect(isLastOtpChannel(ch('1', ['TH']), [ch('1', ['TH'])])).toBe(true);

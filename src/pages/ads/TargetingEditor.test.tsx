@@ -87,6 +87,14 @@ describe('TargetingEditor', { timeout: 30000 }, () => {
     expect(await screen.findByText(/not a valid language tag/i)).toBeInTheDocument();
   });
 
+  it('takes off the blanks of the contract around a country and a language, U+0085 and the ideographic space among them', () => {
+    const { last } = mount();
+    pick(screen.getByRole('combobox', { name: 'Countries' }), '\u0085th\u3000');
+    expect(last().geo).toEqual(['TH']);
+    pick(screen.getByRole('combobox', { name: 'Languages' }), '\u0085ar-SA\u3000');
+    expect(last().languages).toEqual(['ar-SA']);
+  });
+
   it('reads the versions and the languages as typed', async () => {
     const { last, user } = mount();
     await user.type(screen.getByRole('textbox', { name: 'Lowest system version' }), '13');
