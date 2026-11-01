@@ -7,6 +7,7 @@ import configMock from '../../../mock/config.mock';
 import exportMock from '../../../mock/export.mock';
 import statsMock from '../../../mock/stats.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import enUS from '../../locales/en-US';
@@ -388,7 +389,7 @@ describe('the drill-down tabs', { timeout: 40000 }, () => {
     const campaigns = rowsOf(tables()[1])
       .map((r) => cellsOf(r)[0])
       .join(' ');
-    expect(campaigns).toContain(adsState.campaigns.get('2')!.name);
+    expect(campaigns).toContain(must(adsState.campaigns.get('2')).name);
     await user.click(screen.getByRole('tab', { name: 'By creative' }));
     await waitFor(() => expect(headsOf(tables()[1])[0]).toBe('Creative'));
     await waitFor(() => expect(rowsOf(tables()[1]).length).toBeGreaterThan(0));
@@ -418,8 +419,8 @@ describe('the drill-down tabs', { timeout: 40000 }, () => {
 
   it('keeps names of 5000 letters, Arabic, Thai and emoji inside the table', async () => {
     backend();
-    adsState.campaigns.get('2')!.name = 'ก'.repeat(5000);
-    adsState.campaigns.get('6')!.name = `عرض ${'🎉'.repeat(30)}`;
+    must(adsState.campaigns.get('2')).name = 'ก'.repeat(5000);
+    must(adsState.campaigns.get('6')).name = `عرض ${'🎉'.repeat(30)}`;
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderPage(<ReportPage />);
     await ready();

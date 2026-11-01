@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { must } from '../tests/must';
 import { adsState, resetAdsStore } from './_core/adsData';
 import { resetConfigStore, saved } from './_core/configStore';
 import { issueToken, resetStore } from './_core/store';
@@ -165,7 +166,7 @@ describe('the campaigns', () => {
     const row = (await get(CAMPAIGNS, { pageSize: 200 })).body.data.items[0];
     expect(row.createdByUsername).toBe('root');
     expect(row).toHaveProperty('updatedByUsername');
-    adsState.campaigns.get(row.id)!.createdBy = 'gone';
+    must(adsState.campaigns.get(row.id)).createdBy = 'gone';
     const again = (await get(CAMPAIGNS, { pageSize: 200 })).body.data.items.find(
       (c: { id: string }) => c.id === row.id,
     );
@@ -269,18 +270,18 @@ describe('the campaigns', () => {
     const campaigns = await findBy<{ id: string; status: string }>(CAMPAIGNS, {});
     const units = await findBy<{ campaignId: string }>(UNITS, {});
     const hasUnit = (id: string) => units.some((u) => u.campaignId === id);
-    const active = campaigns.find((c) => c.status === 'ACTIVE')!;
+    const active = must(campaigns.find((c) => c.status === 'ACTIVE'));
     expect((await send(CAMPAIGN_DELETE, {}, { id: active.id })).status).toBe(409);
-    const endedWithUnit = campaigns.find((c) => c.status === 'ENDED' && hasUnit(c.id))!;
+    const endedWithUnit = must(campaigns.find((c) => c.status === 'ENDED' && hasUnit(c.id)));
     const refused = await send(CAMPAIGN_DELETE, {}, { id: endedWithUnit.id });
     expect(refused.status).toBe(409);
     expect(refused.body.code).toBe('INVALID_STATE');
     const draftWithUnit = campaigns.find((c) => c.status === 'DRAFT' && hasUnit(c.id));
     if (draftWithUnit)
       expect((await send(CAMPAIGN_DELETE, {}, { id: draftWithUnit.id })).status).toBe(409);
-    const endedFree = campaigns.find((c) => c.status === 'ENDED' && !hasUnit(c.id))!;
+    const endedFree = must(campaigns.find((c) => c.status === 'ENDED' && !hasUnit(c.id)));
     expect((await send(CAMPAIGN_DELETE, {}, { id: endedFree.id })).status).toBe(200);
-    const draftFree = campaigns.find((c) => c.status === 'DRAFT' && !hasUnit(c.id))!;
+    const draftFree = must(campaigns.find((c) => c.status === 'DRAFT' && !hasUnit(c.id)));
     expect((await send(CAMPAIGN_DELETE, {}, { id: draftFree.id })).status).toBe(200);
     expect((await get(CAMPAIGN_ONE, {}, { id: endedFree.id })).status).toBe(404);
   });
@@ -511,11 +512,11 @@ describe('the units', () => {
     const units = await findBy<{ id: string; status: string }>(UNITS, {});
     const creatives = await findBy<{ adUnitId: string }>(CREATIVES, {});
     const hasCreative = (id: string) => creatives.some((c) => c.adUnitId === id);
-    const active = units.find((u) => u.status === 'ACTIVE')!;
+    const active = must(units.find((u) => u.status === 'ACTIVE'));
     expect((await send(UNIT_DELETE, {}, { id: active.id })).status).toBe(409);
     const draftWith = units.find((u) => u.status === 'DRAFT' && hasCreative(u.id));
     if (draftWith) expect((await send(UNIT_DELETE, {}, { id: draftWith.id })).status).toBe(409);
-    const draftFree = units.find((u) => u.status === 'DRAFT' && !hasCreative(u.id))!;
+    const draftFree = must(units.find((u) => u.status === 'DRAFT' && !hasCreative(u.id)));
     expect((await send(UNIT_DELETE, {}, { id: draftFree.id })).status).toBe(200);
     expect((await get(UNIT_ONE, {}, { id: draftFree.id })).status).toBe(404);
   });
@@ -638,7 +639,7 @@ describe('the creatives', () => {
     expect(again.status).toBe(409);
     expect(again.body.code).toBe('INVALID_STATE');
     const other = await upload();
-    adsState.uploads.get(other)!.kind = 'APK';
+    must(adsState.uploads.get(other)).kind = 'APK';
     const wrong = await send(CREATIVE_CREATE, body({ uploadId: other }));
     expect(wrong.status).toBe(400);
     expect(refs(wrong)).toEqual(['uploadId:OUT_OF_RANGE']);

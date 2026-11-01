@@ -5,6 +5,7 @@ import { saved } from '../../../mock/_core/configStore';
 import adsMock from '../../../mock/ads.mock';
 import configMock from '../../../mock/config.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import PlacementsPage from './placements';
 import {
@@ -55,7 +56,7 @@ const setConfig = (key: string, value: unknown) =>
   });
 const dialog = () => screen.findByRole('dialog');
 const placement = (slotKey: string) =>
-  [...adsState.placements.values()].find((p) => p.slotKey === slotKey)!;
+  must([...adsState.placements.values()].find((p) => p.slotKey === slotKey));
 
 describe('the placement page: the notes', { timeout: 30000 }, () => {
   it('opens with the delivery checklist', async () => {
@@ -213,7 +214,7 @@ describe('the warnings that stay on the page', { timeout: 30000 }, () => {
   it('does not count a creative without a skip on a native placement', async () => {
     setConfig('ads.force_close_seconds', 0);
     for (const creative of adsState.creatives.values()) creative.skippable = true;
-    adsState.creatives.get('9')!.skippable = false; // on a unit of the native placement
+    must(adsState.creatives.get('9')).skippable = false; // on a unit of the native placement
     await load();
     await waitFor(() => expect(configKeys()).toHaveLength(9));
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -293,7 +294,7 @@ describe('the placement table', { timeout: 30000 }, () => {
 
   it('shows 0 and a cap that was set to 0 as it is, not as nothing, and a missing value as a dash', async () => {
     backend();
-    adsState.placements.get('1')!.frequencyCap = 0;
+    must(adsState.placements.get('1')).frequencyCap = 0;
     (adsState.placements.get('2') as { frequencyCap: unknown }).frequencyCap = null;
     renderPage(<PlacementsPage />);
     await waitFor(() => expect(tableRows()).toHaveLength(4));
@@ -311,7 +312,7 @@ describe('the placement table', { timeout: 30000 }, () => {
 
   it('shows a name of 300 letters without a space inside the table', async () => {
     backend();
-    adsState.placements.get('3')!.name = 'ก'.repeat(300);
+    must(adsState.placements.get('3')).name = 'ก'.repeat(300);
     renderPage(<PlacementsPage />);
     await waitFor(() => expect(tableRows()).toHaveLength(4));
     const buttons = [...document.querySelectorAll('.ant-table-tbody button[data-lines]')];
@@ -378,7 +379,9 @@ describe('the enabled switch', { timeout: 30000 }, () => {
     });
     await waitFor(() =>
       expect(
-        within(tableRows().find((r) => r.textContent?.includes('app_open'))!).getByRole('switch'),
+        within(must(tableRows().find((r) => r.textContent?.includes('app_open')))).getByRole(
+          'switch',
+        ),
       ).not.toBeChecked(),
     );
   });

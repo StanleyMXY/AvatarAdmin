@@ -254,13 +254,13 @@ function checkTargeting(value: unknown, details: Detail[]): void {
   const ref = (key: string) => `targeting.${key}`;
   if ('platforms' in targeting) {
     const platforms = list('platforms');
-    if (!platforms || !platforms.every((p) => p === 'ANDROID' || p === 'IOS')) {
+    if (!platforms?.every((p) => p === 'ANDROID' || p === 'IOS')) {
       details.push({ ref: ref('platforms'), reason: 'OUT_OF_RANGE' });
     }
   }
   if ('geo' in targeting) {
     const geo = list('geo');
-    if (!geo || !geo.every((c) => isText(c) && COUNTRY.test(c))) {
+    if (!geo?.every((c) => isText(c) && COUNTRY.test(c))) {
       details.push({ ref: ref('geo'), reason: 'OUT_OF_RANGE' });
     }
   }
@@ -271,28 +271,23 @@ function checkTargeting(value: unknown, details: Detail[]): void {
   }
   if ('languages' in targeting) {
     const languages = list('languages');
-    if (
-      !languages ||
-      !languages.every((l) => isText(l) && LANGUAGE_TAG.test(l) && l.length <= 35)
-    ) {
+    if (!languages?.every((l) => isText(l) && LANGUAGE_TAG.test(l) && l.length <= 35)) {
       details.push({ ref: ref('languages'), reason: 'INVALID_LANGUAGE_TAG' });
     }
   }
   if ('day_parts' in targeting) {
     const parts = list('day_parts');
-    const fine =
-      parts !== null &&
-      parts.every((part) => {
-        const p = part as { start?: unknown; end?: unknown } | null;
-        return (
-          typeof p === 'object' &&
-          p !== null &&
-          isText(p.start) &&
-          isText(p.end) &&
-          CLOCK.test(p.start) &&
-          CLOCK.test(p.end)
-        );
-      });
+    const fine = parts?.every((part) => {
+      const p = part as { start?: unknown; end?: unknown } | null;
+      return (
+        typeof p === 'object' &&
+        p !== null &&
+        isText(p.start) &&
+        isText(p.end) &&
+        CLOCK.test(p.start) &&
+        CLOCK.test(p.end)
+      );
+    });
     if (!fine) details.push({ ref: ref('day_parts'), reason: 'OUT_OF_RANGE' });
   }
 }

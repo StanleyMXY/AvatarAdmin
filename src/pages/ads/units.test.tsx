@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import adsMock from '../../../mock/ads.mock';
 import configMock from '../../../mock/config.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import {
   adsState,
@@ -35,7 +36,7 @@ const unit = (id: string) => {
   if (!found) throw new Error(`no unit ${id}`);
   return found;
 };
-const campaign = (id: string) => adsState.campaigns.get(id)!;
+const campaign = (id: string) => must(adsState.campaigns.get(id));
 const rowOf = async (id: string) => {
   const name = unit(id).name;
   await waitFor(() =>
@@ -279,7 +280,7 @@ describe('the state changes and the delete', { timeout: 30000 }, () => {
     });
     await waitFor(() =>
       expect(
-        cellsOf(rows().find((r) => r.textContent?.includes(unit('6').name.slice(0, 12)))!)[3],
+        cellsOf(must(rows().find((r) => r.textContent?.includes(unit('6').name.slice(0, 12)))))[3],
       ).toBe('Running'),
     );
   });
@@ -616,7 +617,7 @@ describe('the form', { timeout: 60000 }, () => {
       targeting: { platforms: ['ANDROID'], geo: null, languages: ['th', 'id'] },
     });
     await dialogsClosed();
-    expect(adsState.units.get('1')!.targeting).not.toHaveProperty('geo');
+    expect(must(adsState.units.get('1')).targeting).not.toHaveProperty('geo');
   });
 });
 

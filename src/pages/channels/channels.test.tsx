@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import channelsMock from '../../../mock/channels.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import enUS from '../../locales/en-US';
 import {
@@ -132,9 +133,9 @@ describe('the list of channel packages', () => {
 
   it('shows the names of every language, long unbroken text and emoji without widening the table', async () => {
     backend();
-    channelsState.channels.get('play')!.name = 'ก'.repeat(5000);
-    channelsState.channels.get('direct')!.name = 'مرحبا بك 🌟 Xin chào';
-    channelsState.channels.get('appstore')!.packageName = 'a'.repeat(3000);
+    must(channelsState.channels.get('play')).name = 'ก'.repeat(5000);
+    must(channelsState.channels.get('direct')).name = 'مرحبا بك 🌟 Xin chào';
+    must(channelsState.channels.get('appstore')).packageName = 'a'.repeat(3000);
     renderPage(<ChannelsPage />);
     await waitFor(() => expect(rows().length).toBe(3));
     for (const pattern of [/^ก+$/, /^مرحبا بك/, /^a+$/]) {
@@ -311,7 +312,7 @@ describe('creating a channel package', { timeout: 60000 }, () => {
     const form = await openNew(user);
     await fillNew(user, form);
     channelsState.channels.set('partner-th', {
-      ...channelsState.channels.get('play')!,
+      ...must(channelsState.channels.get('play')),
       code: 'partner-th',
     });
     await user.click(submit(form));
@@ -440,7 +441,7 @@ describe('editing a channel package', { timeout: 60000 }, () => {
   });
 
   it('keeps a channel that is switched off switched off when its name is changed', async () => {
-    channelsState.channels.get('direct')!.enabled = false;
+    must(channelsState.channels.get('direct')).enabled = false;
     const { calls, user } = await load();
     const form = await openEdit(user, 'direct');
     const name = form.getByRole('textbox', { name: 'Name' });
@@ -498,7 +499,7 @@ describe('editing a channel package', { timeout: 60000 }, () => {
 
 describe('the enabled switch', { timeout: 60000 }, () => {
   it('switches a channel on without asking, with the name, the package and the new state', async () => {
-    channelsState.channels.get('direct')!.enabled = false;
+    must(channelsState.channels.get('direct')).enabled = false;
     const { calls, user } = await load();
     const row = await rowOf('direct');
     await user.click(within(row).getByRole('switch'));
@@ -569,7 +570,7 @@ describe('the enabled switch', { timeout: 60000 }, () => {
   });
 
   it('sends one request when the switch is pressed twice to switch on', async () => {
-    channelsState.channels.get('direct')!.enabled = false;
+    must(channelsState.channels.get('direct')).enabled = false;
     const { calls, user } = await load();
     const row = await rowOf('direct');
     const toggle = within(row).getByRole('switch');

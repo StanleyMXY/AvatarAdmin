@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import appVersionsMock from '../../../mock/appVersions.mock';
 import channelsMock from '../../../mock/channels.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import enUS from '../../locales/en-US';
 import {
@@ -204,7 +205,7 @@ describe('the page of the app versions', () => {
   it('turns a link into a link only when it is https, and otherwise shows it as text', async () => {
     const calls = backend();
     const id = versionBy('play', 110).id;
-    appVersionsState.versions.get(id)!.storeUrl = 'javascript:alert(1)';
+    must(appVersionsState.versions.get(id)).storeUrl = 'javascript:alert(1)';
     renderPage(<AppVersionsPage />);
     const row = await rowOf(id);
     expect(calls.length).toBeGreaterThan(0);
@@ -225,9 +226,9 @@ describe('the page of the app versions', () => {
 
   it('shows the first characters of the id when the administrator is gone, and a dash when there is no id', async () => {
     backend();
-    const gone = appVersionsState.versions.get(versionBy('play', 120).id)!;
+    const gone = must(appVersionsState.versions.get(versionBy('play', 120).id));
     gone.createdBy = 'deleted-admin-with-a-long-id';
-    const none = appVersionsState.versions.get(versionBy('play', 100).id)!;
+    const none = must(appVersionsState.versions.get(versionBy('play', 100).id));
     none.createdBy = null;
     renderPage(<AppVersionsPage />);
     expect(cellsOf(await rowOf(gone.id))[7]).toBe('deleted-');
@@ -256,7 +257,7 @@ describe('the page of the app versions', () => {
   it('asks for the second page when it is chosen', async () => {
     const calls = backend();
     for (let i = 0; i < 25; i += 1) {
-      const base = appVersionsState.versions.get(versionBy('play', 100).id)!;
+      const base = must(appVersionsState.versions.get(versionBy('play', 100).id));
       appVersionsState.versions.set(`extra-${i}`, {
         ...base,
         id: `extra-${i}`,
@@ -367,9 +368,9 @@ describe('the page of the app versions', () => {
   it('holds the names of every language, long unbroken text and emoji without widening the table', async () => {
     backend();
     const long = 'ก'.repeat(5000);
-    channelsState.channels.get('play')!.name = long;
-    channelsState.channels.get('direct')!.name = 'مرحبا بك في التطبيق 🌟 Xin chào Hola';
-    channelsState.channels.get('appstore')!.name = '😀'.repeat(300);
+    must(channelsState.channels.get('play')).name = long;
+    must(channelsState.channels.get('direct')).name = 'مرحبا بك في التطبيق 🌟 Xin chào Hola';
+    must(channelsState.channels.get('appstore')).name = '😀'.repeat(300);
     renderPage(<AppVersionsPage />);
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
     for (const pattern of [/^ก+$/, /^مرحبا بك/, /^(😀)+$/u]) {
@@ -506,7 +507,7 @@ describe('deleting a draft and taking a version down', () => {
     const draft = versionBy('play', 120);
     const row = await rowOf(draft.id);
     // somebody else activated it meanwhile
-    appVersionsState.versions.get(draft.id)!.status = 'ARCHIVED';
+    must(appVersionsState.versions.get(draft.id)).status = 'ARCHIVED';
     await confirmInline(user, row, 'Delete');
     expect(await screen.findByText(txt('error.INVALID_STATE'))).toBeTruthy();
     expect(appVersionsState.versions.has(draft.id)).toBe(true);

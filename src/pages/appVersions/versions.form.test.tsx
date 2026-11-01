@@ -5,6 +5,7 @@ import appVersionsMock from '../../../mock/appVersions.mock';
 import channelsMock from '../../../mock/channels.mock';
 import { fileOf, zipBytes } from '../../../tests/imageBytes';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import enUS from '../../locales/en-US';
 import {
@@ -213,7 +214,7 @@ describe('creating a version of a STORE channel', { timeout: 60000 }, () => {
   });
 
   it('does not let a channel that is switched off be chosen', async () => {
-    channelsState.channels.get('play')!.enabled = false;
+    must(channelsState.channels.get('play')).enabled = false;
     const { user } = await load();
     const form = await openNew(user);
     await user.click(form.getByRole('combobox', { name: 'Channel package' }));
@@ -538,7 +539,7 @@ describe('editing a draft', { timeout: 60000 }, () => {
     const { user } = await load();
     const draft = versionBy('play', 120);
     const form = await openEdit(user, draft.id);
-    appVersionsState.versions.get(draft.id)!.status = 'ACTIVE';
+    must(appVersionsState.versions.get(draft.id)).status = 'ACTIVE';
     await user.click(submit(form));
     expect(await form.findByText(enUS['error.INVALID_STATE'])).toBeTruthy();
   });
@@ -587,7 +588,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     const info = await form.findByTestId('apk-info');
     expect(uploads).toHaveLength(1);
     expect(uploads[0].url).toBe('/uploads/apk');
-    const record = [...appVersionsState.uploads.values()].find((u) => !u.used)!;
+    const record = must([...appVersionsState.uploads.values()].find((u) => !u.used));
     expect(info.textContent).toContain(record.apkUrl);
     expect(info.textContent).toContain(record.apkSha256);
     expect(info.querySelectorAll('input, textarea')).toHaveLength(0);
@@ -595,7 +596,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     await waitFor(() =>
       expect(writesOf(calls).filter((c) => c.url !== '/api/admin/uploads/apk')).toHaveLength(1),
     );
-    const create = writesOf(calls).find((c) => c.url === '/api/admin/app-versions')!;
+    const create = must(writesOf(calls).find((c) => c.url === '/api/admin/app-versions'));
     expect(create.body).toEqual({
       channelCode: 'direct',
       versionName: '1.3.0',
@@ -676,7 +677,9 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     );
     await user.click(submit(form));
     await waitFor(() => expect(writesOf(calls).filter((c) => c.method === 'PUT')).toHaveLength(1));
-    const body = writesOf(calls).find((c) => c.method === 'PUT')!.body as { apkUploadId: string };
+    const body = must(writesOf(calls).find((c) => c.method === 'PUT')).body as {
+      apkUploadId: string;
+    };
     expect(body.apkUploadId).not.toBe(old);
     expect(appVersionsState.versions.get(draft.id)?.apkUploadId).toBe(body.apkUploadId);
   });
@@ -752,7 +755,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     await waitFor(() =>
       expect(writesOf(calls).some((c) => c.url === '/api/admin/app-versions')).toBe(true),
     );
-    const body = writesOf(calls).find((c) => c.url === '/api/admin/app-versions')!.body;
+    const body = must(writesOf(calls).find((c) => c.url === '/api/admin/app-versions')).body;
     expect(body).not.toHaveProperty('storeUrl');
     expect(body).toHaveProperty('apkUploadId');
   });

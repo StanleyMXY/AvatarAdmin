@@ -6,6 +6,7 @@ import adsMock from '../../../mock/ads.mock';
 import configMock from '../../../mock/config.mock';
 import { fileOf, jpegBytes, mp4Bytes, pngBytes } from '../../../tests/imageBytes';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { must } from '../../../tests/must';
 import { renderPage } from '../../../tests/renderPage';
 import CreativesPage from './creatives';
 import {
@@ -18,7 +19,6 @@ import {
   overrideFetch,
   settled,
   signIn,
-  uploadModule,
   uploads,
   writesOf,
 } from './testSetup';
@@ -46,7 +46,7 @@ const creative = (id: string) => {
   if (!found) throw new Error(`no creative ${id}`);
   return found;
 };
-const unit = (id: string) => adsState.units.get(id)!;
+const unit = (id: string) => must(adsState.units.get(id));
 const rowOf = async (id: string) => {
   await waitFor(() => expect(document.querySelector(`tr[data-row-key="${id}"]`)).not.toBeNull());
   return document.querySelector(`tr[data-row-key="${id}"]`) as HTMLTableRowElement;
@@ -294,7 +294,7 @@ describe('the filters', { timeout: 30000 }, () => {
     const { calls, user } = await load();
     expect([...lastQuery(calls).keys()].sort()).toEqual(['page', 'pageSize']);
     await chooseOption(user, 'Unit', unit('1').name);
-    await chooseOption(user, 'Campaign', adsState.campaigns.get('2')!.name);
+    await chooseOption(user, 'Campaign', must(adsState.campaigns.get('2')).name);
     await chooseOption(user, 'Review status', 'Approved');
     await chooseOption(user, 'Serving status', 'Paused');
     await chooseOption(user, 'Type', 'Video');
@@ -387,7 +387,7 @@ describe('approve, reject, serve and delete', { timeout: 40000 }, () => {
       body: { reviewStatus: 'APPROVED' },
     });
     await waitFor(() =>
-      expect(cellsOf(document.querySelector('tr[data-row-key="3"]')!)[4]).toBe('Approved'),
+      expect(cellsOf(must(document.querySelector('tr[data-row-key="3"]')))[4]).toBe('Approved'),
     );
   });
 
@@ -421,9 +421,11 @@ describe('approve, reject, serve and delete', { timeout: 40000 }, () => {
       body: { reviewStatus: 'REJECTED', reviewNote: 'Logo too small สวัสดี' },
     });
     await waitFor(() =>
-      expect(cellsOf(document.querySelector('tr[data-row-key="3"]')!)[4]).toContain('Rejected'),
+      expect(cellsOf(must(document.querySelector('tr[data-row-key="3"]')))[4]).toContain(
+        'Rejected',
+      ),
     );
-    expect(document.querySelector('tr[data-row-key="3"]')!.textContent).toContain(
+    expect(must(document.querySelector('tr[data-row-key="3"]')).textContent).toContain(
       'Logo too small สวัสดี',
     );
   });
@@ -480,10 +482,12 @@ describe('approve, reject, serve and delete', { timeout: 40000 }, () => {
     });
     await waitFor(() =>
       expect(
-        within(document.querySelector('tr[data-row-key="1"]')!).getByRole('switch'),
+        within(must(document.querySelector<HTMLElement>('tr[data-row-key="1"]'))).getByRole(
+          'switch',
+        ),
       ).not.toBeChecked(),
     );
-    expect(cellsOf(document.querySelector('tr[data-row-key="1"]')!)[4]).toBe('Approved');
+    expect(cellsOf(must(document.querySelector('tr[data-row-key="1"]')))[4]).toBe('Approved');
     await user.click(within(await rowOf('2')).getByRole('switch'));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
     expect(writesOf(calls)[1].body).toEqual({ servingStatus: 'ACTIVE' });
@@ -1227,7 +1231,7 @@ describe('the form: editing', { timeout: 60000 }, () => {
     );
     await user.click(form.getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls).filter((c) => c.method === 'PUT')).toHaveLength(1));
-    const body = writesOf(calls).find((c) => c.method === 'PUT')!.body as { uploadId: string };
+    const body = must(writesOf(calls).find((c) => c.method === 'PUT')).body as { uploadId: string };
     expect(body.uploadId).toMatch(/^up-0/);
     expect(JSON.stringify(body)).not.toMatch(/mediaUrl|thumbnailUrl/);
   });
@@ -1239,7 +1243,7 @@ describe('the form: editing', { timeout: 60000 }, () => {
     await user.click(form.getByRole('button', { name: 'Submit' }));
     await dialogsClosed();
     await waitFor(() =>
-      expect(cellsOf(document.querySelector('tr[data-row-key="4"]')!)[4]).toBe('Draft'),
+      expect(cellsOf(must(document.querySelector('tr[data-row-key="4"]')))[4]).toBe('Draft'),
     );
   });
 
