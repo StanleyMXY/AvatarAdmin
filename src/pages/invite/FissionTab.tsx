@@ -14,8 +14,9 @@ import {
   Tree,
   Typography,
 } from 'antd';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ReadState } from '../../components/ReadState';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import { getDepthStats, getInviteChain, type InviteChain } from '../../services/invite';
 import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
@@ -66,23 +67,23 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
   // ---- the chain ----
   const [state, setState] = useState<ChainState>({ kind: 'idle' });
   const [problem, setProblem] = useState<FormProblem>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   const { applied } = form;
   useEffect(() => {
     if (!applied) return;
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setState({ kind: 'loading' });
     getInviteChain({ rootAccountId: applied.accountId, maxDepth: applied.maxDepth }).then(
       (chain) => {
-        if (mine === counter.current) setState({ kind: 'loaded', chain });
+        if (isCurrent()) setState({ kind: 'loaded', chain });
       },
       (error) => {
-        if (mine === counter.current) {
+        if (isCurrent()) {
           setState({ kind: 'failed', text: chainFailureText(intl, error) });
         }
       },
     );
-  }, [applied, intl]);
+  }, [applied, intl, begin]);
 
   const submit = () => {
     if (trimSpec(form.accountId) === '') return setProblem('account');

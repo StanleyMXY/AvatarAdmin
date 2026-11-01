@@ -3,6 +3,7 @@ import { Card, Flex, Tabs } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Can } from '../../components/Can';
 import type { Kept } from '../../hooks/useKeptState';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { getAdminMeta } from '../../services/auth';
 import { useAdminMeta } from '../../session/useSession';
 import { ConfigForm } from '../config/ConfigForm';
@@ -34,13 +35,13 @@ export default function PricesPage() {
   // the list that is held.
   const [freshAllowed, setFreshAllowed] = useState<string[] | undefined>();
   const allowedCurrencies = freshAllowed ?? meta.allowedCurrencies;
-  const latestRead = useRef(0);
+  const begin = useLatestCall();
   const readAllowed = useCallback(async () => {
-    const mine = ++latestRead.current;
+    const isCurrent = begin();
     const read = await getAdminMeta();
-    if (mine === latestRead.current && Array.isArray(read.allowedCurrencies))
+    if (isCurrent() && Array.isArray(read.allowedCurrencies))
       setFreshAllowed(read.allowedCurrencies);
-  }, []);
+  }, [begin]);
   useEffect(() => {
     void readAllowed();
   }, [readAllowed]);

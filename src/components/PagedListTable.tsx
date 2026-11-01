@@ -2,6 +2,7 @@ import { type ActionType, type ProColumns, ProTable } from '@ant-design/pro-comp
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Skeleton } from 'antd';
 import { type ReactNode, useRef, useState, useSyncExternalStore } from 'react';
+import { useLatestCall } from '../hooks/useLatestCall';
 import type { Page } from '../request/errors';
 import { isServiceUnavailable, subscribeServiceStatus } from '../request/serviceStatus';
 import { describeFailure } from '../session/describe';
@@ -55,23 +56,23 @@ export function PagedListTable<
   const [rows, setRows] = useState<T[]>([]);
   const [loadedOnce, setLoadedOnce] = useState(false);
   const noticeUp = useSyncExternalStore(subscribeServiceStatus, isServiceUnavailable);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   // ProTable cancels the older of two overlapping requests itself; the counter only makes sure the
   // error shown is the error of the newest request.
   const load = async (params: Record<string, unknown>) => {
     const { current, pageSize, ...search } = params;
-    const mine = ++counter.current;
+    const isCurrent = begin();
     try {
       const page = await request({
         ...(search as Record<string, unknown>),
         page: Number(current ?? 1),
         pageSize: Number(pageSize ?? DEFAULT_PAGE_SIZE),
       } as { page: number; pageSize: number } & F);
-      if (mine === counter.current) setFailure(null);
+      if (isCurrent()) setFailure(null);
       return { data: page.items, total: page.total, success: true };
     } catch (error) {
-      if (mine === counter.current) {
+      if (isCurrent()) {
         const described = describeFailure(intl, error);
         setFailure({ text: described.text, code: described.error.code });
         setRows([]);

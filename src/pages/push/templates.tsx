@@ -7,6 +7,7 @@ import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import { RowActions } from '../../components/RowActions';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   deleteTemplate,
   listAllTemplates,
@@ -45,20 +46,20 @@ export default function TemplatesPage() {
   const [all, setAll] = useState<PushTemplate[] | null>(null);
   const [missing, setMissing] = useState<MissingLocales | null>(null);
   const [allFailure, setAllFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const loadAll = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     try {
       const rows = await listAllTemplates();
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setAll(rows.items);
       setMissing(rows.missingLocales);
       setAllFailure(null);
     } catch (error) {
-      if (mine === counter.current) setAllFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setAllFailure(describeFailure(intl, error).text);
     }
-  }, [intl]);
+  }, [intl, begin]);
 
   useEffect(() => {
     void loadAll();

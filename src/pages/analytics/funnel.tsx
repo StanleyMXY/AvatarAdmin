@@ -1,12 +1,13 @@
 import { Funnel } from '@ant-design/plots';
 import { useAccess, useIntl } from '@umijs/max';
 import { App, Button, Card, Flex, Form, InputNumber, Select, Table, Tag, Typography } from 'antd';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ReadState } from '../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import {
   createSavedFunnel,
@@ -86,22 +87,22 @@ export default function FunnelPage() {
   const [result, setResult] = useState<FunnelStepResult[] | null>(null);
   const [queryFailure, setQueryFailure] = useState<string | null>(null);
   const [querying, setQuerying] = useState(false);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   /** Asks for `asked` (the form as it is by default). */
   const query = async (asked: { steps: string[]; windowHours: number } = body()) => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setQuerying(true);
     setQueryFailure(null);
     try {
       const answer = await getFunnel({ ...asked, ...range });
-      if (mine === counter.current) setResult(answer.steps);
+      if (isCurrent()) setResult(answer.steps);
     } catch (error) {
-      if (mine === counter.current) {
+      if (isCurrent()) {
         setResult(null);
         setQueryFailure(describeFailure(intl, error).text);
       }
     } finally {
-      if (mine === counter.current) setQuerying(false);
+      if (isCurrent()) setQuerying(false);
     }
   };
 
@@ -111,7 +112,7 @@ export default function FunnelPage() {
    * the numbers of this form.
    */
   const dropResult = () => {
-    counter.current += 1;
+    begin();
     setResult(null);
     setQueryFailure(null);
     setQuerying(false);

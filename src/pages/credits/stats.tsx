@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { type CreditStats, getCreditStats } from '../../services/credits';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
@@ -29,22 +30,22 @@ export default function CreditStatsPage() {
   const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
   const [data, setData] = useState<CreditStats | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   // Switching the language changes `intl`; the figures do not depend on it, so it must not make a new request.
   const intlRef = useRef(intl);
   intlRef.current = intl;
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setData(null);
     setFailure(null);
     try {
       const answer = await getCreditStats(range.from, range.to);
-      if (mine === counter.current) setData(answer);
+      if (isCurrent()) setData(answer);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intlRef.current, error).text);
+      if (isCurrent()) setFailure(describeFailure(intlRef.current, error).text);
     }
-  }, [range]);
+  }, [range, begin]);
 
   useEffect(() => {
     void load();

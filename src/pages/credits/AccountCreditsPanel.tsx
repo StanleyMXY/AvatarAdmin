@@ -11,6 +11,7 @@ import {
 } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { type AccountCredits, getAccountCredits, type LedgerRow } from '../../services/credits';
 import { describeFailure } from '../../session/describe';
 import { DASH, formatCount } from '../../utils/ratio';
@@ -34,27 +35,27 @@ export function AccountCreditsPanel({ accountId }: { accountId: string }) {
   const [data, setData] = useState<AccountCredits | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   // Switching the language changes `intl`; the ledger does not depend on it, so it must not make a new request.
   const intlRef = useRef(intl);
   intlRef.current = intl;
 
   const load = useCallback(async () => {
     // When two requests overlap, the answer of the newest one is the one that is shown.
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setLoading(true);
     try {
       const answer = await getAccountCredits(accountId, { page, pageSize });
-      if (mine === counter.current) {
+      if (isCurrent()) {
         setData(answer);
         setFailure(null);
       }
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intlRef.current, error).text);
+      if (isCurrent()) setFailure(describeFailure(intlRef.current, error).text);
     } finally {
-      if (mine === counter.current) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [accountId, page, pageSize]);
+  }, [accountId, page, pageSize, begin]);
 
   useEffect(() => {
     void load();

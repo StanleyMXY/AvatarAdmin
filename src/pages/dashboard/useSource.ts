@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLatestCall } from '../../hooks/useLatestCall';
 
 export type SourceState<T> =
   | { status: 'idle'; data: null; error: null }
@@ -19,26 +20,26 @@ export function useSource<T>(load: () => Promise<T>, enabled: boolean): Source<T
     data: null,
     error: null,
   });
-  const newest = useRef(0);
+  const begin = useLatestCall();
   const loadRef = useRef(load);
   loadRef.current = load;
 
   const run = useCallback(() => {
-    const mine = ++newest.current;
+    const isCurrent = begin();
     setState({ status: 'loading', data: null, error: null });
     loadRef.current().then(
       (data) => {
-        if (mine === newest.current) setState({ status: 'ready', data, error: null });
+        if (isCurrent()) setState({ status: 'ready', data, error: null });
       },
       (error: unknown) => {
-        if (mine === newest.current) setState({ status: 'failed', data: null, error });
+        if (isCurrent()) setState({ status: 'failed', data: null, error });
       },
     );
-  }, []);
+  }, [begin]);
 
   useEffect(() => {
     if (!enabled) {
-      newest.current++;
+      begin();
       setState((previous) =>
         previous.status === 'idle' ? previous : { status: 'idle', data: null, error: null },
       );
@@ -46,9 +47,9 @@ export function useSource<T>(load: () => Promise<T>, enabled: boolean): Source<T
     }
     run();
     return () => {
-      newest.current++;
+      begin();
     };
-  }, [enabled, run]);
+  }, [enabled, run, begin]);
 
   return { ...state, reload: run };
 }

@@ -14,10 +14,11 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   CLOSED_COMPLAINT_STATUSES,
@@ -77,18 +78,18 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
   const options = statusOptions(intl);
 
   // Only the newest read is shown: an answer for a complaint that was closed or replaced is dropped.
-  const newest = useRef(0);
+  const begin = useLatestCall();
   const load = useCallback(async () => {
-    const mine = ++newest.current;
+    const isCurrent = begin();
     if (id === null) return;
     setLoadFailure(null);
     try {
       const read = await getComplaint(id);
-      if (mine === newest.current) setDetail(read);
+      if (isCurrent()) setDetail(read);
     } catch (error) {
-      if (mine === newest.current) setLoadFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setLoadFailure(describeFailure(intl, error).text);
     }
-  }, [id, intl]);
+  }, [id, intl, begin]);
 
   // A different complaint starts from an empty drawer.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `id` is the trigger, nothing else is read

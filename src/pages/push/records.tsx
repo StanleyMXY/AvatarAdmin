@@ -2,9 +2,10 @@ import { QuestionCircleOutlined } from '@ant-design/icons';
 import { Link, useAccess, useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Spin, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   getRecord,
   listRecords,
@@ -52,19 +53,19 @@ function Deliveries({ id }: { id: string }) {
     intl.formatMessage({ id: key }, values);
   const [detail, setDetail] = useState<PushRecordDetail | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setDetail(null);
     setFailure(null);
     try {
       const record = await getRecord(id);
-      if (mine === counter.current) setDetail(record);
+      if (isCurrent()) setDetail(record);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setFailure(describeFailure(intl, error).text);
     }
-  }, [id, intl]);
+  }, [id, intl, begin]);
 
   useEffect(() => {
     void load();
@@ -131,22 +132,22 @@ export default function RecordsPage() {
   const [data, setData] = useState<Page<PushRecord> | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setLoading(true);
     try {
       const page = await listRecords(paging);
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setData(page);
       setFailure(null);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setFailure(describeFailure(intl, error).text);
     } finally {
-      if (mine === counter.current) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [paging, intl]);
+  }, [paging, intl, begin]);
 
   useEffect(() => {
     void load();

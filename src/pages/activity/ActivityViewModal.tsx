@@ -1,7 +1,8 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Descriptions, Flex, Modal, Spin, Table, Typography } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { type CheckinActivityDetail, getCheckinActivity } from '../../services/activity';
 import { describeFailure } from '../../session/describe';
 import { countText, orDash } from '../../utils/displayText';
@@ -27,32 +28,32 @@ export function ActivityViewModal({ id, open, onClose }: Props) {
   const t = (key: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id: key }, values);
   const [state, setState] = useState<State>({ kind: 'loading' });
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const load = useCallback(
     async (target: string) => {
-      const mine = ++counter.current;
+      const isCurrent = begin();
       setState({ kind: 'loading' });
       try {
         const detail = await getCheckinActivity(target);
-        if (mine === counter.current) setState({ kind: 'loaded', detail });
+        if (isCurrent()) setState({ kind: 'loaded', detail });
       } catch (error) {
-        if (mine === counter.current) {
+        if (isCurrent()) {
           setState({ kind: 'failed', text: describeFailure(intl, error).text });
         }
       }
     },
-    [intl],
+    [intl, begin],
   );
 
   useEffect(() => {
     if (id === null || !open) {
       // Closed: an answer that is still on its way belongs to nobody.
-      counter.current += 1;
+      begin();
       return;
     }
     void load(id);
-  }, [id, open, load]);
+  }, [id, open, load, begin]);
 
   const rewards =
     state.kind === 'loaded' && Array.isArray(state.detail.rewards) ? state.detail.rewards : [];

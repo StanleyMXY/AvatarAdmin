@@ -2,12 +2,13 @@ import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Select, Spin, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ExportButton } from '../../components/ExportButton';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { TRIGGER_REASONS } from '../../services/push';
 import { getPushStats } from '../../services/stats/reports';
 import type { PushStatRow } from '../../services/stats/types';
@@ -56,10 +57,10 @@ export default function PushStatsPage() {
   const [applied, setApplied] = useState<Filter>(initialFilter);
   const [rows, setRows] = useState<PushStatRow[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setRows(null);
     setFailure(null);
     try {
@@ -68,11 +69,11 @@ export default function PushStatsPage() {
         to: applied.range.to,
         triggerReason: applied.reason === ALL ? undefined : applied.reason,
       });
-      if (mine === counter.current) setRows(items);
+      if (isCurrent()) setRows(items);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setFailure(describeFailure(intl, error).text);
     }
-  }, [applied, intl]);
+  }, [applied, intl, begin]);
 
   useEffect(() => {
     void load();

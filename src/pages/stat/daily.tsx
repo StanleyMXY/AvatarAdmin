@@ -13,6 +13,7 @@ import {
 import { ProvisionalTag } from '../../components/stat/ProvisionalTag';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { getDaily } from '../../services/stats/reports';
 import type { StatDailyRow } from '../../services/stats/types';
 import { describeFailure } from '../../session/describe';
@@ -61,13 +62,13 @@ export default function DailyReportPage() {
   // marked provisional follows that day and not the clock of every later drawing of the page.
   const [today, setToday] = useState<string>(() => todayUtc());
   const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   // The words of a failure follow the language; a switch of language is not a reason to read again.
   const intlRef = useRef(intl);
   intlRef.current = intl;
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     const askedOn = todayUtc();
     setRows(null);
     setFailure(null);
@@ -78,14 +79,14 @@ export default function DailyReportPage() {
         platform: applied.platform,
         channel: applied.channel,
       });
-      if (mine === counter.current) {
+      if (isCurrent()) {
         setToday(askedOn);
         setRows(items);
       }
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intlRef.current, error).text);
+      if (isCurrent()) setFailure(describeFailure(intlRef.current, error).text);
     }
-  }, [applied]);
+  }, [applied, begin]);
 
   useEffect(() => {
     void load();

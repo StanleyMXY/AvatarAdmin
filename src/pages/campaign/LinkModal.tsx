@@ -1,6 +1,7 @@
 import { Link, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Radio, Typography } from 'antd';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type AttributionCampaign,
@@ -38,10 +39,11 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
   const [link, setLink] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
-  // Counts the changes of the fields: an answer for fields that were changed since is dropped.
-  const version = useRef(0);
+  // A change of the fields overtakes the read that is on its way: an answer for fields that were
+  // changed since is dropped.
+  const begin = useLatestCall();
   const change = (apply: () => void) => {
-    version.current += 1;
+    begin();
     apply();
     setLink(null);
     setProblem(null);
@@ -59,7 +61,7 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
   const { run, pending } = useSingleFlight(async () => {
     setProblem(null);
     setLink(null);
-    const mine = version.current;
+    const isCurrent = begin();
     if (!campaign[PLATFORM_FIELDS[platform].pixel]) {
       setProblem(t('campaign.link.noPixel'));
       return;
@@ -71,9 +73,9 @@ export function LinkModal({ campaign, linkBase, onClose }: Props) {
         utmMedium: utmMedium.trim(),
         utmCampaign: utmCampaign.trim(),
       });
-      if (mine === version.current) setLink(typeof answer.url === 'string' ? answer.url : null);
+      if (isCurrent()) setLink(typeof answer.url === 'string' ? answer.url : null);
     } catch (error) {
-      if (mine === version.current) setProblem(describeFailure(intl, error).text);
+      if (isCurrent()) setProblem(describeFailure(intl, error).text);
     }
   });
 

@@ -3,6 +3,7 @@ import { Alert, App, Button, Card, Descriptions, Flex, Space, Spin } from 'antd'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { ApiError } from '../../request/errors';
 import {
   decideModeration,
@@ -55,16 +56,16 @@ export default function ModerationDetailPage() {
   const [deciding, setDeciding] = useState<ModerationDecision | null>(null);
   const intlRef = useRef(intl);
   intlRef.current = intl;
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
     if (id === null) return;
-    const mine = ++counter.current;
+    const isCurrent = begin();
     try {
       const record = await getModerationRecord(id);
-      if (mine === counter.current) setState({ phase: 'ready', record });
+      if (isCurrent()) setState({ phase: 'ready', record });
     } catch (error) {
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       const described = describeFailure(intlRef.current, error);
       setState({
         phase: 'failed',
@@ -72,14 +73,11 @@ export default function ModerationDetailPage() {
         text: described.text,
       });
     }
-  }, [id]);
+  }, [id, begin]);
 
   useEffect(() => {
     setState({ phase: 'loading' });
     void load();
-    return () => {
-      counter.current += 1;
-    };
   }, [load]);
 
   const back = <Link to="/moderation/queue">{t('moderation.detail.back')}</Link>;

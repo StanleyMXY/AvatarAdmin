@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Spin, Typography } from 'antd';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { ApiError } from '../../request/errors';
 import { type ComplaintEvidence, getComplaintEvidence } from '../../services/complaints';
 import { describeFailure } from '../../session/describe';
@@ -78,16 +79,16 @@ export function EvidenceViewer({ complaintId, count }: { complaintId: string; co
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [shown, setShown] = useState<Shown | null>(null);
-  const latest = useRef(0);
+  const begin = useLatestCall();
 
   const open = async (index: number) => {
-    const mine = ++latest.current;
+    const isCurrent = begin();
     setShown({ index, state: 'loading' });
     try {
       const evidence = await getComplaintEvidence(complaintId, index);
-      if (mine === latest.current) setShown({ index, state: 'ready', evidence });
+      if (isCurrent()) setShown({ index, state: 'ready', evidence });
     } catch (error) {
-      if (mine !== latest.current) return;
+      if (!isCurrent()) return;
       const text =
         error instanceof ApiError && error.code === 'RESOURCE_NOT_FOUND'
           ? t('complaints.evidence.notFound')

@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, Button, Card, Flex, Spin, Typography } from 'antd';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   getModerationContent,
   type ModerationContent,
@@ -95,35 +96,36 @@ export function ContentPanel({
   const [failure, setFailure] = useState('');
   const [mediaFailed, setMediaFailed] = useState(false);
   const retried = useRef(false);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   const id = record.id;
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setPhase('loading');
     setMediaFailed(false);
     try {
       const answer = await getModerationContent(id);
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setContent(answer);
       setPhase('ready');
     } catch (error) {
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       const described = describeFailure(intlRef.current, error);
       setContent(null);
       setFailure(described.text);
       setPhase(described.error.code === 'CONTENT_NOT_STORED' ? 'notStored' : 'failed');
     }
-  }, [id]);
+  }, [id, begin]);
 
   useEffect(() => {
     if (!active) return undefined;
     retried.current = false;
     void load();
     return () => {
-      counter.current += 1;
+      // Another record, or the tab is left: the read still on its way belongs to nobody.
+      begin();
     };
-  }, [active, load]);
+  }, [active, load, begin]);
 
   const onMediaError = () => {
     if (!retried.current) {

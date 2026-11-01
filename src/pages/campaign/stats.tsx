@@ -1,7 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Button, Flex, Spin, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ExportButton } from '../../components/ExportButton';
 import { FailureBar } from '../../components/FailureBar';
@@ -11,6 +11,7 @@ import { LandBar } from '../../components/stat/LandBar';
 import { ReportHelper } from '../../components/stat/ReportHelper';
 import { TrendChart } from '../../components/stat/TrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import { getPerformance, type PerformanceRow, readCostSettings } from '../../services/campaign';
 import { describeFailure } from '../../session/describe';
@@ -55,10 +56,10 @@ export default function CampaignStatsPage() {
   const [failure, setFailure] = useState<string | null>(null);
   // What the backend refused about the dates, by field (`from`, `to`): shown next to the dates.
   const [rangeRefusals, setRangeRefusals] = useState<string[]>([]);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setCampaignRows(null);
     setDayRows(null);
     setFailure(null);
@@ -73,11 +74,11 @@ export default function CampaignStatsPage() {
         getPerformance({ ...query, groupBy: 'campaign' }),
         getPerformance({ ...query, groupBy: 'day' }),
       ]);
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setCampaignRows(byCampaign.items);
       setDayRows(byDay.items);
     } catch (error) {
-      if (mine === counter.current) {
+      if (isCurrent()) {
         const described = describeFailure(intl, error);
         setFailure(described.text);
         // A range error names `from` or `to` (the same for every statistics page): say which
@@ -100,7 +101,7 @@ export default function CampaignStatsPage() {
         );
       }
     }
-  }, [applied, intl]);
+  }, [applied, intl, begin]);
 
   useEffect(() => {
     void load();

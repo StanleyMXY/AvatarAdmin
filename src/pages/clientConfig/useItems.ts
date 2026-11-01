@@ -1,5 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { type ClientConfigItem, listClientConfig } from '../../services/clientConfig';
 import { describeFailure } from '../../session/describe';
 
@@ -16,29 +17,26 @@ export function useItems() {
   const [items, setItems] = useState<ClientConfigItem[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const reload = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setLoading(true);
     try {
       const answer = await listClientConfig();
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setItems(answer);
       setFailure(null);
     } catch (error) {
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setFailure(describeFailure(intlRef.current, error).text);
     } finally {
-      if (mine === counter.current) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, []);
+  }, [begin]);
 
   useEffect(() => {
     void reload();
-    return () => {
-      counter.current += 1;
-    };
   }, [reload]);
 
   return { items, failure, loading, reload: () => void reload() };

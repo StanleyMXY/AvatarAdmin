@@ -3,6 +3,7 @@ import { Alert, Button, Card, Flex, Spin, Statistic, Table, Typography } from 'a
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   getModerationStats,
   type ModerationStatRow,
@@ -24,21 +25,21 @@ export default function ModerationStatsPage() {
   const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
   const [data, setData] = useState<ModerationStats | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   const intlRef = useRef(intl);
   intlRef.current = intl;
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setData(null);
     setFailure(null);
     try {
       const answer = await getModerationStats(range);
-      if (mine === counter.current) setData(answer);
+      if (isCurrent()) setData(answer);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intlRef.current, error).text);
+      if (isCurrent()) setFailure(describeFailure(intlRef.current, error).text);
     }
-  }, [range]);
+  }, [range, begin]);
 
   useEffect(() => {
     void load();

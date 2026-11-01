@@ -14,7 +14,8 @@ import {
   Typography,
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -79,28 +80,31 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
   // The failed request is kept, not its text: the text is written when drawn, so a language switch
   // changes it without reading the activity again (which would empty the form being typed in).
   const [loadFailure, setLoadFailure] = useState<{ failure: unknown } | null>(null);
-  const counter = useRef(0);
-  const load = useCallback(async (id: string) => {
-    const mine = ++counter.current;
-    setDetail(null);
-    setLoadFailure(null);
-    try {
-      const answer = await getCheckinActivity(id);
-      if (mine === counter.current) setDetail(answer);
-    } catch (error) {
-      if (mine === counter.current) setLoadFailure({ failure: error });
-    }
-  }, []);
+  const begin = useLatestCall();
+  const load = useCallback(
+    async (id: string) => {
+      const isCurrent = begin();
+      setDetail(null);
+      setLoadFailure(null);
+      try {
+        const answer = await getCheckinActivity(id);
+        if (isCurrent()) setDetail(answer);
+      } catch (error) {
+        if (isCurrent()) setLoadFailure({ failure: error });
+      }
+    },
+    [begin],
+  );
   useEffect(() => {
     if (rowId === null) {
       // Closed, or a new activity: an answer that is still on its way belongs to nobody.
-      counter.current += 1;
+      begin();
       setDetail(null);
       setLoadFailure(null);
       return;
     }
     void load(rowId);
-  }, [rowId, load]);
+  }, [rowId, load, begin]);
 
   const ready = target === 'new' || (row !== null && detail !== null && detail.id === row.id);
 

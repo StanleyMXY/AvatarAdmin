@@ -1,11 +1,12 @@
 import type { ProColumns } from '@ant-design/pro-components';
 import { Link, useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Typography } from 'antd';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   getModerationStats,
   listModerationRecords,
@@ -42,22 +43,21 @@ export default function ModerationQueuePage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [oldest, setOldest] = useState<Oldest>({ state: 'loading' });
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   // `oldestPendingSeconds` is a current value, whatever the range; one UTC day is the smallest one the endpoint takes.
   const loadOldest = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     try {
       const day = todayUtc();
       const stats = await getModerationStats({ from: day, to: day });
-      if (mine === counter.current)
-        setOldest({ state: 'ready', seconds: stats.oldestPendingSeconds });
+      if (isCurrent()) setOldest({ state: 'ready', seconds: stats.oldestPendingSeconds });
     } catch (error) {
-      if (mine === counter.current) {
+      if (isCurrent()) {
         setOldest({ state: 'failed', message: describeFailure(intl, error).text });
       }
     }
-  }, [intl]);
+  }, [intl, begin]);
 
   // The table asks for the list when the page opens and each time the list changes, and asks for
   // this value with each of those; the retry button of the banner asks for it alone.

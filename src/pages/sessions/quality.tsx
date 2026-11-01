@@ -21,6 +21,7 @@ import { LandBar } from '../../components/stat/LandBar';
 import { ProvisionalTag } from '../../components/stat/ProvisionalTag';
 import { ReportHelper } from '../../components/stat/ReportHelper';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { getSessionQuality } from '../../services/stats/reports';
 import type { SessionQualityRow } from '../../services/stats/types';
 import { useAdminMeta } from '../../session/useSession';
@@ -39,7 +40,6 @@ import {
   successRate,
   sumRows,
 } from './qualityMetrics';
-import { useStatRead } from './useStatRead';
 
 /** A column title with the hint icon beside it (the definition of the figure). */
 const headerWithTip = (title: string, tip: string, testId?: string) => (
@@ -122,7 +122,7 @@ export default function SessionQualityPage() {
     const askedOn = todayUtc();
     return { ...(await getSessionQuality(applied)), askedOn };
   }, [applied]);
-  const { data, failure, reload } = useStatRead(fetcher);
+  const { data, failure, reload } = useLatestRead(fetcher);
   const rows = useMemo(() => (data ? [...data.items].sort(byDate) : null), [data]);
 
   const limits = {

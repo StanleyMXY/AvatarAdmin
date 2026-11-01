@@ -12,6 +12,7 @@ import { ReportHelper } from '../../components/stat/ReportHelper';
 import { RetentionMatrix } from '../../components/stat/RetentionMatrix';
 import { RetentionTrendChart } from '../../components/stat/RetentionTrendChart';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { getReactivation, getRetention } from '../../services/stats/reports';
 import {
   RETENTION_DAYS,
@@ -55,13 +56,13 @@ export default function RetentionReportPage() {
   const [retention, setRetention] = useState<RetentionRow[] | null>(null);
   const [reactivation, setReactivation] = useState<ReactivationRow[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   // The words of a failure follow the language; a switch of language is not a reason to read again.
   const intlRef = useRef(intl);
   intlRef.current = intl;
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setRetention(null);
     setReactivation(null);
     setFailure(null);
@@ -69,7 +70,7 @@ export default function RetentionReportPage() {
     try {
       if (tab === 'reactivation') {
         const { items } = await getReactivation({ from, to, silenceDays });
-        if (mine === counter.current) setReactivation(items);
+        if (isCurrent()) setReactivation(items);
       } else {
         const { items } = await getRetention({
           from,
@@ -78,12 +79,12 @@ export default function RetentionReportPage() {
           platform: applied.platform,
           channel: applied.channel,
         });
-        if (mine === counter.current) setRetention(items);
+        if (isCurrent()) setRetention(items);
       }
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intlRef.current, error).text);
+      if (isCurrent()) setFailure(describeFailure(intlRef.current, error).text);
     }
-  }, [tab, applied, silenceDays]);
+  }, [tab, applied, silenceDays, begin]);
 
   useEffect(() => {
     void load();

@@ -1,9 +1,10 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Card, Flex, Spin, Statistic, Table, Typography } from 'antd';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { getSubscriptionStats, type SubscriptionStatRow } from '../../services/subscriptions';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
@@ -77,19 +78,19 @@ export default function SubscriptionStatsPage() {
   const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
   const [rows, setRows] = useState<SubscriptionStatRow[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const load = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setRows(null);
     setFailure(null);
     try {
       const { items } = await getSubscriptionStats(range);
-      if (mine === counter.current) setRows(items);
+      if (isCurrent()) setRows(items);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setFailure(describeFailure(intl, error).text);
     }
-  }, [range, intl]);
+  }, [range, intl, begin]);
 
   useEffect(() => {
     void load();

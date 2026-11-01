@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Divider, Form, Input, Modal, Spin, Tag, Typography } from 'antd';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -85,16 +86,16 @@ export function CampaignModal({ campaign, existingCodes, onClose, onSaved }: Pro
   const [codes, setCodes] = useState<string[]>(initialCodes);
 
   const [channels, setChannels] = useState<ChannelState>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
   const readChannels = () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setChannels(null);
     getChannels()
       .then((rows) => {
-        if (mine === counter.current) setChannels({ rows });
+        if (isCurrent()) setChannels({ rows });
       })
       .catch(() => {
-        if (mine === counter.current) setChannels('failed');
+        if (isCurrent()) setChannels('failed');
       });
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: the channel packages are read once, when the dialog opens
