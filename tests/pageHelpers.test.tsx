@@ -15,6 +15,7 @@ import {
   stubObjectUrls,
   uploadModule,
   uploads,
+  withExportSheet,
   writesExceptUploads,
   writesOf,
 } from './pageHelpers';
@@ -136,6 +137,29 @@ describe('uploadModule', () => {
     await uploadModule.uploadFile({ url: '/api/admin/uploads/image', file });
     expect(uploads).toEqual([{ url: '/api/admin/uploads/image', name: 'รูป.png', size: 3 }]);
     expect(calls).toEqual([{ url: '/api/admin/uploads/image', method: 'POST' }]);
+  });
+});
+
+describe('withExportSheet', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('answers a statistics export with a spreadsheet, lists it, and leaves other addresses to the old fetch', async () => {
+    const calls = fakeFetch();
+    const exports = withExportSheet();
+    const sheet = await fetch('/api/admin/stats/export/daily?from=2026-10-01');
+    expect(sheet.headers.get('content-disposition')).toBe('attachment; filename="export.xlsx"');
+    expect([...new Uint8Array(await sheet.arrayBuffer())]).toEqual([80, 75, 3, 4]);
+    expect(exports).toEqual([{ url: '/api/admin/stats/export/daily?from=2026-10-01' }]);
+    await fetch('/api/admin/stats/daily');
+    expect(exports).toHaveLength(1);
+    expect(calls.map((c) => c.url)).toEqual(['/api/admin/stats/daily']);
+  });
+
+  it('stands in for the calls that save a file: an address for it, and the click on the link', () => {
+    fakeFetch();
+    withExportSheet();
+    expect(URL.createObjectURL(new Blob(['x']))).toBe('blob:x');
+    expect(vi.isMockFunction(HTMLAnchorElement.prototype.click)).toBe(true);
   });
 });
 

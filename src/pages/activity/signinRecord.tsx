@@ -4,11 +4,11 @@ import { Flex, Typography } from 'antd';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { type CheckinRecord, listCheckinRecords } from '../../services/activity';
+import { countText, instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { CopyableId } from './CopyableId';
-import { countText, instantText, plainOrDash } from './texts';
 
 type Filters = { accountId?: string; activityId?: string };
 // The search-only column has no field in the row.
@@ -62,7 +62,7 @@ export default function SigninRecordPage() {
             )}
             {name === '' ? (
               <Typography.Text type="secondary">
-                {t('activity.record.idOf', { id: plainOrDash(row.activityId) })}
+                {t('activity.record.idOf', { id: orDash(row.activityId) })}
               </Typography.Text>
             ) : null}
           </Flex>
@@ -73,7 +73,7 @@ export default function SigninRecordPage() {
       title: t('activity.record.col.date'),
       dataIndex: 'checkinDate',
       search: false,
-      render: (_, row) => plainOrDash(row.checkinDate),
+      render: (_, row) => orDash(row.checkinDate),
     },
     {
       title: t('activity.record.col.dayNum'),

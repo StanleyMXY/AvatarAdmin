@@ -12,9 +12,9 @@ import {
   updateTaskConfig,
 } from '../../services/activity';
 import { countCodePoints } from '../../utils/codePoints';
+import { failureToForm } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 
 type Values = {
   taskName: string;

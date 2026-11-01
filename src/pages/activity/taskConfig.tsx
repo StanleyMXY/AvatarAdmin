@@ -18,11 +18,11 @@ import {
   type TaskType,
 } from '../../services/activity';
 import { describeFailure } from '../../session/describe';
+import { codeText, countText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { TaskFormModal } from './TaskFormModal';
-import { codeText, countText, instantText } from './texts';
 
 type Filters = { taskName?: string; taskType?: TaskType; status?: TaskStatus };
 
@@ -113,7 +113,8 @@ export default function TaskConfigPage() {
       valueEnum: Object.fromEntries(
         TASK_TYPES.map((type) => [type, { text: t(`activity.task.type.${type}`) }]),
       ),
-      render: (_, row) => codeText(intl, 'activity.task.type', row.taskType) || DASH,
+      render: (_, row) =>
+        codeText(intl, 'activity.task.type', row.taskType, { writeOut: true }) || DASH,
     },
     {
       title: t('activity.task.col.target'),

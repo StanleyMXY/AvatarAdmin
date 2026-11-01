@@ -10,10 +10,10 @@ import { TrendChart } from '../../components/stat/TrendChart';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import { getTasksDaily, getTasksSummary } from '../../services/stats/reports';
 import type { TaskSummaryRow } from '../../services/stats/types';
+import { countText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { StatsBar, useAppliedRange } from './StatsBar';
-import { countText, plainOrDash } from './texts';
 
 /** A share with one decimal (`50.0%`), or a dash when the backend has none (no records that day: the denominator was 0). */
 const rateText = (value: unknown, locale: string): string =>
@@ -141,7 +141,7 @@ export default function TaskStatsPage() {
             columns={columns}
             dataSource={summary.data.items.map((r, i) => ({
               ...r,
-              __key: `${plainOrDash(r.taskId)}|${i}`,
+              __key: `${orDash(r.taskId)}|${i}`,
             }))}
             pagination={false}
             scroll={{ x: 'max-content' }}

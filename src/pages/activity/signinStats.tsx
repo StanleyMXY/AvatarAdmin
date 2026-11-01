@@ -12,9 +12,9 @@ import { getCheckinDailyUsers, getCheckinStreakBuckets } from '../../services/st
 import type { CheckinDailyUsersRow, StreakBucketRow } from '../../services/stats/types';
 import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
+import { countText, orDash } from '../../utils/displayText';
 import { DASH } from '../../utils/ratio';
 import { StatsBar, useAppliedRange } from './StatsBar';
-import { countText, plainOrDash } from './texts';
 
 type TabKey = 'daily' | 'streak';
 
@@ -66,7 +66,7 @@ export default function SigninStatsPage() {
     {
       title: t('activity.signinStats.col.date'),
       dataIndex: 'statDate',
-      render: (value: unknown) => plainOrDash(value),
+      render: (value: unknown) => orDash(value),
     },
     {
       title: t('activity.signinStats.col.users'),
@@ -142,7 +142,7 @@ export default function SigninStatsPage() {
                       columns={dailyColumns}
                       dataSource={dailyRows.map((r, i) => ({
                         ...r,
-                        __key: `${plainOrDash(r.statDate)}|${i}`,
+                        __key: `${orDash(r.statDate)}|${i}`,
                       }))}
                       pagination={false}
                       scroll={{ x: 'max-content' }}
@@ -186,7 +186,7 @@ export default function SigninStatsPage() {
                       columns={streakColumns}
                       dataSource={streakRows.map((r, i) => ({
                         ...r,
-                        __key: `${plainOrDash(r.consecutiveDays)}|${i}`,
+                        __key: `${orDash(r.consecutiveDays)}|${i}`,
                       }))}
                       pagination={false}
                       scroll={{ x: 'max-content' }}

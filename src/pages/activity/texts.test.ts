@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import enUS from '../../locales/en-US/activity';
 import zhCN from '../../locales/zh-CN/activity';
-import { codeText, countText, instantText, plainOrDash, type Translator } from './texts';
+import type { Translator } from '../../utils/displayText';
+import { lifecycleOptions } from './texts';
 
 // Kana, CJK ideographs and Hangul, written as code points so that this file has none of them.
 const CJK_OR_HANGUL = new RegExp(
@@ -68,41 +69,17 @@ describe('the texts of the activity pages', () => {
 
 const intl: Translator = {
   locale: 'en-US',
-  messages: { 'activity.task.type.call_seconds': 'x' },
+  messages: {},
   formatMessage: ({ id }) => `<${id}>`,
 };
 
-describe('the text helpers', () => {
-  it('codeText gives the words of a known code, the code itself for a code the language file does not know, and nothing for nothing', () => {
-    expect(codeText(intl, 'activity.task.type', 'call_seconds')).toBe(
-      '<activity.task.type.call_seconds>',
-    );
-    expect(codeText(intl, 'activity.task.type', 'brand_new')).toBe('brand_new');
-    expect(codeText(intl, 'activity.task.type', null)).toBe('');
-    expect(codeText(intl, 'activity.task.type', { a: 1 })).toBe('{"a":1}');
-    // A code that is the name of an object property is not a known code.
-    expect(codeText(intl, 'activity.task.type', 'constructor')).toBe('constructor');
-  });
-
-  it('countText writes a number, 0 included, and a dash for anything else', () => {
-    expect(countText('en-US', 0)).toBe('0');
-    expect(countText('en-US', 12345)).toBe('12,345');
-    for (const value of [null, undefined, '5', {}, Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(countText('en-US', value)).toBe('—');
-    }
-  });
-
-  it('instantText writes an instant in the language, a dash for nothing and anything that is not text', () => {
-    expect(instantText('en-US', null)).toBe('—');
-    expect(instantText('en-US', '')).toBe('—');
-    expect(instantText('en-US', 5)).toBe('—');
-    expect(instantText('en-US', '2026-10-26T01:02:03Z')).toMatch(/2026/);
-  });
-
-  it('plainOrDash writes any value as text and nothing as a dash', () => {
-    expect(plainOrDash(null)).toBe('—');
-    expect(plainOrDash('')).toBe('—');
-    expect(plainOrDash(0)).toBe('0');
-    expect(plainOrDash({ a: 1 })).toBe('{"a":1}');
+describe('lifecycleOptions', () => {
+  it('has the words and a colour for each state of a sign-in activity', () => {
+    expect(lifecycleOptions(intl)).toEqual({
+      DRAFT: { label: '<activity.lifecycle.DRAFT>', color: 'default' },
+      ACTIVE: { label: '<activity.lifecycle.ACTIVE>', color: 'success' },
+      ENDED: { label: '<activity.lifecycle.ENDED>', color: 'warning' },
+      DISABLED: { label: '<activity.lifecycle.DISABLED>', color: 'error' },
+    });
   });
 });

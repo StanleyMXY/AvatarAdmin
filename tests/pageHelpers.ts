@@ -138,6 +138,31 @@ export const uploadModule = {
   },
 };
 
+/**
+ * Puts a spreadsheet answer in front of whatever `fetch` is now: a statistics export address gets
+ * the file and is written to the list, every other address goes on to the old `fetch`. Also stands
+ * in for the browser calls that save a file.
+ */
+export function withExportSheet(): { url: string }[] {
+  const exports: { url: string }[] = [];
+  const delegate = globalThis.fetch;
+  (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => 'blob:x');
+  (URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = vi.fn();
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith('/api/admin/stats/export/')) {
+        exports.push({ url });
+        return sheetAnswer('export');
+      }
+      return delegate(input, init);
+    }),
+  );
+  return exports;
+}
+
 /** Stands in for the browser calls that make an address for a picture that was chosen. */
 export function stubObjectUrls(): void {
   (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => 'blob:preview');

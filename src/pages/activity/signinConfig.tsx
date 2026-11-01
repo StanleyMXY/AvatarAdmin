@@ -15,11 +15,12 @@ import {
   setCheckinActivityStatus,
 } from '../../services/activity';
 import { describeFailure } from '../../session/describe';
+import { instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { ActivityFormModal } from './ActivityFormModal';
 import { ActivityViewModal } from './ActivityViewModal';
-import { instantText, lifecycleOptions } from './texts';
+import { lifecycleOptions } from './texts';
 import { useOverlapFlow } from './useOverlapFlow';
 
 type Filters = { name?: string; lifecycleStatus?: LifecycleStatus };

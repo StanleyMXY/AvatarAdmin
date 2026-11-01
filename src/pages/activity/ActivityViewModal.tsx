@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { StatusTag } from '../../components/StatusTag';
 import { type CheckinActivityDetail, getCheckinActivity } from '../../services/activity';
 import { describeFailure } from '../../session/describe';
+import { countText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
-import { countText, lifecycleOptions, plainOrDash } from './texts';
+import { lifecycleOptions } from './texts';
 
 type State =
   | { kind: 'loading' }
@@ -90,7 +91,7 @@ export function ActivityViewModal({ id, open, onClose }: Props) {
                 label: t('activity.signin.view.name'),
                 children: (
                   <span dir="auto" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
-                    {plainOrDash(state.detail.name)}
+                    {orDash(state.detail.name)}
                   </span>
                 ),
               },

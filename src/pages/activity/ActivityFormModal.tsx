@@ -27,9 +27,9 @@ import {
 } from '../../services/activity';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
 import { pickedDay } from '../../utils/utcDay';
-import { failureToForm } from './formFailure';
 import { useOverlapFlow } from './useOverlapFlow';
 
 type StepValues = { rewardCredits: number | null; bonusCredits: number | null };
