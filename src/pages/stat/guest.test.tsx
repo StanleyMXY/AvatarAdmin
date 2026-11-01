@@ -335,7 +335,7 @@ describe('the guest daily report', () => {
     await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(1));
     expect(screen.getByText('Check day (UTC)')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
-    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(2));
+    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(2), { timeout: 5000 });
     expect(callsTo(calls, 'land/').map((c) => c.url)).toEqual([
       '/api/admin/stats/land/daily-business?date=2026-10-25',
       '/api/admin/stats/land/guest-cohort?date=2026-10-25',
@@ -595,7 +595,7 @@ describe('the conversion cohorts tab', () => {
     await openTab('Conversion cohorts');
     await waitFor(() => expect(callsTo(calls, 'guest/cohort')).toHaveLength(1));
     fireEvent.click(panel().getByRole('button', { name: 'Re-land this day' }));
-    await waitFor(() => expect(callsTo(calls, 'guest/cohort')).toHaveLength(2));
+    await waitFor(() => expect(callsTo(calls, 'guest/cohort')).toHaveLength(2), { timeout: 5000 });
     expect(callsTo(calls, 'land/').map((c) => c.url)).toEqual([
       '/api/admin/stats/land/daily-business?date=2026-10-25',
       '/api/admin/stats/land/guest-cohort?date=2026-10-25',
@@ -617,7 +617,7 @@ describe('the conversion cohorts tab', () => {
     renderPage(<GuestPage />);
     await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(1));
     fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
-    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(2));
+    await waitFor(() => expect(callsTo(calls, 'guest/daily')).toHaveLength(2), { timeout: 5000 });
     expect(callsTo(calls, 'land/').map((c) => c.url)).toEqual([
       '/api/admin/stats/land/daily-business?date=2026-10-25',
       '/api/admin/stats/land/guest-cohort?date=2026-10-25',

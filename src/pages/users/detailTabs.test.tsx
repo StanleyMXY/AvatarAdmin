@@ -250,7 +250,11 @@ describe('the devices tab', { timeout: 30000 }, () => {
         : jsonResponse(200, envelope('200', usersState.users[0])),
     );
     await open(USER.rich, 'devices');
-    const rows = await waitFor(() => rowsOf('devices-table'));
+    const rows = await waitFor(() => {
+      const found = rowsOf('devices-table');
+      expect(found).toHaveLength(2);
+      return found;
+    });
     expect(rows).toHaveLength(2);
     expect(within(rows[1]).getAllByText('—').length).toBe(5);
     const cell = within(rows[0]).getByText(/T{100}/);
@@ -319,8 +323,11 @@ describe('the sign-in events tab', { timeout: 30000 }, () => {
         : jsonResponse(200, envelope('200', usersState.users[0])),
     );
     await open(USER.rich, 'authEvents');
-    const rows = await waitFor(() => rowsOf('auth-events-table'));
-    expect(rows).toHaveLength(2);
+    const rows = await waitFor(() => {
+      const found = rowsOf('auth-events-table');
+      expect(found).toHaveLength(2);
+      return found;
+    });
     expect(within(rows[0]).getByText('ab12cd34')).toBeInTheDocument();
     expect(within(rows[0]).getAllByText('—')).toHaveLength(2); // reason and device
     expect(within(rows[1]).getByText('NEW_KIND')).toBeInTheDocument();
@@ -356,8 +363,11 @@ describe('the sign-in events tab', { timeout: 30000 }, () => {
         : jsonResponse(200, envelope('200', usersState.users[0])),
     );
     await open(USER.rich, 'authEvents');
-    const rows = await waitFor(() => rowsOf('auth-events-table'));
-    expect(rows).toHaveLength(2);
+    const rows = await waitFor(() => {
+      const found = rowsOf('auth-events-table');
+      expect(found).toHaveLength(2);
+      return found;
+    });
     for (const row of rows) expect(row.querySelectorAll('td')[0].textContent).toBe('—');
   });
 
