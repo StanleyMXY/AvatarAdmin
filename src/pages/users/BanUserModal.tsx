@@ -2,6 +2,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Tooltip, Typography } from 'antd';
 import { useRef, useState } from 'react';
 import { ReasonModalForm } from '../../components/ReasonModalForm';
+import { useFailure } from '../../hooks/useFailure';
 import { ApiError } from '../../request/errors';
 import { banUser } from '../../services/users';
 import { canBan } from './accountState';
@@ -28,7 +29,7 @@ export function BanUserModal({ accountId, status, onDone, compact }: Props) {
   const access = useAccess() as unknown as { canAccess: (code?: string) => boolean };
   const t = (id: string) => intl.formatMessage({ id });
   const [open, setOpen] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, failWith, clear } = useFailure();
   // Set when the ban went through: a second submit while the dialog is closing sends nothing.
   const banned = useRef(false);
 
@@ -37,22 +38,21 @@ export function BanUserModal({ accountId, status, onDone, compact }: Props) {
 
   const close = () => {
     setOpen(false);
-    setFailure(null);
+    clear();
   };
 
   const submit = async (reason: string) => {
     if (banned.current) return;
-    setFailure(null);
+    clear();
     try {
       await banUser(accountId, reason);
       banned.current = true;
     } catch (error) {
-      const text = actionFailure(intl, error);
-      setFailure(text);
+      failWith((words) => actionFailure(words, error));
       if (error instanceof ApiError && error.code === 'INVALID_STATE') {
         // The page reads the account again and may replace this button, so the dialog cannot be
         // the only place that says what the account is now.
-        message.error(text);
+        message.error(actionFailure(intl, error));
         onDone();
       }
       return;

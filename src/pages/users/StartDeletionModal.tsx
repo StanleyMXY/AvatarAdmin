@@ -2,6 +2,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Tooltip, Typography } from 'antd';
 import { useRef, useState } from 'react';
 import { ReasonModalForm } from '../../components/ReasonModalForm';
+import { useFailure } from '../../hooks/useFailure';
 import { ApiError } from '../../request/errors';
 import { startDeletion } from '../../services/users';
 import { canStartDeletion } from './accountState';
@@ -26,7 +27,7 @@ export function StartDeletionModal({ accountId, status, onDone }: Props) {
   const access = useAccess() as unknown as { canAccess: (code?: string) => boolean };
   const t = (id: string) => intl.formatMessage({ id });
   const [open, setOpen] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, failWith, clear } = useFailure();
   // Set when the deletion was scheduled: a second submit while the dialog is closing sends nothing.
   const started = useRef(false);
 
@@ -35,17 +36,17 @@ export function StartDeletionModal({ accountId, status, onDone }: Props) {
 
   const close = () => {
     setOpen(false);
-    setFailure(null);
+    clear();
   };
 
   const submit = async (reason: string) => {
     if (started.current) return;
-    setFailure(null);
+    clear();
     try {
       await startDeletion(accountId, reason);
       started.current = true;
     } catch (error) {
-      setFailure(actionFailure(intl, error));
+      failWith((words) => actionFailure(words, error));
       if (error instanceof ApiError && error.code === 'INVALID_STATE') onDone();
       return;
     }
