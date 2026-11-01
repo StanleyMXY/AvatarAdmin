@@ -294,10 +294,14 @@ describe('the filters', () => {
     expect(action).toHaveAttribute('maxlength', '64');
     expect(type).toHaveAttribute('maxlength', '64');
     expect(id).toHaveAttribute('maxlength', '255');
-    // text in other scripts is cut by the same limit, not refused
-    await user.type(action, 'ก'.repeat(70));
-    await user.type(type, 'ب'.repeat(70));
-    await user.type(id, 'x'.repeat(300));
+    // text in other scripts is cut by the same limit, not refused. Pasted, not typed: 440 single key
+    // presses took longer than the time of a test when the machine was busy, and the limit is the same.
+    await user.click(action);
+    await user.paste('ก'.repeat(70));
+    await user.click(type);
+    await user.paste('ب'.repeat(70));
+    await user.click(id);
+    await user.paste('x'.repeat(300));
     expect((action as HTMLInputElement).value).toHaveLength(64);
     expect((type as HTMLInputElement).value).toHaveLength(64);
     expect((id as HTMLInputElement).value).toHaveLength(255);
