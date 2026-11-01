@@ -128,6 +128,23 @@ describe('the push result page: reading', () => {
     expect(cellsOf(bodyRows()[1]).slice(0, 2)).toEqual(['2026-10-20', 'Streak at risk']);
   });
 
+  it('keys its rows by a field of the row, so a row of the same day and reason twice still has its own key, and the table raises no rowKey warning', async () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+    backend({
+      rows: () => [
+        row('2026-10-20', 'daily_recall'),
+        row('2026-10-20', 'daily_recall', { pushesSent: 7 }),
+      ],
+    });
+    renderPage(<StatsPage />);
+    await waitFor(() => expect(bodyRows()).toHaveLength(2));
+    const keys = bodyRows().map((tr) => tr.getAttribute('data-row-key'));
+    expect(new Set(keys).size).toBe(2);
+    expect(warn.mock.calls.map((args) => args.join(' ')).filter((m) => /rowKey/.test(m))).toEqual(
+      [],
+    );
+  });
+
   it('has date, reason, sent, accepted, failed, opened and the open rate, in that order, and no total row', async () => {
     backend();
     renderPage(<StatsPage />);

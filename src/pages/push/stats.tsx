@@ -194,9 +194,7 @@ export default function PushStatsPage() {
           />
           <Table<PushStatRow & { __key: string }>
             size="small"
-            rowKey={(row, index) =>
-              `${plainText(row.statDate)}|${plainText(row.triggerReason)}|${index}`
-            }
+            rowKey="__key"
             columns={columns}
             dataSource={rows.map((r, i) => ({
               ...r,
