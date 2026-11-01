@@ -39,17 +39,21 @@ const MAX_CODE_POINTS = 100;
 
 /**
  * What is wrong with the code of a new node, if anything: it is missing, it has a character that does
- * not belong in a code (the code is also a path segment and is shown in the tree), or it is taken.
- * The backend decides on the real rules; the contract gives none, so these are the least that keep a
- * code readable.
+ * not belong in a code (the code is also a path segment and is shown in the tree), it starts or ends
+ * with a dot, or it is taken. A code that is only dots (`.`, `..`) is a path segment that URLs read as
+ * "this folder" and "the folder above" (`encodeURIComponent` leaves a dot alone), so the edit and
+ * delete requests of such a node would go to another address; a dot at either end is refused with them
+ * and one inside (`report.view`) is fine. The backend decides on the real rules; the contract gives
+ * none, so these are the least that keep a code readable and reachable.
  */
 export function codeProblem(
   raw: string,
   nodes: readonly PermissionNode[],
-): 'required' | 'invalid' | 'taken' | null {
+): 'required' | 'invalid' | 'dots' | 'taken' | null {
   const code = trimSpec(raw);
   if (code === '') return 'required';
   if (NOT_ALLOWED_IN_CODE.test(code) || countCodePoints(code) > MAX_CODE_POINTS) return 'invalid';
+  if (code.startsWith('.') || code.endsWith('.')) return 'dots';
   if (nodes.some((n) => n.code === code)) return 'taken';
   return null;
 }

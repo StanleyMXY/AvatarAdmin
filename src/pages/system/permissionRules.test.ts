@@ -85,6 +85,49 @@ describe('the code of a new node', () => {
     expect(codeProblem('A', nodes)).toBe('taken');
     expect(codeProblem(' USER:VIEW ', nodes)).toBe('taken');
   });
+
+  // The code is also a path segment of the edit and delete requests: `.` and `..` are read as the
+  // current and the parent directory there, so a node with such a code could never be reached again.
+  it.each([
+    '.',
+    '..',
+    '...',
+    ' . ',
+    ' .. ',
+    '.hidden',
+    'trailing.',
+    'USER:VIEW.',
+    'a..',
+    '..a',
+    '.ผู้ใช้',
+    'نص.',
+  ])('refuses %j: a code does not start or end with a dot', (code) => {
+    expect(codeProblem(code, nodes)).toBe('dots');
+  });
+
+  it.each([
+    'a.b',
+    'a..b',
+    'USER.VIEW',
+    'custom.report:view',
+    'ผู้ใช้.ดู',
+    'usuario.ver',
+    'pengguna.lihat',
+    'người.dùng',
+    'مستخدم.عرض',
+    '用户.查看',
+    'v1.2.3',
+  ])('allows %j: a dot inside the code is fine', (code) => {
+    expect(codeProblem(code, nodes)).toBeNull();
+  });
+
+  it('names the character problem before the dot problem, and the dot problem before "taken"', () => {
+    expect(codeProblem('. x', nodes)).toBe('invalid');
+    expect(codeProblem('x .', nodes)).toBe('invalid');
+    expect(codeProblem('.'.repeat(101), nodes)).toBe('invalid');
+    const withDots = [...nodes, node('.dotted', null)];
+    expect(codeProblem('.dotted', withDots)).toBe('dots');
+  });
 });
 
 describe('the order offered for a new node', () => {

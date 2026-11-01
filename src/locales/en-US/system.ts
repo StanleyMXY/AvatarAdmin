@@ -155,6 +155,7 @@ const messages: Record<string, string> = {
   'system.permissions.field.code.required': 'Enter a code',
   'system.permissions.field.code.invalid':
     'The code cannot contain spaces or control characters, and is at most 100 characters.',
+  'system.permissions.field.code.dots': 'The code cannot start or end with a dot.',
   'system.permissions.field.code.taken': 'A node with this code exists already.',
   'system.permissions.field.type': 'Type',
   'system.permissions.field.parent': 'Parent node',

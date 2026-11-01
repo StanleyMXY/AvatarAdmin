@@ -524,6 +524,19 @@ describe('a new node', () => {
     expect(writesOf(calls)).toHaveLength(0);
   });
 
+  it.each(['.', '..', '.hidden', 'trailing.'])(
+    'refuses the code %j (a dot at the start or the end), before anything is sent',
+    async (code) => {
+      const { user, calls } = await load();
+      const box = await openNew(user);
+      await fill(user, box, { code });
+      await user.click(save(box));
+      expect(await box.findByText('The code cannot start or end with a dot.')).toBeInTheDocument();
+      expect(writesOf(calls)).toHaveLength(0);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    },
+  );
+
   it('puts the duplicate the backend finds under the code field, as the text of the code', async () => {
     const { user } = await load();
     overrideFetch(({ url, method }) =>

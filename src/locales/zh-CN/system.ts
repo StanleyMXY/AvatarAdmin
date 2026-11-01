@@ -142,6 +142,7 @@ const messages: Record<string, string> = {
   'system.permissions.field.codeHint': '节点创建后不能再改码。',
   'system.permissions.field.code.required': '请输入权限码',
   'system.permissions.field.code.invalid': '权限码不能含空格或控制字符，最多 100 个字符。',
+  'system.permissions.field.code.dots': '权限码不能以点号开头或结尾。',
   'system.permissions.field.code.taken': '已经有这个权限码的节点。',
   'system.permissions.field.type': '类型',
   'system.permissions.field.parent': '父节点',
