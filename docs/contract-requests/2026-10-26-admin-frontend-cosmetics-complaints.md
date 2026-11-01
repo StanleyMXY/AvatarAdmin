@@ -50,3 +50,13 @@
 ## 五、`GET /accounts/{id}/avatars` 的 `isCurrent`
 
 后端回复第 7 条的字段表里，形象有 `isCurrent`，外观没有；`currentLookId` 在形象上。前端按字段表定义类型（`AccountAvatars`），`isCurrent` 的含义我们理解为"这个形象是账号当前使用的形象（`User.currentAvatarAssetId`）"。如果不是，请告知。
+
+## 六、带签名地址的读接口不要被浏览器缓存
+
+投诉证据（`GET /likeness-complaints/{id}/evidence/{index}`）、形象与外观目录（`GET /cosmetics`、`/actions`、`/renderer-models`）、默认数字人（`GET /default-avatars`）、账号的形象（`GET /accounts/{id}/avatars`）的响应里有签名地址，有效期很短；证据和账号形象的每次读取还要写审计日志。契约没有写这些 GET 的 `Cache-Control`。
+
+**问：** 这些响应能不能都带 `Cache-Control: no-store`？
+
+**我们为什么需要：** 若后端回了可缓存的头（例如 `max-age`），管理员在有效期内再点同一个证据文件，请求到不了后端：那次查看没有审计记录，页面还会复用已经快过期的签名地址。
+
+**暂定做法：** 前端对这几个读请求都带 `cache: 'no-store'`（浏览器的请求选项），所以不依赖后端的头；后端补上 `Cache-Control: no-store` 是同一件事的第二层保险（代理和别的客户端也不会缓存）。
