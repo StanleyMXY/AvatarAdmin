@@ -161,6 +161,13 @@ describe('the page of the permission tree', () => {
     expect(long.style.overflowWrap).toBe('anywhere');
   });
 
+  it('keeps a permission code of 5000 characters without a space inside its column', async () => {
+    custom('K'.repeat(5000), null, { nameEn: 'Long code', nameZh: 'a' });
+    await load();
+    const long = screen.getByText('K'.repeat(5000), { selector: 'button' });
+    expect(long.style.overflowWrap).toBe('anywhere');
+  });
+
   it('reads the tree with ROLE:MANAGE alone, and shows no write control then', async () => {
     signIn('support', { codes: ['ROLE:MANAGE'] });
     await load();

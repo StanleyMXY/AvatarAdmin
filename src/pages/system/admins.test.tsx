@@ -10,6 +10,7 @@ import { renderPage } from '../../../tests/renderPage';
 import { history, setTestInitialState } from '../../../tests/stubs/umi-max';
 import { AdminFormModal } from './AdminFormModal';
 import AdminsPage from './admins';
+import { ResetPasswordModal } from './ResetPasswordModal';
 import {
   dialogsClosed,
   holdWrites,
@@ -271,7 +272,7 @@ describe('the protections of the own account and of the last super administrator
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /refuses this for your own account and for the last enabled super administrator/,
+        /Possible reasons: it is your own account; it is the last enabled super administrator; or the account was changed by someone else meanwhile/,
       ),
     ).toBeInTheDocument();
     // never the backend's own words
@@ -307,6 +308,24 @@ describe('the row of a super administrator is closed to an administrator who is 
     }
     const cell = row.querySelector('td:last-child') as HTMLElement;
     expect(within(cell).queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('says why there is no button, in the cell of the row of a super administrator, and says nothing like it on an ordinary row or to a super administrator', async () => {
+    asNonSuper();
+    await load();
+    const closed = (await rowOf('root')).querySelector('td:last-child') as HTMLElement;
+    expect(
+      within(closed).getByText('Only a super administrator can act on this account.'),
+    ).toBeVisible();
+    const open = (await rowOf('reviewer')).querySelector('td:last-child') as HTMLElement;
+    expect(within(open).queryByText(/Only a super administrator can act/)).not.toBeInTheDocument();
+  });
+
+  it('does not say it to a super administrator, who has the buttons', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+    await load();
+    const cell = (await rowOf('root')).querySelector('td:last-child') as HTMLElement;
+    expect(within(cell).queryByText(/Only a super administrator can act/)).not.toBeInTheDocument();
   });
 
   it('draws no Edit and no Enable on the row of a disabled super administrator either', async () => {
@@ -454,6 +473,18 @@ describe('the reasons of the buttons that are off are written in the row', () =>
     expect(document.querySelector('.ant-tooltip')).toBeNull();
   });
 
+  it('writes the two sentences about the own account as one line, so that the row has four lines of reasons and not five', async () => {
+    await load();
+    const cell = await (async () =>
+      (await rowOf('root')).querySelector('td:last-child') as HTMLElement)();
+    expect(
+      within(cell).getByText(
+        /This is your own account: you cannot change your own roles or super administrator flag\. You cannot disable or delete your own account\./,
+      ),
+    ).toBeVisible();
+    expect(cell.querySelectorAll('.ant-typography.ant-typography-secondary')).toHaveLength(4);
+  });
+
   it('shows no reason on a row where nothing is off', async () => {
     await load();
     const cell = within(await cellOf('reviewer'));
@@ -509,7 +540,7 @@ describe('the reasons of the buttons that are off are written in the row', () =>
     renderPage(<AdminsPage />, 'zh-CN');
     await waitForRows();
     const cell = within(await cellOf('root'));
-    expect(cell.getByText('不能停用或删除自己的账号。')).toBeInTheDocument();
+    expect(cell.getByText(/不能停用或删除自己的账号。/)).toBeInTheDocument();
     expect(cell.getByText(/不能在这里重置自己的密码.*修改密码/)).toBeInTheDocument();
     expect(cell.getByText(/不能重置自己的二次验证/)).toBeInTheDocument();
     expect(cell.getByText(/这是你自己的账号/)).toBeInTheDocument();
@@ -774,6 +805,16 @@ describe('a new administrator', () => {
     expect(box.getByRole('switch', { name: 'Super administrator' })).toBeEnabled();
   });
 
+  it('sends the initial password exactly as typed, with the blanks at both ends', async () => {
+    const { user, calls } = await load();
+    const box = await open(user);
+    const typed = ` ${PASSWORD} `;
+    await fill(user, box, { password: typed });
+    await user.click(box.getByRole('button', { name: /Save$/ }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { password: string }).password).toBe(typed);
+  });
+
   it('takes the minimum length from the answer of /me and checks it in code points', async () => {
     signIn('root', { minLength: 20 });
     const { user, calls } = await load();
@@ -968,6 +1009,28 @@ describe('a new administrator', () => {
     expect((writesOf(calls)[0].body as { superAdmin: boolean }).superAdmin).toBe(true);
   });
 
+  it('names the missing permission also when the 403 of GET /roles comes without a code of ours (a gateway), and sends no roleIds', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'] });
+    const { user, calls } = await load();
+    overrideFetch(({ url }) =>
+      url.pathname === '/api/admin/roles'
+        ? new Response('<html>Forbidden</html>', {
+            status: 403,
+            headers: { 'content-type': 'text/html' },
+          })
+        : undefined,
+    );
+    const box = await open(user);
+    expect(
+      await box.findByText(/needs the permission Manage roles \(ROLE:MANAGE\)/),
+    ).toBeInTheDocument();
+    expect(rolesBox(box)).toBeDisabled();
+    await fill(user, box);
+    await user.click(box.getByRole('button', { name: /Save$/ }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(writesOf(calls)[0].body).toMatchObject({ roleIds: [] });
+  });
+
   it('disables the role choice and names the missing permission when GET /roles is refused with 403', async () => {
     signIn('support', { codes: ['ADMIN:MANAGE'] });
     const { user, calls } = await load();
@@ -1073,6 +1136,100 @@ describe('editing an administrator', () => {
     expect(rolesBox(box)).toBeDisabled();
     expect(box.getByRole('switch', { name: 'Super administrator' })).toBeDisabled();
     expect(box.getByRole('button', { name: /Save$/ })).toBeDisabled();
+  });
+
+  it('opens for a row without a list of roles and with a name that is not text, instead of failing to draw', async () => {
+    backend();
+    const odd = {
+      id: 77,
+      username: { first: 'x' },
+      superAdmin: false,
+      status: 'ACTIVE',
+      mustChangePassword: false,
+      totpEnrolledAt: null,
+      lastLoginAt: null,
+      createdAt: '2026-08-01T00:00:00Z',
+    } as never;
+    const me = {
+      id: '1001',
+      username: 'root',
+      superAdmin: true,
+      mustChangePassword: false,
+      permissions: [],
+      passwordMinLength: 12,
+    };
+    renderPage(
+      <AdminFormModal
+        admin={odd}
+        me={me}
+        protection={{ own: false, lastSuper: false }}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    const box = within(await dialog());
+    expect(box.getByRole('button', { name: /Save$/ })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('[object Object]');
+  });
+
+  it('the dialog that resets a password opens for a name that is not text, and says it as text', async () => {
+    backend();
+    const odd = { id: 77, username: { first: 'x' }, roles: [] } as never;
+    renderPage(
+      <ResetPasswordModal
+        admin={odd}
+        me={{
+          id: '1001',
+          username: 'root',
+          superAdmin: true,
+          mustChangePassword: false,
+          permissions: [],
+          passwordMinLength: 12,
+        }}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    await dialog();
+    expect(document.body.textContent).not.toContain('[object Object]');
+  });
+
+  it('does not let a flag that is not exactly true set the super administrator flag: the switch stays off', async () => {
+    backend();
+    const row = {
+      id: '77',
+      username: 'someone',
+      superAdmin: false,
+      status: 'ACTIVE',
+      mustChangePassword: false,
+      totpEnrolledAt: null,
+      lastLoginAt: null,
+      createdAt: '2026-08-01T00:00:00Z',
+      roles: [],
+    } as never;
+    for (const odd of ['true', 1, null, undefined]) {
+      const view = renderPage(
+        <AdminFormModal
+          admin={row}
+          me={
+            {
+              id: '1001',
+              username: 'root',
+              superAdmin: odd,
+              mustChangePassword: false,
+              permissions: [],
+              passwordMinLength: 12,
+            } as never
+          }
+          protection={{ own: false, lastSuper: false }}
+          onDone={() => {}}
+          onClose={() => {}}
+        />,
+      );
+      const box = within(await dialog());
+      expect(box.getByRole('switch', { name: 'Super administrator' })).toBeDisabled();
+      view.unmount();
+    }
   });
 
   it('keeps Save off until something is changed', async () => {

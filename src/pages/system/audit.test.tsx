@@ -41,8 +41,6 @@ const auditCalls = (calls: { url: string }[]) =>
     .filter((c) => c.url.startsWith('/api/admin/audit-logs'))
     .map((c) => new URL(c.url, 'http://x'));
 const lastAudit = (calls: { url: string }[]) => auditCalls(calls).at(-1) as URL;
-const expand = async (user: ReturnType<typeof userEvent.setup>) =>
-  user.click(await screen.findByText(/展开|Expand/));
 const search = async (user: ReturnType<typeof userEvent.setup>) =>
   user.click(screen.getByRole('button', { name: /查\s*询|Query|Search/ }));
 const cellsOfRow = (action: string, targetId: string) =>
@@ -76,6 +74,15 @@ describe('the audit log list', () => {
       'Detail',
       'Time',
     ]);
+  });
+
+  it('shows all five filters at once, without a button to expand the search form', async () => {
+    await load();
+    expect(screen.queryByText(/展开|Expand/)).toBeNull();
+    for (const label of ['Administrator', 'Action', 'Object type', 'Object ID']) {
+      expect(document.querySelector('.ant-pro-table-search')?.textContent).toContain(label);
+    }
+    expect(document.querySelector('.ant-pro-table-search')?.textContent).toMatch(/Time|Date/);
   });
 
   it('has nothing to edit or delete: no such button, link, menu or check box anywhere', async () => {
@@ -183,6 +190,20 @@ describe('the audit log list', () => {
     expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toContain('hunter2');
   });
 
+  it('keeps an action, an object type and an object id of 5000 characters without a space inside their columns', async () => {
+    row({
+      action: 'A'.repeat(5000),
+      targetType: 'T'.repeat(5000),
+      targetId: 'I'.repeat(5000),
+      detail: 'd',
+    });
+    await load();
+    for (const letter of ['A', 'T', 'I']) {
+      const long = screen.getByText(letter.repeat(5000), { selector: 'button' });
+      expect(long.style.overflowWrap).toBe('anywhere');
+    }
+  });
+
   it('opens the whole detail in a popover with a copy button when the text is long', async () => {
     const user = userEvent.setup();
     row({ action: 'LONGISH', targetId: '8', detail: 'y'.repeat(900) });
@@ -242,8 +263,7 @@ describe('the audit log list', () => {
 
 describe('the filters', () => {
   it('has an administrator, an action, an object type, an object ID and a time range (UTC)', async () => {
-    const { user } = await load();
-    await expand(user);
+    await load();
     expect(screen.getByRole('combobox', { name: 'Administrator' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Action' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Object type' })).toBeInTheDocument();
@@ -254,7 +274,6 @@ describe('the filters', () => {
 
   it('sends the action, the object type and the object id as typed, with the ends cleaned', async () => {
     const { calls, user } = await load();
-    await expand(user);
     await user.type(screen.getByRole('textbox', { name: 'Action' }), '  USER_BAN ');
     await user.type(screen.getByRole('textbox', { name: 'Object type' }), 'USER');
     await user.type(screen.getByRole('textbox', { name: 'Object ID' }), '10000000001');
@@ -269,7 +288,6 @@ describe('the filters', () => {
 
   it('limits the action and the object type to 64 characters and the object id to 255, so no request goes out that the backend answers with 400', async () => {
     const { calls, user } = await load();
-    await expand(user);
     const action = screen.getByRole('textbox', { name: 'Action' });
     const type = screen.getByRole('textbox', { name: 'Object type' });
     const id = screen.getByRole('textbox', { name: 'Object ID' });
@@ -292,7 +310,6 @@ describe('the filters', () => {
 
   it('filters by administrator: the choice lists the administrators by name and sends the id', async () => {
     const { calls, user } = await load();
-    await expand(user);
     await user.click(await screen.findByRole('combobox', { name: 'Administrator' }));
     await user.click(
       (await screen.findAllByText('support', { selector: '.ant-select-item-option-content' }))[0],
@@ -315,8 +332,7 @@ describe('the filters', () => {
 
   it('draws no administrator filter at all without ADMIN:MANAGE: neither the choice nor a box for an id', async () => {
     signIn('support', { codes: ['AUDIT:VIEW'] });
-    const { calls, user } = await load();
-    await expand(user);
+    const { calls } = await load();
     expect(screen.queryByRole('combobox', { name: 'Administrator' })).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Administrator ID' })).not.toBeInTheDocument();
     const search = document.querySelector('.ant-pro-table-search') as HTMLElement;
@@ -343,16 +359,13 @@ describe('the filters', () => {
     overrideFetch(({ url }) =>
       url.pathname === '/api/admin/admins' ? jsonAnswer(500, 'INTERNAL_ERROR') : undefined,
     );
-    const user = userEvent.setup();
     renderPage(<AuditPage />);
     await waitForRows();
-    await expand(user);
     expect(await screen.findByRole('textbox', { name: 'Administrator ID' })).toBeInTheDocument();
   });
 
   it('sends a UTC day range as [first day 00:00:00Z, the day after the last day 00:00:00Z)', async () => {
     const { calls, user } = await load();
-    await expand(user);
     const [start, end] = [
       ...document.querySelectorAll<HTMLInputElement>('.ant-picker-input input'),
     ];

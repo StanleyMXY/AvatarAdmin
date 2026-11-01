@@ -242,16 +242,43 @@ describe('codes that are sent to a person: only the ones that are a credential',
   });
 });
 
-describe('text that carries a credential: 33 shapes', () => {
+describe('text that carries a credential: shapes', () => {
   const cases: [string, unknown, string][] = [
     // structured
     ['a password', { password: 'hunter2' }, `{"password":"${HIDDEN}"}`],
     ['a nested token', { a: { b: { token: 't' } } }, `{"a":{"b":{"token":"${HIDDEN}"}}}`],
     ['a list under a secret', { apiKey: ['k1', 'k2'] }, `{"apiKey":["${HIDDEN}","${HIDDEN}"]}`],
     [
-      'a date under a password key',
-      { passwordChangedAt: '2026-10-01' },
-      `{"passwordChangedAt":"${HIDDEN}"}`,
+      'a date under a password key stays readable',
+      { passwordChangedAt: '2026-10-01T08:00:00Z' },
+      '{"passwordChangedAt":"2026-10-01T08:00:00Z"}',
+    ],
+    ['a short number sent as a code', { code: '483920' }, `{"code":"${HIDDEN}"}`],
+    [
+      'a permission code is not one',
+      { code: 'USER:VIEW', n: { code: 'TH' } },
+      '{"code":"USER:VIEW","n":{"code":"TH"}}',
+    ],
+    ['a country calling code is not one', { code: '66' }, '{"code":"66"}'],
+    [
+      'a setting named by a key such as configKey',
+      { configKey: 'facebook.access_token', value: 'EAAB-secret' },
+      `{"configKey":"facebook.access_token","value":"${HIDDEN}"}`,
+    ],
+    [
+      'a setting with its change one level down',
+      { setting: 'sms.api_secret', changes: { from: 'x', to: 'y' } },
+      `{"setting":"sms.api_secret","changes":{"from":"${HIDDEN}","to":"${HIDDEN}"}}`,
+    ],
+    [
+      'a setting with k and v',
+      { k: 'facebook.access_token', v: 'EAAB-secret' },
+      `{"k":"facebook.access_token","v":"${HIDDEN}"}`,
+    ],
+    [
+      'a jwt, a session, a signature and a salt',
+      { jwt: 'a', session: 'b', sessionId: 'c', accessKey: 'd', sig: 'e', salt: 'f' },
+      `{"jwt":"${HIDDEN}","session":"${HIDDEN}","sessionId":"${HIDDEN}","accessKey":"${HIDDEN}","sig":"${HIDDEN}","salt":"${HIDDEN}"}`,
     ],
     [
       'old and new next to a secret key',
@@ -288,6 +315,36 @@ describe('text that carries a credential: 33 shapes', () => {
     ['a Thai word', 'รหัสผ่าน: hunter2', `รหัสผ่าน: ${HIDDEN}`],
     ['a Russian word', 'пароль=hunter2', `пароль=${HIDDEN}`],
     ['a Chinese word', '密码：hunter2', `密码：${HIDDEN}`],
+    [
+      'a password with a quote inside',
+      'Request body: {"user":"bob","password":"hun\\"ter2"}',
+      `Request body: {"user":"bob","password":"${HIDDEN}"}`,
+    ],
+    [
+      'JSON written inside a text',
+      '{\\"password\\":\\"hunter2\\"}',
+      `{\\"password\\":\\"${HIDDEN}\\"}`,
+    ],
+    ['a change told in words', 'changed password to hunter2', `changed password to ${HIDDEN}`],
+    ['a PIN after a space', 'PIN 1234', `PIN ${HIDDEN}`],
+    ['an otp after a space', 'otp 123456', `otp ${HIDDEN}`],
+    [
+      'a verification code after a space',
+      'verification code 123456 sent',
+      `verification code ${HIDDEN} sent`,
+    ],
+    ['a pass key', 'pass=hunter2', `pass=${HIDDEN}`],
+    ['a jwt', 'jwt=eyJhbGciOi.eyJzdWIiOiIx.c2ln', `jwt=${HIDDEN}`],
+    [
+      'a bearer token on its own',
+      'sent Bearer abcdefgh12345 to the gateway',
+      `sent Bearer ${HIDDEN} to the gateway`,
+    ],
+    [
+      'a date under a password key in text',
+      'passwordChangedAt=2026-10-01',
+      'passwordChangedAt=2026-10-01',
+    ],
     // not a credential
     ['a number of the version of a token', 'tokenVersion: 4', 'tokenVersion: 4'],
     ['a boolean flag', 'mustChangePassword: true', 'mustChangePassword: true'],
@@ -307,8 +364,8 @@ describe('text that carries a credential: 33 shapes', () => {
     expect(detailText(input)).toBe(expected);
   });
 
-  it('has at least 33 shapes', () => {
-    expect(cases.length).toBeGreaterThanOrEqual(33);
+  it('has at least 45 shapes', () => {
+    expect(cases.length).toBeGreaterThanOrEqual(45);
   });
 
   it('stays linear on a very long text with no spaces, with many separators or with a value that never ends', () => {

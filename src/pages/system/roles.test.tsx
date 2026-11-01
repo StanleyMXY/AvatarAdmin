@@ -151,6 +151,32 @@ describe('paging', () => {
     expect(screen.queryByText('Search')).not.toBeInTheDocument();
   });
 
+  it('goes back to the last page that has rows when the only row of the last page is deleted, not to "no data"', async () => {
+    // 21 roles: page 1 has 20 and page 2 has the one that is deleted below.
+    const extra = 21 - systemState.roles.size;
+    for (let i = 0; i < extra; i += 1) {
+      systemState.roles.set(`9${i}`, {
+        id: `9${i}`,
+        name: `Role ${String(i).padStart(2, '0')}`,
+        remark: null,
+        createdAt: `2026-10-01T00:${String(i).padStart(2, '0')}:00Z`,
+        permissionCodes: [],
+      });
+    }
+    expect(systemState.roles.size).toBe(21);
+    // No administrator holds a role, so that any of them can be deleted.
+    for (const extra of systemState.extras.values()) extra.roleIds = [];
+    const { user, calls } = await load();
+    await user.click(screen.getByTitle('2'));
+    await waitFor(() => expect(tableRows()).toHaveLength(1));
+    const lonely = tableRows()[0][0];
+    await user.click(within(await rowOf(lonely)).getByRole('button', { name: 'Delete' }));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(tableRows()).toHaveLength(20));
+    expect(screen.queryByText('No data')).not.toBeInTheDocument();
+    expect(calls.some((c) => c.url === '/api/admin/roles?page=1&pageSize=20')).toBe(true);
+  });
+
   it('draws no search form: there is nothing to filter', async () => {
     await load();
     expect(document.querySelector('.ant-pro-table-search')).toBeNull();
@@ -433,6 +459,76 @@ describe('editing a role', () => {
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
       'AUDIT:VIEW',
+      'STATS:VIEW',
+    ]);
+  });
+
+  it('says when a role has a function without the page it is on, saves it as it is, and stops saying it when the page is checked', async () => {
+    systemState.roles.set('65', {
+      id: '65',
+      name: 'Functions only',
+      remark: null,
+      createdAt: '2026-10-05T00:00:00Z',
+      permissionCodes: ['USER:BAN'],
+    });
+    const { user, calls } = await load();
+    const box = await openEdit(user, 'Functions only');
+    expect(await box.findByTestId('role-without-page')).toHaveTextContent(/USER:BAN/);
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
+      'USER:BAN',
+    ]);
+  });
+
+  it('does not say it for a role that has the page with its function, or after the page is checked', async () => {
+    systemState.roles.set('66', {
+      id: '66',
+      name: 'Functions only 2',
+      remark: null,
+      createdAt: '2026-10-05T00:00:00Z',
+      permissionCodes: ['USER:BAN'],
+    });
+    const { user } = await load();
+    const withPage = await openEdit(user, 'Soporte al cliente');
+    expect(withPage.queryByTestId('role-without-page')).toBeNull();
+    await user.click(withPage.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const box = await openEdit(user, 'Functions only 2');
+    expect(await box.findByTestId('role-without-page')).toBeInTheDocument();
+    await user.click(checkbox(box, 'USER:VIEW'));
+    await waitFor(() => expect(box.queryByTestId('role-without-page')).toBeNull());
+  });
+
+  it('keeps a built-in node the application does not know yet when the role is saved, shown checked, and does not name it as dropped', async () => {
+    systemState.nodes.set('NEWPAGE:VIEW', {
+      code: 'NEWPAGE:VIEW',
+      parent: null,
+      type: 'MENU',
+      sortOrder: 901,
+      nameZh: '新页面',
+      nameEn: 'New page',
+      builtin: true,
+      createdByUsername: null,
+    });
+    systemState.roles.set('64', {
+      id: '64',
+      name: 'Has the new page',
+      remark: null,
+      createdAt: '2026-10-05T00:00:00Z',
+      permissionCodes: ['NEWPAGE:VIEW', 'STATS:VIEW'],
+    });
+    const { user, calls } = await load();
+    const box = await openEdit(user, 'Has the new page');
+    expect(checkbox(box, 'NEWPAGE:VIEW')).toBeChecked();
+    expect(box.queryByText(/will be dropped when you save/)).toBeNull();
+    // only the name of the role is changed
+    const name = box.getByRole('textbox', { name: 'Name' });
+    fireEvent.change(name, { target: { value: 'Has the new page 2' } });
+    await user.click(save(box));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { permissionCodes: string[] }).permissionCodes).toEqual([
+      'NEWPAGE:VIEW',
       'STATS:VIEW',
     ]);
   });

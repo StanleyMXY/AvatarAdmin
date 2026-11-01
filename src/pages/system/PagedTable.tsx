@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Table, type TableColumnsType } from 'antd';
-import { type MutableRefObject, type ReactNode, useCallback, useState } from 'react';
+import { type MutableRefObject, type ReactNode, useCallback, useEffect, useState } from 'react';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
 import type { Page } from '../../request/errors';
 import { describeFailure } from '../../session/describe';
@@ -35,6 +35,15 @@ export function PagedTable<T extends object>({
   const fetcher = useCallback(() => load(paging), [load, paging]);
   const { state, reload } = useRead(fetcher, `${paging.page}:${paging.pageSize}`);
   reloadRef.current = reload;
+  // The last row of the last page was deleted: that page is empty now while the rows before it are
+  // not, so the table goes to the last page that has rows instead of showing "no data".
+  useEffect(() => {
+    if (state.status !== 'ok' || state.data.items.length > 0) return;
+    const total = Number.isFinite(state.data.total) ? state.data.total : 0;
+    if (paging.page <= 1 || total <= 0) return;
+    const last = Math.max(1, Math.ceil(total / paging.pageSize));
+    if (last < paging.page) setPaging((now) => ({ ...now, page: last }));
+  }, [state, paging.page, paging.pageSize]);
   return (
     <div>
       {state.status === 'failed' ? (

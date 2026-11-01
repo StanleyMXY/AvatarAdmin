@@ -15,7 +15,7 @@ import { useSession } from '../../session/useSession';
 import { trimSpec } from '../../utils/trimSpec';
 import { failureToForm } from './formFailure';
 import { PermissionTreeSelect } from './PermissionTreeSelect';
-import { buildIndex, codesNotHeld, isSelectable } from './permissionTree';
+import { ancestorsOf, buildIndex, codesNotHeld, isSelectable } from './permissionTree';
 import { withScopeHint } from './texts';
 import { useRead } from './useRead';
 
@@ -78,6 +78,21 @@ export function RoleModal({ role, onDone, onClose }: Props) {
     };
   }, [nodes, role]);
   const value = picked ?? held.value;
+
+  // A function code without the code of the page it is on: a role saved under an older rule can be
+  // like that, and its holders cannot open the page. Saving does not add the page (that would give
+  // more than the role has), so the dialog says it and the page can be checked.
+  const withoutPage = useMemo(() => {
+    if (nodes === null) return [] as string[];
+    const index = buildIndex(nodes);
+    const chosen = new Set(value);
+    return value.filter((code) =>
+      ancestorsOf(index, code).some((above) => {
+        const node = index.byCode.get(above);
+        return node !== undefined && isSelectable(node) && !chosen.has(above);
+      }),
+    );
+  }, [nodes, value]);
 
   const { run, pending } = useSingleFlight(async () => {
     setFailure(null);
@@ -195,6 +210,17 @@ export function RoleModal({ role, onDone, onClose }: Props) {
           <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
             {t('system.roles.selected', { count: value.length })}
           </Typography.Paragraph>
+          {withoutPage.length > 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 8 }}
+              data-testid="role-without-page"
+              title={t('system.roles.withoutPage', {
+                codes: withoutPage.slice(0, NOTE_CODES).join(', '),
+              })}
+            />
+          ) : null}
           {held.dropped.length > 0 ? (
             <Alert
               type="warning"

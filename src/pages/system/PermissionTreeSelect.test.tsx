@@ -173,7 +173,12 @@ describe('PermissionTreeSelect', () => {
     expect(box(/A page from the future/)).not.toBeDisabled();
     expect(box(/A page from the future/)).toBeChecked();
     fireEvent.click(box(/Export users/));
-    expect(seen).toHaveBeenLastCalledWith(['FUTURE:PAGE', 'STATS:VIEW', 'USER:EXPORT', 'USER:VIEW']);
+    expect(seen).toHaveBeenLastCalledWith([
+      'FUTURE:PAGE',
+      'STATS:VIEW',
+      'USER:EXPORT',
+      'USER:VIEW',
+    ]);
     fireEvent.click(box(/A page from the future/));
     expect(seen).toHaveBeenLastCalledWith(['STATS:VIEW', 'USER:EXPORT', 'USER:VIEW']);
   });

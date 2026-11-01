@@ -65,21 +65,25 @@ export default function AuditPage() {
       title: t('system.audit.col.action'),
       dataIndex: 'action',
       fieldProps: { maxLength: MAX_ACTION },
-      render: (_, row) => <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.action)}</span>,
+      render: (_, row) => (
+        <EllipsisPopoverText text={orDash(row.action)} lines={2} width={180} dir="ltr" />
+      ),
     },
     {
       title: t('system.audit.col.targetType'),
       dataIndex: 'targetType',
       fieldProps: { maxLength: MAX_TARGET_TYPE },
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.targetType)}</span>
+        <EllipsisPopoverText text={orDash(row.targetType)} lines={2} width={160} dir="ltr" />
       ),
     },
     {
       title: t('system.audit.col.targetId'),
       dataIndex: 'targetId',
       fieldProps: { maxLength: MAX_TARGET_ID },
-      render: (_, row) => <span style={{ overflowWrap: 'anywhere' }}>{orDash(row.targetId)}</span>,
+      render: (_, row) => (
+        <EllipsisPopoverText text={orDash(row.targetId)} lines={2} width={200} dir="ltr" />
+      ),
     },
     {
       title: t('system.audit.col.detail'),
@@ -133,7 +137,12 @@ export default function AuditPage() {
   return (
     <Flex vertical gap={16}>
       <Alert type="info" showIcon title={t('system.audit.note')} />
-      <PagedListTable<AuditLog, Filters> rowKey="id" columns={columns} request={request} />
+      <PagedListTable<AuditLog, Filters>
+        rowKey="id"
+        columns={columns}
+        request={request}
+        defaultCollapsed={false}
+      />
     </Flex>
   );
 }

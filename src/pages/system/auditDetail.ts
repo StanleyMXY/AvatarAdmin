@@ -25,6 +25,9 @@ const CREDENTIAL_PARTS = [
   'cookie',
   'signature',
   'totp',
+  'sessionid',
+  'accesskey',
+  'secretkey',
   // Russian, Thai, Arabic, Spanish, Indonesian, Vietnamese, Chinese
   'пароль',
   'секрет',
@@ -44,7 +47,7 @@ const CREDENTIAL_PARTS = [
   '密鑰',
 ];
 // Short words: a whole word of the key is compared (an "otp" inside "footprint" is not one).
-const CREDENTIAL_WORDS = new Set(['pwd', 'otp', 'pass', 'pin']);
+const CREDENTIAL_WORDS = new Set(['pwd', 'otp', 'pass', 'pin', 'jwt', 'sig', 'salt', 'session']);
 // "code" names a credential only together with one of these ("verificationCode"); a permission code,
 // an error code or a country code is not one.
 const CODE_WORDS = new Set(['code', 'codes']);
@@ -100,6 +103,12 @@ const wordsOf = (key: string): string[] =>
     .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean);
 
+/** A key that is only the word "code" (or "codes"): nothing says what kind of code it is. */
+function isBareCodeKey(key: string): boolean {
+  const words = wordsOf(key);
+  return words.length === 1 && CODE_WORDS.has(words[0]);
+}
+
 function isCredentialKey(key: string): boolean {
   const letters = fold(key);
   if (FOLDED_PARTS.some((part) => letters.includes(part))) return true;
@@ -125,6 +134,7 @@ const LABEL_KEYS = new Set([
   'setting',
   'item',
   'config',
+  'k',
 ]);
 const VALUE_WORDS = new Set([
   'old',
@@ -139,12 +149,24 @@ const VALUE_WORDS = new Set([
   'prev',
   'current',
   'next',
+  'v',
+  'change',
+  'changes',
+  'diff',
+  'delta',
+  'data',
+  'detail',
+  'details',
+  'payload',
 ]);
+
+// A key such as `configKey` or `settingName` is a label as well: it is read by its words.
+const isLabelKey = (key: string): boolean =>
+  LABEL_KEYS.has(key.toLowerCase()) || wordsOf(key).some((word) => LABEL_KEYS.has(word));
 
 function namesCredential(object: Record<string, unknown>): boolean {
   return Object.entries(object).some(
-    ([key, value]) =>
-      LABEL_KEYS.has(key.toLowerCase()) && typeof value === 'string' && isCredentialKey(value),
+    ([key, value]) => isLabelKey(key) && typeof value === 'string' && isCredentialKey(value),
   );
 }
 const isValueKey = (key: string): boolean => wordsOf(key).some((word) => VALUE_WORDS.has(word));
@@ -190,6 +212,8 @@ const TEXT_WORDS = [
   'otp',
   'pin',
   'pwd',
+  'pass',
+  'jwt',
   '(?:verification|verify|security|login|reset|recovery|backup|sms|email)[_ -]?code',
 ];
 // The rest of the name after the word ("passwordChangedAt", "token_v2"); a key is short, and the bound keeps
@@ -197,10 +221,19 @@ const TEXT_WORDS = [
 // "Password".
 const AFTER = '[\\p{L}\\p{N}_.-]{0,40}';
 const KEY_NAME = `(?:${TEXT_PARTS.join('|')})${AFTER}|(?<![\\p{L}\\p{N}])(?:${TEXT_WORDS.join('|')})`;
+// Between the key and the value: a colon or an equals sign, "is", "was" or "to" ("changed password to x"),
+// or - for the short secrets that are numbers - nothing but a space before the digits ("PIN 1234").
+const SEPARATOR =
+  '(?:\\s*[:：=]\\s*|\\s+(?:is|was|to)\\s+|(?<=(?:otp|pin|code))\\s+(?=\\d{3,10}(?![\\p{L}\\p{N}])))';
+// The value: between escaped quotes (`\"x\"`, a JSON text written inside a text), between quotes (a quote
+// written as `\"` belongs to the value), or bare.
 const TEXT_PAIR = new RegExp(
-  `(?<head>["']?(?<key>${KEY_NAME})(?![\\p{L}\\p{N}])["']?(?:\\s*[:：=]\\s*|\\s+is\\s+))` +
+  `(?<head>\\\\?["']?(?<key>${KEY_NAME})(?![\\p{L}\\p{N}])\\\\?["']?${SEPARATOR})` +
     `(?:(?:bearer|basic|digest|token)\\s+)?` +
-    `(?:"(?<dq>[^"]*)(?<dqEnd>")?|'(?<sq>[^']*)(?<sqEnd>')?|(?<bare>[^\\s,;"'}\\]]+))`,
+    `(?:\\\\"(?<edq>(?:(?!\\\\")[\\s\\S])*)(?<edqEnd>\\\\")?` +
+    `|"(?<dq>(?:[^"\\\\]|\\\\[\\s\\S])*)(?<dqEnd>")?` +
+    `|'(?<sq>[^']*)(?<sqEnd>')?` +
+    `|(?<bare>[^\\s,;"'}\\]]+))`,
   'giu',
 );
 // "https://user:secret@host/": the part after the colon of the user information.
@@ -223,20 +256,31 @@ const COUNTING_WORDS = new Set([
   'attempts',
 ]);
 
+// A date or a time ("passwordChangedAt": "2026-10-01T08:00:00Z") is what a key such as that holds, not a
+// credential: it stays readable.
+const ISO_TIME =
+  /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+// A token written on its own: "Bearer abc...", and a JSON web token wherever it stands.
+const BEARER_ALONE = /(\bBearer\s+)(?!\*)[\w.~+/=-]{8,}/gi;
+const WEB_TOKEN = /\beyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]*/g;
+
 function maskPairs(text: string): string {
   return text
     .replace(ADDRESS_USER, `$1${HIDDEN}$3`)
     .replace(TEXT_PAIR, (whole, ...rest: unknown[]) => {
       const groups = rest[rest.length - 1] as Record<string, string | undefined>;
-      const { head = '', key = '', dq, dqEnd, sq, sqEnd, bare } = groups;
+      const { head = '', key = '', edq, edqEnd, dq, dqEnd, sq, sqEnd, bare } = groups;
+      if (edq !== undefined) return `${head}\\"${HIDDEN}${edqEnd ?? ''}`;
       if (dq !== undefined) return `${head}"${HIDDEN}${dqEnd ?? ''}`;
       if (sq !== undefined) return `${head}'${HIDDEN}${sqEnd ?? ''}`;
       const value = bare ?? '';
-      if (FLAG.test(value)) return whole;
+      if (FLAG.test(value) || ISO_TIME.test(value)) return whole;
       const last = wordsOf(key).at(-1) ?? '';
       if (/^\d+$/.test(value) && COUNTING_WORDS.has(last)) return whole;
       return `${head}${HIDDEN}`;
-    });
+    })
+    .replace(BEARER_ALONE, `$1${HIDDEN}`)
+    .replace(WEB_TOKEN, HIDDEN);
 }
 
 function maskText(text: string): string {
@@ -260,10 +304,25 @@ function maskText(text: string): string {
  * This is the second line, as well as it can be done: the backend is not meant to write a credential
  * into the detail, and the question to the backend stays open. Nothing is changed in the value given.
  */
-export function maskDetail(value: unknown, depth = 0, credential = false): unknown {
+export function maskDetail(
+  value: unknown,
+  depth = 0,
+  credential = false,
+  ownKey?: string,
+): unknown {
   if (depth > MAX_DEPTH) return CUT;
-  if (typeof value === 'string') return credential ? HIDDEN : maskText(value);
-  if (Array.isArray(value)) return value.map((item) => maskDetail(item, depth + 1, credential));
+  if (typeof value === 'string') {
+    if (credential) return ISO_TIME.test(value.trim()) ? value : HIDDEN;
+    // A key that is just "code" is a permission code, an error code or a country code, which are
+    // words; a code that is a short number is the one sent by SMS or an authenticator.
+    if (ownKey !== undefined && isBareCodeKey(ownKey) && /^\d{4,10}$/.test(value.trim())) {
+      return HIDDEN;
+    }
+    return maskText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => maskDetail(item, depth + 1, credential, ownKey));
+  }
   if (typeof value === 'object' && value !== null) {
     const object = value as Record<string, unknown>;
     const named = namesCredential(object);
@@ -273,6 +332,7 @@ export function maskDetail(value: unknown, depth = 0, credential = false): unkno
         item,
         depth + 1,
         credential || isCredentialKey(key) || (named && isValueKey(key)),
+        key,
       );
     }
     return copy;

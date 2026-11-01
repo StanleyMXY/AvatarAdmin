@@ -25,7 +25,7 @@ const messages: Record<string, string> = {
   'system.admins.note':
     'You cannot change your own roles, super administrator flag or status, and you cannot delete your own account. The last enabled super administrator cannot be disabled or deleted, and its flag cannot be cleared. Only a super administrator sets or clears the super administrator flag.',
   'system.admins.refusedHint':
-    'The backend refuses this for your own account and for the last enabled super administrator. Nothing was changed.',
+    'The backend refused this and nothing was changed. Possible reasons: it is your own account; it is the last enabled super administrator; or the account was changed by someone else meanwhile (read the list again).',
   'system.admins.forbiddenHint':
     'The backend refused this and nothing was changed. Possible reasons: it is your own account; administrators can only grant permissions they hold; and can only act on administrators whose permissions they all hold.',
   'system.admins.new': 'New administrator',
@@ -88,6 +88,8 @@ const messages: Record<string, string> = {
   'system.admins.ownDisableReason': 'You cannot disable or delete your own account.',
   'system.admins.lastSuperReason':
     'This is the last enabled super administrator: it cannot be disabled or deleted.',
+  'system.admins.closedNote': 'Only a super administrator can act on this account.',
+  'system.admins.ownReasons': '{note} {disable}',
   'system.admins.ownNote':
     'This is your own account: you cannot change your own roles or super administrator flag.',
   'system.admins.createDone':
@@ -120,6 +122,8 @@ const messages: Record<string, string> = {
   'system.roles.treeFailed': 'The permission tree could not be read: {message}',
   'system.roles.treeRetry': 'Read again',
   'system.roles.treeLoading': 'Reading the permission tree…',
+  'system.roles.withoutPage':
+    'These permissions are given without the page they are on, so the people who hold them cannot open the page: {codes}. Check the page to give it too.',
   'system.roles.notHeld':
     'This role has permissions you do not hold: {codes}. You cannot save changes to it.',
   'system.roles.notHeldMany':

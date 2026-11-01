@@ -36,8 +36,10 @@ function treeData(index: TreeIndex, codes: string[]): DataNode[] {
 
 /**
  * The tree of permissions with a check box on every node, for the permissions of a role. Checking a
- * node checks everything below it and every page above it; a parent with only some of its
- * descendants checked shows half checked and is not in the value; the value is always the complete list of codes (the rules are in
+ * node checks everything below it and every page above it; taking a node away takes it and
+ * everything below it, and keeps the pages above (a page with only some of its functions is in the
+ * value and shows checked; a node that is not in the value but has something below it in the value
+ * shows half checked); the value is always the complete list of codes (the rules are in
  * permissionTree.ts). Names follow the interface language (the other language, then the code, when
  * a name is missing). A node whose code the application does not know cannot be chosen.
  */

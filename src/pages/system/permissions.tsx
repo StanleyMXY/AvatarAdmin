@@ -91,7 +91,7 @@ export default function PermissionsPage() {
       key: 'code',
       title: t('system.permissions.col.code'),
       render: (_, row) => (
-        <span style={{ overflowWrap: 'anywhere' }}>{plainText(row.node.code)}</span>
+        <EllipsisPopoverText text={plainText(row.node.code)} lines={2} width={220} dir="ltr" />
       ),
     },
     {

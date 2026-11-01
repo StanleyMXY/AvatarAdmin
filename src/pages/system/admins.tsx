@@ -79,8 +79,15 @@ export default function AdminsPage() {
     if (!canManage || isClosedTo(row, me)) return [];
     const { own, lastSuper } = protectionOf(row);
     return [
-      ...(own ? [t('system.admins.ownNote')] : []),
-      ...(own ? [t('system.admins.ownDisableReason')] : []),
+      // The two sentences about the own account in one line: a row of five lines is hard to read.
+      ...(own
+        ? [
+            t('system.admins.ownReasons', {
+              note: t('system.admins.ownNote'),
+              disable: t('system.admins.ownDisableReason'),
+            }),
+          ]
+        : []),
       ...(lastSuper ? [t('system.admins.lastSuperReason')] : []),
       ...(own ? [t('system.admins.ownResetPasswordReason')] : []),
       ...(own ? [t('system.admins.ownResetTotpReason')] : []),
@@ -218,6 +225,14 @@ export default function AdminsPage() {
             fixed: 'right' as const,
             render: (_: unknown, row: AdminUser) => {
               const reasons = reasonsOf(row);
+              // The row of a super administrator has no action for anyone else: say why, in place of buttons.
+              if (isClosedTo(row, me)) {
+                return (
+                  <Typography.Text type="secondary" style={{ fontSize: 12, maxWidth: 260 }}>
+                    {t('system.admins.closedNote')}
+                  </Typography.Text>
+                );
+              }
               return (
                 <Flex vertical gap={4} style={{ maxWidth: 260 }}>
                   <RowActions actions={actionsOf(row)} />

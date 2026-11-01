@@ -13,6 +13,7 @@ import {
   updateAdmin,
 } from '../../services/system';
 import { describeFailure } from '../../session/describe';
+import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { checkNewPassword, type RowProtection } from './adminRules';
 import { failureToForm } from './formFailure';
@@ -66,7 +67,14 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
   const minLength = me?.passwordMinLength;
   const canSetSuper = me?.superAdmin === true;
 
-  const original = admin?.roles.map((r) => r.id) ?? [];
+  // The row comes from the backend: a name that is not text is drawn as text, and a row without a
+  // list of roles has none, instead of the dialog failing to open.
+  const adminName = plainText(admin?.username);
+  const adminRoles = (Array.isArray(admin?.roles) ? admin.roles : []).map((r) => ({
+    id: plainText(r?.id),
+    name: plainText(r?.name),
+  }));
+  const original = adminRoles.map((r) => r.id);
   const chosenRoles = Form.useWatch('roleIds', form) ?? original;
   const chosenSuper = Form.useWatch('superAdmin', form) ?? admin?.superAdmin ?? false;
 
@@ -84,7 +92,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
 
   const options = [
     ...(roles.state.data ?? []).map((role) => ({ value: role.id, label: role.name })),
-    ...(admin?.roles ?? [])
+    ...adminRoles
       .filter((r) => !(roles.state.data ?? []).some((role) => role.id === r.id))
       .map((role) => ({ value: role.id, label: role.name })),
   ];
@@ -132,7 +140,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
       title={
         creating
           ? t('system.admins.createTitle')
-          : t('system.admins.editTitle', { name: admin.username })
+          : t('system.admins.editTitle', { name: adminName })
       }
       okText={t('system.common.save')}
       cancelText={t('system.common.cancel')}
@@ -147,7 +155,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
         layout="vertical"
         autoComplete="off"
         initialValues={{
-          username: admin?.username ?? '',
+          username: adminName,
           password: '',
           confirm: '',
           roleIds: original,
@@ -261,10 +269,10 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
             placeholder={t('system.admins.field.rolesPlaceholder')}
           />
         </Form.Item>
-        {!creating && !rolesReadable && admin.roles.length > 0 ? (
+        {!creating && !rolesReadable && adminRoles.length > 0 ? (
           <Typography.Paragraph type="secondary" style={{ overflowWrap: 'anywhere' }}>
             {t('system.admins.field.rolesCurrent', {
-              names: admin.roles.map((r) => r.name).join(', '),
+              names: adminRoles.map((r) => r.name).join(', '),
             })}
           </Typography.Paragraph>
         ) : null}
