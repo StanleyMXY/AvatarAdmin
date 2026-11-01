@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { IntlProvider } from 'react-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLocale, history, resetUmiStub } from '../../../tests/stubs/umi-max';
@@ -158,6 +158,30 @@ describe('HeaderDropdown', () => {
       wrap(<HeaderDropdown username="ploy" onChangePassword={() => {}} onLogout={() => {}} />),
     );
     expect(screen.getByText('ploy')).toBeInTheDocument();
+  });
+
+  it('leaves the user name out of the header on a phone-width window and keeps it as the name of the button, so that the avatar fits next to the switches', async () => {
+    const real = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(max-width: 575px)',
+      media: query,
+      onchange: null,
+      addListener() {},
+      removeListener() {},
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+    try {
+      render(
+        wrap(<HeaderDropdown username="ploy" onChangePassword={() => {}} onLogout={() => {}} />),
+      );
+      await waitFor(() => expect(screen.queryByText('ploy')).toBeNull());
+      expect(screen.getByRole('button', { name: 'ploy' })).toHaveAttribute('title', 'ploy');
+      expect(screen.getByTestId('header-avatar')).toBeInTheDocument();
+    } finally {
+      window.matchMedia = real;
+    }
   });
 });
 

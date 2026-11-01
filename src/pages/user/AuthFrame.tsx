@@ -14,13 +14,17 @@ export function AuthFrame({ titleId, children }: { titleId: string; children: Re
   const { token } = theme.useToken();
   return (
     <Flex
+      data-testid="auth-frame"
       vertical
       align="center"
-      justify="center"
       style={{
-        minHeight: '100vh',
+        // The frame is the window: it does not depend on the margin of the page body (8px by default,
+        // which with a height of 100vh gave the document a scroll bar and a border of another colour),
+        // and it scrolls inside itself when the card is taller than the window.
+        position: 'fixed',
+        inset: 0,
+        overflowY: 'auto',
         padding: 16,
-        position: 'relative',
         background: token.colorBgLayout,
       }}
     >
@@ -28,7 +32,8 @@ export function AuthFrame({ titleId, children }: { titleId: string; children: Re
         <LangSwitch />
         <ThemeSwitch />
       </Flex>
-      <Card style={{ width: '100%', maxWidth: 400 }}>
+      {/* Centred with automatic margins: `justify-content: center` would cut off the top of a card taller than the window. */}
+      <Card style={{ width: '100%', maxWidth: 400, margin: 'auto' }}>
         <Flex vertical align="center" gap={8} style={{ marginBottom: 24 }}>
           <img src={buildVars.logoUrl} alt="" width={48} height={48} />
           <Typography.Text strong>{buildVars.productName}</Typography.Text>
