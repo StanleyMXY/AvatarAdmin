@@ -18,10 +18,10 @@ import {
   SMS_RECORDS_EXPORT_URL,
   type SmsRecord,
 } from '../../services/sms';
+import { instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { lastNDaysUtc, utcDayRangeToInstants } from '../../utils/utcDay';
-import { instantText, orDash } from './texts';
 
 type Filters = {
   msgId: string;

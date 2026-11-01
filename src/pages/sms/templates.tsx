@@ -3,6 +3,7 @@ import { Alert, App, Button, Flex } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
@@ -16,12 +17,11 @@ import {
   type SmsTemplate,
   setTemplateEnabled,
 } from '../../services/sms';
+import { orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { isLastEnglishFallbackTemplate, isLastOtpTemplate } from './lastOtp';
-import { StatusSwitch } from './StatusSwitch';
 import { TemplateModal } from './TemplateModal';
 import { templateFailureText } from './templateFailure';
-import { orDash } from './texts';
 import { useLastOtpPrompt } from './useLastOtpPrompt';
 
 const NO_FILTERS: Record<string, never> = {};
@@ -170,7 +170,7 @@ export default function TemplatesPage() {
       key: 'enabled',
       title: t('sms.templates.col.enabled'),
       render: (_, row) => (
-        <StatusSwitch
+        <EnabledSwitch
           checked={row.enabled === true}
           label={t('sms.templates.switchLabel', { code: plainText(row.templateCode) })}
           onToggle={async (next) => {

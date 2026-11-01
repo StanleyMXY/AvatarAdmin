@@ -22,6 +22,7 @@ import {
   type SmsProvider,
   updateChannel,
 } from '../../services/sms';
+import { failureToForm } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import {
@@ -32,7 +33,6 @@ import {
   credentialProblems,
   normalizeCountries,
 } from './channelRules';
-import { failureToForm } from './formFailure';
 import { type Coverage, keepsCoverage } from './lastOtp';
 import { guardedFailureText, type useLastOtpPrompt } from './useLastOtpPrompt';
 
@@ -142,7 +142,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
       if (channel) await updateChannel(plainText(channel.id), buildChannelBody(input, 'update'));
       else await createChannel(buildChannelBody(input, 'create'));
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS);
+      const result = failureToForm(intl, form, error, FIELDS, {}, { generalReason: true });
       setFailure({ text: guardedFailureText(intl, error, guarded), more: result.unplaced });
       return;
     }

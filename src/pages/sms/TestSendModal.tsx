@@ -6,9 +6,9 @@ import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChang
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { getSmsMeta, type SmsChannel, sendTestSms } from '../../services/sms';
 import { describeFailure } from '../../session/describe';
+import { countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { countText } from './texts';
 
 type Props = { channel: SmsChannel; onClose: () => void };
 

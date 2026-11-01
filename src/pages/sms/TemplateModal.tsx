@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { createTemplate, SMS_TYPES, type SmsTemplate, updateTemplate } from '../../services/sms';
+import { failureToForm } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { countryCodeProblem } from './channelRules';
-import { failureToForm } from './formFailure';
 import { isLastOtpTemplate, keepsEnglishFallback } from './lastOtp';
 import { isEnglishFallbackRefusal, templateFailureText } from './templateFailure';
 import {
@@ -92,7 +92,7 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
         await updateTemplate(plainText(template.id), buildTemplateBody(input, 'update'));
       else await createTemplate(buildTemplateBody(input, 'create'));
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS);
+      const result = failureToForm(intl, form, error, FIELDS, {}, { generalReason: true });
       // The refusal about the English template names no field: its words stand alone at the top.
       setFailure({
         text: templateFailureText(intl, error, guarded),

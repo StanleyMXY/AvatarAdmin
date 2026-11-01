@@ -3,6 +3,7 @@ import { Alert, App, Button, Flex, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { FailureBar } from '../../components/FailureBar';
 import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
@@ -18,12 +19,11 @@ import {
   type SmsChannel,
   setChannelEnabled,
 } from '../../services/sms';
+import { countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { asCoverage, ChannelModal } from './ChannelModal';
 import { isLastOtpChannel } from './lastOtp';
-import { StatusSwitch } from './StatusSwitch';
 import { TestSendModal } from './TestSendModal';
-import { countText } from './texts';
 import { guardedFailureText, useLastOtpPrompt } from './useLastOtpPrompt';
 
 const NO_FILTERS: Record<string, never> = {};
@@ -172,7 +172,7 @@ export default function ChannelsPage() {
       key: 'enabled',
       title: t('sms.channels.col.enabled'),
       render: (_, row) => (
-        <StatusSwitch
+        <EnabledSwitch
           checked={row.enabled === true}
           label={t('sms.channels.switchLabel', { code: plainText(row.channelCode) })}
           disabled={!canConfig}
