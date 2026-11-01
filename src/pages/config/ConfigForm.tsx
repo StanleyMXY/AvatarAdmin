@@ -2,9 +2,9 @@ import { useIntl, useLocation } from '@umijs/max';
 import { Alert, Button, Card, Flex, Spin, Typography } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PermissionCode } from '../../access/permissionCodes';
+import { useFailure } from '../../hooks/useFailure';
 import type { ApiError } from '../../request/errors';
 import { type ConfigItem, listConfig } from '../../services/config';
-import { describeFailure } from '../../session/describe';
 import { ConfigRow } from './ConfigRow';
 import { specOf } from './configSchema';
 import { refusalAlertText, refusalTexts } from './refusal';
@@ -66,7 +66,7 @@ function TopRefusals({ texts }: { texts: string[] }) {
 export function ConfigForm(props: Props) {
   const intl = useIntl();
   const [items, setItems] = useState<ConfigItem[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   // The last save or reset the backend refused: kept as the failure itself (not as translated
   // words) so the words follow the language, and shared by the rows so that a rule between two
   // keys is shown on both.
@@ -76,11 +76,11 @@ export function ConfigForm(props: Props) {
     try {
       const { items: rows } = await listConfig();
       setItems(rows);
-      setFailure(null);
+      clear();
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      fail(error);
     }
-  }, [intl]);
+  }, [fail, clear]);
 
   useEffect(() => {
     void load();
