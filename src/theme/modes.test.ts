@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs';
 import { act, renderHook } from '@testing-library/react';
 import { theme as antdTheme } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { contrastRatio, pickOnPrimary } from './contrast';
+import { contrastRatio, luminance, pickOnPrimary } from './contrast';
 import {
   applyModeToDocument,
   getCodeTextColor,
+  getErrorSolidColors,
   getModeTokens,
   getPresetTagColors,
   getStatusTextColors,
@@ -565,6 +566,46 @@ describe.each(THEME_MODES)('red (danger) text of buttons in %s mode', (mode: The
   });
 });
 
+describe.each(THEME_MODES)('solid red (danger) buttons in %s mode', (mode: ThemeMode) => {
+  const text = () => hexOf(resolvedTokens(mode).colorTextLightSolid);
+
+  it('rest, hover and press carry the white text at least 4.5:1', () => {
+    const colors = getErrorSolidColors(mode);
+    for (const fill of [colors.rest, colors.hover, colors.active])
+      expect(contrastRatio(text(), fill), `${text()} on ${fill}`).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('stays red, and hover and press are each darker than the state before (they must show)', () => {
+    const colors = getErrorSolidColors(mode);
+    for (const fill of [colors.rest, colors.hover, colors.active]) {
+      const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(fill.slice(i, i + 2), 16));
+      expect(r, fill).toBeGreaterThan(g);
+      expect(r, fill).toBeGreaterThan(b);
+    }
+    expect(luminance(colors.hover)).toBeLessThan(luminance(colors.rest));
+    expect(luminance(colors.active)).toBeLessThan(luminance(colors.hover));
+  });
+
+  it('moves the red of Ant Design only as far as needed: the rest colour is its first shade toward black that reads', () => {
+    const original = hexOf(resolvedTokens(mode).colorError);
+    expect(contrastRatio(text(), original)).toBeLessThan(4.5);
+    let percent = 1;
+    while (contrastRatio(text(), mixToward(original, '#000000', percent / 100)) < 4.5) percent += 1;
+    expect(getErrorSolidColors(mode).rest).toBe(
+      mixToward(original, '#000000', percent / 100).toUpperCase(),
+    );
+  });
+
+  it('puts the three fills on the document for the style sheet', () => {
+    applyModeToDocument(mode);
+    const style = document.documentElement.style;
+    const colors = getErrorSolidColors(mode);
+    expect(style.getPropertyValue('--avatar-error-solid')).toBe(colors.rest);
+    expect(style.getPropertyValue('--avatar-error-solid-hover')).toBe(colors.hover);
+    expect(style.getPropertyValue('--avatar-error-solid-active')).toBe(colors.active);
+  });
+});
+
 describe.each(THEME_MODES)(
   'links in a bar with a tinted background in %s mode',
   (mode: ThemeMode) => {
@@ -654,6 +695,16 @@ describe('src/global.css: the colours moved to 4.5:1', () => {
         'color: var(--avatar-error-text-active);',
       ]);
     }
+  });
+
+  it('gives the solid red button (a delete or leave confirmation) the deeper red, also on hover and press, and leaves the disabled one alone', () => {
+    const rest =
+      '.ant-btn-color-dangerous.ant-btn-variant-solid:not(:disabled):not(.ant-btn-disabled)';
+    expect(bodies(rest)).toEqual(['background-color: var(--avatar-error-solid);']);
+    expect(bodies(`${rest}:hover`)).toEqual(['background-color: var(--avatar-error-solid-hover);']);
+    expect(bodies(`${rest}:active`)).toEqual([
+      'background-color: var(--avatar-error-solid-active);',
+    ]);
   });
 
   it('gives inline code its own readable text colour', () => {

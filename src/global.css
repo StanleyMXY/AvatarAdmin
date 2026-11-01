@@ -163,6 +163,25 @@ html[data-theme]
   color: var(--avatar-error-text-active);
 }
 
+/*
+ * The solid red button (a delete or leave confirmation): the deeper red under its white text, also
+ * on hover and press (Ant Design lightens it on hover). A disabled one keeps its own look.
+ */
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-solid:not(:disabled):not(.ant-btn-disabled) {
+  background-color: var(--avatar-error-solid);
+}
+
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-solid:not(:disabled):not(.ant-btn-disabled):hover {
+  background-color: var(--avatar-error-solid-hover);
+}
+
+html[data-theme]
+  .ant-btn-color-dangerous.ant-btn-variant-solid:not(:disabled):not(.ant-btn-disabled):active {
+  background-color: var(--avatar-error-solid-active);
+}
+
 /* Inline code. */
 html[data-theme] .ant-typography code {
   color: var(--avatar-code-text);

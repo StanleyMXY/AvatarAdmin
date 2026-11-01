@@ -329,6 +329,42 @@ export function getStatusTextColors(mode: ThemeMode): StatusTextColors {
   return colors;
 }
 
+export type ErrorSolidColors = {
+  /** The fill of a solid red button at rest, on hover and while pressed. */
+  rest: string;
+  hover: string;
+  active: string;
+};
+
+const solidCache = new Map<ThemeMode, ErrorSolidColors>();
+
+/**
+ * The fill of a solid red button (a delete or leave confirmation) with the white text Ant Design
+ * puts on it. Ant Design fills it with its error red, which carries white at 3.3:1 (light) or
+ * 4.2:1 (the dark themes), and lightens it on hover, which is 2.6:1 and 3.1:1. The rest colour is the
+ * error red moved toward black just far enough to reach 4.5:1 with the text; hover and press go
+ * further toward black (as the links do), so they stay readable and still show.
+ */
+export function getErrorSolidColors(mode: ThemeMode): ErrorSolidColors {
+  const cached = solidCache.get(mode);
+  if (cached) return cached;
+  const resolved = antdTheme.getDesignToken(toAntdTheme(getModeTokens(mode))) as unknown as Record<
+    string,
+    string
+  >;
+  const text = toHex(resolved.colorTextLightSolid);
+  // The text is light, so the fill moves toward black (readableText moves toward the darker end
+  // when the background list is light: the text is the "background" of this check).
+  const rest = readableText(toHex(resolved.colorError), [text]);
+  const colors = {
+    rest,
+    hover: mixHex(rest, '#000000', LINK_HOVER_SHIFT),
+    active: mixHex(rest, '#000000', LINK_ACTIVE_SHIFT),
+  };
+  solidCache.set(mode, colors);
+  return colors;
+}
+
 /** The preset colours a tag can be given (`<Tag color="green">`). */
 export const PRESET_TAG_COLORS = [
   'blue',
@@ -415,6 +451,10 @@ export function applyModeToDocument(mode: ThemeMode): void {
   style.setProperty('--avatar-info-text', status.info);
   style.setProperty('--avatar-error-text-hover', status.errorHover);
   style.setProperty('--avatar-error-text-active', status.errorActive);
+  const solid = getErrorSolidColors(mode);
+  style.setProperty('--avatar-error-solid', solid.rest);
+  style.setProperty('--avatar-error-solid-hover', solid.hover);
+  style.setProperty('--avatar-error-solid-active', solid.active);
   const presets = getPresetTagColors(mode);
   for (const name of PRESET_TAG_COLORS)
     style.setProperty(`--avatar-tag-${name}-text`, presets[name]);
