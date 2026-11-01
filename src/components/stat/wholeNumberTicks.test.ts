@@ -8,23 +8,23 @@ describe('wholeNumberTicks', () => {
     expect(wholeNumberTicks(0, 4)).toEqual([0, 1, 2, 3, 4]);
   });
 
-  it('rounds the ends outward, so the largest value is still inside the axis', () => {
-    expect(wholeNumberTicks(0, 2.4)).toEqual([0, 1, 2, 3]);
-    expect(wholeNumberTicks(0.5, 1.5)).toEqual([0, 1, 2]);
+  it('keeps inside the range: no tick above the largest value or below the smallest', () => {
+    expect(wholeNumberTicks(0, 2.4)).toEqual([0, 1, 2]);
+    expect(wholeNumberTicks(0.5, 1.5)).toEqual([1]);
+    expect(wholeNumberTicks(0.2, 0.8)).toEqual([]);
   });
 
   it('steps by a round whole number when the counts are large, with a few ticks only', () => {
-    expect(wholeNumberTicks(0, 1000)).toEqual([0, 500, 1000]);
+    expect(wholeNumberTicks(0, 1000)).toEqual([0, 200, 400, 600, 800, 1000]);
     const ticks = wholeNumberTicks(0, 87);
-    expect(ticks[0]).toBe(0);
-    expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(87);
-    expect(ticks.length).toBeLessThanOrEqual(7);
-    for (const tick of ticks) expect(Number.isInteger(tick)).toBe(true);
+    expect(ticks).toEqual([0, 20, 40, 60, 80]);
+    expect(wholeNumberTicks(3, 17)).toEqual([5, 10, 15]);
+    for (const tick of wholeNumberTicks(0, 123456)) expect(Number.isInteger(tick)).toBe(true);
   });
 
-  it('still gives an axis when every value is the same or the range is empty', () => {
-    expect(wholeNumberTicks(0, 0)).toEqual([0, 1]);
-    expect(wholeNumberTicks(3, 3)).toEqual([3, 4]);
+  it('gives the one tick of a range that is a single whole number', () => {
+    expect(wholeNumberTicks(0, 0)).toEqual([0]);
+    expect(wholeNumberTicks(3, 3)).toEqual([3]);
   });
 
   it('ignores a range that is not numbers instead of looping', () => {
