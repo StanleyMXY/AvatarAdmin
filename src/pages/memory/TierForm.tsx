@@ -1,10 +1,11 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Flex, Form, Input, InputNumber, Modal, Spin, Switch } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { getTier, MEMORY_NAME_PATTERN, saveTier, type TierSettings } from '../../services/memory';
-import { describeFailure } from '../../session/describe';
+import { failureLine } from '../../session/failureLine';
 import { trimSpec } from '../../utils/trimSpec';
 
 type Values = Partial<TierSettings> & { tierName?: string };
@@ -47,7 +48,7 @@ export function TierForm({ open, tierName, existing, starting, onClose, onSaved 
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
   const [loading, setLoading] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, failWith, clear } = useFailure();
   const creating = tierName === null;
   /** The settings of the tier as they were when the dialog opened; only what differs from them is sent. */
   const loaded = useRef<TierSettings | null>(null);
@@ -55,7 +56,7 @@ export function TierForm({ open, tierName, existing, starting, onClose, onSaved 
 
   useEffect(() => {
     if (!open) return;
-    setFailure(null);
+    clear();
     loaded.current = null;
     setReady(false);
     if (creating) {
@@ -76,7 +77,7 @@ export function TierForm({ open, tierName, existing, starting, onClose, onSaved 
         setReady(true);
       })
       .catch((error) => {
-        if (live) setFailure(describeFailure(intl, error).text);
+        if (live) fail(error);
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -84,7 +85,7 @@ export function TierForm({ open, tierName, existing, starting, onClose, onSaved 
     return () => {
       live = false;
     };
-  }, [open, tierName, creating, starting, form, intl]);
+  }, [open, tierName, creating, starting, form, fail, clear]);
 
   const range = (field: keyof typeof RANGES) => {
     const [min, max] = RANGES[field];
@@ -99,12 +100,11 @@ export function TierForm({ open, tierName, existing, starting, onClose, onSaved 
 
   const send = useSingleFlight(
     async (name: string, values: Partial<TierSettings>, isNew: boolean) => {
-      setFailure(null);
+      clear();
       try {
         await saveTier(name, values);
       } catch (error) {
-        const { text, fields } = describeFailure(intl, error);
-        setFailure([text, ...fields.map((f) => `${f.ref}: ${f.text}`)].join(' / '));
+        failWith((words) => failureLine(words, error));
         return;
       }
       message.success(t(isNew ? 'memory.tier.created' : 'memory.tier.saved'));

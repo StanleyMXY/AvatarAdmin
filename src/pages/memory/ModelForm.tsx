@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Flex, Form, Input, InputNumber, Modal } from 'antd';
-import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { MEMORY_NAME_PATTERN, registerEmbeddingModel } from '../../services/memory';
@@ -32,10 +32,10 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
 
   const send = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     const name = trimSpec(values.modelName ?? '');
     try {
       await registerEmbeddingModel(name, {
@@ -43,7 +43,7 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
         dimensions: values.dimensions as number,
       });
     } catch (error) {
-      const { text, fields } = describeFailure(intl, error);
+      const { fields } = describeFailure(intl, error);
       const byRef: Record<string, string> = { name: 'modelName' };
       const placed = fields.filter((f) => ['name', 'teiBaseUrl', 'dimensions'].includes(f.ref));
       if (placed.length > 0) {
@@ -51,7 +51,7 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
           placed.map((f) => ({ name: (byRef[f.ref] ?? f.ref) as keyof Values, errors: [f.text] })),
         );
       } else {
-        setFailure(text);
+        fail(error);
       }
       return;
     }
@@ -67,7 +67,7 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
       mask={{ closable: false }}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       onCancel={send.pending ? undefined : onClose}
       okText={t('memory.model.submit')}

@@ -3,8 +3,8 @@ import { Alert, Button, Card, Flex, Spin, Table } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { Can } from '../../components/Can';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useFailure } from '../../hooks/useFailure';
 import { type EmbeddingModel, listEmbeddingModels } from '../../services/memory';
-import { describeFailure } from '../../session/describe';
 import { ConfigForm } from '../config/ConfigForm';
 import { ModelForm } from './ModelForm';
 
@@ -15,18 +15,18 @@ export default function ModelsPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [models, setModels] = useState<EmbeddingModel[] | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [registering, setRegistering] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const { items } = await listEmbeddingModels();
       setModels(items);
-      setFailure(null);
+      clear();
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      fail(error);
     }
-  }, [intl]);
+  }, [fail, clear]);
 
   useEffect(() => {
     void load();
