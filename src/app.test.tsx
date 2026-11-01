@@ -1,6 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { IntlProvider } from 'react-intl';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { envelope, jsonResponse, stubFetch } from '../tests/httpStubs';
+import { renderPage } from '../tests/renderPage';
 import {
   getLocale,
   history,
@@ -19,8 +22,10 @@ import {
 } from './app';
 import { buildVars } from './buildVars';
 import { adoptLocale, rememberLocale, resetActiveLocaleForTests } from './locales/activeLocale';
+import enUS from './locales/en-US';
 import { applyInitialLocale } from './locales/initLocale';
 import { apiRequest } from './request/apiClient';
+import { getToken, resetSessionState, setToken } from './request/session';
 import { resetThemeModeForTests } from './theme/modes';
 
 beforeEach(() => {
@@ -78,6 +83,72 @@ describe('layout', () => {
     );
     expect(screen.getByText('No permission')).toBeInTheDocument();
     expect(screen.getByText('Page not found')).toBeInTheDocument();
+  });
+
+  describe('the 404 page is behind the same gate as the pages', () => {
+    const notFound = () => config().noFound as React.ReactElement;
+
+    beforeEach(() => {
+      sessionStorage.clear();
+      resetSessionState();
+      setTestLocation({ pathname: '/no/such/page', search: '?x=1' });
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('says the service is not available, with a retry and a sign-out, when the token is held and the account could not be read, and not that the page is missing', () => {
+      setToken('tok');
+      setTestInitialState({ unavailable: true });
+      renderPage(notFound());
+      expect(screen.getByText(enUS['error.GATEWAY_UNAVAILABLE'])).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+      expect(screen.queryByText(enUS['pages.404.title'])).toBeNull();
+      expect(history.replace).not.toHaveBeenCalled();
+      expect(getToken()).toBe('tok');
+      // this state is drawn without the menu and the header, so the notice fills the page
+      expect(layout({ initialState: { unavailable: true } }).pure).toBe(true);
+    });
+
+    it('shows the page that is missing once the retry has read the account', async () => {
+      setToken('tok');
+      setTestInitialState({ unavailable: true });
+      stubFetch((call) =>
+        jsonResponse(
+          200,
+          call.url.endsWith('/me')
+            ? envelope('200', { ...signedIn(false, ['USER:VIEW']) })
+            : envelope('200', { maxRecipients: null }),
+        ),
+      );
+      renderPage(notFound());
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
+      expect(await screen.findByText(enUS['pages.404.title'])).toBeInTheDocument();
+    });
+
+    it('signs out from the notice', async () => {
+      setToken('tok');
+      setTestInitialState({ unavailable: true });
+      renderPage(notFound());
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Sign out' }));
+      await waitFor(() => expect(getToken()).toBeNull());
+      expect(history.replace).toHaveBeenCalledWith('/user/login');
+    });
+
+    it('sends someone who is not signed in to the sign-in page with the way back, and shows no 404 page meanwhile', () => {
+      setTestInitialState({});
+      renderPage(notFound());
+      expect(screen.queryByText(enUS['pages.404.title'])).toBeNull();
+      expect(history.replace).toHaveBeenCalledWith(
+        `/user/login?redirect=${encodeURIComponent('/no/such/page?x=1')}`,
+      );
+    });
+
+    it('still shows the 404 page to someone who is signed in', () => {
+      setTestInitialState({ me: signedIn(false, ['USER:VIEW']) });
+      renderPage(notFound());
+      expect(screen.getByText(enUS['pages.404.title'])).toBeInTheDocument();
+      expect(history.replace).not.toHaveBeenCalled();
+    });
   });
 
   it('draws no menu or header unless an account is known: not while it loads, not when signed out, not when it could not be read', () => {
