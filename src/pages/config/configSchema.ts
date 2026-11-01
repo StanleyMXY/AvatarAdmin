@@ -1,5 +1,7 @@
 import type { PermissionCode } from '../../access/permissionCodes';
+import { countCodePoints } from '../../utils/codePoints';
 import { validateServerLink } from '../../utils/linkRule';
+import { trimSpec } from '../../utils/trimSpec';
 import { EXTRA_ENTRIES } from './extraConfigKeys';
 
 // One entry per operating parameter of contract 17.5 (`AppConfig`). The schema holds no default
@@ -17,6 +19,8 @@ export type ConfigKeySpec = {
   group: string;
   min?: number;
   max?: number;
+  /** For a plain number: the value must be larger than this (not equal to it). */
+  greaterThan?: number;
   /** For a whole number that may also be 0: the smallest other value (0 means "off", for example no retention limit). */
   zeroOrMin?: number;
   /** For a string: the shape it must have. */
@@ -35,6 +39,15 @@ const isPositiveInt = (v: unknown): v is number =>
 const LANGUAGE_TAG = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 
 const VALIDATORS: Record<string, (value: unknown) => string | null> = {
+  // The name that stands for the app in e-mails: 1 to 100 characters once the ends are trimmed.
+  'app.display_name': (v) => {
+    if (typeof v !== 'string') return 'EMPTY_NOT_ALLOWED';
+    const length = countCodePoints(trimSpec(v));
+    if (length === 0) return 'EMPTY_NOT_ALLOWED';
+    return length > 100 ? 'OUT_OF_RANGE' : null;
+  },
+  // When an invite reward is judged: at sign-up, or at the end of the first long enough call.
+  'invite.reward_trigger': (v) => (v === 'REGISTER' || v === 'FIRST_CALL' ? null : 'OUT_OF_RANGE'),
   // The thresholds are positive and rise with the stage.
   'companionship.stage_thresholds': (v) => {
     const o = v as { BONDING?: unknown; CLOSE?: unknown } | null;
@@ -444,12 +457,15 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     kind: 'number',
     editPermission: 'CONFIG:MANAGE',
     group: 'generation',
+    greaterThan: 0,
   },
   {
     key: 'generation.mouth_open_min_brightness',
     kind: 'number',
     editPermission: 'CONFIG:MANAGE',
     group: 'generation',
+    min: 0,
+    max: 255,
   },
   {
     key: 'generation.ai_label_enabled',
@@ -892,6 +908,8 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     kind: 'number',
     editPermission: 'MODERATION:CONFIG',
     group: 'moderation',
+    min: 0.1,
+    max: 1,
   },
   {
     key: 'moderation.generated_output_review',
@@ -1581,7 +1599,11 @@ export function validateValue(spec: ConfigKeySpec, value: unknown): string | nul
       return null;
     }
     case 'number': {
-      return typeof value === 'number' && Number.isFinite(value) ? null : 'NOT_AN_INTEGER';
+      if (typeof value !== 'number' || !Number.isFinite(value)) return 'NOT_AN_INTEGER';
+      if (spec.min !== undefined && value < spec.min) return 'OUT_OF_RANGE';
+      if (spec.max !== undefined && value > spec.max) return 'OUT_OF_RANGE';
+      if (spec.greaterThan !== undefined && value <= spec.greaterThan) return 'OUT_OF_RANGE';
+      return null;
     }
     case 'bool':
       return typeof value === 'boolean' ? null : 'NOT_BOOLEAN';
@@ -1592,7 +1614,8 @@ export function validateValue(spec: ConfigKeySpec, value: unknown): string | nul
     }
     case 'string':
       if (typeof value !== 'string') return 'EMPTY_NOT_ALLOWED';
-      return spec.pattern && !spec.pattern.test(value) ? 'OUT_OF_RANGE' : null;
+      if (spec.pattern && !spec.pattern.test(value)) return 'OUT_OF_RANGE';
+      return spec.validate ? spec.validate(value) : null;
     case 'json':
       return spec.validate ? spec.validate(value) : null;
   }

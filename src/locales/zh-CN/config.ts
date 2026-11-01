@@ -391,10 +391,10 @@ const messages: Record<string, string> = {
     '陪伴纪念日的天数清单，用 JSON 数组表示，例如满 7、30、100 天时触发纪念日。',
   'config.moderation.block_score.label': '审核拦截分数',
   'config.moderation.block_score.desc':
-    '审核分数达到这个值就拦截内容。取值随审核服务选型确定，没有默认值。生产环境未配置时，依赖审核的用户端接口不可用，生成任务也不处理；管理端不受影响，应先在管理端配置，再让用户端上线。',
+    '把审核服务返回的分数映射为“拦截”级别的阈值，复核分数是比它低的那个阈值。取值随审核服务选型确定，没有默认值。生产环境未配置时，依赖审核的用户端接口不可用，生成任务也不处理；管理端不受影响，应先在管理端配置，再让用户端上线。',
   'config.moderation.review_score.label': '审核复核分数',
   'config.moderation.review_score.desc':
-    '审核分数达到这个值就进入人工复核，必须小于拦截分数。未配置时的后果与拦截分数相同。',
+    '把审核服务返回的分数映射为“复核”级别的阈值，必须小于拦截分数。取值随审核服务选型确定，没有默认值。未配置时的后果与拦截分数相同。',
   'config.moderation.call_timeout_seconds.label': '审核调用超时',
   'config.moderation.call_timeout_seconds.desc':
     '一次调用审核服务的超时时间，单位秒，超时按中风险处理（伴侣名字除外）。',
@@ -422,7 +422,7 @@ const messages: Record<string, string> = {
   'config.complaint.likeness_due_hours.desc':
     '照片里的人投诉的处理时限，单位小时，超过时限会写告警。',
   'config.complaint.likeness_due_hours.risk':
-    '这是照片里的人投诉的处理时限，超过后会写告警，改大这个值会让逾期的投诉更晚才被发现。',
+    '照片里的人的投诉必须在这个时间内处理（默认 48 小时），超过会写告警。',
   'config.complaint.retention_days.label': '投诉记录保留天数',
   'config.complaint.retention_days.desc':
     '投诉记录（含投诉人的邮箱和证据）及其处理记录，从结案起保留多少天，单位天，到期由每天一次的清理任务一起删除。没有结案的投诉不会删除。',
