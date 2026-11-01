@@ -230,12 +230,11 @@ export function parentCandidates(nodes: readonly PermissionNode[], code: string)
  * plain text, in the order the role has them (what the backend sends is not trusted to be text).
  * The backend refuses to save a role that has any of them, so the dialog says so beforehand.
  * `held` is null for a super administrator, who holds everything, and when it is not known.
+ * A role row without a list of codes (the contract promises one; a row that came without it is
+ * not trusted) has none.
  */
-export function codesNotHeld(
-  roleCodes: readonly unknown[],
-  held: ReadonlySet<string> | null,
-): string[] {
-  if (held === null) return [];
+export function codesNotHeld(roleCodes: unknown, held: ReadonlySet<string> | null): string[] {
+  if (held === null || !Array.isArray(roleCodes)) return [];
   const seen = new Set<string>();
   for (const raw of roleCodes) {
     const code = plainText(raw);

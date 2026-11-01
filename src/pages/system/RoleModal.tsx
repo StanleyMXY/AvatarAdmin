@@ -67,7 +67,7 @@ export function RoleModal({ role, onDone, onClose }: Props) {
   const held = useMemo(() => {
     if (nodes === null) return { value: [] as string[], dropped: [] as string[] };
     const index = buildIndex(nodes);
-    const wanted = role?.permissionCodes ?? [];
+    const wanted = Array.isArray(role?.permissionCodes) ? role.permissionCodes : [];
     const keep = (code: string) => {
       const node = index.byCode.get(code);
       return node !== undefined && isSelectable(node);

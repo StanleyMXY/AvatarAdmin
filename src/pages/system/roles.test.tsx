@@ -906,6 +906,44 @@ describe('an administrator who is not a super administrator hands out only what 
       expect(save(box)).toBeDisabled();
     });
 
+    it.each([
+      ['has no permissionCodes at all', undefined],
+      ['has permissionCodes null', null],
+      ['has permissionCodes that is not a list', 'USER:VIEW'],
+    ])(
+      'opens a role that %s for an administrator who is not a super administrator, with nothing checked and nothing to complain about',
+      async (_name, bad) => {
+        signIn('support', { codes: ['ROLE:MANAGE', 'USER:VIEW'] });
+        // The fake backend cannot make such a row (it sorts the codes), so the answer is written here.
+        backend();
+        overrideFetch(({ url, method }) =>
+          method === 'GET' && url.pathname === '/api/admin/roles'
+            ? jsonAnswer(200, '200', {
+                items: [
+                  {
+                    id: '72',
+                    name: 'Sin permisos',
+                    remark: null,
+                    createdAt: '2026-10-08T00:00:00Z',
+                    permissionCodes: bad,
+                  },
+                ],
+                total: 1,
+              })
+            : undefined,
+        );
+        const user = userEvent.setup();
+        renderPage(<RolesPage />);
+        await waitForRows();
+        const box = await openEdit(user, 'Sin permisos');
+        expect(noteOf(box)).toBeNull();
+        expect(box.getAllByRole('checkbox').some((c) => (c as HTMLInputElement).checked)).toBe(
+          false,
+        );
+        expect(save(box)).toBeEnabled();
+      },
+    );
+
     it('is written in Chinese when the interface is Chinese', async () => {
       systemState.roles.set('70', {
         id: '70',

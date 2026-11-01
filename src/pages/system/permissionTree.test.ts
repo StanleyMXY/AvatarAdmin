@@ -638,4 +638,10 @@ describe('the codes of a role that the administrator does not hold', () => {
   it('compares the exact code: case and spaces count', () => {
     expect(codesNotHeld(['user:view', ' USER:VIEW'], held)).toEqual(['user:view', ' USER:VIEW']);
   });
+
+  it('treats a role without a list of codes as having none', () => {
+    for (const bad of [undefined, null, 'USER:VIEW', 7, { length: 1, 0: 'COST:VIEW' }]) {
+      expect(codesNotHeld(bad, held)).toEqual([]);
+    }
+  });
 });
