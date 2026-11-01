@@ -56,11 +56,9 @@ const messages: Record<string, string> = {
   'memory.model.dimensionsInvalid': '请填写 1 到 8192 的整数',
   'memory.model.submit': '登记',
   'memory.model.registered': '模型已登记',
-  'memory.model.conflictTitle': '同名模型已登记，维度不同',
   'memory.model.empty': '还没有登记的模型',
   'memory.model.params': '参数',
 
-  'memory.account.title': '记忆',
   'memory.account.tier': '档位',
   'memory.account.tierName': '当前档位',
   'memory.account.tierNone': '还没有指派过档位，按 default 档处理',

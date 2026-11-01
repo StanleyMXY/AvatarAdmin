@@ -59,6 +59,8 @@ export function TierForm({ open, tierName, existing, starting, onClose, onSaved 
     loaded.current = null;
     setReady(false);
     if (creating) {
+      // an edit dialog closed while it was still loading leaves `loading` set: a new tier has nothing to wait for
+      setLoading(false);
       form.setFieldsValue({ tierName: '', ...(starting ?? FALLBACK) });
       setReady(true);
       return;

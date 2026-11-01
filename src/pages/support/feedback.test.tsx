@@ -77,6 +77,14 @@ describe('the list', { timeout: 30000 }, () => {
     }
   });
 
+  it('has no search area: the list has no filter, so there is no empty card with two buttons that do nothing', async () => {
+    useMockBackend(supportMock);
+    renderPage(<FeedbackPage />);
+    await rowOf(newest('FAILED'));
+    expect(document.querySelector('.ant-pro-table-search')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^(Query|Reset|Search)$/ })).toBeNull();
+  });
+
   it('shows a category or a status it does not know as it is', async () => {
     fixed([feedback({ category: 'COMPLIMENT', forwardStatus: 'SPOOLED', message: 'odd one' })]);
     renderPage(<FeedbackPage />);

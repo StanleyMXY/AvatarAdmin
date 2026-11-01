@@ -7,24 +7,25 @@
 
 契约 §17.4 写了 `AdminAlert` 的列（`id`、`type`、`accountId`、`refType`、`refId`、`detail`、`status`、`createdAt`、`resolvedAt`）和查询参数 `status`、`type`，字段表里没有这一行。
 
+契约 §17.4 开头的通则已经回答了分页、`{items,total}` 和默认的创建时间倒序，不再问。仍然没写清的：
+
 **问：**
-1. 响应是不是 `{"items":[…],"total":N}`，接受 `page`、`pageSize`？
-2. 不带 `status` 时是全部状态，还是只返回 `OPEN`？
-3. 排序是不是按 `createdAt` 倒序？
-4. `detail` 是字符串还是 JSON 对象？
+1. 不带 `status` 时是全部状态，还是只返回 `OPEN`？
+2. `detail` 是字符串还是 JSON 对象？
 
-**我们为什么需要：** 告警页是分页表格，要知道总数；"未处理告警"卡片（总览页）用 `GET /alerts?status=OPEN` 的 `total`；`detail` 要显示在一个格子里。
+**我们为什么需要：** "未处理告警"卡片（总览页）用 `GET /alerts?status=OPEN` 的 `total`；`detail` 要显示在一个格子里。
 
-**暂定做法：** 分页的 `{items,total}`，字段名同实体的列，不带 `status` 是全部，按创建时间倒序，`detail` 是字符串或 `null`（如果是对象，页面要另外设计怎么显示，请确认）。告警页默认筛选 `status=OPEN`，由页面发出。
+**暂定做法：** 字段名同实体的列，不带 `status` 是全部，`detail` 是字符串或 `null`；页面收到对象、数组或数字时把它写成文字显示，不会出错（所以这一条不阻塞，回复后可以显示得更好）。告警页默认筛选 `status=OPEN`，由页面发出。
 
 ## 二、`GET /support/feedback` 的筛选、分页和列表里带不带全文
 
 契约 §17.4 只写了 `GET /support/feedback`、`GET /support/feedback/{id}` 和重试，没有写参数和响应。
 
+分页、`{items,total}` 和默认的创建时间倒序，契约 §17.4 开头的通则已经回答，不再问。仍然没写清的：
+
 **问：**
-1. 列表接受 `page`、`pageSize` 吗，响应是 `{items,total}` 吗，排序是不是按 `createdAt` 倒序？
-2. 能不能按 `forwardStatus`（`PENDING`、`FORWARDED`、`FAILED`）和 `category` 筛选？
-3. 列表的每一行是不是 `SupportFeedback` 的全部列（含 `message` 和 `context`），还是只有摘要？
+1. 能不能按 `forwardStatus`（`PENDING`、`FORWARDED`、`FAILED`）和 `category` 筛选？
+2. 列表的每一行是不是 `SupportFeedback` 的全部列（含 `message` 和 `context`），还是只有摘要？
 
 **我们为什么需要：** 客服要找的是转发失败的那几条（只有它们能点"重试"）；反馈多了以后只能翻页找很慢。正文最长 4000 个码点，`context` 里最近的错误最多 20 条，每条 500 字符，列表每行都带全文时 200 行的一页会很大。
 
@@ -70,3 +71,13 @@
 契约 §16.3 写"每次手动指派一条"，没有写顺序。
 
 **暂定做法：** 页面按 `assignedAt` 倒序自己排，最新的一条当作"当前模型"；没有记录时显示默认模型 `bge-m3`（契约 §16.3 写明的默认）。如果后端的"当前模型"不是最新一条，请告诉我们。
+
+## 七、管线监控页的"上报来源"从哪里列出
+
+契约 §14.1 的 `GET /monitor/pipeline` 只返回时间范围内有点的数据；`source` 是筛选参数，没有"列出所有上报来源"的接口。
+
+**问：** 能不能在这个响应里加一个 `sources`（字符串数组，最近 `monitor.max_range_days` 天内上报过的全部来源，不受所选时间范围和所选 `source` 影响）？或者提供一个单独的列出来源的接口？
+
+**我们为什么需要：** 页面的"来源"下拉现在只列这次返回的点里出现过的来源。一个来源停止上报以后，在较短的时间范围里没有点，它既不在图里也不在下拉里，而"最近没有上报的来源"恰恰是监控最想看到的。
+
+**暂定做法：** 下拉列出这次会话里所有看到过的来源（切换时间范围时累加），没有点的来源在换到更长的范围之后才会出现；后端给出 `sources` 后页面直接用它。

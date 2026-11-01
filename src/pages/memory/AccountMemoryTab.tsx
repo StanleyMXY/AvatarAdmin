@@ -2,6 +2,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Popconfirm, Select, Spin, Table, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type AccountMemory,
@@ -50,14 +51,20 @@ export default function AccountMemoryTab({ accountId, accountStatus }: Props) {
   const [choice, setChoice] = useState<string | undefined>(undefined);
   const [assignFailure, setAssignFailure] = useState<string | null>(null);
 
+  const begin = useLatestCall();
+
   const load = useCallback(async () => {
+    // Only the newest read counts: an answer for the account shown before must not replace this one.
+    const isCurrent = begin();
     try {
-      setMemory(await getAccountMemory(accountId));
+      const answer = await getAccountMemory(accountId);
+      if (!isCurrent()) return;
+      setMemory(answer);
       setFailure(null);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      if (isCurrent()) setFailure(describeFailure(intl, error).text);
     }
-  }, [accountId, intl]);
+  }, [accountId, intl, begin]);
 
   useEffect(() => {
     setMemory(null);
