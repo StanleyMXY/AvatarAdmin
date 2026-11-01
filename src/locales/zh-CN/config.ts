@@ -754,6 +754,8 @@ const messages: Record<string, string> = {
     '允许的币种必须包含默认币种。要改默认币种，先把新币种加进允许列表；要把当前默认币种从列表里去掉，先改默认币种。',
   'config.push.schedule_catchup_minutes.reject.OUT_OF_RANGE':
     '没有保存。取值必须在 1 到 10080 之间，并且 catch-up 分钟数×60 须 ≥ 600 + 推送任务轮询秒数（默认轮询下至少 11）。',
+  'config.invite.reward_start_at.reject.OUT_OF_RANGE': '奖励的开始时间必须早于结束时间。',
+  'config.invite.reward_end_at.reject.OUT_OF_RANGE': '奖励的开始时间必须早于结束时间。',
   'config.push.task_poll_seconds.reject.OUT_OF_RANGE':
     '没有保存。取值不能小于 1，并且 catch-up 分钟数×60 须保持 ≥ 600 + 这个轮询秒数。',
   'config.chat.message_retention_days.reject.OUT_OF_RANGE':

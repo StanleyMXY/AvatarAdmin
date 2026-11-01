@@ -1,6 +1,6 @@
 import { guard } from './_core/auth';
 import { bodyOf, fail, invalidRequest, MockHttpError, ok, toUmi } from './_core/http';
-import { META_DEFAULTS } from './_core/meta';
+import { currentMeta } from './_core/meta';
 import { ALL_CODES } from './_core/permissions';
 import {
   FAKE_TOTP_CODE,
@@ -144,5 +144,6 @@ export default {
 
   'GET /api/admin/me': guard(null, (req) => ok(meOf(req.admin)), { allowMustChange: true }),
 
-  'GET /api/admin/meta': guard(null, () => ok(structuredClone(META_DEFAULTS))),
+  // The fields that repeat a setting follow it as saved (see currentMeta).
+  'GET /api/admin/meta': guard(null, () => ok(currentMeta())),
 };
