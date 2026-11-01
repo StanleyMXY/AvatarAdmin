@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Progress, Typography } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { useFailureView } from '../hooks/useFailure';
 import { useSingleFlight } from '../hooks/useSingleFlight';
 import { uploadFile } from '../request/upload';
 import { describeFailure } from '../session/describe';
@@ -70,8 +71,10 @@ export function UploadField<T extends { uploadId: string }>({
   const meta = useAdminMeta() as Partial<UploadLimitMeta>;
   const entry = UPLOAD_ENTRIES[kind];
   const input = useRef<HTMLInputElement>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  // What was wrong with the chosen file (kept as the check, whose words are made when drawn) and
+  // the upload that failed (kept as the failure, for the same reason): both follow the language.
+  const [problem, setProblem] = useState<Awaited<ReturnType<typeof checkUploadFile>> | null>(null);
+  const { view: failure, show, clear } = useFailureView<string>();
   const [percent, setPercent] = useState<number | null>(null);
   const [doneName, setDoneName] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -129,7 +132,7 @@ export function UploadField<T extends { uploadId: string }>({
 
   const { run, pending } = useSingleFlight(async (file: File) => {
     setProblem(null);
-    setFailure(null);
+    clear();
     setDoneName(null);
     setPercent(null);
     setPreview(null);
@@ -143,12 +146,12 @@ export function UploadField<T extends { uploadId: string }>({
       check = await checkUploadFile(kind, file, meta);
     } catch {
       // the file could not be read at all
-      if (alive.current) setFailure(t('error.UNKNOWN'));
+      if (alive.current) show((words) => words.formatMessage({ id: 'error.UNKNOWN' }));
       return;
     }
     if (!alive.current) return;
     if (!check.ok) {
-      setProblem(problemText(check));
+      setProblem(check);
       return;
     }
     // A picture is shown only after the check, and only when its header says it is small: the
@@ -179,12 +182,12 @@ export function UploadField<T extends { uploadId: string }>({
         setPreview(null);
         const shownByPage = latest.current.onFailed?.(error) === true;
         if (!shownByPage) {
-          const described = describeFailure(intl, error);
-          setFailure(
-            withFieldReasons
+          show((words) => {
+            const described = describeFailure(words, error);
+            return withFieldReasons
               ? [described.text, ...described.fields.map((f) => f.text)].join(' ')
-              : described.text,
-          );
+              : described.text;
+          });
         }
       }
     } finally {
@@ -250,7 +253,7 @@ export function UploadField<T extends { uploadId: string }>({
           format={() => t('pages.upload.uploading', { percent })}
         />
       ) : null}
-      {problem ? <Alert type="error" title={problem} showIcon /> : null}
+      {problem && !problem.ok ? <Alert type="error" title={problemText(problem)} showIcon /> : null}
       {failure ? <Alert type="error" title={failure} showIcon /> : null}
       {doneName ? (
         <Typography.Text type="success">

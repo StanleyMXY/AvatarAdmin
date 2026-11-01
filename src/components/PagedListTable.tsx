@@ -50,7 +50,10 @@ export function PagedListTable<
   const intl = useIntl();
   const innerRef = useRef<ActionType | undefined>(undefined);
   const ref = actionRef ?? innerRef;
-  const [failure, setFailure] = useState<{ text: string; code: string } | null>(null);
+  // The failed read itself (boxed): its words are made when the list is drawn, so they follow the language.
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
+  const described = failed === null ? null : describeFailure(intl, failed.error);
+  const failure = described === null ? null : { text: described.text, code: described.error.code };
   // The rows are held here, so that a failed read can take them away: they belong to another page or
   // other filters than the ones that failed.
   const [rows, setRows] = useState<T[]>([]);
@@ -69,12 +72,11 @@ export function PagedListTable<
         page: Number(current ?? 1),
         pageSize: Number(pageSize ?? DEFAULT_PAGE_SIZE),
       } as { page: number; pageSize: number } & F);
-      if (isCurrent()) setFailure(null);
+      if (isCurrent()) setFailed(null);
       return { data: page.items, total: page.total, success: true };
     } catch (error) {
       if (isCurrent()) {
-        const described = describeFailure(intl, error);
-        setFailure({ text: described.text, code: described.error.code });
+        setFailed({ error });
         setRows([]);
       }
       return { data: [] as T[], total: 0, success: false };
