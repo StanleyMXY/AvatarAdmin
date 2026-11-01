@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Flex, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
 import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { useUploadSlot } from '../../hooks/useUploadSlot';
@@ -67,16 +68,17 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
+  // The language-file key of the problem, not its words: the words are made when drawn.
   const [iconProblem, setIconProblem] = useState<string | null>(null);
   const icon = useUploadSlot();
   const editing = action !== null;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     setIconProblem(null);
     if (!editing && !icon.uploadId) {
-      setIconProblem(t('avatar.icon.required'));
+      setIconProblem('avatar.icon.required');
       return;
     }
     const fields = {
@@ -99,9 +101,9 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
       const result = failureToForm(intl, form, error, FIELDS);
       if (result.uploadRejected) {
         icon.reset();
-        setIconProblem(t('avatar.icon.rejected'));
+        setIconProblem('avatar.icon.rejected');
       }
-      setFailure(result.text);
+      fail(error);
       return;
     }
     message.success(t('avatar.actions.saved'));
@@ -120,7 +122,7 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
       afterClose={() => {
         form.resetFields();
         icon.reset();
-        setFailure(null);
+        clear();
         setIconProblem(null);
       }}
       okText={t('pages.common.submit')}
@@ -186,7 +188,7 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
               onUploaded={icon.fieldProps.onUploaded}
               onCleared={icon.fieldProps.onCleared}
             />
-            {iconProblem ? <Alert type="error" title={iconProblem} showIcon /> : null}
+            {iconProblem ? <Alert type="error" title={t(iconProblem)} showIcon /> : null}
           </Flex>
         </Form.Item>
         <Form.Item

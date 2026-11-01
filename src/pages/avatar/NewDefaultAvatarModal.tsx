@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Form, Input, Modal, Select } from 'antd';
 import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { useUploadSlot } from '../../hooks/useUploadSlot';
@@ -26,15 +27,16 @@ export function NewDefaultAvatarModal({ open, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
+  // The language-file key of the problem, not its words: the words are made when drawn.
   const [sourceProblem, setSourceProblem] = useState<string | null>(null);
   const source = useUploadSlot();
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     setSourceProblem(null);
     if (!source.uploadId) {
-      setSourceProblem(t('avatar.defaults.sourceRequired'));
+      setSourceProblem('avatar.defaults.sourceRequired');
       return;
     }
     try {
@@ -47,9 +49,9 @@ export function NewDefaultAvatarModal({ open, onClose, onSaved }: Props) {
       const result = failureToForm(intl, form, error, ['name', 'style']);
       if (result.uploadRejected) {
         source.reset();
-        setSourceProblem(t('avatar.defaults.sourceRejected'));
+        setSourceProblem('avatar.defaults.sourceRejected');
       }
-      setFailure(result.text);
+      fail(error);
       return;
     }
     message.success(t('avatar.defaults.created'));
@@ -68,7 +70,7 @@ export function NewDefaultAvatarModal({ open, onClose, onSaved }: Props) {
       afterClose={() => {
         form.resetFields();
         source.reset();
-        setFailure(null);
+        clear();
         setSourceProblem(null);
       }}
       okText={t('pages.common.submit')}
@@ -93,7 +95,7 @@ export function NewDefaultAvatarModal({ open, onClose, onSaved }: Props) {
             onUploaded={source.fieldProps.onUploaded}
             onCleared={source.fieldProps.onCleared}
           />
-          {sourceProblem ? <Alert type="error" title={sourceProblem} showIcon /> : null}
+          {sourceProblem ? <Alert type="error" title={t(sourceProblem)} showIcon /> : null}
         </Form.Item>
         <Form.Item
           name="name"

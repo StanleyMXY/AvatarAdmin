@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, Modal } from 'antd';
-import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type DefaultAvatar, renameDefaultAvatar } from '../../services/avatar';
@@ -22,16 +22,16 @@ export function RenameDefaultAvatarModal({ avatar, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<{ name: string }>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, failWith, clear } = useFailure();
 
   const { run, pending } = useSingleFlight(async (values: { name: string }) => {
     if (!avatar) return;
-    setFailure(null);
+    clear();
     try {
       await renameDefaultAvatar(avatar.id, trimSpec(values.name));
     } catch (error) {
       failureToForm(intl, form, error, ['name']);
-      setFailure(defaultAvatarFailure(intl, error));
+      failWith((words) => defaultAvatarFailure(words, error));
       return;
     }
     message.success(t('avatar.defaults.renamed'));
@@ -48,7 +48,7 @@ export function RenameDefaultAvatarModal({ avatar, onClose, onSaved }: Props) {
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}

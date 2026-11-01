@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import { Alert, App, Checkbox, Flex, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
 import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { useUploadSlot } from '../../hooks/useUploadSlot';
@@ -77,16 +78,17 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
+  // The language-file key of the problem, not its words: the words are made when drawn.
   const [pictureProblem, setPictureProblem] = useState<string | null>(null);
   const picture = useUploadSlot();
   const editing = item !== null;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     setPictureProblem(null);
     if (!editing && !picture.uploadId) {
-      setPictureProblem(t('avatar.preview.required'));
+      setPictureProblem('avatar.preview.required');
       return;
     }
     const fields = {
@@ -115,9 +117,9 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
       const result = failureToForm(intl, form, error, FIELDS);
       if (result.uploadRejected) {
         picture.reset();
-        setPictureProblem(t('avatar.preview.rejected'));
+        setPictureProblem('avatar.preview.rejected');
       }
-      setFailure(result.text);
+      fail(error);
       return;
     }
     message.success(t('avatar.cosmetics.saved'));
@@ -141,7 +143,7 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
       afterClose={() => {
         form.resetFields();
         picture.reset();
-        setFailure(null);
+        clear();
         setPictureProblem(null);
       }}
       okText={t('pages.common.submit')}
@@ -218,7 +220,7 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
               onUploaded={picture.fieldProps.onUploaded}
               onCleared={picture.fieldProps.onCleared}
             />
-            {pictureProblem ? <Alert type="error" title={pictureProblem} showIcon /> : null}
+            {pictureProblem ? <Alert type="error" title={t(pictureProblem)} showIcon /> : null}
           </Flex>
         </Form.Item>
         <Form.Item
