@@ -19,6 +19,7 @@ import {
   SUBSCRIPTION_STATES,
   subscriptionsState,
 } from './_core/subscriptionsData';
+import { usersState } from './_core/usersData';
 
 const state = subscriptionsState;
 const DAY_MS = 86_400_000;
@@ -262,9 +263,12 @@ export default {
 
   'GET /api/admin/accounts/:id/entitlements': guard('SUBSCRIPTION:VIEW', (req) => {
     const accountId = idParam(req);
+    // An account of the user module counts too: its detail page opens this tab, and an account
+    // with no entitlement yet has an empty list.
     const known =
       ACCOUNT_IDS.includes(accountId) ||
-      state().accountEntitlements.some((r) => r.accountId === accountId);
+      state().accountEntitlements.some((r) => r.accountId === accountId) ||
+      usersState.users.some((u) => u.id === accountId);
     if (!known) throw notFound('account');
     const now = Date.now();
     const rows = state()

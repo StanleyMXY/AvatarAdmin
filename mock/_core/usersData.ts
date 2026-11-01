@@ -206,7 +206,7 @@ function makeUser(index: number, over: Base): MockUser {
     bannedAt: null,
     currentAvatarAssetId: null,
     currentVoiceAssetId: null,
-    personaModerationStatus: 'APPROVED',
+    personaModerationStatus: 'NONE',
     companionName: COMPANION_NAMES[language],
     timezone: TIMEZONES[language],
     conversationLanguage: LANGUAGE_TAGS[language],

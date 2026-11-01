@@ -47,8 +47,14 @@ export function BanUserModal({ accountId, status, onDone, compact }: Props) {
       await banUser(accountId, reason);
       banned.current = true;
     } catch (error) {
-      setFailure(actionFailure(intl, error));
-      if (error instanceof ApiError && error.code === 'INVALID_STATE') onDone();
+      const text = actionFailure(intl, error);
+      setFailure(text);
+      if (error instanceof ApiError && error.code === 'INVALID_STATE') {
+        // The page reads the account again and may replace this button, so the dialog cannot be
+        // the only place that says what the account is now.
+        message.error(text);
+        onDone();
+      }
       return;
     }
     message.success(t('users.ban.done'));

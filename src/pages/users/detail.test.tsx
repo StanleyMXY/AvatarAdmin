@@ -302,6 +302,33 @@ describe('the overview tab', { timeout: 30000 }, () => {
     expect(within(field('language')).getByText('th')).toBeInTheDocument();
   });
 
+  it.each([
+    ['NONE', 'en-US', 'No review pending'],
+    ['PENDING_REVIEW', 'en-US', 'Waiting for review'],
+    ['REJECTED', 'en-US', 'Rejected'],
+    ['NONE', 'zh-CN', '无待审'],
+    ['PENDING_REVIEW', 'zh-CN', '待复核'],
+    ['REJECTED', 'zh-CN', '已拒绝'],
+    ['SOMETHING_NEW', 'en-US', 'SOMETHING_NEW'],
+  ] as const)(
+    'shows the persona review state %s in words (%s), and a state it does not know as it came',
+    async (status, language, words) => {
+      stubFetch(async () =>
+        jsonResponse(
+          200,
+          envelope('200', {
+            ...usersState.users.find((u) => u.id === USER.rich),
+            personaModerationStatus: status,
+          }),
+        ),
+      );
+      at(USER.rich);
+      renderPage(<UserDetailPage />, language);
+      await screen.findByText(language === 'en-US' ? `User ${USER.rich}` : `用户 ${USER.rich}`);
+      expect(within(field('persona')).getByText(words)).toBeInTheDocument();
+    },
+  );
+
   it('shows 0 as 0 and nothing as a dash in the care data of an account with none', async () => {
     backend();
     at(USER.noAttribution);

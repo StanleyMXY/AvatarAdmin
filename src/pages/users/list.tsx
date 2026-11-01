@@ -14,6 +14,7 @@ import {
 } from '../../services/users';
 import { formatInstant } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
+import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { Cell } from './Cell';
 import { STATUS_COLORS } from './statusColors';
@@ -117,7 +118,7 @@ export default function UserListPage() {
       title: t('users.common.createdAt'),
       dataIndex: 'createdAt',
       search: false,
-      render: (_, row) => formatInstant(plainText(row.createdAt), intl.locale),
+      render: (_, row) => formatInstant(plainText(row.createdAt), intl.locale) || DASH,
     },
     {
       title: t('users.list.timezone'),

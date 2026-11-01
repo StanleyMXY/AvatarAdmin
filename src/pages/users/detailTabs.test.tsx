@@ -328,6 +328,39 @@ describe('the sign-in events tab', { timeout: 30000 }, () => {
     expect(within(rows[1]).getByText('{"odd":true}')).toBeInTheDocument();
   });
 
+  it('shows a dash for an event without a time', async () => {
+    stubFetch(async ({ url }) =>
+      url.includes('/auth-events')
+        ? jsonResponse(
+            200,
+            envelope('200', {
+              items: [
+                {
+                  type: 'LOGIN_FAIL',
+                  reason: null,
+                  deviceIdHashPrefix: null,
+                  ipHashPrefix: null,
+                  at: null,
+                },
+                {
+                  type: 'LOGIN_FAIL',
+                  reason: null,
+                  deviceIdHashPrefix: null,
+                  ipHashPrefix: null,
+                  at: '',
+                },
+              ],
+              total: 2,
+            }),
+          )
+        : jsonResponse(200, envelope('200', usersState.users[0])),
+    );
+    await open(USER.rich, 'authEvents');
+    const rows = await waitFor(() => rowsOf('auth-events-table'));
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.querySelectorAll('td')[0].textContent).toBe('—');
+  });
+
   it('asks for the next page when it is chosen', async () => {
     const calls = stubFetch(async ({ url }) =>
       url.includes('/auth-events')

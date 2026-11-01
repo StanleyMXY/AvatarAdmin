@@ -57,7 +57,8 @@ function ClusterAccounts({ by, clusterKey }: { by: AbuseBy; clusterKey: string }
     },
     {
       title: t('users.abuse.paidColumn'),
-      render: (_, row) => t(row.paid === true ? 'users.common.yes' : 'users.common.no'),
+      render: (_, row) =>
+        typeof row.paid === 'boolean' ? t(row.paid ? 'users.common.yes' : 'users.common.no') : DASH,
     },
     {
       title: t('users.abuse.method'),
@@ -66,7 +67,7 @@ function ClusterAccounts({ by, clusterKey }: { by: AbuseBy; clusterKey: string }
     {
       title: t('users.common.actions'),
       render: (_, row) =>
-        row.paid === true ? null : (
+        row.paid !== false ? null : (
           <BanUserModal
             compact
             accountId={plainText(row.accountId)}
