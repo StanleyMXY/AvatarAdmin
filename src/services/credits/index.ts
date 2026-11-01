@@ -21,9 +21,37 @@ const enc = encodeURIComponent;
 
 // ---- credit packs (SUBSCRIPTION:CONFIG) ----
 
-/** `GET /credit-products`: every pack, on sale or not. Not paged (see the contract request, question 1). */
-export const listCreditProducts = (): Promise<{ items: CreditProduct[] }> =>
-  apiRequest({ method: 'GET', url: '/credit-products' });
+/** `GET /credit-products`: the packs, on sale or not. Whether the backend pages it is not settled (see the contract request, question 1). */
+export const listCreditProducts = (params?: {
+  page: number;
+  pageSize: number;
+}): Promise<{ items: CreditProduct[]; total?: number }> =>
+  apiRequest({ method: 'GET', url: '/credit-products', params });
+
+const ALL_PAGE_SIZE = 200;
+
+/**
+ * Every pack, whether the backend pages the list (contract 17.4: `page`, `pageSize` up to 200,
+ * `total`) or sends it whole. With a numeric `total` it reads pages until it has that many; without
+ * one it stops at a page shorter than the page size. It stops too at a page that brings nothing new,
+ * so a backend that ignores the page cannot make it loop. Each pack is kept once.
+ */
+export async function listAllCreditProducts(): Promise<CreditProduct[]> {
+  const packs: CreditProduct[] = [];
+  const seen = new Set<string>();
+  for (let page = 1; ; page += 1) {
+    const answer = await listCreditProducts({ page, pageSize: ALL_PAGE_SIZE });
+    const fresh = answer.items.filter((pack) => !seen.has(String(pack.id)));
+    for (const pack of fresh) seen.add(String(pack.id));
+    packs.push(...fresh);
+    if (answer.items.length === 0 || fresh.length === 0) return packs;
+    if (typeof answer.total === 'number') {
+      if (packs.length >= answer.total) return packs;
+    } else if (answer.items.length < ALL_PAGE_SIZE) {
+      return packs;
+    }
+  }
+}
 
 export const createCreditProduct = (body: CreditProductBody): Promise<CreditProduct> =>
   apiRequest({ method: 'POST', url: '/credit-products', body });

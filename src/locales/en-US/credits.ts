@@ -65,6 +65,8 @@ const messages: Record<string, string> = {
   'credits.products.edit': 'Edit credit pack',
   'credits.products.editButton': 'Edit',
   'credits.products.saved': 'Saved',
+  'credits.products.changedMeanwhile':
+    'This pack was changed by someone else since the list was read, so nothing was saved. The list has been read again.',
 
   'credits.requests.new': 'New request',
   'credits.requests.kind': 'Type',
@@ -80,6 +82,7 @@ const messages: Record<string, string> = {
   'credits.requests.reject': 'Reject',
   'credits.requests.approveTitle': 'Approve request',
   'credits.requests.approveNote': 'Note (optional)',
+  'credits.requests.noteLength': 'The note can have up to {max} characters',
   'credits.requests.rejectTitle': 'Reject request',
   'credits.requests.rejectNote': 'Rejection note',
   'credits.requests.ownRequest':

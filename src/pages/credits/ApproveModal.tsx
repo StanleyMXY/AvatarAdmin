@@ -3,7 +3,7 @@ import { Alert, Form, Input, Modal } from 'antd';
 import { useState } from 'react';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
-import { describeFailure } from '../../session/describe';
+import { failureLine } from '../../session/failureLine';
 import { countCodePoints } from '../../utils/codePoints';
 import { trimSpec } from '../../utils/trimSpec';
 
@@ -28,7 +28,7 @@ export function ApproveModal({ open, onSubmit, onClose }: Props) {
     try {
       await onSubmit(note);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      setFailure(failureLine(intl, error));
     }
   });
 
@@ -64,7 +64,7 @@ export function ApproveModal({ open, onSubmit, onClose }: Props) {
             {
               validator: async (_, value: string | undefined) => {
                 if (countCodePoints(trimSpec(value ?? '')) > NOTE_MAX) {
-                  throw new Error(t('pages.common.reasonLength', { min: 1, max: NOTE_MAX }));
+                  throw new Error(t('credits.requests.noteLength', { max: NOTE_MAX }));
                 }
               },
             },

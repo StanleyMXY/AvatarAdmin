@@ -7,19 +7,22 @@ import { PagedListTable } from '../../components/PagedListTable';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type CreditProduct,
-  listCreditProducts,
+  listAllCreditProducts,
   updateCreditProduct,
 } from '../../services/credits';
-import { describeFailure } from '../../session/describe';
+import { failureLine } from '../../session/failureLine';
 import { formatCount } from '../../utils/ratio';
+import { assertPackUnchanged, PackChangedError } from './freshPack';
 import { ProductModal } from './ProductModal';
 
 /** The on-sale switch of one pack: one request per change, and the switch is back where it was when the backend refuses. */
 function SaleSwitch({ pack, onChanged }: { pack: CreditProduct; onChanged: () => void }) {
   const intl = useIntl();
   const { message } = App.useApp();
+  const t = (id: string) => intl.formatMessage({ id });
   const { run, pending } = useSingleFlight(async (enabled: boolean) => {
     try {
+      await assertPackUnchanged(pack);
       await updateCreditProduct(pack.id, {
         credits: pack.credits,
         enabled,
@@ -27,7 +30,9 @@ function SaleSwitch({ pack, onChanged }: { pack: CreditProduct; onChanged: () =>
         ...(pack.surfaces ? { surfaces: pack.surfaces } : {}),
       });
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      if (error instanceof PackChangedError)
+        message.warning(t('credits.products.changedMeanwhile'));
+      else message.error(failureLine(intl, error));
     }
     onChanged();
   });
@@ -51,6 +56,11 @@ export default function CreditProductsPage() {
   const actionRef = useRef<ActionType | undefined>(undefined);
   const [editing, setEditing] = useState<CreditProduct | null | 'new'>(null);
   const reload = () => actionRef.current?.reload();
+  // While the dialog fades out `editing` is already null; it keeps the pack it showed until the
+  // next time it opens, so that it does not turn into the new-pack dialog on its way out.
+  const lastEditing = useRef<CreditProduct | null | 'new'>(null);
+  if (editing !== null) lastEditing.current = editing;
+  const dialogPack = lastEditing.current === 'new' ? null : lastEditing.current;
 
   const columns: ProColumns<CreditProduct>[] = [
     { title: t('credits.products.store'), dataIndex: 'store', search: false },
@@ -98,9 +108,9 @@ export default function CreditProductsPage() {
         rowKey="id"
         columns={columns}
         actionRef={actionRef}
-        // The list is not paged by the backend (a small table of settings): the page is cut here.
+        // A small table of settings: every pack is read (page after page when the backend pages it) and the page is cut here.
         request={async ({ page, pageSize }) => {
-          const { items } = await listCreditProducts();
+          const items = await listAllCreditProducts();
           return {
             items: items.slice((page - 1) * pageSize, page * pageSize),
             total: items.length,
@@ -114,7 +124,7 @@ export default function CreditProductsPage() {
       />
       <ProductModal
         open={editing !== null}
-        pack={editing === 'new' || editing === null ? null : editing}
+        pack={dialogPack}
         onClose={() => setEditing(null)}
         onSaved={reload}
       />

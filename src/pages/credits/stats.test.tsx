@@ -6,6 +6,7 @@ import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { withTimeZone } from '../../../tests/withTimeZone';
+import { renderWithLocaleSwitch } from './localeHost';
 import StatsPage from './stats';
 import { signIn } from './testSetup';
 
@@ -30,6 +31,18 @@ describe('the credit statistics page', { timeout: 30000 }, () => {
       Date.parse(`${today}T00:00:00Z`) - Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
     ).toBe(6 * 86400000);
     expect(screen.getByText(/UTC days/)).toBeInTheDocument();
+  });
+
+  it('does not ask for the figures again when the language of the page is switched, and writes them in the new language', async () => {
+    const calls = useMockBackend(creditsMock);
+    const view = renderWithLocaleSwitch(<StatsPage />);
+    await screen.findByTestId('credits-spent');
+    const before = calls.filter((c) => c.url.includes('/credits/stats')).length;
+    await view.switchTo('zh-CN');
+    await screen.findByText('沙盒里的购买不计入。', { exact: false });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(calls.filter((c) => c.url.includes('/credits/stats')).length).toBe(before);
+    expect(screen.getByTestId('credits-spent')).toBeInTheDocument();
   });
 
   it('uses the UTC date, not the local one, in Singapore between 00:00 and 08:00', async () => {

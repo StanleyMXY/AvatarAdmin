@@ -35,6 +35,9 @@ export function AccountCreditsPanel({ accountId }: { accountId: string }) {
   const [failure, setFailure] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const counter = useRef(0);
+  // Switching the language changes `intl`; the ledger does not depend on it, so it must not make a new request.
+  const intlRef = useRef(intl);
+  intlRef.current = intl;
 
   const load = useCallback(async () => {
     // When two requests overlap, the answer of the newest one is the one that is shown.
@@ -47,11 +50,11 @@ export function AccountCreditsPanel({ accountId }: { accountId: string }) {
         setFailure(null);
       }
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (mine === counter.current) setFailure(describeFailure(intlRef.current, error).text);
     } finally {
       if (mine === counter.current) setLoading(false);
     }
-  }, [accountId, page, pageSize, intl]);
+  }, [accountId, page, pageSize]);
 
   useEffect(() => {
     void load();

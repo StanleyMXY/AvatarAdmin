@@ -90,7 +90,13 @@ export default function CreditTransactionsPage() {
   return (
     <Flex vertical gap={12}>
       <Typography.Text type="secondary">{t('credits.transactions.rangeNote')}</Typography.Text>
-      <PagedListTable<Row, Filters> rowKey="id" columns={columns} request={request} />
+      <PagedListTable<Row, Filters>
+        rowKey="id"
+        columns={columns}
+        // four filters: all of them are shown, so that on a narrow screen none hides behind "expand"
+        defaultCollapsed={false}
+        request={request}
+      />
     </Flex>
   );
 }

@@ -12,6 +12,7 @@ import {
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
 import { trimSpec } from '../../utils/trimSpec';
+import { assertPackUnchanged, PackChangedError } from './freshPack';
 
 type Values = {
   store: string;
@@ -30,7 +31,6 @@ type Props = {
 };
 
 const FIELDS = ['store', 'productId', 'credits', 'sortOrder', 'enabled'] as const;
-const PRODUCT_ID_MAX = 200;
 
 /** New or edit credit pack. The store and the product id identify a pack: they are fixed once it exists. */
 export function ProductModal({ open, pack, onClose, onSaved }: Props) {
@@ -46,6 +46,7 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
     setFailure(null);
     try {
       if (pack) {
+        await assertPackUnchanged(pack);
         await updateCreditProduct(pack.id, {
           credits: values.credits as number,
           enabled: values.enabled,
@@ -63,6 +64,13 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
         });
       }
     } catch (error) {
+      if (error instanceof PackChangedError) {
+        // Nothing was sent: the list is read again and the dialog closes, the person looks at the new values.
+        message.warning(t('credits.products.changedMeanwhile'));
+        onSaved();
+        onClose();
+        return;
+      }
       const { text, fields } = describeFailure(intl, error);
       const mine = fields.filter((f) => (FIELDS as readonly string[]).includes(f.ref));
       if (mine.length > 0) {
@@ -133,10 +141,9 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
           rules={[
             {
               validator: async (_, value: string | undefined) => {
-                const length = countCodePoints(trimSpec(value ?? ''));
-                if (length === 0) throw new Error(t('credits.products.productIdRequired'));
-                if (length > PRODUCT_ID_MAX) {
-                  throw new Error(t('pages.common.reasonLength', { min: 1, max: PRODUCT_ID_MAX }));
+                // The length limit is the backend's: it answers a too long id on this field.
+                if (countCodePoints(trimSpec(value ?? '')) === 0) {
+                  throw new Error(t('credits.products.productIdRequired'));
                 }
               },
             },

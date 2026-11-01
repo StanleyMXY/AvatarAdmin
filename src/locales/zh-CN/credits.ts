@@ -64,6 +64,8 @@ const messages: Record<string, string> = {
   'credits.products.edit': '编辑额度包',
   'credits.products.editButton': '编辑',
   'credits.products.saved': '已保存',
+  'credits.products.changedMeanwhile':
+    '读取列表之后，这个额度包被别人改过，所以没有保存。列表已重新读取。',
 
   'credits.requests.new': '新建申请',
   'credits.requests.kind': '类型',
@@ -79,6 +81,7 @@ const messages: Record<string, string> = {
   'credits.requests.reject': '驳回',
   'credits.requests.approveTitle': '通过申请',
   'credits.requests.approveNote': '备注（可选）',
+  'credits.requests.noteLength': '备注最多 {max} 个字符',
   'credits.requests.rejectTitle': '驳回申请',
   'credits.requests.rejectNote': '驳回备注',
   'credits.requests.ownRequest': '这是你提交的申请，需要由其他管理员审核。',

@@ -30,6 +30,9 @@ export default function CreditStatsPage() {
   const [data, setData] = useState<CreditStats | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const counter = useRef(0);
+  // Switching the language changes `intl`; the figures do not depend on it, so it must not make a new request.
+  const intlRef = useRef(intl);
+  intlRef.current = intl;
 
   const load = useCallback(async () => {
     const mine = ++counter.current;
@@ -39,9 +42,9 @@ export default function CreditStatsPage() {
       const answer = await getCreditStats(range.from, range.to);
       if (mine === counter.current) setData(answer);
     } catch (error) {
-      if (mine === counter.current) setFailure(describeFailure(intl, error).text);
+      if (mine === counter.current) setFailure(describeFailure(intlRef.current, error).text);
     }
-  }, [range, intl]);
+  }, [range]);
 
   useEffect(() => {
     void load();

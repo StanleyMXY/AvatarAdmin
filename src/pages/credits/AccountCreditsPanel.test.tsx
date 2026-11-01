@@ -6,6 +6,7 @@ import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { AccountCreditsPanel } from './AccountCreditsPanel';
+import { renderWithLocaleSwitch } from './localeHost';
 import { signIn } from './testSetup';
 
 beforeEach(() => signIn('finance'));
@@ -18,6 +19,19 @@ const sum = (id: string, pick: (n: number) => boolean) =>
 const fmt = (n: number) => new Intl.NumberFormat('en-US').format(n);
 
 describe('the credit tab of an account', { timeout: 30000 }, () => {
+  it('does not read the ledger again when the language of the page is switched, and keeps what it shows', async () => {
+    const calls = useMockBackend(creditsMock);
+    const view = renderWithLocaleSwitch(<AccountCreditsPanel accountId={ACCOUNT.active} />);
+    await waitFor(() => expect(screen.getAllByRole('row').length).toBeGreaterThan(2));
+    const reads = () => calls.filter((c) => c.url.includes('/credits')).length;
+    const before = reads();
+    await view.switchTo('zh-CN');
+    expect((await screen.findAllByText('变动')).length).toBeGreaterThan(0);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(reads()).toBe(before);
+    expect(screen.getAllByRole('row').length).toBeGreaterThan(2);
+  });
+
   it('shows the balance, the earned and the spent totals and the ledger', async () => {
     useMockBackend(creditsMock);
     renderPage(<AccountCreditsPanel accountId={ACCOUNT.active} />);
