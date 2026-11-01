@@ -121,4 +121,20 @@ describe('check-permission-codes.ts', { timeout: 60_000 }, () => {
     expect(result.status).toBe(1);
     expect(result.stdout + result.stderr).toContain('AUDIT:VIEW');
   });
+
+  it('exits 1 and names the word when an exclusion no longer appears in the documents', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'perm-codes-'));
+    const exclusions = join(dir, 'exclusions.txt');
+    writeFileSync(exclusions, `${readFileSync(EXCLUSIONS, 'utf8')}\nGONE:WORD\n`);
+    const result = run([SPEC, CONTRACT, exclusions]);
+    expect(result.status).toBe(1);
+    expect(result.stdout + result.stderr).toContain('GONE:WORD');
+    expect(result.stdout).not.toContain('ok');
+  });
+
+  it('exits 0 with the real exclusions file, so the stale-exclusion check above is the only reason for 1', () => {
+    const result = run([SPEC, CONTRACT, EXCLUSIONS]);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim().endsWith('ok')).toBe(true);
+  });
 });

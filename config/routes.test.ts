@@ -63,11 +63,18 @@ describe('config/routes.ts', () => {
   it('puts the root redirect before every menu', () => {
     const paths = routes.map((r) => r.path);
     const firstMenu = routes.findIndex((r) => r.name !== undefined);
-    if (firstMenu !== -1) expect(paths.indexOf('/')).toBeLessThan(firstMenu);
+    expect(firstMenu).toBeGreaterThan(-1);
+    expect(paths.indexOf('/')).toBeGreaterThan(-1);
+    expect(paths.indexOf('/')).toBeLessThan(firstMenu);
   });
 
   it('has only access values that are permission codes, no repeated path, and a component or children for every named route', () => {
     expect(problemsIn(routes)).toEqual([]);
+  });
+
+  it('holds all 83 page routes of the spec table, so the checks below are not run over an empty table', () => {
+    expect(flattenPages(routes)).toHaveLength(83);
+    expect(routes.filter((r) => r.name !== undefined)).toHaveLength(23);
   });
 
   it('every page route has an access that is a permission code or none', () => {
@@ -76,10 +83,12 @@ describe('config/routes.ts', () => {
     }
   });
 
-  it('places /users/abuse before /users/:id when both exist', () => {
+  it('places /users/abuse before /users/:id', () => {
     const paths = flattenPages(routes).map((p) => p.path);
     const abuse = paths.indexOf('/users/abuse');
     const detail = paths.indexOf('/users/:id');
-    if (abuse !== -1 && detail !== -1) expect(abuse).toBeLessThan(detail);
+    expect(abuse).toBeGreaterThan(-1);
+    expect(detail).toBeGreaterThan(-1);
+    expect(abuse).toBeLessThan(detail);
   });
 });
