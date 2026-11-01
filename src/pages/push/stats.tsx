@@ -13,11 +13,11 @@ import { getPushStats } from '../../services/stats/reports';
 import type { PushStatRow } from '../../services/stats/types';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { codeText, countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH, formatPercent } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
 import { openRate, sumByDay } from './pushStats';
-import { codeText, countText } from './texts';
 
 type Filter = { range: DayRange; reason: string };
 

@@ -1,7 +1,7 @@
 import { ApiError } from '../../request/errors';
 import { describeFailure } from '../../session/describe';
+import { codeText, type Translator } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
-import { codeText, type Translator } from './texts';
 
 /** What the backend names when it refuses a template write for the rule of the default language. */
 export type RecallRule = { defaultLocale: string; reason: string };

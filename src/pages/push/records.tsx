@@ -14,9 +14,9 @@ import {
   type PushRecordDetail,
 } from '../../services/push';
 import { describeFailure } from '../../session/describe';
+import { codeText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
-import { codeText, instantText } from './texts';
 
 /** An account id: any text, cut to two lines; a link to the user when the administrator may see users. */
 function AccountCell({ accountId }: { accountId: unknown }) {

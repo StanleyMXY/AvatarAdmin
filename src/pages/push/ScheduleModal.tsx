@@ -17,6 +17,7 @@ import { useMemo, useState } from 'react';
 import type { LinkTargetValue } from '../../components/LinkTargetField';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import {
   type Audience,
   createSchedule,
@@ -26,12 +27,11 @@ import {
   type Repeat,
   updateSchedule,
 } from '../../services/push';
+import { failureToForm } from '../../utils/failureToForm';
 import { pickedDay } from '../../utils/utcDay';
 import { AudienceFields } from './AudienceFields';
 import { scheduleFields, scheduleToValues, timeZoneNames } from './bodies';
 import { ContentFields } from './ContentFields';
-import { failureToForm } from './formFailure';
-import { useUploadSlot } from './uploadSlot';
 
 type Values = {
   repeat: Repeat;

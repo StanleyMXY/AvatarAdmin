@@ -2,10 +2,10 @@ import { useIntl } from '@umijs/max';
 import { Alert, Flex, Form, Input } from 'antd';
 import { linkTargetRule } from '../../components/LinkTargetField';
 import { UploadField } from '../../components/UploadField';
+import type { useUploadSlot } from '../../hooks/useUploadSlot';
 import { trimSpec } from '../../utils/trimSpec';
 import { LinkField } from './LinkField';
 import { PushImage } from './PushImage';
-import type { useUploadSlot } from './uploadSlot';
 
 type Props = {
   slot: ReturnType<typeof useUploadSlot>;

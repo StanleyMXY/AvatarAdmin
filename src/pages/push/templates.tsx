@@ -3,6 +3,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Spin, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import { RowActions } from '../../components/RowActions';
 import {
@@ -15,14 +16,14 @@ import {
 } from '../../services/push';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { codeText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { coverage, supportedLocalesOf } from './coverage';
-import { EnabledSwitch } from './EnabledSwitch';
 import { PushImage } from './PushImage';
 import { templateFailureText } from './recallRule';
 import { TemplateMatrix } from './TemplateMatrix';
 import { TemplateModal } from './TemplateModal';
-import { codeText, describeLink } from './texts';
+import { describeLink } from './texts';
 
 /**
  * 模板 (`PUSH:TEMPLATE`): the words of the recall pushes, one template for each trigger reason and

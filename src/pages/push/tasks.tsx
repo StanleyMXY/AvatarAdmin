@@ -9,11 +9,11 @@ import { StatusTag } from '../../components/StatusTag';
 import { cancelTask, listTasks, type PushTask } from '../../services/push';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { codeText, countText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { supportedLocalesOf } from './coverage';
 import { TaskModal } from './TaskModal';
-import { codeText, countText, instantText } from './texts';
 
 /** 手动推送任务 (`PUSH:SEND`): one-off pushes to an audience, now or at a time. Only a waiting task can be cancelled. */
 export default function TasksPage() {

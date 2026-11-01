@@ -4,20 +4,20 @@ import { useState } from 'react';
 import type { LinkTargetValue } from '../../components/LinkTargetField';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import {
   createTemplate,
   type PushTemplate,
   RECALL_REASONS,
   updateTemplate,
 } from '../../services/push';
+import { codeText } from '../../utils/displayText';
+import { failureToForm } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { contentFields } from './bodies';
 import { ContentFields } from './ContentFields';
-import { failureToForm } from './formFailure';
 import { templateFailureText } from './recallRule';
-import { codeText } from './texts';
-import { useUploadSlot } from './uploadSlot';
 
 type Values = {
   triggerReason: string;
