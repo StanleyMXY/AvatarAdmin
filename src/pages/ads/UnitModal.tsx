@@ -2,6 +2,7 @@ import { useIntl } from '@umijs/max';
 import type { FormInstance } from 'antd';
 import { Alert, App, Form, Input, InputNumber, Modal, Typography } from 'antd';
 import { useState } from 'react';
+import type { FailureLines } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -49,6 +50,22 @@ type Props = {
 };
 
 const FIELDS = ['campaignId', 'placementId', 'name', 'weight', 'dailyImpressionCap'] as const;
+
+/** What the backend refused, sorted by where it goes: under a form field, under the targeting, or in the bar. */
+function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknown) {
+  const { text, fields } = describeFailure(intl, error);
+  const forTargeting: Partial<Record<TargetingKey, string>> = {};
+  const more: string[] = [];
+  const forForm: { name: string; errors: string[] }[] = [];
+  for (const detail of fields) {
+    const key = targetingKeyOf(detail.ref);
+    if (key) forTargeting[key] = detail.text;
+    else if ((FIELDS as readonly string[]).includes(detail.ref)) {
+      forForm.push({ name: detail.ref, errors: [detail.text] });
+    } else more.push(detail.text);
+  }
+  return { text, forTargeting, more, forForm };
+}
 const DEFAULT_WEIGHT = 100;
 
 /** The editor key for a name the backend uses in a detail: `targeting.geo`, `day_parts`, `targeting.day_parts[0].start`. */
@@ -87,13 +104,18 @@ export function UnitModal({
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
-  const [serverErrors, setServerErrors] = useState<Partial<Record<TargetingKey, string>>>({});
+  // The save the backend refused, kept as the failure itself: its words are made when drawn, so they
+  // follow the language. `targetingEdited`: the targeting was changed since, so its marks go.
+  const [refusal, setRefusal] = useState<{ error: unknown; targetingEdited: boolean } | null>(null);
+  const refused = refusal === null ? null : splitRefusal(intl, refusal.error);
+  const failure: FailureLines | null =
+    refused === null ? null : { text: refused.text, more: refused.more };
+  const serverErrors: Partial<Record<TargetingKey, string>> =
+    refused === null || refusal?.targetingEdited ? {} : refused.forTargeting;
   const editing = unit !== null;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
-    setServerErrors({});
+    setRefusal(null);
     const common = {
       name: trimSpec(values.name),
       weight: values.weight ?? DEFAULT_WEIGHT,
@@ -114,20 +136,9 @@ export function UnitModal({
         });
       }
     } catch (error) {
-      const { text, fields } = describeFailure(intl, error);
-      const forTargeting: Partial<Record<TargetingKey, string>> = {};
-      const more: string[] = [];
-      const forForm: { name: string; errors: string[] }[] = [];
-      for (const detail of fields) {
-        const key = targetingKeyOf(detail.ref);
-        if (key) forTargeting[key] = detail.text;
-        else if ((FIELDS as readonly string[]).includes(detail.ref)) {
-          forForm.push({ name: detail.ref, errors: [detail.text] });
-        } else more.push(detail.text);
-      }
+      const { forForm } = splitRefusal(intl, error);
       if (forForm.length > 0) (form as FormInstance).setFields(forForm);
-      setServerErrors(forTargeting);
-      setFailure({ text, more });
+      setRefusal({ error, targetingEdited: false });
       return;
     }
     message.success(t('ads.common.saved'));
@@ -158,8 +169,7 @@ export function UnitModal({
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
-        setServerErrors({});
+        setRefusal(null);
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}
@@ -182,7 +192,8 @@ export function UnitModal({
           targeting: unit ? fromTargeting(unit.targeting) : emptyTargetingForm(),
         }}
         onValuesChange={(changed) => {
-          if ('targeting' in changed) setServerErrors({});
+          if ('targeting' in changed)
+            setRefusal((current) => current && { ...current, targetingEdited: true });
         }}
         onFinish={(values) => run(values)}
       >

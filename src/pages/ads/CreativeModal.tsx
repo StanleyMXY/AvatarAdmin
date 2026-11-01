@@ -17,6 +17,7 @@ import {
 import { useState } from 'react';
 import { linkRule } from '../../components/LinkInput';
 import { UploadField } from '../../components/UploadField';
+import type { FailureLines } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { useUploadSlot } from '../../hooks/useUploadSlot';
@@ -96,6 +97,19 @@ const DEEP_LINK_MAX = 2048;
  * file does not fit (400 about `uploadId`), or it is not there (404). A 400 that is only about other
  * fields is not this: the file is still good.
  */
+/** What the backend refused, sorted by where it goes: under a form field or in the bar. */
+function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknown) {
+  const { text, fields } = describeFailure(intl, error);
+  const forForm: { name: string; errors: string[] }[] = [];
+  const more: string[] = [];
+  for (const detail of fields) {
+    if ((FIELDS as readonly string[]).includes(detail.ref)) {
+      forForm.push({ name: detail.ref, errors: [detail.text] });
+    } else more.push(detail.text);
+  }
+  return { text, more, forForm };
+}
+
 function uploadRefused(error: unknown): boolean {
   if (!isUploadIdRejection(error)) return false;
   if (error instanceof ApiError && error.httpStatus === 400) {
@@ -146,7 +160,9 @@ export function CreativeModal({
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
   const slot = useUploadSlot<MediaUpload>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  // The save the backend refused, kept as the failure itself: its words are made when drawn.
+  const [refusal, setRefusal] = useState<{ error: unknown } | null>(null);
+  const failure: FailureLines | null = refusal === null ? null : splitRefusal(intl, refusal.error);
   const [rejected, setRejected] = useState(false);
   const [needFile, setNeedFile] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
@@ -196,7 +212,7 @@ export function CreativeModal({
     : [];
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    setRefusal(null);
     setNeedFile(false);
     if (!editing && !slot.uploadId) {
       setNeedFile(true);
@@ -230,20 +246,13 @@ export function CreativeModal({
             uploadId: slot.uploadId as string,
           });
     } catch (error) {
-      const { text, fields: details } = describeFailure(intl, error);
-      const forForm: { name: string; errors: string[] }[] = [];
-      const more: string[] = [];
-      for (const detail of details) {
-        if ((FIELDS as readonly string[]).includes(detail.ref)) {
-          forForm.push({ name: detail.ref, errors: [detail.text] });
-        } else more.push(detail.text);
-      }
+      const { forForm } = splitRefusal(intl, error);
       if (forForm.length > 0) (form as FormInstance).setFields(forForm);
       if (uploadRefused(error)) {
         slot.reset();
         setRejected(true);
       }
-      setFailure({ text, more });
+      setRefusal({ error });
       return;
     }
     message.success(t('ads.common.saved'));
@@ -380,7 +389,7 @@ export function CreativeModal({
       afterClose={() => {
         form.resetFields();
         slot.reset();
-        setFailure(null);
+        setRefusal(null);
         setRejected(false);
         setNeedFile(false);
         setUnavailable(false);
