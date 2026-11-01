@@ -84,6 +84,7 @@ export function PagedListTable<
   const [start] = useState(initial);
   const [started, setStarted] = useState(false);
   useEffect(() => setStarted(true), []);
+  const pastEnd = useRef<{ last: number; pageSize: number } | null>(null);
   const commitRef = useRef(onCommit);
   commitRef.current = onCommit;
 
@@ -92,6 +93,7 @@ export function PagedListTable<
   const load = async (params: Record<string, unknown>) => {
     const { current, pageSize, ...search } = params;
     const isCurrent = begin();
+    pastEnd.current = null;
     const asked = {
       page: Number(current ?? 1),
       pageSize: Number(pageSize ?? DEFAULT_PAGE_SIZE),
@@ -102,7 +104,14 @@ export function PagedListTable<
         ...(search as Record<string, unknown>),
         ...asked,
       } as { page: number; pageSize: number } & F);
-      if (isCurrent()) setFailed(null);
+      if (isCurrent()) {
+        setFailed(null);
+        // The list got shorter since this page was chosen (a row deleted, or the tab left and opened
+        // again later): the page asked for is past the end. `onLoad` goes to the last page once the
+        // table has taken this answer (a page set before that is put back by the answer).
+        const last = Math.max(1, Math.ceil(page.total / asked.pageSize));
+        pastEnd.current = asked.page > last ? { last, pageSize: asked.pageSize } : null;
+      }
       return { data: page.items, total: page.total, success: true };
     } catch (error) {
       if (isCurrent()) {
@@ -146,6 +155,11 @@ export function PagedListTable<
         }
         dataSource={rows}
         onDataSourceChange={setRows}
+        onLoad={() => {
+          const over = pastEnd.current;
+          pastEnd.current = null;
+          if (over) ref.current?.setPageInfo?.({ current: over.last, pageSize: over.pageSize });
+        }}
         // The toolbar always has the column settings (spec 4.1); the page's own buttons come with it.
         toolBarRender={() => toolbar ?? []}
         options={{ setting: true, reload: false, density: false, fullScreen: false }}

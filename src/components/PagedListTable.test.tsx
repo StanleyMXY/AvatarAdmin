@@ -477,6 +477,37 @@ describe('PagedListTable: start values, and a notice of what was asked', () => {
     expect(request.mock.calls.every(([p]) => p.page === 3 && p.pageSize === 10)).toBe(true);
   });
 
+  it('goes to the last page when the page it starts on is past the end now (the list got shorter while the tab was left), instead of an empty table', async () => {
+    const request = vi.fn(async (p: { page: number; pageSize: number }) => ({
+      items: p.page > 3 ? [] : [{ id: String(p.page), name: `row of page ${p.page}` }],
+      total: 50,
+    }));
+    const onCommit = vi.fn();
+    renderPage(
+      <PagedListTable<Row>
+        rowKey="id"
+        columns={columns}
+        request={request}
+        onCommit={onCommit}
+        initial={{ page: 9, pageSize: 20 }}
+      />,
+    );
+    expect(await screen.findByText('row of page 3')).toBeInTheDocument();
+    expect(request.mock.calls.map(([p]) => p.page)).toEqual([9, 3]);
+    expect(screen.getByRole('listitem', { name: '3' })).toHaveClass('ant-pagination-item-active');
+    expect(onCommit).toHaveBeenLastCalledWith({ search: {}, page: 3, pageSize: 20 });
+  });
+
+  it('does not ask again for a last page that is empty (a list that says there are rows and sends none)', async () => {
+    const request = vi.fn(async (_: { page: number }) => ({ items: [] as Row[], total: 50 }));
+    renderPage(
+      <PagedListTable<Row> rowKey="id" columns={columns} request={request} initial={{ page: 9 }} />,
+    );
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(request.mock.calls.map(([p]) => p.page)).toEqual([9, 3]);
+  });
+
   it('tells what each request asks for: after a search and after a change of page', async () => {
     const request = pages(100);
     const onCommit = vi.fn();
