@@ -20,13 +20,13 @@ import {
 } from '../../services/appVersions';
 import { type ChannelPackage, listChannelPackages } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
+import { adminText, codeText, instantText, orDash } from '../../utils/displayText';
 import { formatBytes } from '../../utils/format';
 import { validateServerLink } from '../../utils/linkRule';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { ActivateModal } from './ActivateModal';
 import { distributionOf } from './distribution';
-import { adminText, codeText, instantText, orDash } from './texts';
 import { VersionModal } from './VersionModal';
 
 type Filters = { channelCode: string; platform: string; status: string };

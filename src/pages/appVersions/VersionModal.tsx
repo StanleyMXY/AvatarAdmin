@@ -17,6 +17,7 @@ import { FailureBar } from '../../components/FailureBar';
 import { UploadField } from '../../components/UploadField';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import { ApiError } from '../../request/errors';
 import {
   type ApkUpload as ApkUploadResult,
@@ -28,6 +29,7 @@ import {
 } from '../../services/appVersions';
 import type { ChannelPackage } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
+import { codeText } from '../../utils/displayText';
 import { formatBytes } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
@@ -35,8 +37,6 @@ import { isUploadIdRejection } from '../../utils/uploadErrors';
 import { ChangelogField } from './ChangelogField';
 import { distributionOf } from './distribution';
 import { validateStoreUrl } from './storeUrl';
-import { codeText } from './texts';
-import { useUploadSlot } from './uploadSlot';
 import { useActiveVersion } from './useActiveVersion';
 import {
   checkChangelog,

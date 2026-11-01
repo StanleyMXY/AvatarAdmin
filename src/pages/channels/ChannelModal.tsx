@@ -12,9 +12,9 @@ import {
   updateChannelPackage,
 } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
+import { codeText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { codeText } from '../appVersions/texts';
 import { checkChannelCode, checkPackageName, distributionsFor } from './channelRules';
 
 type Values = {

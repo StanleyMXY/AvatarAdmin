@@ -12,8 +12,8 @@ import {
   updateChannelPackage,
 } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
+import { codeText, instantText } from '../../utils/displayText';
 import { DASH } from '../../utils/ratio';
-import { codeText, instantText } from '../appVersions/texts';
 import { ChannelModal } from './ChannelModal';
 
 /**
