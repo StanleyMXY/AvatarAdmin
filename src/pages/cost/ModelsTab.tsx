@@ -14,7 +14,7 @@ import {
   theme,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { type Kept, useKeptState } from '../../hooks/useKeptState';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import {
@@ -128,8 +128,11 @@ export function ModelsTab({
   kept,
 }: {
   onlyUnpricedInitially: boolean;
-  /** The filters are kept here for when the tab is opened again (the tab is drawn again each time). */
-  kept: Kept;
+  /**
+   * The filters are kept here for when the tab is opened again (the tab is drawn again each time).
+   * Without a box the tab keeps nothing beyond its own life.
+   */
+  kept?: Kept;
 }) {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
@@ -139,12 +142,14 @@ export function ModelsTab({
   const canPrice = access.canAccess('COST:PRICE');
   const fetcher = useCallback(() => loadAllPages(listUsageModels), []);
   const { data, failure, reload } = useLatestRead(fetcher);
+  const ownBox = useRef<Kept['current']>({}) as Kept;
+  const box = kept ?? ownBox;
   const [onlyUnpriced, setOnlyUnpriced] = useKeptState(
-    kept,
+    box,
     'models.onlyUnpriced',
     onlyUnpricedInitially,
   );
-  const [type, setType] = useKeptState<string | undefined>(kept, 'models.type', undefined);
+  const [type, setType] = useKeptState<string | undefined>(box, 'models.type', undefined);
   const [editing, setEditing] = useState<UsageModel | null>(null);
 
   const rows = useMemo(
