@@ -18,7 +18,7 @@ type Props<T> = {
 /**
  * A server-paged table without a search form (the shared one always draws an empty search card when
  * it has no filter): the shared paged table over `useServerPage`, which goes back to the last page
- * that has rows when the last row of the last page was deleted.
+ * that has rows when the last row of the last page was deleted. Its rows have the table's own height.
  */
 export function PagedTable<T extends object>({
   rowKey,
@@ -29,5 +29,13 @@ export function PagedTable<T extends object>({
 }: Props<T>) {
   const state = useServerPage(load, {}, { backToLastPage: true });
   reloadRef.current = state.reload;
-  return <ServerPagedTable<T> state={state} columns={columns} rowKey={rowKey} toolbar={toolbar} />;
+  return (
+    <ServerPagedTable<T>
+      state={state}
+      columns={columns}
+      rowKey={rowKey}
+      toolbar={toolbar}
+      size="large"
+    />
+  );
 }

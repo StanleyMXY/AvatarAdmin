@@ -129,4 +129,26 @@ describe('PagedTable', () => {
     drawAgain(<PagedTable state={state({ loading: true })} columns={columns} rowKey="id" />);
     expect(document.querySelector('.ant-spin[aria-busy="true"]')).not.toBeNull();
   });
+
+  it('marks the page that the state is on, and follows it when the state goes back to page 1', () => {
+    const current = () =>
+      document.querySelector('.ant-pagination-item-active')?.getAttribute('title');
+    renderPage(<PagedTable state={state({ total: 45, page: 3 })} columns={columns} rowKey="id" />);
+    expect(current()).toBe('3');
+    drawAgain(<PagedTable state={state({ total: 45, page: 1 })} columns={columns} rowKey="id" />);
+    expect(current()).toBe('1');
+  });
+
+  it('draws small rows unless the page asks for another size', () => {
+    const sizeClass = () =>
+      ['small', 'medium'].filter((size) =>
+        document.querySelector(`.ant-table-wrapper .ant-table.ant-table-${size}`),
+      );
+    renderPage(<PagedTable state={state()} columns={columns} rowKey="id" />);
+    expect(sizeClass()).toEqual(['small']);
+    drawAgain(<PagedTable state={state()} columns={columns} rowKey="id" size="middle" />);
+    expect(sizeClass()).toEqual(['medium']);
+    drawAgain(<PagedTable state={state()} columns={columns} rowKey="id" size="large" />);
+    expect(sizeClass()).toEqual([]);
+  });
 });

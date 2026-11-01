@@ -3,11 +3,24 @@ import type { ReactNode } from 'react';
 import { IntlProvider } from 'react-intl';
 import { describe, expect, it } from 'vitest';
 import enUS from '../locales/en-US';
+import zhCN from '../locales/zh-CN';
 import { ApiError, type Page } from '../request/errors';
 import { useServerPage } from './useServerPage';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <IntlProvider locale="en-US" messages={enUS} onError={() => {}}>
+    {children}
+  </IntlProvider>
+);
+
+/** The language of `switchable` can be changed between two renders. */
+const language = { current: 'en-US' as 'en-US' | 'zh-CN' };
+const switchable = ({ children }: { children: ReactNode }) => (
+  <IntlProvider
+    locale={language.current}
+    messages={language.current === 'en-US' ? enUS : zhCN}
+    onError={() => {}}
+  >
     {children}
   </IntlProvider>
 );
@@ -105,6 +118,33 @@ describe('useServerPage', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it('takes the failure away when a read after it succeeds', async () => {
+    let n = 0;
+    const { result } = renderHook(
+      () =>
+        useServerPage(
+          () =>
+            n++ === 0
+              ? Promise.reject(
+                  new ApiError({
+                    code: 'INTERNAL_ERROR',
+                    httpStatus: 500,
+                    message: 'x',
+                    data: null,
+                  }),
+                )
+              : Promise.resolve(pageOf(['back'])),
+          {},
+        ),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.failure).toBe(enUS['error.INTERNAL_ERROR']));
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.rows).toEqual(['back']));
+    expect(result.current.failure).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
   it('drops the failure of an older read too', async () => {
     const first = deferred<Page<string>>();
     const second = deferred<Page<string>>();
@@ -146,6 +186,28 @@ describe('useServerPage', () => {
     expect(result.current.total).toBe(0);
     expect(result.current.failure).toBe(enUS['error.INTERNAL_ERROR']);
     expect(result.current.loading).toBe(false);
+  });
+
+  it('says the failure in the language that is current when it is drawn, not the one it happened in', async () => {
+    language.current = 'en-US';
+    const { result, rerender } = renderHook(
+      () =>
+        useServerPage(
+          () =>
+            Promise.reject(
+              new ApiError({ code: 'ADMIN_FORBIDDEN', httpStatus: 403, message: 'x', data: null }),
+            ),
+          {},
+        ),
+      { wrapper: switchable },
+    );
+    await waitFor(() => expect(result.current.failure).toBe(enUS['error.ADMIN_FORBIDDEN']));
+    language.current = 'zh-CN';
+    rerender();
+    expect(result.current.failure).toBe(zhCN['error.ADMIN_FORBIDDEN']);
+    language.current = 'en-US';
+    rerender();
+    expect(result.current.failure).toBe(enUS['error.ADMIN_FORBIDDEN']);
   });
 
   it('does not set state after the page is left', async () => {
@@ -245,6 +307,34 @@ describe('useServerPage: backToLastPage', () => {
     await act(async () => gate.resolve());
     await waitFor(() => expect(result.current.rows).toHaveLength(10));
     expect(result.current.loading).toBe(false);
+  });
+
+  it('goes to the last page when the total is not a whole number of pages: 19 rows of 10 are two pages', async () => {
+    const total = { value: 25 };
+    const calls: Query[] = [];
+    const serveRows = async (query: Query) => {
+      calls.push(query);
+      const start = (query.page - 1) * query.pageSize;
+      const count = Math.max(0, Math.min(query.pageSize, total.value - start));
+      return pageOf(
+        Array.from({ length: count }, (_, i) => `row ${start + i + 1}`),
+        total.value,
+      );
+    };
+    const { result } = renderHook(() => useServerPage(serveRows, {}, { backToLastPage: true }), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.setPaging(1, 10));
+    await waitFor(() => expect(result.current.pageSize).toBe(10));
+    act(() => result.current.setPaging(3, 10));
+    await waitFor(() => expect(result.current.rows).toHaveLength(5));
+    total.value = 19;
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.page).toBe(2));
+    await waitFor(() => expect(result.current.rows).toHaveLength(9));
+    expect(result.current.loading).toBe(false);
+    expect(calls.map((c) => c.page)).toEqual([1, 1, 3, 3, 2]);
   });
 
   it('does not move when the page has rows, or when the page is inside the pages the total counts', async () => {

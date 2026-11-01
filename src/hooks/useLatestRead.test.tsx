@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { IntlProvider } from 'react-intl';
 import { describe, expect, it } from 'vitest';
 import enUS from '../locales/en-US';
+import zhCN from '../locales/zh-CN';
 import { ApiError } from '../request/errors';
 import { useLatestRead } from './useLatestRead';
 
@@ -229,5 +230,31 @@ describe('useLatestRead: refreshKey', () => {
     await act(async () => second.resolve('new'));
     await act(async () => first.resolve('old'));
     expect(result.current.data).toBe('new');
+  });
+});
+
+describe('useLatestRead: the language of the failure', () => {
+  it('says the failure in the language that is current when it is drawn, not the one it happened in', async () => {
+    let locale: 'en-US' | 'zh-CN' = 'en-US';
+    const switchable = ({ children }: { children: ReactNode }) => (
+      <IntlProvider locale={locale} messages={locale === 'en-US' ? enUS : zhCN} onError={() => {}}>
+        {children}
+      </IntlProvider>
+    );
+    const forbidden = new ApiError({
+      code: 'ADMIN_FORBIDDEN',
+      httpStatus: 403,
+      message: 'x',
+      data: null,
+    });
+    const fetcher = () => Promise.reject(forbidden);
+    const { result, rerender } = renderHook(() => useLatestRead(fetcher), {
+      wrapper: switchable,
+    });
+    await waitFor(() => expect(result.current.failure).toBe(enUS['error.ADMIN_FORBIDDEN']));
+    locale = 'zh-CN';
+    rerender();
+    expect(result.current.failure).toBe(zhCN['error.ADMIN_FORBIDDEN']);
+    expect(result.current.error).toBe(forbidden);
   });
 });

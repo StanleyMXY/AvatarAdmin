@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_PAGE_SIZE } from '../components/PagedListTable';
 import type { Page } from '../request/errors';
 import { describeFailure } from '../session/describe';
@@ -11,7 +11,7 @@ export type ServerPage<T> = {
   page: number;
   pageSize: number;
   loading: boolean;
-  /** The words of the error code of the last read, or null. */
+  /** The words of the error code of the last read, in the current language, or null. */
   failure: string | null;
   setPaging: (page: number, pageSize: number) => void;
   /** Reads again from page 1, also when the filters are the same as before (the Search button). */
@@ -32,8 +32,6 @@ export function useServerPage<T, F extends Record<string, unknown>>(
   options: { backToLastPage?: boolean } = {},
 ): ServerPage<T> {
   const intl = useIntl();
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
   const filtersRef = useRef(filters);
@@ -49,7 +47,13 @@ export function useServerPage<T, F extends Record<string, unknown>>(
   const [rows, setRows] = useState<T[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [failure, setFailure] = useState<string | null>(null);
+  // The failed read itself (boxed: a thrown value can be anything); its words are made when the
+  // list is drawn, so they follow the language.
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
+  const failure = useMemo(
+    () => (failed === null ? null : describeFailure(intl, failed.error).text),
+    [intl, failed],
+  );
   const begin = useLatestCall();
 
   // `key` stands for the filters: the effect runs when they change.
@@ -63,7 +67,7 @@ export function useServerPage<T, F extends Record<string, unknown>>(
         if (!isCurrent()) return;
         setRows(answer.items);
         setTotal(answer.total);
-        setFailure(null);
+        setFailed(null);
         const last = Math.max(1, Math.ceil(answer.total / pageSize));
         if (
           backToLastPage.current &&
@@ -81,7 +85,7 @@ export function useServerPage<T, F extends Record<string, unknown>>(
         if (!isCurrent()) return;
         setRows([]);
         setTotal(0);
-        setFailure(describeFailure(intlRef.current, error).text);
+        setFailed({ error });
         setLoading(false);
       });
   }, [key, page, pageSize, tick]);

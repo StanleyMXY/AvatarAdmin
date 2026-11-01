@@ -9,13 +9,12 @@ import {
   sessionsState,
 } from '../../../mock/_core/sessionsData';
 import { resetStore } from '../../../mock/_core/store';
-import { adminOf } from '../../../mock/_core/testing';
 import * as sessionsMock from '../../../mock/sessions.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
-import { signInAs, useMockBackend } from '../../../tests/mockBackend';
+import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
-import { resetUmiStub, setTestAccess, setTestInitialState } from '../../../tests/stubs/umi-max';
-import access from '../../access';
+import { signInAsAdmin } from '../../../tests/signInAsAdmin';
+import { resetUmiStub } from '../../../tests/stubs/umi-max';
 import enUS from '../../locales/en-US';
 import SessionListPage from './list';
 
@@ -23,18 +22,7 @@ const signIn = (username = 'root', codes?: string[]) => {
   resetUmiStub();
   resetStore();
   resetSessionsStore();
-  const admin = adminOf(username);
-  if (codes) admin.permissions = codes as typeof admin.permissions;
-  signInAs(username);
-  const me = {
-    id: admin.id,
-    username,
-    superAdmin: admin.superAdmin,
-    mustChangePassword: false,
-    permissions: admin.permissions,
-  };
-  setTestAccess(access({ me }));
-  setTestInitialState({ me, meta: { ...META_DEFAULTS } });
+  signInAsAdmin(username, { codes, meta: { ...META_DEFAULTS } });
 };
 
 beforeEach(() => signIn());

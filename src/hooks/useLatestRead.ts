@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { describeFailure } from '../session/describe';
 import { useLatestCall } from './useLatestCall';
 
@@ -20,19 +20,22 @@ export function useLatestRead<T>(
 ) {
   const keep = options.keepWhileReading === true;
   const intl = useIntl();
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
   const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  // The failed read itself (boxed: a thrown value can be anything); its words are made when the
+  // page is drawn, so they follow the language.
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
+  const error = failed === null ? null : failed.error;
+  const failure = useMemo(
+    () => (failed === null ? null : describeFailure(intl, failed.error).text),
+    [intl, failed],
+  );
   const [loading, setLoading] = useState(true);
   const begin = useLatestCall();
 
   const reload = useCallback(async () => {
     const isCurrent = begin();
     if (!keep) setData(null);
-    setError(null);
-    setFailure(null);
+    setFailed(null);
     setLoading(true);
     try {
       const result = await fetcher();
@@ -42,8 +45,7 @@ export function useLatestRead<T>(
     } catch (caught) {
       if (!isCurrent()) return;
       setData(null);
-      setError(caught);
-      setFailure(describeFailure(intlRef.current, caught).text);
+      setFailed({ error: caught });
       setLoading(false);
     }
   }, [fetcher, keep, begin]);

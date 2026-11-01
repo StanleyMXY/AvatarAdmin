@@ -14,6 +14,8 @@ type Props<T> = {
   onRow?: (row: T) => HTMLAttributes<HTMLElement>;
   /** Buttons above the table, on the right. */
   toolbar?: ReactNode;
+  /** The height of the rows; small unless the page says otherwise (`large` is the table's own). */
+  size?: 'small' | 'middle' | 'large';
 };
 
 /** A table of a `useServerPage` list: paging, the failure with its retry, the empty text. Nothing makes it wider than its box: it scrolls. */
@@ -24,13 +26,14 @@ export function PagedTable<T extends object>({
   emptyText,
   onRow,
   toolbar,
+  size = 'small',
 }: Props<T>) {
   return (
     <Flex vertical gap={12}>
       {state.failure ? <FailureBar failure={state.failure} onRetry={state.reload} /> : null}
       {toolbar ? <Flex justify="flex-end">{toolbar}</Flex> : null}
       <Table<T>
-        size="small"
+        size={size}
         rowKey={rowKey}
         columns={columns}
         dataSource={state.rows}

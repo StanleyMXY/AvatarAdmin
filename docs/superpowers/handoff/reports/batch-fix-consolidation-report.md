@@ -65,3 +65,20 @@
 ## 全量测试
 
 全部提交之后跑了一次全量：`npx vitest run --testTimeout=60000`，404 个文件、7442 条通过、1 条原有的跳过，0 失败。（开头出现的一行 `ECONNREFUSED 127.0.0.1:3000` 在这次改动之前就有，与本次无关。）
+
+## 更正与后续
+
+这一节是独立评审（`final-consolidation-review.md`）之后追加的，前面各节没有改。
+
+**更正“验证”段的变异检查说法。** 上面写 `useServerPage`“其余全红”、`PagedTable`“全红”，与事实不符：独立评审用另一批变异复现出 4 处在共用件自己的测试里存活（页面测试也守不住）：`useServerPage.ts` 里 `Math.ceil` 改成 `Math.floor`（总数不是页大小整数倍时，回最后一页算错）；成功时 `setFailure(null)` 删掉（失败后重试成功，失败条不消失）；`PagedTable.tsx` 里 `current: state.page` 删掉（筛选变了回到第 1 页，表格仍高亮旧页码）；`EnabledSwitch.tsx` 里 `loading={pending}` 删掉（保存期间开关不转圈）。所以那两处“全红”只对当时列出的那批变异成立，`EnabledSwitch` 的“变异检查”也没有覆盖加载态。这 4 处现在各补了一条用例，并逐个重做变异确认变红：
+
+- 总数 19、页大小 10、从第 3 页回第 2 页（`useServerPage.test.tsx`）：`Math.floor` 变异时红。
+- 失败后读取成功，失败消失（`useServerPage.test.tsx`）：删掉 `setFailed(null)`（该行在第 1 条修复后的写法）时红。
+- 当前页高亮跟着状态走（`PagedTable.test.tsx`）：删掉 `current` 时红。
+- 保存期间开关带 `ant-switch-loading`，结束后去掉（`EnabledSwitch.test.tsx`）：删掉 `loading` 时红。
+
+**补写 system 分页表的第四处差别。** 上面“system/PagedTable.tsx”一行写了三处小差别，漏了第四处：共用 `PagedTable` 写死了 `size="small"`，系统管理的管理员页和角色页的表比原来矮（同样的数据，第一行高度 57 px 变成 41 px），“视觉相同”不成立。已修复：共用 `PagedTable` 加 `size` 参数（默认仍是 `small`，其余调用方不变），系统页传 `large`（这就是不写 `size` 时表格自己的高度；逐字节比对过两种写法画出的 DOM 相同），并有测试：共用件的默认和三种取值，以及系统页的表没有 `ant-table-small`、`ant-table-medium`。
+
+**第一处差别（失败条文字不跟着语言变）也已修复。** `useServerPage` 和 `useLatestRead` 现在保存失败对象，`failure` 文字在渲染时用当前语言现算；对外的返回值不变，所以所有用到这两个钩子的页面一并修好，不只是系统页。测试：两个钩子各一条（英文失败后切中文，再切回英文），和系统角色页一条（拦截 403，条上先是英文，切换后整句是中文，没有英文残留）。同时更正上面“system/useRead.ts”一行的说法“失败文字仍在渲染时用 error 现算”——那一行说的是 `useRead` 钩子，在这次之前并入的 `useServerPage` 没有做到；现在两处都做到了。
+
+**并入两处没并入的测试助手。** `sessions/list.test.tsx` 的 `signIn` 主体改为调用 `tests/signInAsAdmin.ts`（构造的 `me`、初始状态、默认 `meta` 与原来逐项相同，原来的 `codes` 覆盖也保留）；`clientConfig/list.test.tsx` 自己的 `writesOf` 删除，改用 `testSetup.ts` 转出的共用 `writesOf`（两份函数体逐字相同）。这两处是测试代码的整理，没有可先红后绿的行为，两个文件改前改后的测试结果相同（改前改后 `sessions/list.test.tsx` 都有一条 5000 字符抽屉用例在机器负载高时超时，单独跑或负载低时通过，与本改动无关）。

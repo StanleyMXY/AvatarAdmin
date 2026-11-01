@@ -74,4 +74,18 @@ describe('EnabledSwitch', () => {
     await userEvent.setup().click(screen.getByRole('switch', { name: 'Row 1' }));
     expect(onToggle).not.toHaveBeenCalled();
   });
+
+  it('shows the loading state of the switch while the request is on its way, and takes it away after', async () => {
+    let release: () => void = () => {};
+    const onToggle = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
+    const onDone = vi.fn();
+    renderPage(<EnabledSwitch checked label="Row 1" onToggle={onToggle} onDone={onDone} />);
+    const loading = () => document.querySelector('.ant-switch-loading');
+    expect(loading()).toBeNull();
+    await userEvent.setup().click(screen.getByRole('switch', { name: 'Row 1' }));
+    expect(loading()).not.toBeNull();
+    release();
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(loading()).toBeNull());
+  });
 });
