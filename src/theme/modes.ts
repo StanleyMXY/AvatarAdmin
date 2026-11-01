@@ -215,6 +215,8 @@ const subscribe = (listener: () => void) => {
 export function applyModeToDocument(mode: ThemeMode): void {
   document.documentElement.dataset.theme = mode;
   document.documentElement.style.colorScheme = BASE[mode].isDark ? 'dark' : 'light';
+  // The page behind the app (before it is drawn, and when scrolled past its end) is the layout colour.
+  document.documentElement.style.backgroundColor = BASE[mode].colorBgLayout;
 }
 
 export function setThemeMode(mode: ThemeMode): void {

@@ -1,6 +1,7 @@
 import { defineConfig } from '@umijs/max';
 import { buildVars, toDefine } from './buildVars';
 import { localeConfig } from './localeConfig';
+import { preloadThemeScripts } from './preloadTheme';
 import proxy from './proxy';
 import routes from './routes';
 
@@ -20,6 +21,8 @@ export default defineConfig({
   // Initial language is resolved by the app itself; Umi only provides the intl plumbing.
   locale: localeConfig,
   antd: {},
+  // The saved theme's background before the app has loaded (no flash of white in the dark themes).
+  headScripts: preloadThemeScripts,
   define: toDefine(buildVars),
   proxy,
   // Tools and tests in mock/ are not endpoint files.
