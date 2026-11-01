@@ -2,7 +2,27 @@ import type { FormInstance } from 'antd';
 import { ApiError } from '../../request/errors';
 import { describeFailure } from '../../session/describe';
 import type { Translator } from '../../utils/displayText';
-import { failureToForm as failureToSharedForm } from '../../utils/failureToForm';
+import { failureToForm as failureToSharedForm, failureWords } from '../../utils/failureToForm';
+
+/**
+ * The words of a failed save, without a form: the text for the bar at the bottom of the dialog (null
+ * when a duplicate lands under its own field) and the details no field took. A page keeps the failure
+ * and calls this when it draws, so the words follow the language.
+ */
+export function failureView(
+  intl: Translator,
+  error: unknown,
+  fields: readonly string[],
+): { text: string | null; unplaced: string[] } {
+  if (error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE') {
+    const { text } = describeFailure(intl, error);
+    const field = (error.data as { field?: unknown } | null)?.field;
+    if (typeof field === 'string' && fields.includes(field)) return { text: null, unplaced: [] };
+    return { text, unplaced: [] };
+  }
+  const { text, unplaced } = failureWords(intl, error, fields, {}, { generalReason: true });
+  return { text, unplaced };
+}
 
 /**
  * Puts a failed save into the form. Field details (400 `INVALID_REQUEST`) go under their field when
@@ -19,13 +39,11 @@ export function failureToForm(
   fields: readonly string[],
 ): { text: string | null; unplaced: string[] } {
   if (error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE') {
-    const { text } = describeFailure(intl, error);
     const field = (error.data as { field?: unknown } | null)?.field;
     if (typeof field === 'string' && fields.includes(field)) {
-      form.setFields([{ name: field, errors: [text] }]);
-      return { text: null, unplaced: [] };
+      form.setFields([{ name: field, errors: [describeFailure(intl, error).text] }]);
     }
-    return { text, unplaced: [] };
+    return failureView(intl, error, fields);
   }
   const { text, unplaced } = failureToSharedForm(
     intl,

@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Spin, Typography } from 'antd';
 import { useMemo, useState } from 'react';
+import { useFailureView } from '../../hooks/useFailure';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -14,7 +15,7 @@ import {
 import { describeFailure } from '../../session/describe';
 import { useSession } from '../../session/useSession';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
+import { failureToForm, failureView } from './formFailure';
 import { PermissionTreeSelect } from './PermissionTreeSelect';
 import { ancestorsOf, buildIndex, codesNotHeld, isSelectable } from './permissionTree';
 import { withScopeHint } from './texts';
@@ -46,7 +47,11 @@ export function RoleModal({ role, onDone, onClose }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<{ text: string; unplaced: string[] } | null>(null);
+  const {
+    view: failure,
+    show,
+    clear,
+  } = useFailureView<{ text: string; unplaced: string[] } | null>();
   const tree = useLatestRead(listPermissions, { keepWhileReading: true });
   const nodes: PermissionNode[] | null = !tree.loading && tree.failure === null ? tree.data : null;
   const [picked, setPicked] = useState<string[] | null>(null);
@@ -95,7 +100,7 @@ export function RoleModal({ role, onDone, onClose }: Props) {
   }, [nodes, value]);
 
   const { run, pending } = useSingleFlight(async () => {
-    setFailure(null);
+    clear();
     let values: Values;
     try {
       values = await form.validateFields();
@@ -116,12 +121,13 @@ export function RoleModal({ role, onDone, onClose }: Props) {
       onDone();
       onClose();
     } catch (error) {
-      const placed = failureToForm(intl, form, error, ['name', 'remark']);
-      setFailure(
-        placed.text === null
+      failureToForm(intl, form, error, ['name', 'remark']);
+      show((words) => {
+        const placed = failureView(words, error, ['name', 'remark']);
+        return placed.text === null
           ? null
-          : { text: withScopeHint(intl, error, placed.text), unplaced: placed.unplaced },
-      );
+          : { text: withScopeHint(words, error, placed.text), unplaced: placed.unplaced };
+      });
     }
   });
 

@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select } from 'antd';
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
+import { useFailureView } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -10,7 +11,7 @@ import {
   updatePermission,
 } from '../../services/system';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
+import { failureToForm, failureView } from './formFailure';
 import { buildPermissionPatch, codeProblem, nextSortOrder } from './permissionRules';
 import { buildIndex, isBuiltinNode, nodeName, parentCandidates } from './permissionTree';
 
@@ -52,7 +53,7 @@ export function PermissionNodeModal({ node, nodes, onDone, onClose }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { view: failure, show, clear } = useFailureView<string | null>();
   // The order stops following the parent once the person has typed one.
   const orderTyped = useRef(false);
   const creating = node === null;
@@ -74,7 +75,7 @@ export function PermissionNodeModal({ node, nodes, onDone, onClose }: Props) {
   ];
 
   const { run, pending } = useSingleFlight(async () => {
-    setFailure(null);
+    clear();
     let values: Values;
     try {
       values = await form.validateFields();
@@ -109,7 +110,8 @@ export function PermissionNodeModal({ node, nodes, onDone, onClose }: Props) {
       onDone();
       onClose();
     } catch (error) {
-      setFailure(failureToForm(intl, form, error, FIELDS).text);
+      failureToForm(intl, form, error, FIELDS);
+      show((words) => failureView(words, error, FIELDS).text);
     }
   });
 

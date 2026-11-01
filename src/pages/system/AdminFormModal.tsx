@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Form, Input, Modal, Select, Switch, Typography } from 'antd';
-import { useState } from 'react';
+import { useFailureView } from '../../hooks/useFailure';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
@@ -17,7 +17,7 @@ import { describeFailure } from '../../session/describe';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { checkNewPassword, type RowProtection } from './adminRules';
-import { failureToForm } from './formFailure';
+import { failureToForm, failureView } from './formFailure';
 import { withScopeHint } from './texts';
 
 type Values = {
@@ -61,7 +61,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { view: failure, show, clear } = useFailureView<string | null>();
   const roles = useLatestRead(loadAllRoles, { keepWhileReading: true });
   const creating = admin === null;
   const minLength = me?.passwordMinLength;
@@ -97,7 +97,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
   ];
 
   const { run, pending } = useSingleFlight(async () => {
-    setFailure(null);
+    clear();
     let values: Values;
     try {
       values = await form.validateFields();
@@ -124,8 +124,11 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
       onDone();
       onClose();
     } catch (error) {
-      const placed = failureToForm(intl, form, error, FIELDS);
-      setFailure(placed.text === null ? null : withScopeHint(intl, error, placed.text));
+      failureToForm(intl, form, error, FIELDS);
+      show((words) => {
+        const { text } = failureView(words, error, FIELDS);
+        return text === null ? null : withScopeHint(words, error, text);
+      });
     }
   });
 
