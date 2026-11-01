@@ -2,11 +2,11 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACCOUNT, creditsState } from '../../../mock/_core/creditsData';
 import * as creditsMock from '../../../mock/credits.mock';
+import { renderWithLocaleSwitch } from '../../../tests/failureLanguage';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { AccountCreditsPanel } from './AccountCreditsPanel';
-import { renderWithLocaleSwitch } from './localeHost';
 import { signIn } from './testSetup';
 
 beforeEach(() => signIn('finance'));

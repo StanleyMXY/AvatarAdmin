@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
-import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -39,11 +39,11 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const editing = pack !== null;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     try {
       if (pack) {
         await assertPackUnchanged(pack);
@@ -71,12 +71,12 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
         onClose();
         return;
       }
-      const { text, fields } = describeFailure(intl, error);
+      const { fields } = describeFailure(intl, error);
       const mine = fields.filter((f) => (FIELDS as readonly string[]).includes(f.ref));
       if (mine.length > 0) {
         form.setFields(mine.map((f) => ({ name: f.ref as keyof Values, errors: [f.text] })));
       }
-      setFailure(text);
+      fail(error);
       return;
     }
     message.success(t('credits.products.saved'));
@@ -100,7 +100,7 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}

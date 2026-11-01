@@ -1,6 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Form, Input, InputNumber, Modal, Select } from 'antd';
-import { useState } from 'react';
+import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdjustKind, createAdjustRequest } from '../../services/credits';
@@ -32,10 +32,10 @@ export function AdjustRequestModal({ open, accountId, onClose, onCreated }: Prop
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     try {
       await createAdjustRequest({
         accountId: trimSpec(values.accountId),
@@ -44,12 +44,12 @@ export function AdjustRequestModal({ open, accountId, onClose, onCreated }: Prop
         reason: trimSpec(values.reason),
       });
     } catch (error) {
-      const { text, fields } = describeFailure(intl, error);
+      const { fields } = describeFailure(intl, error);
       const mine = fields.filter((f) => (FIELDS as readonly string[]).includes(f.ref));
       if (mine.length > 0) {
         form.setFields(mine.map((f) => ({ name: f.ref as keyof Values, errors: [f.text] })));
       }
-      setFailure(text);
+      fail(error);
       return;
     }
     message.success(t('credits.requests.created'));
@@ -91,7 +91,7 @@ export function AdjustRequestModal({ open, accountId, onClose, onCreated }: Prop
       onCancel={pending ? undefined : onClose}
       afterClose={() => {
         form.resetFields();
-        setFailure(null);
+        clear();
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}

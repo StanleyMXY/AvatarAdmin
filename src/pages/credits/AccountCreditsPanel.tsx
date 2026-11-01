@@ -9,11 +9,11 @@ import {
   type TableColumnsType,
   Typography,
 } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
+import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { type AccountCredits, getAccountCredits, type LedgerRow } from '../../services/credits';
-import { describeFailure } from '../../session/describe';
 import { DASH, formatCount } from '../../utils/ratio';
 import { ledgerColumns } from './ledgerColumns';
 import { NegativeBalance } from './NegativeBalance';
@@ -33,12 +33,9 @@ export function AccountCreditsPanel({ accountId }: { accountId: string }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [data, setData] = useState<AccountCredits | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  const { text: failure, fail, clear } = useFailure();
   const [loading, setLoading] = useState(false);
   const begin = useLatestCall();
-  // Switching the language changes `intl`; the ledger does not depend on it, so it must not make a new request.
-  const intlRef = useRef(intl);
-  intlRef.current = intl;
 
   const load = useCallback(async () => {
     // When two requests overlap, the answer of the newest one is the one that is shown.
@@ -48,14 +45,14 @@ export function AccountCreditsPanel({ accountId }: { accountId: string }) {
       const answer = await getAccountCredits(accountId, { page, pageSize });
       if (isCurrent()) {
         setData(answer);
-        setFailure(null);
+        clear();
       }
     } catch (error) {
-      if (isCurrent()) setFailure(describeFailure(intlRef.current, error).text);
+      if (isCurrent()) fail(error);
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [accountId, page, pageSize, begin]);
+  }, [accountId, page, pageSize, begin, fail, clear]);
 
   useEffect(() => {
     void load();
