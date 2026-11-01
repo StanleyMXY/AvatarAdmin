@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { renderPage } from '../../tests/renderPage';
 import { ApiError } from '../request/errors';
+import { markServiceUnavailable, resetServiceStatus } from '../request/serviceStatus';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, PagedListTable } from './PagedListTable';
 
 type Row = { id: string; name: string };
@@ -203,5 +204,249 @@ describe('PagedListTable', () => {
     );
     await waitFor(() => expect(document.querySelector('.ant-pro-table-search')).not.toBeNull());
     expect(screen.getByLabelText('Filter f')).toBeVisible();
+  });
+});
+
+describe('PagedListTable: a page size is chosen from the four, and the rows follow the newest answer', () => {
+  it('lists 10, 20, 50 and 100 to choose from and asks again with the one chosen, from page 1', async () => {
+    const request = vi.fn(async (p: { page: number; pageSize: number }) => ({
+      items: [{ id: `${p.page}-${p.pageSize}`, name: `page ${p.page} of ${p.pageSize}` }],
+      total: 500,
+    }));
+    const user = userEvent.setup();
+    renderPage(<PagedListTable<Row> rowKey="id" columns={columns} request={request} />);
+    await screen.findByText('page 1 of 20');
+    await user.click(screen.getByRole('listitem', { name: '3' }));
+    await screen.findByText('page 3 of 20');
+    await user.click(document.querySelector('.ant-pagination .ant-select') as HTMLElement);
+    const options = [...document.querySelectorAll('.ant-select-item-option')].map((o) =>
+      o.textContent?.replace(/\s+/g, ' ').trim(),
+    );
+    expect(options.map((o) => Number.parseInt(o ?? '', 10))).toEqual([10, 20, 50, 100]);
+    await user.click(
+      screen.getAllByText(/^50\b/, { selector: '.ant-select-item-option-content' })[0],
+    );
+    expect(await screen.findByText('page 1 of 50')).toBeInTheDocument();
+    expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, pageSize: 50 }));
+  });
+
+  it('shows no error from an older request that fails after the newest one worked', async () => {
+    const answers: Record<number, { resolve: (v: unknown) => void; reject: (e: unknown) => void }> =
+      {};
+    const request = vi.fn(
+      (p: { page: number }) =>
+        new Promise<{ items: Row[]; total: number }>((resolve, reject) => {
+          answers[p.page] = { resolve: resolve as never, reject };
+        }),
+    );
+    renderPage(<PagedListTable<Row> rowKey="id" columns={columns} request={request} />);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    answers[1].resolve({ items: [{ id: '1', name: 'first' }], total: 100 });
+    await screen.findByText('first');
+    fireEvent.click(screen.getByRole('listitem', { name: '2' }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('listitem', { name: '3' }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    answers[3].resolve({ items: [{ id: '3', name: 'newest' }], total: 100 });
+    await screen.findByText('newest');
+    answers[2].reject(
+      new ApiError({ code: 'INTERNAL_ERROR', message: 'late', httpStatus: 500, data: null }),
+    );
+    await new Promise((r) => setTimeout(r, 60));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('newest')).toBeInTheDocument();
+  });
+
+  it('keeps the error of the newest request when an older one answers well after it', async () => {
+    const answers: Record<number, { resolve: (v: unknown) => void; reject: (e: unknown) => void }> =
+      {};
+    const request = vi.fn(
+      (p: { page: number }) =>
+        new Promise<{ items: Row[]; total: number }>((resolve, reject) => {
+          answers[p.page] = { resolve: resolve as never, reject };
+        }),
+    );
+    renderPage(<PagedListTable<Row> rowKey="id" columns={columns} request={request} />);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    answers[1].resolve({ items: [{ id: '1', name: 'first' }], total: 100 });
+    await screen.findByText('first');
+    fireEvent.click(screen.getByRole('listitem', { name: '2' }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('listitem', { name: '3' }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    answers[3].reject(
+      new ApiError({ code: 'INTERNAL_ERROR', message: 'bad', httpStatus: 500, data: null }),
+    );
+    await screen.findByRole('alert');
+    answers[2].resolve({ items: [{ id: '2', name: 'older but fine' }], total: 100 });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('does not leave the rows of the last good answer beside the error of the next one', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [{ id: '1', name: 'Alice' }], total: 100 })
+      .mockRejectedValueOnce(
+        new ApiError({ code: 'INTERNAL_ERROR', message: 'x', httpStatus: 500, data: null }),
+      );
+    renderPage(<PagedListTable<Row> rowKey="id" columns={columns} request={request} />);
+    await screen.findByText('Alice');
+    fireEvent.click(screen.getByRole('listitem', { name: '2' }));
+    await screen.findByRole('alert');
+    expect(screen.queryByText('Alice')).toBeNull(); // they belong to another page, or other filters
+  });
+});
+
+describe('PagedListTable: the date range of a search form reaches the request as the page names it', () => {
+  it('as the two days of a transform, written YYYY-MM-DD', async () => {
+    const withRange: ProColumns<Row>[] = [
+      { title: 'Name', dataIndex: 'name' },
+      {
+        title: 'Day',
+        dataIndex: 'range',
+        hideInTable: true,
+        valueType: 'dateRange',
+        search: {
+          transform: (value: [string, string]) => ({ fromDay: value[0], toDay: value[1] }),
+        },
+      },
+    ];
+    const request = vi.fn(async () => ({ items: [], total: 0 }));
+    const user = userEvent.setup();
+    renderPage(
+      <PagedListTable<Row, { fromDay?: string; toDay?: string }>
+        rowKey="id"
+        columns={withRange}
+        request={request}
+      />,
+    );
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(document.querySelectorAll('.ant-picker-input input')).toHaveLength(2),
+    );
+    const [start, end] = [
+      ...document.querySelectorAll<HTMLInputElement>('.ant-picker-input input'),
+    ];
+    await user.type(start, '2026-10-01{Enter}');
+    await user.type(end, '2026-10-05{Enter}');
+    await user.click(screen.getByRole('button', { name: /^(Query|Search|查\s*询)$/ }));
+    await waitFor(() =>
+      expect(request).toHaveBeenLastCalledWith(
+        expect.objectContaining({ fromDay: '2026-10-01', toDay: '2026-10-05', page: 1 }),
+      ),
+    );
+  });
+});
+
+describe('PagedListTable: skeleton, column settings and the gateway notice', () => {
+  it('shows a skeleton in the body while the first page is being read, and never again', async () => {
+    let answer: (page: { items: Row[]; total: number }) => void = () => {};
+    const request = vi.fn(
+      () =>
+        new Promise<{ items: Row[]; total: number }>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    renderPage(<PagedListTable<Row> rowKey="id" columns={columns} request={request} />);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    expect(document.querySelector('.ant-table-tbody .ant-skeleton')).not.toBeNull();
+    answer({ items: [{ id: '1', name: 'Alice' }], total: 100 });
+    await screen.findByText('Alice');
+    expect(document.querySelector('.ant-skeleton')).toBeNull();
+    // the next page: the rows stay, no skeleton comes back
+    fireEvent.click(screen.getByRole('listitem', { name: '2' }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(document.querySelector('.ant-skeleton')).toBeNull();
+  });
+
+  it('shows the empty state, not the skeleton, once an empty page has come', async () => {
+    renderPage(
+      <PagedListTable<Row>
+        rowKey="id"
+        columns={columns}
+        request={async () => ({ items: [], total: 0 })}
+      />,
+    );
+    await waitFor(() => expect(document.querySelector('.ant-empty')).not.toBeNull());
+    expect(document.querySelector('.ant-skeleton')).toBeNull();
+  });
+
+  it('puts the column settings in the toolbar, next to the page buttons', async () => {
+    const user = userEvent.setup();
+    renderPage(
+      <PagedListTable<Row>
+        rowKey="id"
+        columns={columns}
+        toolbar={[
+          <button key="new" type="button">
+            New
+          </button>,
+        ]}
+        request={async () => ({ items: [{ id: '1', name: 'Alice' }], total: 1 })}
+      />,
+    );
+    await screen.findByText('Alice');
+    expect(screen.getByRole('button', { name: 'New' })).toBeInTheDocument();
+    const setting = document.querySelector('.ant-pro-table-list-toolbar .anticon-setting');
+    expect(setting).not.toBeNull();
+    // no reload, density or full-screen buttons: only what the specification asks for
+    expect(document.querySelector('.ant-pro-table-list-toolbar .anticon-reload')).toBeNull();
+    expect(document.querySelector('.ant-pro-table-list-toolbar .anticon-column-height')).toBeNull();
+    await user.click(setting as Element);
+    expect(
+      await screen.findByText('Name', { selector: '.ant-tree-title *, .ant-tree-title' }),
+    ).toBeInTheDocument();
+  });
+
+  it('has the column settings when there are no page buttons too', async () => {
+    renderPage(
+      <PagedListTable<Row>
+        rowKey="id"
+        columns={columns}
+        request={async () => ({ items: [{ id: '1', name: 'Alice' }], total: 1 })}
+      />,
+    );
+    await screen.findByText('Alice');
+    expect(document.querySelector('.anticon-setting')).not.toBeNull();
+  });
+
+  it('leaves the gateway message to the notice of the shell while it is up: one text, one retry', async () => {
+    const gateway = () =>
+      new ApiError({ code: 'GATEWAY_UNAVAILABLE', httpStatus: 504, message: 'x', data: null });
+    markServiceUnavailable('GET /users');
+    renderPage(
+      <PagedListTable<Row>
+        rowKey="id"
+        columns={columns}
+        request={async () => {
+          throw gateway();
+        }}
+      />,
+    );
+    await waitFor(() => expect(document.querySelector('.ant-table-tbody')).not.toBeNull());
+    await new Promise((r) => setTimeout(r, 60));
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    resetServiceStatus();
+  });
+
+  it('shows its own error with a retry for the gateway message when the notice of the shell is not up', async () => {
+    resetServiceStatus();
+    renderPage(
+      <PagedListTable<Row>
+        rowKey="id"
+        columns={columns}
+        request={async () => {
+          throw new ApiError({
+            code: 'GATEWAY_UNAVAILABLE',
+            httpStatus: 504,
+            message: 'x',
+            data: null,
+          });
+        }}
+      />,
+    );
+    expect(await screen.findByText(/temporarily unavailable/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });
