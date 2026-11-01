@@ -2,7 +2,8 @@
 
 Admin console frontend: Umi Max, React, Ant Design 6 and `@ant-design/pro-components`.
 The design lives in the plan under `docs/superpowers/plans/`; the shared specification and
-backend contract live in the AvatarApp repository and are not copied here.
+backend contract live in the AvatarApp repository (its `main`). This repository holds read-only,
+byte-identical snapshots of the two files in `docs/shared-snapshots/`; they are never edited here.
 
 ## Requirements
 
@@ -31,6 +32,7 @@ backend contract live in the AvatarApp repository and are not copied here.
 | `npm run lint`                                             | `biome check` (lint, format, import order).                                                                                                     |
 | `npm run tsc`                                              | `tsc --noEmit` for the whole project.                                                                                                           |
 | `npm run check:routes`, `check:codes`, `check:config-keys` | Consistency checks against the specification and contract, run with `tsx`.                                                                      |
+| `npm run gen:permission-tree`, `gen:config-keys`           | Rewrite the generated permission tree and configuration key files from the spec / contract; pass the file path after `--` (see the script header).   |
 
 `postinstall` runs `max setup` (generates `src/.umi`, which is git-ignored); `prepare` installs the
 husky hooks.
@@ -93,6 +95,18 @@ npm run check:config-keys -- <contract path>
 The spec and the contract are the snapshots in `docs/shared-snapshots/` (see the README there);
 `check:codes` reads the exclusions from `docs/superpowers/handoff/permission-code-exclusions.txt`.
 `grep -r "mock-password" dist/` must find nothing: the fake backend is not part of the build.
+
+### Dependency audit
+
+`npm audit` (checked 2026-11-01) reports 64 advisories in 70 installed package copies: 1 critical, 16 high, 37 moderate, 10 low. `npm` marks all 70 copies `dev` in `package-lock.json`: none is reached through `dependencies` (antd, pro-components, react, dayjs, qrcode.react). The build tool is itself a dev dependency, though, and a few of its parts end up in the browser bundle, so they were read one by one:
+
+- `react-router` 6.3.0 (open redirect through a backslash or an untrusted address given to `navigate` or `Link`): the only address the app takes from outside is the return address after sign-in, and `safeReturnUrl` (`src/session/returnUrl.ts`) refuses `//`, backslashes, encoded slashes and control characters. Not reachable.
+- `path-to-regexp` 8.2.0 inside `@ant-design/pro-layout` (backtracking patterns): the patterns are the route paths of `config/routes`, written by us; nothing a visitor types is turned into a pattern. Not reachable by a visitor.
+- `@babel/runtime` 7.23.6 (slow generated code for `.replace` with named groups): the only named-group expression in `src` is replaced with a function, never with a `$<name>` string (`src/pages/system/auditDetail.ts`). Not reachable.
+- `immer` (through the dva plugin), `axios` (through the request plugin): neither plugin is enabled in `config/config.ts`.
+- The rest is build, lint, dev-server and test tooling (webpack, mako, esbuild, vite, eslint, glob, minimatch, the crypto polyfills, `happy-dom`, `vitest`): it runs on a developer or CI machine only. `happy-dom` and `vitest` advisories need a page or a mock file from an untrusted source; the tests load only our own code.
+
+Run `npm audit` again before each release; a new advisory in a package that is in the bundle (`antd`, `react`, `react-dom`, `dayjs`, `qrcode.react`, `react-router`, `@ant-design/pro-*`) is a reason to update first.
 
 ## Why these choices
 
