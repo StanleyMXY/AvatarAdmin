@@ -2,7 +2,7 @@ import { theme as antdTheme, type ThemeConfig } from 'antd';
 import type { MappingAlgorithm } from 'antd/es/theme/interface';
 import { useSyncExternalStore } from 'react';
 import { mixHex, pickOnPrimary, readableText } from './contrast';
-import { FONT_FAMILY, LAYOUT, PRIMARY, RADIUS } from './tokens';
+import { FALL_COLOR, FONT_FAMILY, LAYOUT, PRIMARY, RADIUS, RISE_COLOR } from './tokens';
 
 export type ThemeMode = 'dim' | 'deep' | 'light';
 
@@ -36,6 +36,12 @@ export type ModeTokens = {
    * 3.4:1 or less on the light page. Moved just far enough to reach 4.5:1 on every background.
    */
   colorTextHint: string;
+  /**
+   * A rise and a fall written as text (the change of a figure): the green and the red of the charts
+   * moved just far enough to reach 4.5:1 on every background. The chart colours themselves stay.
+   */
+  colorRiseText: string;
+  colorFallText: string;
   fontFamily: string;
 };
 
@@ -52,6 +58,8 @@ const BASE: Record<
     | 'colorLinkHover'
     | 'colorLinkActive'
     | 'colorTextHint'
+    | 'colorRiseText'
+    | 'colorFallText'
     | 'fontFamily'
   >
 > = {
@@ -99,6 +107,11 @@ function linkColors(base: (typeof BASE)[ThemeMode], primary: string) {
   };
 }
 
+/** `color` moved to 4.5:1 on the container, the page and the raised background of a mode. */
+function readableOn(color: string, base: (typeof BASE)[ThemeMode]): string {
+  return readableText(color, [base.colorBgContainer, base.colorBgLayout, base.colorBgElevated]);
+}
+
 /** The hint text colour: the text colour at the strength Ant Design uses for hints, moved to 4.5:1 where it falls short. */
 function hintColor(base: (typeof BASE)[ThemeMode]): string {
   const backgrounds = [base.colorBgContainer, base.colorBgLayout, base.colorBgElevated];
@@ -119,6 +132,8 @@ export function getModeTokens(
     colorTextOnPrimary: pickOnPrimary(primary.base),
     ...linkColors(BASE[mode], primary.base),
     colorTextHint: hintColor(BASE[mode]),
+    colorRiseText: readableOn(RISE_COLOR, BASE[mode]),
+    colorFallText: readableOn(FALL_COLOR, BASE[mode]),
     fontFamily: FONT_FAMILY,
   };
 }
@@ -258,6 +273,12 @@ export function setThemeMode(mode: ThemeMode): void {
 export function useThemeMode(): [ThemeMode, (mode: ThemeMode) => void] {
   const mode = useSyncExternalStore(subscribe, getMode, getMode);
   return [mode, setThemeMode];
+}
+
+/** The tokens of the mode in use (they change with it). */
+export function useModeTokens(): ModeTokens {
+  const [mode] = useThemeMode();
+  return getModeTokens(mode);
 }
 
 /** Forgets the mode held in memory, so the next read goes to localStorage again (tests). */

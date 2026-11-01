@@ -13,7 +13,7 @@ import {
   toAntdTheme,
   useThemeMode,
 } from './modes';
-import { LAYOUT, RADIUS } from './tokens';
+import { FALL_COLOR, LAYOUT, RADIUS, RISE_COLOR } from './tokens';
 
 beforeEach(() => resetThemeModeForTests());
 afterEach(() => vi.restoreAllMocks());
@@ -236,6 +236,38 @@ describe.each(THEME_MODES)('secondary, hint and placeholder text in %s mode', (m
     expect(contrastRatio(hint, bg)).toBeLessThan(contrastRatio(tokens.colorText, bg));
   });
 });
+
+describe.each(THEME_MODES)(
+  'the rise and the fall written as text in %s mode',
+  (mode: ThemeMode) => {
+    it('are at least 4.5:1 on the container, the page and the raised background, and keep the colour when it already is', () => {
+      const tokens = getModeTokens(mode);
+      for (const [text, chart] of [
+        [tokens.colorRiseText, RISE_COLOR],
+        [tokens.colorFallText, FALL_COLOR],
+      ] as const) {
+        for (const bg of TEXT_BACKGROUNDS(tokens)) {
+          expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+        }
+        if (TEXT_BACKGROUNDS(tokens).every((bg) => contrastRatio(chart, bg) >= 4.5)) {
+          expect(text).toBe(chart);
+        } else {
+          expect(text).not.toBe(chart);
+        }
+      }
+    });
+
+    it('stay a green and a red: the first channel of the fall leads, the second of the rise leads', () => {
+      const tokens = getModeTokens(mode);
+      const channels = (hex: string) =>
+        [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+      const [rr, rg, rb] = channels(tokens.colorRiseText);
+      const [fr, fg, fb] = channels(tokens.colorFallText);
+      expect(rg).toBeGreaterThan(Math.max(rr, rb));
+      expect(fr).toBeGreaterThan(Math.max(fg, fb));
+    });
+  },
+);
 
 describe.each(THEME_MODES)('solid primary fills in %s mode', (mode: ThemeMode) => {
   it('a selected solid radio button carries the same text as a primary button, not white', () => {

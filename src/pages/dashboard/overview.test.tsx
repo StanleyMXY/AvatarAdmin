@@ -15,6 +15,7 @@ import { withTimeZone } from '../../../tests/withTimeZone';
 import access from '../../access';
 import { resetSessionState, setToken } from '../../request/session';
 import type { RetentionRow, StatDailyRow } from '../../services/stats/types';
+import { getModeTokens } from '../../theme/modes';
 import Overview from './overview';
 
 const NOW = '2026-10-26T20:00:00Z';
@@ -386,9 +387,13 @@ describe('the overview: the numbers on the cards', () => {
     renderPage(<Overview />);
     await waitForValue('d1');
     // the D1 of cohort 10-24 was counted on 10-25: a complete day, so its changes are judged
-    expect(screen.getByTestId('dashboard-vs-yesterday-d1')).toHaveStyle({ color: '#22C55E' });
+    expect(screen.getByTestId('dashboard-vs-yesterday-d1')).toHaveStyle({
+      color: getModeTokens('dim').colorRiseText,
+    });
     expect(text('dashboard-vs-7d-d1')).toBe('-10 pp');
-    expect(screen.getByTestId('dashboard-vs-7d-d1')).toHaveStyle({ color: '#EF4444' });
+    expect(screen.getByTestId('dashboard-vs-7d-d1')).toHaveStyle({
+      color: getModeTokens('dim').colorFallText,
+    });
   });
 
   it('leaves the change of a complete day with no change at all uncoloured', async () => {
