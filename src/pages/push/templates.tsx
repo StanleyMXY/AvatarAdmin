@@ -17,14 +17,13 @@ import {
 } from '../../services/push';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
-import { codeText } from '../../utils/displayText';
+import { codeText, describeLink } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { coverage, supportedLocalesOf } from './coverage';
 import { PushImage } from './PushImage';
 import { templateFailureText } from './recallRule';
 import { TemplateMatrix } from './TemplateMatrix';
 import { TemplateModal } from './TemplateModal';
-import { describeLink } from './texts';
 
 /**
  * 模板 (`PUSH:TEMPLATE`): the words of the recall pushes, one template for each trigger reason and
@@ -132,7 +131,10 @@ export default function TemplatesPage() {
       search: false,
       render: (_, row) => (
         <EllipsisPopoverText
-          text={describeLink(intl, row.linkType, row.linkTarget)}
+          text={describeLink(intl, row.linkType, row.linkTarget, {
+            summaryId: 'push.link.summary',
+            empty: '',
+          })}
           lines={2}
           width={200}
         />

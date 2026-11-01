@@ -4,10 +4,9 @@ import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import { getNotification, type NotificationDetail } from '../../services/notifications';
 import { describeFailure } from '../../session/describe';
-import { adminText, codeText, instantText, orDash } from '../../utils/displayText';
+import { adminText, codeText, describeLink, instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
-import { describeLink } from './texts';
 
 /** Any text, any script, any length: broken anywhere, shown in its own direction, never wider than the drawer. */
 const WRAP: CSSProperties = {
@@ -115,7 +114,13 @@ export function NotificationDrawer({ id, onClose }: { id: string; onClose: () =>
                 key: 'link',
                 label: t('notifications.detail.link'),
                 children: (
-                  <span style={WRAP}>{describeLink(intl, detail.linkType, detail.linkTarget)}</span>
+                  <span style={WRAP}>
+                    {describeLink(intl, detail.linkType, detail.linkTarget, {
+                      summaryId: 'notifications.link.summary',
+                      empty: DASH,
+                      writeOut: true,
+                    })}
+                  </span>
                 ),
               },
               {

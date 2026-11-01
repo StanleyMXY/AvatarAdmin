@@ -25,6 +25,29 @@ export function codeText(
   return text !== '' && intl.messages[id] ? intl.formatMessage({ id }) : text;
 }
 
+/**
+ * One line for a link of a message: "App screen: Store", "Web address: https://…" or "No link", in
+ * the current language. What differs between the pages is passed in:
+ * - `summaryId`: the language file's text with `{kind}` and `{target}` that joins the two;
+ * - `empty`: what a link type that is empty (or, without `writeOut`, not text) becomes;
+ * - `writeOut`: write a link type that is not text out as text (a number as its digits).
+ */
+export function describeLink(
+  intl: Translator,
+  linkType: unknown,
+  linkTarget: unknown,
+  options: { summaryId: string; empty: string; writeOut?: boolean },
+): string {
+  const kind = codeText(intl, 'pages.link.type', linkType, { writeOut: options.writeOut });
+  if (linkType === 'NONE') return kind;
+  if (kind === '') return options.empty;
+  const target = plainText(linkTarget);
+  const shown = linkType === 'SCREEN' ? codeText(intl, 'pages.link.screen', target) : target;
+  return shown === ''
+    ? kind
+    : intl.formatMessage({ id: options.summaryId }, { kind, target: shown });
+}
+
 /** An instant of the backend in the interface language, or a dash when there is none (a value that is not text is none). */
 export function instantText(locale: string, value: unknown): string {
   return typeof value === 'string' && value !== '' ? formatInstant(value, locale) : DASH;
