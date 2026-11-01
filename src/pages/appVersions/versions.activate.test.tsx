@@ -124,6 +124,40 @@ describe('activating a version of a STORE channel', () => {
     expect(writesOf(calls)).toHaveLength(1);
   });
 
+  it('cannot be sent while the version that is active now is still being read, and says so; it can when the read is back', async () => {
+    const { calls, user } = await load();
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) => {
+        const url = new URL(String(input), 'http://localhost');
+        if (
+          url.pathname === '/api/admin/app-versions' &&
+          (init.method ?? 'GET') === 'GET' &&
+          url.searchParams.get('status') === 'ACTIVE'
+        ) {
+          await gate;
+        }
+        return real(input, init);
+      }),
+    );
+    const draft = versionBy('play', 120);
+    const dialog = await openActivation(user, draft.id);
+    await user.click(within(dialog).getByRole('checkbox', { name: LIVE }));
+    expect(within(dialog).getByTestId('activate-reading')).toBeTruthy();
+    expect(dialogSubmit(dialog).disabled).toBe(true);
+    fireEvent.click(dialogSubmit(dialog));
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+    release();
+    await waitFor(() => expect(dialogSubmit(dialog).disabled).toBe(false));
+    expect(within(dialog).queryByTestId('activate-reading')).toBeNull();
+  });
+
   it('asks again at every activation: the box is empty each time the dialog opens', async () => {
     const { user } = await load();
     const play = versionBy('play', 120);

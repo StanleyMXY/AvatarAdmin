@@ -13,10 +13,12 @@ import {
   Typography,
 } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { UploadField } from '../../components/UploadField';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
 import {
+  type ApkUpload as ApkUploadResult,
   type AppVersion,
   createAppVersion,
   updateAppVersion,
@@ -29,7 +31,6 @@ import { formatBytes } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { isUploadIdRejection } from '../../utils/uploadErrors';
-import { ApkUpload } from './ApkUpload';
 import { ChangelogField } from './ChangelogField';
 import { distributionOf } from './distribution';
 import { FailureBar } from './FailureBar';
@@ -102,7 +103,9 @@ const numberOr = (value: unknown): number | null =>
 function uploadRefused(error: unknown, carriedNewUpload: boolean): boolean {
   if (!(error instanceof ApiError) || !isUploadIdRejection(error)) return false;
   if (error.httpStatus === 400) {
-    return error.details.length === 0 || error.details.some((d) => d.ref === 'apkUploadId');
+    // The contract does not promise `details` on a 400: without them nothing says the file is at
+    // fault, and a file of up to 100 MB is not thrown away on a guess.
+    return error.details.some((d) => d.ref === 'apkUploadId');
   }
   if (error.httpStatus === 409) {
     const status = (error.data as { status?: unknown } | null)?.status;
@@ -176,6 +179,9 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
           apkSha256: plainText(version.apkSha256),
         }
       : null;
+  // What the upload answered is text by the contract; whatever it really is, it is drawn as text.
+  const fileUrlText = shownFile ? plainText(shownFile.apkUrl) : '';
+  const fileShaText = shownFile ? plainText(shownFile.apkSha256) : '';
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
     setFailure(null);
@@ -447,7 +453,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
                         label: t('appVersions.apk.url'),
                         children: (
                           <span dir="ltr" style={{ overflowWrap: 'anywhere' }}>
-                            {shownFile.apkUrl}
+                            {fileUrlText}
                           </span>
                         ),
                       },
@@ -467,7 +473,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
                             dir="ltr"
                             style={{ overflowWrap: 'anywhere', fontFamily: 'monospace' }}
                           >
-                            {shownFile.apkSha256}
+                            {fileShaText}
                           </span>
                         ),
                       },
@@ -480,7 +486,9 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
                   ) : null}
                 </Flex>
               ) : null}
-              <ApkUpload
+              <UploadField<ApkUploadResult>
+                kind="apk"
+                withFieldReasons
                 key={slot.version}
                 onBusyChange={slot.fieldProps.onBusyChange}
                 onUploaded={(result) => {
@@ -532,7 +540,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

@@ -6,7 +6,8 @@ export type RuleCheck = { ok: true } | { ok: false; reasonKey: string };
 const ok: RuleCheck = { ok: true };
 const bad = (reasonKey: string): RuleCheck => ({ ok: false, reasonKey });
 
-// \n is a character of its own for `$` in some engines: the pattern is checked on the whole text.
+// Anchored at both ends and checked on the whole text. In JavaScript `$` does not match before a
+// final line break, so 'ab\n' is refused.
 const CODE = /^[a-z0-9_-]{2,32}$/;
 // What the application id of Android and the bundle id of iOS are written with.
 const PACKAGE_NAME = /^[A-Za-z0-9._-]+$/;

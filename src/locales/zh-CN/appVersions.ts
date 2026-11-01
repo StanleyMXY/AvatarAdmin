@@ -105,6 +105,7 @@ const messages: Record<string, string> = {
   'appVersions.activate.consequence':
     '该渠道的所有用户都会被提示有新版本，并被带到商店页。如果新版本在商店里对用户还不可见，用户会到一个没有新版本的商店页，被强制更新的用户在新版本出现前将无法使用。',
   'appVersions.activate.confirmLive': '新版本已经在商店对用户可见',
+  'appVersions.activate.reading': '正在读取这个渠道当前生效的版本，读完后才能激活。',
   'appVersions.activate.strong':
     '警告：新版本的最低版本号 {min} 大于当前生效的版本号 {active}。已经装着最新版本的用户也会被强制更新，在商店里能装上新版本之前他们将无法使用。',
   'appVersions.activate.strongUnknown':

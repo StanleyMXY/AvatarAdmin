@@ -117,6 +117,8 @@ const messages: Record<string, string> = {
   'appVersions.activate.consequence':
     'Every user of the channel is told that a new version is available and is taken to the store. If the new version is not yet visible to users in the store, they reach a store page without it, and a user who is forced to update cannot use the app until it appears.',
   'appVersions.activate.confirmLive': 'The new version is already visible to users in the store',
+  'appVersions.activate.reading':
+    'Reading the version that is active in this channel now. Activating is possible when it is back.',
   'appVersions.activate.strong':
     'Warning: the minimum version number {min} is higher than the version number {active} that is active now. Users who already have the newest version will be forced to update, and they cannot use the app until the new version can be installed from the store.',
   'appVersions.activate.strongUnknown':

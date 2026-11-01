@@ -316,12 +316,15 @@ describe('creating a channel package', { timeout: 60000 }, () => {
       code: 'partner-th',
     });
     await user.click(submit(form));
-    const messages = await form.findAllByText(enUS['error.DUPLICATE_RESOURCE']);
-    expect(messages.length).toBeGreaterThan(0);
-    const field = messages
-      .map((m) => m.closest('.ant-form-item'))
-      .find((item) => item?.querySelector('input#channelPackage_code'));
-    expect(field).toBeTruthy();
+    // The same sentence is also in the bar at the top of the dialog, which comes first: wait for
+    // the one under the field itself.
+    await waitFor(() => {
+      const field = form
+        .getAllByText(enUS['error.DUPLICATE_RESOURCE'])
+        .map((m) => m.closest('.ant-form-item'))
+        .find((item) => item?.querySelector('input#channelPackage_code'));
+      expect(field).toBeTruthy();
+    });
   });
 
   it('wants a name, a platform and a distribution', async () => {
@@ -525,6 +528,38 @@ describe('the enabled switch', { timeout: 60000 }, () => {
     await waitFor(() => expect(channelsState.channels.get('play')?.enabled).toBe(false));
     expect(writesOf(calls)).toHaveLength(1);
     expect(writesOf(calls)[0].body).toMatchObject({ enabled: false });
+  });
+
+  it('breaks the name of a channel of 5000 letters without a space inside the question, not out of it', async () => {
+    must(channelsState.channels.get('play')).name = 'N'.repeat(5000);
+    const { user } = await load();
+    await user.click(within(await rowOf('play')).getByRole('switch'));
+    const question = (await screen.findByText(/Switch off N{5000}\?/)) as HTMLElement;
+    expect(question.style.overflowWrap).toBe('anywhere');
+    expect(question.style.maxWidth).not.toBe('');
+  });
+
+  it('keeps the table on the page while it is read again after a change (it does not empty and fill again)', async () => {
+    must(channelsState.channels.get('direct')).enabled = false;
+    const { calls, user } = await load();
+    const rowBefore = await rowOf('direct');
+    const present: boolean[] = [];
+    const watcher = new MutationObserver(() => {
+      present.push(rows().some((tr) => tr.getAttribute('data-row-key') === 'direct'));
+    });
+    watcher.observe(document.body, { childList: true, subtree: true });
+    await user.click(within(rowBefore).getByRole('switch'));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    await waitFor(() =>
+      expect(
+        calls.filter((c) => c.method === 'GET' && c.url.startsWith('/api/admin/channels')).length,
+      ).toBeGreaterThan(1),
+    );
+    await settled();
+    watcher.disconnect();
+    expect(present.length).toBeGreaterThan(0);
+    expect(present.every(Boolean)).toBe(true);
+    expect(rowBefore.isConnected).toBe(true);
   });
 
   it('does nothing when the question is answered with Cancel', async () => {

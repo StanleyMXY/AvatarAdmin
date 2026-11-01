@@ -51,6 +51,8 @@ export function ActivateModal({ version, channels, rows, onClose, onDone }: Prop
         ? numberOr(fromList?.versionCode)
         : null;
   const settled = hint.state === 'known' || hint.state === 'none' || hint.state === 'failed';
+  // Activating before the read is back would skip the strong warning that the read may bring.
+  const reading = hint.state === 'loading';
   const unknown = settled && hint.state !== 'none' && activeCode === null;
 
   const min = numberOr(version.minVersionCode);
@@ -82,7 +84,11 @@ export function ActivateModal({ version, channels, rows, onClose, onDone }: Prop
       onCancel={pending ? undefined : onClose}
       okText={t('appVersions.activate.submit')}
       cancelText={t('pages.common.cancel')}
-      okButtonProps={{ loading: pending, disabled: pending || (needsBox && !live), danger: strong }}
+      okButtonProps={{
+        loading: pending,
+        disabled: pending || reading || (needsBox && !live),
+        danger: strong,
+      }}
       cancelButtonProps={{ disabled: pending }}
       onOk={() => void run().catch(() => {})}
     >
@@ -103,6 +109,11 @@ export function ActivateModal({ version, channels, rows, onClose, onDone }: Prop
           <Typography.Paragraph style={{ marginBottom: 0 }}>
             {t('appVersions.activate.minimum', { min })}
           </Typography.Paragraph>
+        ) : null}
+        {reading ? (
+          <Typography.Text type="secondary" data-testid="activate-reading">
+            {t('appVersions.activate.reading')}
+          </Typography.Text>
         ) : null}
         {strong ? (
           <Alert
@@ -137,7 +148,7 @@ export function ActivateModal({ version, channels, rows, onClose, onDone }: Prop
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

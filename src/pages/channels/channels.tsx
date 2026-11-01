@@ -61,7 +61,11 @@ function EnabledSwitch({
   }
   return (
     <Popconfirm
-      title={t('channels.disableAsk', { name: row.name || row.code })}
+      title={
+        <span style={{ display: 'block', maxWidth: 'min(320px, 80vw)', overflowWrap: 'anywhere' }}>
+          {t('channels.disableAsk', { name: row.name || row.code })}
+        </span>
+      }
       okText={t('channels.disableConfirm')}
       cancelText={t('pages.common.cancel')}
       okButtonProps={{ danger: true, loading: pending, disabled: pending }}
@@ -87,7 +91,7 @@ export default function ChannelsPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [editing, setEditing] = useState<ChannelPackage | 'new' | null>(null);
-  const read = useLatestRead(listChannelPackages);
+  const read = useLatestRead(listChannelPackages, { keepWhileReading: true });
   const rows = read.data ?? [];
 
   const columns: ColumnsType<ChannelPackage> = [
