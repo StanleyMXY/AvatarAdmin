@@ -11,17 +11,17 @@
 4. **`POST /admins`、`PUT /admins/{id}`、`POST …/status` 的响应形状。** **暂定：** 创建和修改返回一行 `GET /admins` 里的那种对象；状态、重置密码、重置二次验证、删除返回 `null`。页面只用它们判断成功，不读任何密码字段。**请确认后端从不在响应里返回密码或临时密码**（契约规定密码由创建者设置，没有"生成初始密码"的接口，所以页面没有"显示一次的密码"对话框）。
 5. **用户名、密码的规则。** 契约写密码至少 `admin.password_min_length`、不得与用户名相同，没写用户名的长度和字符、没写创建和重置时 400 `details` 的 `ref`。**暂定：** 页面只检查用户名不为空（去首尾空白），不限制长度和字符；密码按 `GET /me` 的 `passwordMinLength`（按码点数）、不得与用户名相同、两次输入一致检查；创建时密码问题的 `ref` 是 `password`，重置时是 `newPassword`，用户名的是 `username`，角色的是 `roleIds`。
 6. **`DUPLICATE_RESOURCE` 的 `data.field`。** 契约只写用户名冲突是 409 `DUPLICATE_RESOURCE`。**暂定：** `data.field` 是 `username`（管理员）、`name`（角色）、`code`（权限节点），页面把译文放在同名的表单项下面；不认识的 `field` 只显示在对话框底部。
-7. **任务书与契约在"谁能读 `GET /roles`"上不一致。** 任务书写"要 `ROLE:MANAGE`，只有 `ADMIN:MANAGE` 的管理员收到 403"；契约 §17.4 附·通则第 5 条和后端第一份回复写 `GET /roles` 另允许 `ADMIN:MANAGE`（管理员表单选角色用）。页面按后者做（假后端也如此），同时两种情况都处理：收到 403 时角色选择器禁用并写明缺 `ROLE:MANAGE`，且不发 `roleIds`。
-8. **`passwordMinLength` 的位置。** 任务书写它在 `GET /meta`（`useAdminMeta()`），实际在 `GET /me`（后端第一份回复，`Me.passwordMinLength`）；页面读 `me`，两处都没有时不检查长度。
+7. **任务书与契约在"谁能读 `GET /roles`"上不一致。** 任务书写"要 `ROLE:MANAGE`，只有 `ADMIN:MANAGE` 的管理员收到 403"；契约 §17.4 附·通则第 5 条和后端第一份回复写 `GET /roles` 另允许 `ADMIN:MANAGE`（管理员表单选角色用）。页面按后者做（假后端也如此），同时两种情况都处理：收到 403 时角色选择器禁用并写明缺 `ROLE:MANAGE`，且不发 `roleIds`。 **【已答（核对于 2026-11-01）：`GET /roles` 另允许 `ADMIN:MANAGE`，见 `docs/backend-inputs/2026-10-21-avatar-backend-reply-to-avataradmin.md` 第 85 行】**
+8. **`passwordMinLength` 的位置。** 任务书写它在 `GET /meta`（`useAdminMeta()`），实际在 `GET /me`（后端第一份回复，`Me.passwordMinLength`）；页面读 `me`，两处都没有时不检查长度。 **【已答（核对于 2026-11-01）：`passwordMinLength` 在 `GET /me` 里，见 `docs/backend-inputs/2026-10-21-avatar-backend-reply-to-avataradmin.md` 第 41 行】**
 
 ## 二、角色 `/roles`
 
 1. **请求体。** 契约写 `{"name","remark","permissionCodes":[…]}`。**暂定：** `PUT` 是整体替换（页面总是发完整的三项，`remark` 空时发 `null`）；`permissionCodes` 可以是空数组；`name` 去首尾空白后不能为空；名称唯一（大小写是否敏感请说明，假后端不敏感）；名称和备注的长度没有写，页面不限制。
-2. **自定义节点的码能否放进 `permissionCodes`？** 契约 §17.3 写能，"给角色分配不存在的权限码 400"。页面允许勾选真实权限码清单里的码，不允许勾选自定义节点，也不允许勾选"标成内置但页面的码清单里没有"的节点（负责人 2026-10-27 已定：只有权限树里的系统节点可以勾给角色；代码：`src/pages/system/permissionTree.ts` 的 `isSelectable`）。后端对自定义节点的码是否接受，仍请确认。
+2. **自定义节点的码能否放进 `permissionCodes`？** 契约 §17.3 写能，"给角色分配不存在的权限码 400"。页面允许勾选真实权限码清单里的码，不允许勾选自定义节点，也不允许勾选"标成内置但页面的码清单里没有"的节点（负责人 2026-10-27 已定：只有权限树里的系统节点可以勾给角色；代码：`src/pages/system/permissionTree.ts` 的 `isSelectable`）。后端对自定义节点的码是否接受，仍请确认。 **【已按决定实现（核对于 2026-11-01）：`docs/superpowers/handoff/decisions-2026-10-27.md` 第 19 行（自定义节点不能勾给角色）；`src/pages/system/permissionTree.ts` 第 28 行 `isSelectable`；前端不再提供这个入口，这一问不再需要后端回答】**
 
 ## 三、权限树 `/permissions`
 
-1. **`POST`、`PUT` 的请求体。** **暂定：** 创建 `{code, parent, type, sortOrder, nameZh, nameEn}`（`parent` 为根时 `null`）；修改 `{nameZh, nameEn, sortOrder}`，自定义节点且改了父节点时另带 `parent`；内置节点永远不带 `parent`；`code` 和 `type` 创建后不改，所以修改里不带。**请确认**修改时 `type` 确实不能改。
+1. **`POST`、`PUT` 的请求体。** **暂定：** 创建 `{code, parent, type, sortOrder, nameZh, nameEn}`（`parent` 为根时 `null`）；修改 `{nameZh, nameEn, sortOrder}`，自定义节点且改了父节点时另带 `parent`；内置节点永远不带 `parent`；`code` 和 `type` 创建后不改，所以修改里不带。**请确认**修改时 `type` 确实不能改。 **【部分已答（核对于 2026-11-01）：修改时节点类型不能改，改了答 400 且 `ref` 为 `type`，见 `docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 172 行；请求体形状等仍待后端回答】**
 2. **码、名称、排序的限制。** 契约没有写码的格式和长度、名称长度、`sortOrder` 的范围。**暂定：** 页面要求码去首尾空白后不为空、不含空白或控制字符或格式字符（含零宽和双向控制）、至多 100 个码点；名称不为空；排序是整数。
 3. **把节点移到自己或自己后代下面（会成环）时返回什么？** **暂定：** 400 `INVALID_REQUEST`，`data.details` 为 `[{ref:'parent', reason:'OUT_OF_RANGE'}]`。页面的父节点选项里本来就没有自己和后代，所以正常使用碰不到；请确认后端同样拒绝。
 4. **改内置节点的父节点、删除内置节点时返回什么？** **暂定：** 改父节点 400 `INVALID_REQUEST`（`ref: 'parent'`）；删除内置节点 409 `INVALID_STATE`。页面不提供这两个操作。
@@ -43,3 +43,5 @@
 **问：** 后端对"非超级管理员操作超级管理员账号（重置密码、重置二次验证、停用、删除、改角色）"是否一律返回 403？请写进契约，并给出错误码。
 
 **现状（2026-11-01）：** 负责人 2026-10-27 已定前端也挡一层：对超级管理员那一行，不是超级管理员的人看不到重置密码、重置二次验证、停用、删除，也不能编辑和启用；对自己那一行，重置密码和重置二次验证不可用（自己改密码走"修改密码"）。代码：`src/pages/system/admins.tsx`（"The row of a super administrator is closed to anyone who is not one"）。后端仍是最终裁决，上面的问题保留。
+
+核对于 2026-11-01

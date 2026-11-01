@@ -6,7 +6,7 @@
 ## 一、短信渠道 `/sms/channels`
 
 1. **凭据在请求体里叫什么、是什么类型？** 契约写"`PUT /sms/channels/{id}`（含凭据）"和"更新时凭据字段留空表示不修改"，实体列是 `credentialsEnc`（加密存储），请求字段名没有写。**暂定（已过时，见下面的现状）：** 请求体里叫 `credentials`，是一个字符串（页面里是一个密码框）。**留空时请求体里没有这个键**（不是空串，也不是 `null`）。有的短信供应商要两三个凭据（密钥和密码）；如果要结构化的值，请说明形状，页面再改成多个输入框。
-   **现状（2026-11-01）：** 后端清单 W2a 说明收的是"名称到文本值"的映射，页面已改成若干行"名称 + 值"，请求体发 `{"<名称>": "<值>"}`，没有输入时不带这个键，已保存的凭据永不回显。待后端确认的几点见 `2026-10-31-admin-frontend-sms-credentials-shape.md`。
+   **现状（2026-11-01）：** 后端清单 W2a 说明收的是"名称到文本值"的映射，页面已改成若干行"名称 + 值"，请求体发 `{"<名称>": "<值>"}`，没有输入时不带这个键，已保存的凭据永不回显。待后端确认的几点见 `2026-10-31-admin-frontend-sms-credentials-shape.md`。 **【已答（核对于 2026-11-01）：`docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 169 行：`credentials` 的值必须是非 null 的文本，名称为空或值为 null 答 400 `EMPTY_NOT_ALLOWED`，不改凭据时省略该字段或发 `{}`；还没答的细节见 `2026-10-31-admin-frontend-sms-credentials-shape.md`】**
 2. **`PUT /sms/channels/{id}` 是整条替换还是只改带来的字段？** **暂定：** 页面总是发完整的可编辑字段：`name`、`providerCode`、`apiUrl`、`extConfig`、`countries`、`smsType`、`priority`，加上输入了才有的 `credentials`；不带 `channelCode`（创建后不可改）和 `enabled`（有自己的 `PUT …/enabled`）。`extConfig` 为空时发 `null`，国家为空时发 `[]`。
 3. **`PUT …/enabled` 的请求体。** 契约只写了路径。**暂定：** `{"enabled": true|false}`。
 4. **`POST /sms/channels` 的 `enabled` 默认值。** **暂定：** 页面总是显式发 `enabled`，新建默认 `false`（新通道在凭据和测试发送确认前不会被选中）。
@@ -23,7 +23,7 @@
 1. **列表是否分页、有没有筛选。** 契约写 `GET/POST /sms/templates`、`PUT/DELETE /sms/templates/{id}`、`PUT …/enabled`。**暂定：** 和别的列表一样按 `page`、`pageSize` 分页，响应 `{items,total}`，没有筛选参数（规格 5.18 没有写模板的筛选）。
 2. **请求体。** **暂定：** 创建 `{templateCode, name, smsType, locale, country, content, providerTemplateId, enabled}`（`country`、`providerTemplateId` 空时发 `null`，`country` 写成大写），更新不带 `templateCode` 和 `enabled`，`PUT …/enabled` 是 `{"enabled": true|false}`。
 3. **`{code}` 缺失时的字段明细。** **暂定假后端：** 400 `INVALID_REQUEST`，`data.details` 为 `[{ref:'content', reason:'MISSING_PLACEHOLDER'}]`。`reason.MISSING_PLACEHOLDER` 现在仍不在语言文件里（真实的原因码要等后端给出，所以没有加译文），页面遇到没有译文的原因码时，字段下写"输入内容不合法"，不显示后端的 `message`。请给出真实的原因码；邮件模板缺必含项同理。
-4. **改模板的 `smsType` 能不能使"最后一个启用的 `OTP` 模板"消失。** 契约只写停用和删除。**暂定：** 页面把改类型也当作需要先问的操作；后端如果不拒绝，只是多问了一次。
+4. **改模板的 `smsType` 能不能使"最后一个启用的 `OTP` 模板"消失。** 契约只写停用和删除。**暂定：** 页面把改类型也当作需要先问的操作；后端如果不拒绝，只是多问了一次。 **【已答（核对于 2026-11-01）：`docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 第 40、101 行：创建、修改、启用、停用、删除模板，把“启用、`OTP`、`en`、不限国家”的最后一个拿掉，答 400 `INVALID_REQUEST`】**
 
 ## 三、发送记录 `/sms/records`
 
@@ -43,3 +43,5 @@
 ## 五、需要改共享文件的地方（写在任务报告里，不在这里）
 
 `src/components/JsonField.tsx` 不接收表单传来的 `id`，在 `Form.Item` 里不能和标签关联，本任务的扩展配置框改用自己的文本域；`src/components/ExportButton.tsx` 的按钮文字是"导出"，规格写"导出 Excel"。这不是契约的问题，不需要后端回复。
+
+核对于 2026-11-01

@@ -32,3 +32,5 @@
 1. 每一行的话和真实行为是否一致（"对"或改写的一句）。
 2. 其中有单位或方向容易搞反的：`recall.window_minutes`（是"设定小时之后"的窗口，还是以设定小时为中心）、`recall.inactive_hours`（"连续多少小时没有活跃"从哪一刻起算）、`recall.streak_min_days`（"达到"是大于等于还是大于）、`export.min_interval_hours`（按用户还是按管理员，哪个导出）、`support.rate_limit_per_hour`（按账号还是按 IP）、`events.max_body_kb`（1 KB 是 1000 还是 1024 字节）。
 3. 另外前端在 `moderation.block_score`、`moderation.review_score` 和 `complaint.likeness_due_hours` 的说明里，已经删掉了契约原文之外的推断（"达到这个值就拦截"、"改大会更晚发现"），只留契约的话；如果后端愿意确认分数和阈值的方向（分数大于等于拦截阈值才拦截吗），前端可以把方向写回说明里。
+
+核对于 2026-11-01

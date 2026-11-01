@@ -50,3 +50,5 @@
 ## 六、规则词表 `moderation.text_rules` 和 `GET /config`
 
 `moderation.text_rules` 既是配置键（`GET /config` 里有一行，页面只读并指向规则页），又有专用的 `GET/PUT /moderation/text-rules`。**问：** 两边读到的是同一份数据吗（规则页保存后，`GET /config` 里该键的值同步变化）？假后端目前不同步（规则页和 `GET /config` 各读各的）。
+
+核对于 2026-11-01

@@ -29,3 +29,5 @@
 **我们为什么需要：** 日报的"有效订阅"列在值带"回填"标记时要读这个标志；值为 `null` 时没有可标记的数。
 
 **暂定做法：** 前端只在 `activeSubscriptions` 是数字且 `activeSubscriptionsBackfilled === true` 时标"回填"；标志为 `null`、`false` 或缺失都当作"不是回填"，值为 `null` 时一律显示"—"。假后端在没有快照的日子两个字段都给 `null`。
+
+核对于 2026-11-01

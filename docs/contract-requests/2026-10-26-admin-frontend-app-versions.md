@@ -34,7 +34,7 @@
 ## 四、APK 上传 `POST /uploads/apk`
 
 1. **失败的原因。** 规格 5.19 写"文件没有 v2 以上签名时显示后端的错误原因"。已定的规则是错误码已知时只显示译文，而 `INVALID_FILE` 只有一条译文（"文件为空、超出大小限制或类型不支持"），没有"缺少 v2 以上签名"。**暂定：** 上传区旁常驻一句"文件必须带 v2 及以上的签名"，失败时显示 `INVALID_FILE` 的译文，以及 `data.details` 里每条原因的译文（有的话）。请求：缺签名时给 `details: [{"ref":"file","reason":"<专用码>"}]`，并告诉我们码，由负责共享语言文件的会话加译文。
-2. **503。** `upload.public_base_url` 没配置时返回 503 `DEPENDENCY_UNAVAILABLE`（后端说明里写了）。页面已按此提示"先在系统配置里设置 `upload.public_base_url`"，持有 `CONFIG:MANAGE` 的管理员带链接到 `/config`。请确认这个状态码对 APK 上传一定是 503，不会是别的。
+2. **503。** `upload.public_base_url` 没配置时返回 503 `DEPENDENCY_UNAVAILABLE`（后端说明里写了）。页面已按此提示"先在系统配置里设置 `upload.public_base_url`"，持有 `CONFIG:MANAGE` 的管理员带链接到 `/config`。请确认这个状态码对 APK 上传一定是 503，不会是别的。 **【已答（核对于 2026-11-01）：503 `DEPENDENCY_UNAVAILABLE`，见 `docs/backend-inputs/2026-10-21-avatar-backend-note-for-avataradmin.md` 第 16 行】**
 3. **响应。** 契约写 `{"uploadId","apkUrl","apkSizeBytes","apkSha256"}`。页面只读这四个；`apkUrl` 页面只显示为文字，不做成链接。
 
 ## 五、规格需要在 main 上修改的地方
@@ -45,3 +45,5 @@
 ## 六、需要改共享文件的地方（写在任务报告里，不在这里）
 
 `src/components/UploadField.tsx` 不把上传失败告诉页面，也不能藏掉表单里重新露出来的原生"选择文件"框，本任务在自己目录里放了一份 `ApkUpload`；`src/services/channels/getChannels.ts` 和 `mock/channels.mock.ts` 的字段名见第一节第 1 条。这不是契约的问题，不需要后端回复。
+
+核对于 2026-11-01

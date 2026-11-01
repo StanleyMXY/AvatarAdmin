@@ -16,6 +16,8 @@
 
 这一层有一个读和写之间的时间窗（两次请求之间别人保存仍会被覆盖），只有后端在 `PUT` 里比较才能关上。前端**现在不发** `expectedUpdatedAt`：后端还没承诺接受它，发一个未知字段可能让整个保存被拒。后端支持后，前端把它加到请求体里，并把 409 `INVALID_STATE` 也按"已被他人修改"处理，是一处小改动。
 
+> **已按决定实现（核对于 2026-11-01）：** `docs/superpowers/handoff/decisions-2026-10-27.md` 第 11 行、第 46 行；客户端配置的版本检查与“重新载入”见 `src/pages/clientConfig/ClientConfigEditor.tsx` 第 87、397 行，规则词表见 `src/pages/moderation/rules.tsx`。这一层不再需要后端回答；第二、三、四节仍待回答或待改契约。
+
 ## 二、客户端配置
 
 已有完整的变更请求，不重复：`docs/contract-requests/2026-10-21-admin-frontend.md` 第 4.4 条（`PUT /client-config/{key}` 加 `expectedUpdatedAt`，409 `INVALID_STATE`，`data` 带当前的 `updatedAt`）。假后端已按那一条实现（`mock/clientConfig.mock.ts`），带 `expectedUpdatedAt` 的请求和不带的都按那一条的测试清单测过（`mock/clientConfig.mock.test.ts`）。
@@ -40,3 +42,5 @@
 
 1. **整体替换（`PUT /client-config/{key}`）时，没有变化的语言行的 `updatedAt` 是否更新？** 契约 17.4 把 `GET /client-config` 里键的 `updatedAt` 定义为"各语言行里最近更新的那一行"。如果后端只更新有变化的行：A 打开有 `th`、`ar` 的键（最近时间 T1），B 去掉 `ar` 并保存，剩下的 `th` 行时间仍是 T1，A 再保存时两次读到的 `updatedAt` 都是 T1。前端已经在 `updatedAt` 相同时也比较各语言的值，所以这种情形不会丢；问这个只为了让 `expectedUpdatedAt` 的比较在后端也不漏（建议：整体替换成功时，该键所有行的 `updatedAt` 都更新到同一个新时刻，或另给键级的版本号）。时间精度如果只到秒，同一秒内的两次保存在后端的比较里也分不出。
 2. **保存的回复丢了，用户再按一次保存。** `PUT` 已在后端提交，回复因断网、超时（前端 30 秒）或网关 504 丢了；用户再点保存时，检查读取读到的是自己刚写入的版本，和打开时的不同，页面会提示"已被他人修改"，实际是自己的写入。数据没有丢，点"重新载入"就看到，但提示说的不是事实。前端单独做不到分辨；后端支持 `expectedUpdatedAt` 后，可让重复的、内容与库里已有内容完全相同的 `PUT` 返回成功（幂等），这样页面不需要分辨。
+
+核对于 2026-11-01

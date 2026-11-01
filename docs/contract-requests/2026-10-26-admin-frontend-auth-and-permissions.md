@@ -45,3 +45,5 @@
 **我们为什么需要：** 角色编辑页"勾选父节点同时勾选全部子节点"的行为取决于它。
 
 **暂定做法：** 假后端把这几个码挂在同领域的页面下（`COSMETIC:GRANT` → `COSMETIC:MANAGE`，`STATS:EXPORT`/`STATS:LAND` → `STATS:VIEW`），`SUBSCRIPTION:CONFIG` 是 MENU。前端不写死任何父子关系，全部用 `GET /permissions` 返回的 `parent`。
+
+核对于 2026-11-01
