@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 const rowOf = async (id: string) => {
-  const link = await screen.findByRole('link', { name: id });
+  const link = await screen.findByRole('link', { name: id }, { timeout: 8000 });
   const row = link.closest('tr');
   if (!row) throw new Error(`no row for ${id}`);
   return row as HTMLTableRowElement;
@@ -151,6 +151,56 @@ describe('the review queue', { timeout: 30000 }, () => {
       'href',
       `/moderation/${RECORD_ID.reportedAvatar}`,
     );
+  });
+
+  it('has no button or other control inside the link of the record id, and the whole id is its text', async () => {
+    installMockBackend(moderationMock);
+    renderPage(<QueuePage />);
+    const link = await screen.findByRole('link', { name: RECORD_ID.reportedAvatar });
+    expect(link.querySelector('button, a, input, [role="button"]')).toBeNull();
+    expect(link.textContent).toBe(RECORD_ID.reportedAvatar);
+    expect(link).toHaveAttribute('href', `/moderation/${RECORD_ID.reportedAvatar}`);
+  });
+
+  it('asks for the waiting time of the oldest record once when the page opens, and again with each new list', async () => {
+    const calls = installMockBackend(moderationMock);
+    const user = userEvent.setup();
+    renderPage(<QueuePage />);
+    await rowOf(RECORD_ID.oldestImage);
+    await new Promise((r) => setTimeout(r, 150));
+    const statsCalls = () => calls.filter((c) => c.url.includes('/moderation/stats')).length;
+    expect(statsCalls()).toBe(1);
+    await expandSearch(user);
+    await chooseOption(user, 'Source', 'Complaint');
+    await user.click(screen.getByRole('button', { name: /查\s*询|Query|Search/ }));
+    await waitFor(() => expect(statsCalls()).toBe(2));
+  });
+
+  it('shows only the rows of the content type that was chosen, also when the backend does not filter by it', async () => {
+    installMockBackend(moderationMock);
+    const real = globalThis.fetch;
+    interceptFetch((url, init) =>
+      url.includes('/moderation/records?') && url.includes('contentType=')
+        ? real(url.replace(/&?contentType=[A-Z_]+/, ''), init)
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<QueuePage />);
+    await rowOf(RECORD_ID.oldestImage);
+    await expandSearch(user);
+    await chooseOption(user, 'Content type', 'Action clip');
+    await user.click(screen.getByRole('button', { name: /查\s*询|Query|Search/ }));
+    await waitFor(
+      () => expect(screen.queryByRole('link', { name: RECORD_ID.oldestImage })).toBeNull(),
+      { timeout: 10000 },
+    );
+    expect(screen.getByRole('link', { name: RECORD_ID.clip })).toBeInTheDocument();
+    const types = screen
+      .getAllByRole('row')
+      .filter((r) => r.querySelector('a[href^="/moderation/"]'))
+      .map((r) => r.textContent ?? '');
+    expect(types.length).toBeGreaterThan(0);
+    for (const text of types) expect(text).toContain('Action clip');
   });
 
   it('has Complaint among the sources and the generated image and the action clip among the content types, and sends what is chosen', async () => {

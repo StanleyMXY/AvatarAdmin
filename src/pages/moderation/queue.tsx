@@ -1,7 +1,7 @@
 import type { ProColumns } from '@ant-design/pro-components';
 import { Link, useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Typography } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
 import { StatusTag } from '../../components/StatusTag';
@@ -58,10 +58,8 @@ export default function ModerationQueuePage() {
     }
   }, [intl]);
 
-  useEffect(() => {
-    void loadOldest();
-  }, [loadOldest]);
-
+  // The table asks for the list when the page opens and each time the list changes, and asks for
+  // this value with each of those; the retry button of the banner asks for it alone.
   const options = statusOptions(t);
   const now = Date.now();
 
@@ -71,8 +69,19 @@ export default function ModerationQueuePage() {
       dataIndex: 'id',
       search: false,
       render: (_, row) => (
-        <Link to={`/moderation/${encodeURIComponent(row.id)}`}>
-          <EllipsisPopoverText text={row.id} width={140} lines={1} />
+        <Link
+          to={`/moderation/${encodeURIComponent(row.id)}`}
+          title={row.id}
+          style={{
+            display: 'inline-block',
+            maxWidth: 140,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            verticalAlign: 'bottom',
+          }}
+        >
+          {row.id}
         </Link>
       ),
     },
@@ -179,15 +188,21 @@ export default function ModerationQueuePage() {
       <PagedListTable<ModerationRecord, Filters>
         rowKey="id"
         columns={columns}
-        request={({ page, pageSize, status, source, contentType }) => {
+        request={async ({ page, pageSize, status, source, contentType }) => {
           void loadOldest();
-          return listModerationRecords({
+          const answer = await listModerationRecords({
             page,
             pageSize,
             ...(status ? { status } : {}),
             ...(source ? { source } : {}),
             ...(contentType ? { contentType } : {}),
           });
+          // The contract does not list `contentType` among the query parameters yet (question file,
+          // part one): a backend that does not know it would send every type, which must not look
+          // like a filtered list.
+          return contentType
+            ? { ...answer, items: answer.items.filter((row) => row.contentType === contentType) }
+            : answer;
         }}
       />
     </Flex>

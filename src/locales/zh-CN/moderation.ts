@@ -60,7 +60,6 @@ const messages: Record<string, string> = {
   'moderation.queue.oldestFailed': '最老待处理记录的等待时长取不到：{message}',
   'moderation.queue.note': '待处理的记录按等待时长从长到短排在前面。举报必须真的被处理。',
   'moderation.queue.view': '查看',
-  'moderation.queue.reload': '刷新',
 
   'moderation.detail.back': '返回审核队列',
   'moderation.detail.record': '记录',
@@ -96,6 +95,7 @@ const messages: Record<string, string> = {
   'moderation.decision.confirmReject': '确认拒绝',
   'moderation.decision.approved': '已通过',
   'moderation.decision.rejected': '已拒绝',
+  'moderation.decision.stateChanged': '这条记录已被别人先处理了，它现在的状态：{status}。',
 
   'moderation.effect.AVATAR.APPROVE': '上传任务继续生成形象。',
   'moderation.effect.AVATAR.REJECT': '上传任务失败（内容被拒绝），并删除用户的原照。',

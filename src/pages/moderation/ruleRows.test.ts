@@ -35,6 +35,19 @@ describe('rows and inputs', () => {
     expect(input.note).toBe('n');
   });
 
+  it('trims U+0085 and U+001C..U+001F, which the contract counts as white space and String.trim keeps', () => {
+    const [input] = toInputs([
+      {
+        ...blankRow(),
+        pattern: `${String.fromCharCode(0x85)}a${String.fromCharCode(0x1f)}`,
+        note: `${String.fromCharCode(0x1c)}n${String.fromCharCode(0x85)}`,
+      },
+    ]);
+    expect(input.pattern).toBe('a');
+    expect(input.note).toBe('n');
+    expect(rowProblem({ ...blankRow(), pattern: String.fromCharCode(0x85) }).pattern).toBe('EMPTY');
+  });
+
   it('gives each row its own key, also after a copy', () => {
     const keys = new Set([...saved, ...toRows([]), blankRow(), blankRow()].map((r) => r.key));
     expect(keys.size).toBe(4);

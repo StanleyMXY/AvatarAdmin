@@ -104,6 +104,25 @@ describe('the rule list', { timeout: 30000 }, () => {
   });
 });
 
+describe('leaving the page with edits that are not saved', { timeout: 30000 }, () => {
+  const unload = () => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+
+  it('asks the browser before the page is closed or reloaded while the list has edits that are not saved, and not when it has none or once it is saved', async () => {
+    const user = userEvent.setup();
+    await openPage();
+    expect(unload()).toBe(false);
+    await addRule(user, 'ห้ามพูดคำนี้');
+    expect(unload()).toBe(true);
+    await save(user);
+    await screen.findByText('The list is saved');
+    await waitFor(() => expect(unload()).toBe(false));
+  });
+});
+
 describe('saving the list', { timeout: 30000 }, () => {
   it('adds a Thai and an Arabic rule and shows them again after the save, in the order they were put', async () => {
     const user = userEvent.setup();
@@ -430,17 +449,15 @@ describe('loading the list', { timeout: 30000 }, () => {
 });
 
 describe('the parameters section', { timeout: 30000 }, () => {
-  it('shows the other moderation keys with the rule list key as a read-only link to this page', async () => {
+  it('shows the other moderation keys and no row for the rule list, which this page edits above', async () => {
     await openPage();
-    const row = await screen.findByTestId('config-row-moderation.block_score');
-    expect(row).toBeInTheDocument();
+    await screen.findByTestId('config-row-moderation.block_score');
     const keys = [...document.querySelectorAll('[data-testid^="config-row-"]')].map((e) =>
       (e.getAttribute('data-testid') as string).replace('config-row-', ''),
     );
-    expect(keys.filter((k) => k.startsWith('moderation.'))).toHaveLength(11);
+    expect(keys.filter((k) => k.startsWith('moderation.'))).toHaveLength(10);
     expect(keys.every((k) => k.startsWith('moderation.'))).toBe(true);
-    const rules = screen.getByTestId('config-row-moderation.text_rules');
-    expect(within(rules).getByRole('link', { name: '/moderation/rules' })).toBeInTheDocument();
-    expect(within(rules).queryByRole('textbox')).toBeNull();
+    expect(keys).not.toContain('moderation.text_rules');
+    expect(screen.queryByRole('link', { name: '/moderation/rules' })).toBeNull();
   });
 });

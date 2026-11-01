@@ -1,13 +1,19 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Form, Input, Modal } from 'antd';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
-import type { ModerationDecision, ModerationRecord } from '../../services/moderation';
+import { ApiError } from '../../request/errors';
+import {
+  MODERATION_STATUSES,
+  type ModerationDecision,
+  type ModerationRecord,
+} from '../../services/moderation';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
 import { trimSpec } from '../../utils/trimSpec';
 import { effectKey } from './effects';
+import { labelOf } from './options';
 
 export const DECISION_NOTE_MAX = 500;
 
@@ -31,14 +37,37 @@ export function DecisionModal({ record, decision, onSubmit, onClose }: Props) {
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<{ note: string }>();
   const [failure, setFailure] = useState<string | null>(null);
+  // The body of a dialog that is closing is not drawn again, so its handlers read the decision from
+  // a ref: a press on the button while it fades out must not send the decision a second time.
+  const current = useRef(decision);
+  current.current = decision;
   const { run, pending } = useSingleFlight(async (chosen: ModerationDecision, note: string) => {
     setFailure(null);
     try {
       await onSubmit(chosen, note);
     } catch (error) {
-      setFailure(describeFailure(intl, error).text);
+      setFailure(failureText(error));
     }
   });
+
+  // The record is shown again after a 409; once it is no longer waiting there is nothing to confirm.
+  const stillPending = record.status === 'PENDING_REVIEW';
+
+  /** A 409 says the state the record is in now (`data.status`); any other failure is told by its code. */
+  function failureText(error: unknown): string {
+    if (error instanceof ApiError && error.code === 'INVALID_STATE') {
+      const status = (error.data as { status?: unknown } | null)?.status;
+      if (
+        typeof status === 'string' &&
+        (MODERATION_STATUSES as readonly string[]).includes(status)
+      ) {
+        return t('moderation.decision.stateChanged', {
+          status: labelOf(t, intl.messages, 'moderation.status', status),
+        });
+      }
+    }
+    return describeFailure(intl, error).text;
+  }
 
   const rejecting = decision === 'REJECT';
   return (
@@ -58,7 +87,7 @@ export function DecisionModal({ record, decision, onSubmit, onClose }: Props) {
         rejecting ? t('moderation.decision.confirmReject') : t('moderation.decision.confirmApprove')
       }
       cancelText={t('pages.common.cancel')}
-      okButtonProps={{ loading: pending, disabled: pending, danger: rejecting }}
+      okButtonProps={{ loading: pending, disabled: pending || !stillPending, danger: rejecting }}
       cancelButtonProps={{ disabled: pending }}
       onOk={() => form.submit()}
     >
@@ -77,7 +106,9 @@ export function DecisionModal({ record, decision, onSubmit, onClose }: Props) {
         name="moderationDecision"
         layout="vertical"
         requiredMark={false}
-        onFinish={(values) => decision && run(decision, trimSpec(values.note ?? ''))}
+        onFinish={(values) =>
+          current.current ? run(current.current, trimSpec(values.note ?? '')) : undefined
+        }
       >
         <RevalidateOnLocaleChange />
         <Form.Item

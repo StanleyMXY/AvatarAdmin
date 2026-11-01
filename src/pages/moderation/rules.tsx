@@ -14,6 +14,7 @@ import {
 } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
+import { useLeaveGuard } from '../../hooks/useLeaveGuard';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   getTextRules,
@@ -166,6 +167,7 @@ export default function ModerationRulesPage() {
   });
 
   const dirty = isDirty(rows, saved);
+  useLeaveGuard(dirty);
 
   if (load.phase === 'loading') {
     return <Spin />;
@@ -392,7 +394,7 @@ export default function ModerationRulesPage() {
       <Card size="small" title={t('moderation.rules.params')}>
         <Flex vertical gap={12}>
           <Typography.Text type="secondary">{t('moderation.rules.paramsNote')}</Typography.Text>
-          <ConfigForm editPermission="MODERATION:CONFIG" />
+          <ConfigForm editPermission="MODERATION:CONFIG" exclude={['moderation.text_rules']} />
         </Flex>
       </Card>
     </Flex>
