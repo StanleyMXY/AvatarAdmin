@@ -101,7 +101,7 @@ describe('registering a model', { timeout: 30000 }, () => {
     expect(await screen.findByText('e5-base', { selector: 'td' })).toBeInTheDocument();
   });
 
-  it('shows the detail of a 409 MEMORY_MODEL_CONFLICT as the memory service wrote it', async () => {
+  it('shows the words of the code for a 409 MEMORY_MODEL_CONFLICT and never the sentence of the memory service, which is in one language only', async () => {
     useMockBackend(memoryMock, configMock);
     const user = userEvent.setup();
     renderPage(<ModelsPage />);
@@ -109,15 +109,14 @@ describe('registering a model', { timeout: 30000 }, () => {
     fill(dialog, { name: 'bge-m3', url: 'https://tei.internal.example', dimensions: '768' });
     await user.click(within(dialog).getByRole('button', { name: 'Register' }));
     expect(
-      await within(dialog).findByText(
-        'Model bge-m3 is already registered with 1024 dimensions; its vector table cannot change, register a new name instead',
-      ),
+      await within(dialog).findByText(/registered with a different dimension/),
     ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/vector table cannot change/)).toBeNull();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(memoryStore.models.get('bge-m3')?.dimensions).toBe(1024);
   });
 
-  it('shows the detail whatever it holds: Thai, Arabic and a long string with no space', async () => {
+  it('does not show a detail in any script, Thai, Arabic or a long string with no space, even when the answer carries one', async () => {
     const detail = `ไม่สามารถ مرحبا ${'z'.repeat(2000)}`;
     stubFetch(async ({ init }) =>
       (init.method ?? 'GET') === 'GET'
@@ -129,7 +128,11 @@ describe('registering a model', { timeout: 30000 }, () => {
     const dialog = await openRegister(user);
     fill(dialog, {});
     await user.click(within(dialog).getByRole('button', { name: 'Register' }));
-    expect(await within(dialog).findByText(detail)).toBeInTheDocument();
+    expect(
+      await within(dialog).findByText(/registered with a different dimension/),
+    ).toBeInTheDocument();
+    expect(dialog.textContent).not.toContain('ไม่สามารถ');
+    expect(dialog.textContent).not.toContain('zzzz');
   });
 
   it('shows the generic text of the code when a 409 has no detail', async () => {

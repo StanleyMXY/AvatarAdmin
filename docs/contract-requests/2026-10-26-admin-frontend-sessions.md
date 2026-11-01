@@ -32,6 +32,8 @@
 
 **暂定做法：** 响应是 §18 `Session` 的列，按通则字段名一字不差：除了列表那九个（`id`、`accountId`、`deviceId`、`requestedAt`、`startedAt`、`endedAt`、`durationSeconds`、`modelTier`、`language`）外，详情抽屉读 `freeTier`、`roomName`、`timezone`、`renderMode`、`deadlineAt`、`endReason`、`agentJoinedAt`、`userJoinedAt`、`userLeftAt`。不读 `lastParticipantEventAt`、`agentIdentity`、`statsAppliedAt`（内部字段，运营不需要）。`endReason` 取 §15.6 的五个值，别的值原样显示；每个时刻字段为 `null` 时显示"—"。**问：** 这样读有没有不该返回给运营看的字段（`roomName` 是通话的房间名，我们当作可以显示）？
 
+**现状（2026-11-01）：** 后端 2026-10-29 清单 a7 已写明详情多一个字段 `maxDurationMinutes`（整数分钟，不小于 0，不为空，发起通话时记下的值）。详情抽屉读它，用来解释截止时间和现在的设置为什么不同（`src/pages/sessions/SessionDrawer.tsx`）；列表的九列不变。
+
 ## 四、列表里怎么认出游客会话
 
 列表的行没有 `guest` 字段，契约写"账号 ID（游客会话为空）"。

@@ -14,6 +14,7 @@
 2. `GET /cosmetics` 的筛选参数叫什么？我们暂定 `kind`（`OUTFIT`、`BACKGROUND`）、`enabled`（`true`、`false`）、`style`（`STYLIZED_3D`、`REALISTIC`，匹配 `compatibleStyles` 包含它的条目）。
 3. `GET /generation-tasks` 只有 `status`、`type` 两个筛选参数（契约写 `?status=FAILED&type=`），排序是创建时间倒序吗？
 4. `GET /likeness-complaints` 的筛选参数是 `status` 吗？按 `dueAt` 排序是从近到远（升序）吗？
+   **现状（2026-11-01）：** 已回答（后端 2026-10-29 清单 a11）：参数是 `status`，取值 `OPEN`（未结案，等于 `RECEIVED` 和 `INVESTIGATING`）或五个状态之一，区分大小写，错误值 400 `INVALID_REQUEST`；排序是 `dueAt` 升序、同时间按 `id`。假后端和页面按此实现。
 
 **暂定做法：**
 - 前端总是发 `page`、`pageSize`。响应里有 `total` 就按服务端分页；没有 `total`（返回了全部）就在前端按页切开。这样两种答案都不会让页面少显示条目。
@@ -28,7 +29,7 @@
 3. **`POST /cosmetics`、`POST /actions` 的请求体**：我们发 `key`、`kind`（动作没有）、`names`、`generationSpec`（动作另有 `description`）、`compatibleStyles`、`surfaces`、`creditPrice`（服装；`null` 表示不能用额度兑换）、`isFree`、`isDefault`、`triggerableBy`（动作）、`sortOrder`、`enabled`，加 `previewUploadId`/`iconUploadId`。预览图和图标创建时必填吗（第 18 章这两列没有标"可空"，我们暂定必填，前端创建时没有上传就不提交）？`enabled` 创建时能带吗（暂定能，新建表单默认 `false`）？
 4. **`PUT /cosmetics/{id}`、`PUT /actions/{id}` 的请求体**：我们发除 `key`、`kind`、`enabled` 之外的全部可编辑字段（整体替换，`creditPrice: null` 表示清除价格），`previewUploadId`/`iconUploadId` 只在换了图时才带。`key` 创建后不可改（契约第 18 章），`kind` 我们也按创建后只读处理（契约没有写它能不能改）。请确认这个请求体可以接受，特别是 `kind` 不带。
 5. **默认条目**：每种 `kind` 一个 `isDefault=true` 的免费条目。把另一个条目设为默认时，旧的默认条目的 `isDefault` 是自动取消，还是返回 409？`isDefault` 为真而 `isFree` 为假是 400 吗（假后端暂定 400，`details` 的 `ref` 为 `isDefault`）？
-6. **长度和格式**：`key`、`names` 每个值、动作的 `description`、声明的 `version` 和 `texts` 每个值的长度上限和字符规则契约没有写（只有 `generationSpec` 的 1..2000 码点）。前端只检查非空和 `generationSpec` 的长度，其余交给后端的 400（原样展示）。
+6. **长度和格式**：`key`、`names` 每个值、动作的 `description`、声明的 `version` 和 `texts` 每个值的长度上限和字符规则契约没有写（只有 `generationSpec` 的 1..2000 码点）。前端只检查非空和 `generationSpec` 的长度，其余交给后端的 400（页面显示按错误码和原因码翻译的文字，不显示后端的 `message`）。
 7. **声明版本**：`version` 的格式是什么（自由文本，还是日期加序号）？重复是 409 `DUPLICATE_RESOURCE` 吗（`data.field` 是什么）？`activeFrom` 在从未设为生效的版本上是 `null` 吗？暂定都是：自由文本，重复 409 且 `data.field` 为 `version`，没生效过的版本 `activeFrom` 为 `null`。
 
 ## 三、几个写操作的响应
