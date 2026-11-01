@@ -17,6 +17,7 @@ const messages: Record<string, string> = {
   'stat.common.land.button': '重新落地该日',
   'stat.common.land.done': '已重新落地 {date}',
   'stat.common.land.nofillSkipped': '这一天的“无广告原因”表没有重算：它只保留最近 7 个 UTC 日。',
+  'stat.common.land.partial': '已重新落地：{done}。在 {failed} 处停止：{reason}',
   'stat.common.land.hint': '重新计算所选 UTC 日的汇总。',
   'stat.common.unit.percentPoint': '个百分点',
   'stat.common.cohortDate': '注册日',

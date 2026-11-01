@@ -123,6 +123,27 @@ describe('LandBar', () => {
     await waitFor(() => expect(onLanded).toHaveBeenCalledTimes(1));
   });
 
+  it('says which names were re-landed and where it stopped, with the words of the error code', async () => {
+    stubFetch((call) =>
+      call.url.includes('daily-business')
+        ? jsonResponse(500, envelope('INTERNAL_ERROR', null, 'raw backend words'))
+        : jsonResponse(200, envelope('200', null)),
+    );
+    renderPage(<LandBar name={['daily-event', 'daily-business']} onLanded={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
+    const text = await screen.findByText(/Stopped at daily-business/);
+    expect(text.textContent).toMatch(/Re-landed: daily-event\./);
+    expect(text.textContent).not.toContain('raw backend words');
+  });
+
+  it('shows only the words of the error code when the first name failed, with nothing re-landed before it', async () => {
+    stubFetch(() => jsonResponse(500, envelope('INTERNAL_ERROR')));
+    renderPage(<LandBar name={['daily-event', 'daily-business']} onLanded={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
+    expect(await screen.findByText('Server error. Please try again later.')).toBeInTheDocument();
+    expect(screen.queryByText(/Stopped at/)).toBeNull();
+  });
+
   it('runs both names in order when all succeed', async () => {
     const calls = stubFetch(() => jsonResponse(200, envelope('200', null)));
     const onLanded = vi.fn();

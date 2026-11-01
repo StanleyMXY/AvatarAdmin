@@ -19,6 +19,7 @@ const messages: Record<string, string> = {
   'stat.common.land.done': 'Re-landed {date}',
   'stat.common.land.nofillSkipped':
     'The table of the reasons for no ad was not recomputed for this day: it is kept for the last 7 UTC days only.',
+  'stat.common.land.partial': 'Re-landed: {done}. Stopped at {failed}: {reason}',
   'stat.common.land.hint': 'Recomputes the summary of the chosen UTC day.',
   'stat.common.unit.percentPoint': 'pp',
   'stat.common.cohortDate': 'Sign-up day',

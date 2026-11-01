@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderPage } from '../../tests/renderPage';
 import { ApiError } from '../request/errors';
@@ -13,6 +14,22 @@ const mount = (props: Partial<React.ComponentProps<typeof ReasonModalForm>> = {}
   );
   return { onSubmit, onClose };
 };
+
+// The parent that closes the dialog when the submit went through, as the pages do.
+function ClosesAfterSuccess({ onSubmit }: { onSubmit: (reason: string) => Promise<void> }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <ReasonModalForm
+      open={open}
+      title="Ban this user"
+      onSubmit={async (reason) => {
+        await onSubmit(reason);
+        setOpen(false);
+      }}
+      onClose={() => setOpen(false)}
+    />
+  );
+}
 
 const type = (text: string) =>
   fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
@@ -129,6 +146,22 @@ describe('ReasonModalForm', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     release();
+  });
+
+  it('sends nothing more once the submit went through and the dialog is closing, even when the button is pressed again', async () => {
+    const onSubmit = vi.fn(async () => {});
+    renderPage(<ClosesAfterSuccess onSubmit={onSubmit} />);
+    type('spam');
+    submit();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    // The dialog is leaving, but its buttons are still in the page for a moment.
+    const ok = document.querySelector('.ant-modal-footer .ant-btn-primary') as HTMLElement;
+    await waitFor(() =>
+      expect(document.querySelector('.ant-modal')?.className).toMatch(/-leave|-hidden/),
+    );
+    fireEvent.click(ok);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
   it('closes on cancel and shows the hint', async () => {

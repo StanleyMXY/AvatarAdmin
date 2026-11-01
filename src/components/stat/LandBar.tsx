@@ -34,10 +34,11 @@ export function LandBar({ name, onLanded, dateLabelId = 'stat.common.land.date',
   const [day, setDay] = useState<string>(() => yesterdayUtc());
 
   const { run, pending } = useSingleFlight(async () => {
+    const names = Array.isArray(name) ? name : [name];
     let landed = 0;
     let nofillSkipped = false;
     try {
-      for (const one of Array.isArray(name) ? name : [name]) {
+      for (const one of names) {
         const result = await landStat(one, day);
         if (result?.nofillSkipped) nofillSkipped = true;
         landed += 1;
@@ -46,7 +47,16 @@ export function LandBar({ name, onLanded, dateLabelId = 'stat.common.land.date',
       // The backend leaves the table of the reasons for no ad as it was for a day it no longer holds.
       if (nofillSkipped) message.info(intl.formatMessage({ id: 'stat.common.land.nofillSkipped' }));
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      const reason = describeFailure(intl, error).text;
+      // With several names, say which ones went in before the one that failed.
+      message.error(
+        landed > 0
+          ? intl.formatMessage(
+              { id: 'stat.common.land.partial' },
+              { done: names.slice(0, landed).join(', '), failed: names[landed], reason },
+            )
+          : reason,
+      );
     } finally {
       // Whatever was re-landed before a failure is already in the table: the page reads it again.
       if (landed > 0) onLanded();
