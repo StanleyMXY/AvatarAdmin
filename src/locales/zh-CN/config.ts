@@ -66,7 +66,6 @@ const messages: Record<string, string> = {
     '强制关闭已设为 0（不启用），非激励广告没有兜底的关闭按钮',
   'config.warning.SMS_COUNTRY_UNCOVERED': '白名单里有国家没有启用的短信通道覆盖',
   'config.requiresUploadBase': '广告素材和 APK 上传需要它',
-  'config.jsonInvalid': 'JSON 格式不对',
   'config.warning.PHONE_LOGIN_DISABLED_ACCOUNTS': '关闭手机号登录后，仍有 {count} 个手机号账号',
   'config.warning.UNKNOWN': '保存成功，但有提醒',
   'config.auth.access_ttl_minutes.label': '访问令牌有效期',

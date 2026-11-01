@@ -67,7 +67,6 @@ const messages: Record<string, string> = {
   'config.warning.SMS_COUNTRY_UNCOVERED':
     'A country in the allow list has no enabled SMS channel covering it',
   'config.requiresUploadBase': 'Ad media and APK uploads need it',
-  'config.jsonInvalid': 'Not valid JSON',
   'config.warning.PHONE_LOGIN_DISABLED_ACCOUNTS':
     'Phone sign-in is now off, but {count} phone-number accounts exist',
   'config.warning.UNKNOWN': 'Saved, with a warning',
