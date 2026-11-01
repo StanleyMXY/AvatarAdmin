@@ -457,15 +457,15 @@ describe('the gaps of the second line: names, signed links, change phrases and p
 
   describe('signed parameters in a link', () => {
     it.each([
-      ['https://cdn.example.com/a.png?sig=abc123', `https://cdn.example.com/a.png?sig=${H}`],
-      ['https://cdn.example.com/a.png?Sig=abc123', `https://cdn.example.com/a.png?Sig=${H}`],
+      ['https://files.example.com/a.png?sig=abc123', `https://files.example.com/a.png?sig=${H}`],
+      ['https://files.example.com/a.png?Sig=abc123', `https://files.example.com/a.png?Sig=${H}`],
       [
-        'https://cdn.example.com/a.png?a=1&sig=abc123&b=2',
-        `https://cdn.example.com/a.png?a=1&sig=${H}&b=2`,
+        'https://files.example.com/a.png?a=1&sig=abc123&b=2',
+        `https://files.example.com/a.png?a=1&sig=${H}&b=2`,
       ],
       [
-        'https://cdn.example.com/a.png?a=1&sign=abc123#top',
-        `https://cdn.example.com/a.png?a=1&sign=${H}#top`,
+        'https://files.example.com/a.png?a=1&sign=abc123#top',
+        `https://files.example.com/a.png?a=1&sign=${H}#top`,
       ],
       ['/files/a.png?expires=1&hmac=deadbeef', `/files/a.png?expires=1&hmac=${H}`],
       ['"link":"x.com/a?sig=Zm9v%2Bbar%3D"', `"link":"x.com/a?sig=${H}"`],
