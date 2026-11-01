@@ -9,7 +9,7 @@ import { describeFailure } from '../../session/describe';
 type Shown =
   | { index: number; state: 'loading' }
   | { index: number; state: 'ready'; evidence: ComplaintEvidence }
-  | { index: number; state: 'failed'; text: string };
+  | { index: number; state: 'failed'; error: unknown };
 
 /** A signed address is a plain http(s) address; anything else (a script address, for one) is not opened. */
 export function isOpenableAddress(url: unknown): url is string {
@@ -89,11 +89,7 @@ export function EvidenceViewer({ complaintId, count }: { complaintId: string; co
       if (isCurrent()) setShown({ index, state: 'ready', evidence });
     } catch (error) {
       if (!isCurrent()) return;
-      const text =
-        error instanceof ApiError && error.code === 'RESOURCE_NOT_FOUND'
-          ? t('complaints.evidence.notFound')
-          : describeFailure(intl, error).text;
-      setShown({ index, state: 'failed', text });
+      setShown({ index, state: 'failed', error });
     }
   };
 
@@ -116,7 +112,17 @@ export function EvidenceViewer({ complaintId, count }: { complaintId: string; co
         ))}
       </Flex>
       {shown?.state === 'loading' ? <Spin /> : null}
-      {shown?.state === 'failed' ? <Alert type="error" showIcon title={shown.text} /> : null}
+      {shown?.state === 'failed' ? (
+        <Alert
+          type="error"
+          showIcon
+          title={
+            shown.error instanceof ApiError && shown.error.code === 'RESOURCE_NOT_FOUND'
+              ? t('complaints.evidence.notFound')
+              : describeFailure(intl, shown.error).text
+          }
+        />
+      ) : null}
       {shown?.state === 'ready' ? (
         <EvidenceFile
           evidence={shown.evidence}
