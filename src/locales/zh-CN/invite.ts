@@ -66,6 +66,7 @@ const messages: Record<string, string> = {
   'invite.chain.accountRequired': '请输入账号 ID',
   'invite.chain.depthError': '深度需要是 1 到 {max} 的整数',
   'invite.chain.depthErrorOpen': '深度需要是不小于 1 的整数',
+  'invite.chain.fieldFailure': '{field}：{reason}',
   'invite.chain.load': '载入邀请链',
   'invite.chain.idle': '输入账号 ID 后载入它的邀请链。',
   'invite.chain.summary': '后代 {count} 人，实际深度 {depth} 级',

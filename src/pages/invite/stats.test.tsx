@@ -7,6 +7,7 @@ import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import enUS from '../../locales/en-US';
+import zhCN from '../../locales/zh-CN';
 import StatsPage from './stats';
 import { clickExport, signIn, withExportSheet } from './testSetup';
 
@@ -498,6 +499,54 @@ describe('the invite statistics page: the invitation chain', { timeout: 30000 },
       '/api/admin/invites/chain?rootAccountId=acc-two-2&maxDepth=3',
     );
     expect(await screen.findByTestId('invite-chain-tree')).toBeInTheDocument();
+  });
+
+  it('names the field and the reason when the backend refuses the depth, not only the general words', async () => {
+    // The page holds a limit of 5 read at sign-in; another administrator has since lowered it.
+    backend({
+      chain: () =>
+        Promise.resolve(
+          jsonResponse(
+            400,
+            envelope(
+              'INVALID_REQUEST',
+              { details: [{ ref: 'maxDepth', reason: 'OUT_OF_RANGE' }] },
+              'raw backend words',
+            ),
+          ),
+        ),
+    });
+    const user = userEvent.setup();
+    renderPage(<StatsPage />);
+    await openFission(user);
+    await load(user, 'acc-top-1');
+    const bar = await screen.findByRole('alert');
+    expect(bar.textContent).toContain(enUS['error.INVALID_REQUEST']);
+    expect(bar.textContent).toContain(`Depth: ${enUS['reason.OUT_OF_RANGE']}`);
+    expect(document.body.textContent).not.toContain('raw backend words');
+  });
+
+  it('puts the field of a refusal in the words of the other language too', async () => {
+    backend({
+      chain: () =>
+        Promise.resolve(
+          jsonResponse(
+            400,
+            envelope('INVALID_REQUEST', {
+              details: [{ ref: 'rootAccountId', reason: 'ACCOUNT_NOT_FOUND' }],
+            }),
+          ),
+        ),
+    });
+    const user = userEvent.setup();
+    renderPage(<StatsPage />, 'zh-CN');
+    await user.click(await screen.findByRole('tab', { name: zhCN['invite.stats.tab.fission'] }));
+    await user.type(screen.getByRole('textbox', { name: zhCN['invite.chain.accountId'] }), 'acc-1');
+    await user.click(screen.getByRole('button', { name: zhCN['invite.chain.load'] }));
+    const bar = await screen.findByRole('alert');
+    expect(bar.textContent).toContain(
+      `${zhCN['invite.chain.accountId']}：${zhCN['reason.ACCOUNT_NOT_FOUND']}`,
+    );
   });
 
   it('shows only the words of a known error code when the account does not exist', async () => {

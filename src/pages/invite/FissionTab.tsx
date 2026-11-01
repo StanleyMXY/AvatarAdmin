@@ -16,13 +16,12 @@ import {
 } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getDepthStats, getInviteChain, type InviteChain } from '../../services/invite';
-import { describeFailure } from '../../session/describe';
 import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { formatInstant } from '../../utils/format';
 import { DASH, formatCount } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
-import { checkDepth } from './chainRules';
+import { chainFailureText, checkDepth } from './chainRules';
 import { descendantsOf, levelsBelow, type TreeRow, treeRows } from './chainTree';
 import { count } from './numbers';
 import { ReadState } from './ReadState';
@@ -79,7 +78,7 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
       },
       (error) => {
         if (mine === counter.current) {
-          setState({ kind: 'failed', text: describeFailure(intl, error).text });
+          setState({ kind: 'failed', text: chainFailureText(intl, error) });
         }
       },
     );
