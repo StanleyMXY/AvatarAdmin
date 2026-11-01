@@ -66,6 +66,12 @@ describe('UploadField: limits beside the control', () => {
     expect(text).toMatch(/Max \d/);
   });
 
+  it('hides the native file box with its own style, so that the form style cannot show it beside the button', () => {
+    mount('catalogImage');
+    const box = screen.getByTestId('upload-input');
+    expect(box.style.display).toBe('none');
+  });
+
   it('writes the numbers from meta, and changes them when meta changes', () => {
     const { unmount } = mount('catalogImage');
     expect(document.body.textContent).toContain('Max 2 MB');

@@ -191,6 +191,8 @@ export function UploadField<T extends { uploadId: string }>({
           ref={input}
           type="file"
           hidden
+          // an Ant Design form shows a file input again whatever `hidden` says; the inline style wins
+          style={{ display: 'none' }}
           accept={accept}
           data-testid="upload-input"
           onChange={(event) => {
