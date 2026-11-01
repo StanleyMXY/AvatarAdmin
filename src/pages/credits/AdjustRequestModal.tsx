@@ -4,8 +4,8 @@ import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdjustKind, createAdjustRequest } from '../../services/credits';
-import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { detailReasons, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
 
 type Values = { accountId: string; kind: AdjustKind; delta: number | null; reason: string };
@@ -44,11 +44,13 @@ export function AdjustRequestModal({ open, accountId, onClose, onCreated }: Prop
         reason: trimSpec(values.reason),
       });
     } catch (error) {
-      const { fields } = describeFailure(intl, error);
-      const mine = fields.filter((f) => (FIELDS as readonly string[]).includes(f.ref));
-      if (mine.length > 0) {
-        form.setFields(mine.map((f) => ({ name: f.ref as keyof Values, errors: [f.text] })));
-      }
+      setFieldReasons(
+        form,
+        intl,
+        detailReasons(intl, error, (ref) =>
+          (FIELDS as readonly string[]).includes(ref) ? ref : undefined,
+        ),
+      );
       fail(error);
       return;
     }

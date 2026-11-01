@@ -9,8 +9,8 @@ import {
   createCreditProduct,
   updateCreditProduct,
 } from '../../services/credits';
-import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { detailReasons, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
 import { assertPackUnchanged, PackChangedError } from './freshPack';
 
@@ -71,11 +71,13 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
         onClose();
         return;
       }
-      const { fields } = describeFailure(intl, error);
-      const mine = fields.filter((f) => (FIELDS as readonly string[]).includes(f.ref));
-      if (mine.length > 0) {
-        form.setFields(mine.map((f) => ({ name: f.ref as keyof Values, errors: [f.text] })));
-      }
+      setFieldReasons(
+        form,
+        intl,
+        detailReasons(intl, error, (ref) =>
+          (FIELDS as readonly string[]).includes(ref) ? ref : undefined,
+        ),
+      );
       fail(error);
       return;
     }

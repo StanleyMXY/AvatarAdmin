@@ -35,6 +35,7 @@ import {
 } from '../../services/subscriptions';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { detailReasons, setFieldReasons } from '../../utils/fieldReasons';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
@@ -100,12 +101,10 @@ function GrantDialog({
         reason: trimSpec(values.reason),
       });
     } catch (error) {
-      const { fields } = describeFailure(intl, error);
-      const known = fields.filter((f) =>
-        ['entitlementKey', 'durationDays', 'reason'].includes(f.ref),
+      const known = detailReasons(intl, error, (ref) =>
+        ['entitlementKey', 'durationDays', 'reason'].includes(ref) ? ref : undefined,
       );
-      if (known.length > 0)
-        form.setFields(known.map((f) => ({ name: f.ref as keyof GrantForm, errors: [f.text] })));
+      if (known.length > 0) setFieldReasons(form, intl, known);
       else setFailure(error);
       return;
     }

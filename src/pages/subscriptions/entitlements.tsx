@@ -36,6 +36,7 @@ import {
 } from '../../services/subscriptions';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { detailReasons, messageReason, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
 import { FailureAlert } from './FailureAlert';
 import { FeatureValueEditor } from './FeatureValueEditor';
@@ -219,13 +220,13 @@ function DefDialog({
         error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE'
           ? (error.data as { field?: unknown } | null)?.field
           : undefined;
-      const fields = describeFailure(intl, error).fields.filter((f) => known(f.ref));
+      const fields = detailReasons(intl, error, (ref) => (known(ref) ? ref : undefined));
       // A refusal is put beside the field of the form it names; one that names anything else is
       // shown above the form, so that it is never swallowed.
       if (known(duplicate)) {
-        form.setFields([{ name: duplicate, errors: [t('error.DUPLICATE_RESOURCE')] }]);
+        setFieldReasons(form, intl, [messageReason(duplicate, 'error.DUPLICATE_RESOURCE')]);
       } else if (fields.length > 0) {
-        form.setFields(fields.map((f) => ({ name: f.ref as keyof DefForm, errors: [f.text] })));
+        setFieldReasons(form, intl, fields);
       } else {
         setFailure(error);
       }

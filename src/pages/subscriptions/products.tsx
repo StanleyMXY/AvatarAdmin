@@ -32,9 +32,9 @@ import {
   type SubscriptionProduct,
   saveSubscriptionProduct,
 } from '../../services/subscriptions';
-import { describeFailure } from '../../session/describe';
 import { failureLine } from '../../session/failureLine';
 import { countCodePoints } from '../../utils/codePoints';
+import { detailReasons, messageReason, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
 import { FailureAlert } from './FailureAlert';
 import { valuesOf } from './featureRules';
@@ -97,7 +97,7 @@ function ProductDialog({
       product === null &&
       loaded.products.some((p) => p.store === store && p.productId === productId)
     ) {
-      form.setFields([{ name: 'productId', errors: [t('subscriptions.products.exists')] }]);
+      setFieldReasons(form, intl, [messageReason('productId', 'subscriptions.products.exists')]);
       return;
     }
     try {
@@ -111,12 +111,12 @@ function ProductDialog({
         surfaces: product?.surfaces ?? [],
       });
     } catch (error) {
-      const { fields } = describeFailure(intl, error);
-      const known = fields.filter((f) =>
-        ['store', 'productId', 'entitlementKey', 'enabled', 'sortOrder'].includes(f.ref),
+      const known = detailReasons(intl, error, (ref) =>
+        ['store', 'productId', 'entitlementKey', 'enabled', 'sortOrder'].includes(ref)
+          ? ref
+          : undefined,
       );
-      if (known.length > 0)
-        form.setFields(known.map((f) => ({ name: f.ref as keyof ProductForm, errors: [f.text] })));
+      if (known.length > 0) setFieldReasons(form, intl, known);
       else setFailure(error);
       return;
     }

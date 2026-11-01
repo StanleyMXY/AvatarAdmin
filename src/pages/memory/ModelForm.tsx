@@ -4,7 +4,7 @@ import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { MEMORY_NAME_PATTERN, registerEmbeddingModel } from '../../services/memory';
-import { describeFailure } from '../../session/describe';
+import { detailReasons, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
 
 type Values = { modelName?: string; teiBaseUrl?: string; dimensions?: number | null };
@@ -43,13 +43,12 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
         dimensions: values.dimensions as number,
       });
     } catch (error) {
-      const { fields } = describeFailure(intl, error);
       const byRef: Record<string, string> = { name: 'modelName' };
-      const placed = fields.filter((f) => ['name', 'teiBaseUrl', 'dimensions'].includes(f.ref));
+      const placed = detailReasons(intl, error, (ref) =>
+        ['name', 'teiBaseUrl', 'dimensions'].includes(ref) ? (byRef[ref] ?? ref) : undefined,
+      );
       if (placed.length > 0) {
-        form.setFields(
-          placed.map((f) => ({ name: (byRef[f.ref] ?? f.ref) as keyof Values, errors: [f.text] })),
-        );
+        setFieldReasons(form, intl, placed);
       } else {
         fail(error);
       }
