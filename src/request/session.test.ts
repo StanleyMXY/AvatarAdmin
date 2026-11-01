@@ -83,6 +83,16 @@ describe('token storage', () => {
     expect(getToken()).toBeNull();
   });
 
+  it('clearToken as the very first call of a page load: when storage refuses the removal, the token is not read back', () => {
+    sessionStorage.setItem(KEY, 'left-over');
+    resetSessionState();
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+    expect(() => clearToken()).not.toThrow();
+    expect(getToken()).toBeNull();
+  });
+
   it('signing out is clearToken: afterwards not even a fresh page load finds the token', () => {
     setToken('abc');
     clearToken();
@@ -159,7 +169,8 @@ describe('session handlers', () => {
     expect(getToken()).toBeNull();
   });
 
-  it('a handler that throws does not leave the token in place', () => {
+  it('a handler that throws does not leave the token in place, and its error does not reach the caller', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     setSessionHandlers({
       onExpired: () => {
         throw new Error('boom');
@@ -167,7 +178,37 @@ describe('session handlers', () => {
       onForbidden: vi.fn(),
     });
     setToken('abc');
-    expect(() => handleTokenExpired('abc')).toThrow('boom');
+    expect(() => handleTokenExpired('abc')).not.toThrow();
     expect(getToken()).toBeNull();
+    // The failure is not swallowed silently: it is logged once, with the project tag and no token.
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(String(log.mock.calls[0][0])).toContain('[avatar-admin]');
+    expect(JSON.stringify(log.mock.calls)).not.toContain('abc');
+  });
+
+  it('a forbidden handler that throws does not reach the caller either', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    setSessionHandlers({
+      onExpired: vi.fn(),
+      onForbidden: () => {
+        throw new Error('boom');
+      },
+    });
+    expect(() => handleForbidden()).not.toThrow();
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(String(log.mock.calls[0][0])).toContain('[avatar-admin]');
+  });
+
+  it('a handler that throws does not stop the next expiry after a new login', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onExpired = vi.fn(() => {
+      throw new Error('boom');
+    });
+    setSessionHandlers({ onExpired, onForbidden: vi.fn() });
+    setToken('one');
+    handleTokenExpired('one');
+    setToken('two');
+    handleTokenExpired('two');
+    expect(onExpired).toHaveBeenCalledTimes(2);
   });
 });

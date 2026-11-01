@@ -11,8 +11,9 @@
 1. `GET /ads/campaigns`、`/ads/units`、`/ads/creatives` 是不是 `{"items":[…],"total":N}`；`GET /ads/placements`（四行，不分页）是不是 `{"items":[…]}`？
 2. 对象的字段是不是 §22.3 里的列名，管理员 ID 旁带 `…Username`（计划有 `createdByUsername`、`updatedByUsername`，素材有 `createdByUsername`、`reviewedByUsername`，后端回复第 3 条已经说过）？
 3. 素材行里的 `type`、`width`、`height`、`bytes`、`durationSeconds`、`mediaUrl`、`thumbnailUrl` 是不是都在列表里（§22.3 说地址由 `uploadId` 拼出）？每次读列表是不是都给新地址？
+4. 契约 §22.3 的单元字段 `surfaces`（按 `X-Platform`、`X-Channel` 限定，空数组表示所有端；选取时不含请求端的单元按 `TARGETING_MISS` 排除）：`GET /ads/units` 的行里带不带它？`POST /ads/units`、`PUT /ads/units/{id}` 接不接受它（§22.9 写 `PUT` 只改四个字段）？要不要在后台显示和编辑？现在后台既不显示也不发：别处创建的 `surfaces` 为 `["ANDROID"]` 的单元，列表的“定向”列写“不限”，而 iOS 请求实际被排除，运营会困惑。
 
-**暂定做法：** 前端既收 `{items,total}` 也收裸数组，没有 `total` 时按条数算；字段名按 §22.3；缩略图只有 `https://` 开头或 `data:image/` 开头的地址才画，别的显示"—"。
+**暂定做法：** 前端既收 `{items,total}` 也收裸数组，没有 `total` 时按条数算；字段名按 §22.3；缩略图只有 `https://` 开头或 `data:image/` 开头的地址才画，别的显示"—"。`surfaces` 先不显示、不发送，等后端回答。
 
 ## 二、各写接口的请求体
 
@@ -56,7 +57,7 @@
 
 **问：** 是 409 `INVALID_STATE`（`data.status` 是对象当前的状态，页面就看不出是"状态不对"还是"名下有单元"）吗？能不能给一个专门的原因（例如 409 `RESOURCE_IN_USE`，`data.what` 是 `units` 或 `creatives`）？草稿计划名下有单元时能不能删（契约字面是"草稿或已结束，且名下没有单元"，前端按两种状态都不能带单元处理）？
 
-**暂定做法：** 能读到单元的管理员，页面对有单元的计划不提供删除（按钮灰掉并写明原因）；读不到时提供按钮，后端拒绝时显示 `error.INVALID_STATE` 的译文。单元的删除页面不预判（读素材需要另一个权限），拒绝时同样显示译文。
+**暂定做法：** 能读到单元的管理员，页面对有单元的计划不提供删除（按钮灰掉并写明原因）；读不到时提供按钮，后端拒绝时显示 `error.INVALID_STATE` 的译文。单元的删除页面不预判（读素材需要另一个权限；§22.9 写 `GET /ads/units/{id}` 返回单元及其素材的只读列表，但素材列表的字段名没有写，所以前端不依赖它），拒绝时在 `error.INVALID_STATE` 的译文后面加一句“名下还有素材的单元不能删除，请先删除它的素材”（草稿单元被 409 拒绝只可能是这个原因）。
 
 ## 六、长度、范围和格式
 

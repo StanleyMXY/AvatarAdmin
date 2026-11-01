@@ -133,6 +133,35 @@ describe('uploadFile', () => {
     expect(getToken()).toBeNull();
   });
 
+  it('a 401 for a token that has been replaced since is not an expiry (a slow upload from before a new sign-in)', async () => {
+    setToken('old');
+    const pending = uploadFile({ url: '/uploads/image', file: file() });
+    setToken('new');
+    xhrs[0].respond(401, JSON.stringify(envelope('ADMIN_INVALID_TOKEN')));
+    expect((await caught(pending)).code).toBe('ADMIN_INVALID_TOKEN');
+    expect(onExpired).not.toHaveBeenCalled();
+    expect(getToken()).toBe('new');
+  });
+
+  it('a session handler that throws does not leave the upload hanging: it ends with the ApiError of the answer', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    setSessionHandlers({
+      onExpired: () => {
+        throw new Error('handler bug');
+      },
+      onForbidden: () => {
+        throw new Error('handler bug');
+      },
+    });
+    setToken('old');
+    const expired = uploadFile({ url: '/uploads/image', file: file() });
+    xhrs[0].respond(401, JSON.stringify(envelope('ADMIN_INVALID_TOKEN')));
+    expect((await caught(expired)).code).toBe('ADMIN_INVALID_TOKEN');
+    const forbidden = uploadFile({ url: '/uploads/image', file: file() });
+    xhrs[1].respond(403, JSON.stringify(envelope('ADMIN_FORBIDDEN')));
+    expect((await caught(forbidden)).code).toBe('ADMIN_FORBIDDEN');
+  });
+
   it('403 ADMIN_FORBIDDEN goes through onForbidden', async () => {
     const pending = uploadFile({ url: '/uploads/image', file: file() });
     xhrs[0].respond(403, JSON.stringify(envelope('ADMIN_FORBIDDEN')));

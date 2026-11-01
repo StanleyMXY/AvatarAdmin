@@ -50,6 +50,22 @@ export function setSessionHandlers(next: SessionHandlers): void {
 }
 
 /**
+ * Runs a handler of the shell. Its bug must not replace the answer of the request that reported
+ * it (the caller would see the handler's error instead of an ApiError, and an upload would never
+ * end), so it is logged, with the project tag and without any token, and not passed on.
+ */
+function runHandler(name: keyof SessionHandlers): void {
+  try {
+    handlers?.[name]();
+  } catch (error) {
+    console.error(
+      `[avatar-admin] the session handler ${name} failed:`,
+      error instanceof Error ? error.message : 'not an Error',
+    );
+  }
+}
+
+/**
  * A request that was sent with `sentToken` was answered ADMIN_INVALID_TOKEN. Clears the token and
  * calls `onExpired`, once however many requests report it. A report about a token that has been
  * replaced since (a slow answer arriving after a new login) is ignored.
@@ -59,12 +75,12 @@ export function handleTokenExpired(sentToken: string | null): void {
   clearToken();
   if (expiredLatch) return;
   expiredLatch = true;
-  handlers?.onExpired();
+  runHandler('onExpired');
 }
 
 /** A request was answered ADMIN_FORBIDDEN: the permissions the page shows may be out of date. */
 export function handleForbidden(): void {
-  handlers?.onForbidden();
+  runHandler('onForbidden');
 }
 
 /**

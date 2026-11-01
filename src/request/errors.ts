@@ -90,13 +90,17 @@ const hasText = (value: string, key: string) => value !== '' && value !== key;
 
 /**
  * The texts to show for an error: `text` from `error.<code>`, and one text per detail from
- * `reason.<reason>`. A missing `error.<code>` becomes `error.UNKNOWN` plus the backend message; a
- * missing reason falls back to the backend message (English), then to the reason code.
+ * `reason.<reason>`. A missing `error.<code>` becomes `error.UNKNOWN` plus the backend message. A
+ * missing reason falls back to the backend message (English) when it is the only detail, so the
+ * sentence is not repeated on every row; with several details it falls back to the reason code.
+ * Anything that is not an `ApiError` (a TypeError from a page, an abort) is `error.UNKNOWN` alone:
+ * the message of a foreign error may carry an address.
  */
 export function describeError(
-  e: ApiError,
+  e: unknown,
   t: (key: string) => string,
 ): { text: string; fields: { ref: string; text: string }[] } {
+  if (!(e instanceof ApiError)) return { text: t('error.UNKNOWN'), fields: [] };
   const known = t(`error.${e.code}`);
   let text: string;
   if (hasText(known, `error.${e.code}`)) {
@@ -107,9 +111,10 @@ export function describeError(
   }
   const fields = e.details.map((detail) => {
     const reason = t(`reason.${detail.reason}`);
+    const untranslated = e.details.length === 1 ? e.message || detail.reason : detail.reason;
     return {
       ref: detail.ref,
-      text: hasText(reason, `reason.${detail.reason}`) ? reason : e.message || detail.reason,
+      text: hasText(reason, `reason.${detail.reason}`) ? reason : untranslated,
     };
   });
   return { text, fields };
