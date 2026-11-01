@@ -3,8 +3,10 @@ import { Button, Flex, Select, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { HeaderTip } from '../../components/HeaderTip';
+import { PagedTable } from '../../components/PagedTable';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { type Kept, useKeptState } from '../../hooks/useKeptState';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AttributionRecord,
   getRecords,
@@ -19,9 +21,7 @@ import { DASH } from '../../utils/ratio';
 import { lastNDaysUtc, utcDayRangeToInstants } from '../../utils/utcDay';
 import { AccountLink } from './AccountLink';
 import { moneyText, numberOf } from './figures';
-import { PagedTable } from './PagedTable';
 import type { CampaignList } from './useCampaigns';
-import { useServerPage } from './useServerPage';
 
 type Filter = {
   range: DayRange;

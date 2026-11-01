@@ -2,9 +2,11 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Button, Flex, Input, Select, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
 import { StatusTag } from '../../components/StatusTag';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { type Kept, useKeptState } from '../../hooks/useKeptState';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AttributionClick,
   CLICK_STATUSES,
@@ -17,9 +19,7 @@ import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { lastNDaysUtc, utcDayRangeToInstants } from '../../utils/utcDay';
 import { CampaignSelect } from './CampaignSelect';
-import { PagedTable } from './PagedTable';
 import type { CampaignList } from './useCampaigns';
-import { useServerPage } from './useServerPage';
 
 type Filter = {
   range: DayRange;

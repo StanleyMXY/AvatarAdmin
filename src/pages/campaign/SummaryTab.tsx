@@ -4,6 +4,7 @@ import { Button, Empty, Flex, Radio, Spin, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { FailureBar } from '../../components/FailureBar';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { type Kept, useKeptState } from '../../hooks/useKeptState';
 import { useLatestRead } from '../../hooks/useLatestRead';
@@ -19,7 +20,6 @@ import { codeText, countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
-import { FailureBar } from './FailureBar';
 import { costsText, numberOf } from './figures';
 
 type Row = SummaryRow & { rowKey: string };

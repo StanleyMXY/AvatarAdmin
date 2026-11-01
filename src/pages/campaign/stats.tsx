@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ExportButton } from '../../components/ExportButton';
+import { FailureBar } from '../../components/FailureBar';
 import { HeaderTip } from '../../components/HeaderTip';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
@@ -19,7 +20,6 @@ import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
 import { CampaignSelect } from './CampaignSelect';
-import { FailureBar } from './FailureBar';
 import { moneyText, numberOf, rateText, shareText, unitCostText } from './figures';
 import { useCampaigns } from './useCampaigns';
 

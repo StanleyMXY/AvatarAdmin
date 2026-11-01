@@ -4,8 +4,10 @@ import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { PagedTable } from '../../components/PagedTable';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { type Kept, useKeptState } from '../../hooks/useKeptState';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AttributionCost,
   type CostSettings,
@@ -21,9 +23,7 @@ import { BatchModal } from './BatchModal';
 import { CampaignSelect } from './CampaignSelect';
 import { CostModal } from './CostModal';
 import { moneyText } from './figures';
-import { PagedTable } from './PagedTable';
 import type { CampaignList } from './useCampaigns';
-import { useServerPage } from './useServerPage';
 
 type Props = {
   campaigns: CampaignList;
