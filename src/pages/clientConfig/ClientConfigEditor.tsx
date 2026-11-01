@@ -13,6 +13,7 @@ import {
 } from 'antd';
 import { useRef, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
+import { useFailure } from '../../hooks/useFailure';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type ClientConfigItem,
@@ -75,8 +76,10 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
   const [draft, setDraft] = useState<Draft>(() => draftOf(item));
   const [active, setActive] = useState(() => tabKey(draftOf(item)[0]?.locale ?? ''));
   const [attempted, setAttempted] = useState(false);
+  // The reason the backend gave for each language it refused; its words are made when drawn.
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
-  const [failure, setFailure] = useState<string | null>(null);
+  const failed = useFailure();
+  const failure = failed.text;
   const [refused, setRefused] = useState(false);
   // Refusals of the backend that name no tab of this editor (`values`, a language that is not here):
   // shown as a list, so the administrator is not left with the general sentence alone.
@@ -97,13 +100,13 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
     }
   };
   const [newLanguage, setNewLanguage] = useState('');
-  const [languageProblem, setLanguageProblem] = useState<string | null>(null);
+  const [languageProblem, setLanguageProblem] = useState<'DUPLICATE' | 'INVALID' | null>(null);
 
   const changed = isChanged(item, draft);
   const problems = problemsOf(type, draft);
   const problemOf = (locale: string) => problems.find((p) => p.locale === locale);
   const errorOf = (locale: string): string | null => {
-    if (locale in serverErrors) return serverErrors[locale];
+    if (locale in serverErrors) return problemText(intl, serverErrors[locale]);
     const found = problemOf(locale);
     return attempted && found ? problemText(intl, found.reason) : null;
   };
@@ -121,13 +124,7 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
   const add = (raw: string, isDefault: boolean) => {
     const result = addLanguage(draft, raw, { allowDefault: isDefault, initial: emptyValue(type) });
     if (!result.ok) {
-      setLanguageProblem(
-        t(
-          result.problem === 'DUPLICATE'
-            ? 'clientConfig.editor.languageDuplicate'
-            : 'clientConfig.editor.languageInvalid',
-        ),
-      );
+      setLanguageProblem(result.problem === 'DUPLICATE' ? 'DUPLICATE' : 'INVALID');
       return;
     }
     setLanguageProblem(null);
@@ -144,7 +141,7 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
 
   const { run: save, pending } = useSingleFlight(() =>
     exclusive(async () => {
-      setFailure(null);
+      failed.clear();
       setRefused(false);
       setUnplaced([]);
       setConflict(false);
@@ -162,20 +159,20 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
           return;
         }
       } catch (error) {
-        setFailure(describeFailure(intl, error).text);
+        failed.fail(error);
         return;
       }
       try {
         await saveClientConfig(key, valuesOf(type, draft));
       } catch (error) {
-        const { error: failed, text } = describeFailure(intl, error);
+        const { error: refusal } = describeFailure(intl, error);
         const byLanguage: Record<string, string> = {};
         const others: { ref: string; reason: string }[] = [];
-        for (const detail of failed.details) {
+        for (const detail of refusal.details) {
           // The contract (1.4) writes the value without a language as `default`; its entry has the empty tag.
           const tag = detail.ref === 'default' ? '' : detail.ref;
           if (draft.some((entry) => entry.locale === tag)) {
-            byLanguage[tag] = problemText(intl, detail.reason);
+            byLanguage[tag] = detail.reason;
           } else {
             others.push({ ref: detail.ref, reason: detail.reason });
           }
@@ -185,7 +182,7 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
         const first = Object.keys(byLanguage)[0];
         if (first !== undefined) setActive(tabKey(first));
         setRefused(Object.keys(byLanguage).length > 0 || others.length > 0);
-        setFailure(text);
+        failed.fail(error);
         return;
       }
       message.success(t('clientConfig.editor.saved'));
@@ -197,16 +194,16 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
   // Takes the key as the backend has it now and drops the edit, the tabs and the marks on them.
   const { run: reload, pending: reloading } = useSingleFlight(() =>
     exclusive(async () => {
-      setFailure(null);
+      failed.clear();
       let fresh: ClientConfigItem | undefined;
       try {
         fresh = await readClientConfigKey(key);
       } catch (error) {
-        setFailure(describeFailure(intl, error).text);
+        failed.fail(error);
         return;
       }
       if (!fresh) {
-        setFailure(t('error.RESOURCE_NOT_FOUND'));
+        failed.failWith((words) => words.formatMessage({ id: 'error.RESOURCE_NOT_FOUND' }));
         return;
       }
       setItem(fresh);
@@ -227,7 +224,7 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
     exclusive(async () => {
       setResetting(true);
       try {
-        setFailure(null);
+        failed.clear();
         setRefused(false);
         setUnplaced([]);
         setConflict(false);
@@ -238,7 +235,7 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
           }
           await resetClientConfig(key);
         } catch (error) {
-          setFailure(describeFailure(intl, error).text);
+          failed.fail(error);
           return;
         }
         message.success(t('clientConfig.reset.done'));
@@ -512,7 +509,13 @@ export function ClientConfigEditor({ item: opened, editable, onClose, onChanged 
                   {t('clientConfig.editor.addLanguage')}
                 </Button>
                 {languageProblem ? (
-                  <Typography.Text type="danger">{languageProblem}</Typography.Text>
+                  <Typography.Text type="danger">
+                    {t(
+                      languageProblem === 'DUPLICATE'
+                        ? 'clientConfig.editor.languageDuplicate'
+                        : 'clientConfig.editor.languageInvalid',
+                    )}
+                  </Typography.Text>
                 ) : null}
               </Flex>
             ) : null}
