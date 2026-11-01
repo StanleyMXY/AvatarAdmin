@@ -1,4 +1,4 @@
-import { configure, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saved } from '../../../mock/_core/configStore';
@@ -709,10 +709,6 @@ describe('the template page: the rule of the default language', { timeout: 60000
     /Streak at risk needs an enabled template in the default language \(en\)\. Enable that one first\. To switch it off, delete it or change it, first switch off the other languages of Streak at risk\. If it is the only enabled template, keep it in en and enabled, and create the other language as a new template\./;
   const streakTh = () =>
     pushState.templates.find((t) => t.locale === 'th' && t.triggerReason === 'streak_at_risk');
-
-  // A refusal comes back through the page and the toast; under a full parallel run one second is not enough to see it.
-  beforeEach(() => configure({ asyncUtilTimeout: 6000 }));
-  afterEach(() => configure({ asyncUtilTimeout: 1000 }));
 
   it('does not warn beforehand in the dialog: it sends the request, and the backend decides, in the words of the code with the default language and the reason of its answer', async () => {
     const calls = backend();

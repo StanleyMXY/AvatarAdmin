@@ -30,13 +30,14 @@ export async function expandSearch(user: ReturnType<typeof userEvent.setup>) {
 /**
  * Resolves once every dialog has started to close or is gone. happy-dom never fires the animation
  * events that remove a closed Ant Design dialog, so a dialog that is closing keeps its role for good.
+ * It waits as long as the other queries do (tests/setup.ts); `timeout` shortens that.
  */
-export const dialogsClosed = () =>
+export const dialogsClosed = (options?: { timeout?: number }) =>
   waitFor(() => {
     for (const dialog of document.querySelectorAll('.ant-modal')) {
       expect(dialog.className, 'a dialog is still open').toMatch(/-leave|-hidden/);
     }
-  });
+  }, options);
 
 /** The calls that changed something. */
 export const writesOf = <T extends { method: string }>(calls: T[]) =>

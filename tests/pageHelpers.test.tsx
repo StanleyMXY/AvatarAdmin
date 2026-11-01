@@ -299,7 +299,7 @@ describe('dialogsClosed', () => {
   it('waits while a dialog is open and resolves once it has started to close', async () => {
     render(<Dialog />);
     await screen.findByRole('dialog');
-    await expect(dialogsClosed()).rejects.toThrow('a dialog is still open');
+    await expect(dialogsClosed({ timeout: 300 })).rejects.toThrow('a dialog is still open');
     await userEvent.setup().click(screen.getByRole('button', { name: 'close' }));
     await dialogsClosed();
   });

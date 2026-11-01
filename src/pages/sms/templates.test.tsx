@@ -1,4 +1,4 @@
-import { configure, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saved } from '../../../mock/_core/configStore';
@@ -26,11 +26,8 @@ const backend = () => useMockBackend({ default: smsMock }, { default: configMock
 
 beforeEach(() => {
   signIn('root');
-  // Under a full parallel run one second is not enough for what a click sets going (a read of the settings, a request, a list read again).
-  configure({ asyncUtilTimeout: 6000 });
 });
 afterEach(() => {
-  configure({ asyncUtilTimeout: 1000 });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });

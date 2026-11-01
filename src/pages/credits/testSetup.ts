@@ -1,6 +1,6 @@
 // Shared by the page tests of this module: signs in as one of the preset administrators of the mock
 // backend and tells the Umi stand-in who that is, so that buttons follow the administrator's codes.
-import { configure, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import type userEvent from '@testing-library/user-event';
 import { resetCreditsStore } from '../../../mock/_core/creditsData';
 import { resetStore } from '../../../mock/_core/store';
@@ -8,9 +8,6 @@ import { signInAsAdmin } from '../../../tests/signInAsAdmin';
 import { resetUmiStub } from '../../../tests/stubs/umi-max';
 
 export { chooseOption, dialogsClosed } from '../../../tests/pageHelpers';
-
-// The pages draw big tables and the machine may be busy with other work: wait longer than the default second for what a page shows.
-configure({ asyncUtilTimeout: 8000 });
 
 export function resetAll(): void {
   resetUmiStub();
