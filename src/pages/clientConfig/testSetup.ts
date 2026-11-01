@@ -5,10 +5,10 @@ import { clientConfigState, resetClientConfigStore } from '../../../mock/_core/c
 import { resetConfigStore } from '../../../mock/_core/configStore';
 import { META_DEFAULTS } from '../../../mock/_core/meta';
 import { resetStore } from '../../../mock/_core/store';
-import { adminOf } from '../../../mock/_core/testing';
-import { signInAs } from '../../../tests/mockBackend';
-import { resetUmiStub, setTestAccess, setTestInitialState } from '../../../tests/stubs/umi-max';
-import access from '../../access';
+import { signInAsAdmin } from '../../../tests/signInAsAdmin';
+import { resetUmiStub } from '../../../tests/stubs/umi-max';
+
+export { writesOf } from '../../../tests/pageHelpers';
 
 export { clientConfigState };
 
@@ -20,21 +20,5 @@ export function signIn(username: string, options: { codes?: string[] } = {}) {
   resetStore();
   resetConfigStore();
   resetClientConfigStore();
-  const admin = adminOf(username);
-  if (options.codes) admin.permissions = options.codes as typeof admin.permissions;
-  signInAs(username);
-  const me = {
-    id: admin.id,
-    username,
-    superAdmin: admin.superAdmin,
-    mustChangePassword: false,
-    permissions: admin.permissions,
-  };
-  setTestAccess(access({ me }));
-  setTestInitialState({ me, meta: META });
-  return admin;
+  return signInAsAdmin(username, { codes: options.codes, meta: META });
 }
-
-/** The calls that changed something. */
-export const writesOf = <T extends { method: string }>(calls: T[]) =>
-  calls.filter((c) => c.method !== 'GET');

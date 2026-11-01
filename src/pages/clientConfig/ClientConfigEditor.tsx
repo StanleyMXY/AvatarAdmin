@@ -22,6 +22,7 @@ import {
 } from '../../services/clientConfig';
 import { describeFailure } from '../../session/describe';
 import { useAdminMeta } from '../../session/useSession';
+import { adminText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import {
@@ -36,15 +37,7 @@ import {
   valuesOf,
 } from './editorState';
 import { PreviewBox } from './PreviewBox';
-import {
-  adminText,
-  formatValue,
-  instantText,
-  keyText,
-  problemText,
-  readOnlyNote,
-  typeText,
-} from './texts';
+import { formatValue, keyText, problemText, readOnlyNote, typeText } from './texts';
 import { ValueControl } from './ValueControl';
 import { sameVersion } from './version';
 

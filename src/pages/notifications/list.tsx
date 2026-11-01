@@ -13,13 +13,13 @@ import {
   type NotificationQuery,
   type NotificationRow,
 } from '../../services/notifications';
+import { adminText, codeText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { pickedDay, utcDayRangeToInstants } from '../../utils/utcDay';
 import { NotificationDrawer } from './NotificationDrawer';
 import { SendModal } from './SendModal';
-import { adminText, codeText, instantText } from './texts';
 
 type Range = { from: string; to: string } | null;
 type Filters = {
@@ -88,7 +88,8 @@ export default function NotificationsPage() {
     {
       key: 'category',
       title: t('notifications.col.category'),
-      render: (_, row) => codeText(intl, 'notifications.category', row.category) || DASH,
+      render: (_, row) =>
+        codeText(intl, 'notifications.category', row.category, { writeOut: true }) || DASH,
     },
     {
       key: 'title',
