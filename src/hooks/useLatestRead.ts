@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { describeFailure } from '../session/describe';
+import { useLatestCall } from './useLatestCall';
 
 /**
  * Reads whenever `fetcher` changes (give it a stable function: `useCallback` over what is asked) and
@@ -25,35 +26,32 @@ export function useLatestRead<T>(
   const [error, setError] = useState<unknown>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   const reload = useCallback(async () => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     if (!keep) setData(null);
     setError(null);
     setFailure(null);
     setLoading(true);
     try {
       const result = await fetcher();
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setData(result);
       setLoading(false);
     } catch (caught) {
-      if (mine !== counter.current) return;
+      if (!isCurrent()) return;
       setData(null);
       setError(caught);
       setFailure(describeFailure(intlRef.current, caught).text);
       setLoading(false);
     }
-  }, [fetcher, keep]);
+  }, [fetcher, keep, begin]);
 
   // A new `refreshKey` is a reason to read again, although the fetcher is the same.
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey only starts a read
   useEffect(() => {
     void reload();
-    return () => {
-      counter.current += 1;
-    };
   }, [reload, options.refreshKey]);
 
   return { data, error, failure, loading, reload: () => void reload() };

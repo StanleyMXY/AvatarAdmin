@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_PAGE_SIZE } from '../components/PagedListTable';
 import type { Page } from '../request/errors';
 import { describeFailure } from '../session/describe';
+import { useLatestCall } from './useLatestCall';
 
 export type ServerPage<T> = {
   rows: T[];
@@ -49,17 +50,17 @@ export function useServerPage<T, F extends Record<string, unknown>>(
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<string | null>(null);
-  const counter = useRef(0);
+  const begin = useLatestCall();
 
   // `key` stands for the filters: the effect runs when they change.
   // biome-ignore lint/correctness/useExhaustiveDependencies: key, page, pageSize and tick are what a new read depends on
   useEffect(() => {
-    const mine = ++counter.current;
+    const isCurrent = begin();
     setLoading(true);
     fetcherRef
       .current({ ...filtersRef.current, page, pageSize })
       .then((answer) => {
-        if (mine !== counter.current) return;
+        if (!isCurrent()) return;
         setRows(answer.items);
         setTotal(answer.total);
         setFailure(null);
@@ -77,7 +78,7 @@ export function useServerPage<T, F extends Record<string, unknown>>(
         setLoading(false);
       })
       .catch((error) => {
-        if (mine !== counter.current) return;
+        if (!isCurrent()) return;
         setRows([]);
         setTotal(0);
         setFailure(describeFailure(intlRef.current, error).text);
