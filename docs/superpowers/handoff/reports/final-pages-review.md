@@ -146,3 +146,109 @@
 ## 十、阻塞 0
 
 没有只有别人能给的输入。
+
+# 修复（追加，上面的内容没有改）
+
+分支 `claude/jolly-dirac-4pq9g6`。立即修 2 条、记录项 7 条都按"先写会失败的测试、看到红、再修、做变异检查、真实浏览器再量一次"做完。立即修未修 0、记录项 2（修的时候新发现的，见第四节）、未运行 3（见第五节）、阻塞 0。
+
+## 一、提交
+
+| 内容 | 提交 |
+|---|---|
+| 立即修 1（标签菜单画在屏幕外）、立即修 2（网关通知条的重试丢掉未保存编辑）、记录项 1（关闭有未保存编辑的当前标签后标签没了） | `2a7d7c2` |
+| 记录项 2（浏览器拒绝站点数据时选语言没有变化） | `1ec6401` |
+| 记录项 6（改密码被拒时接后端句子） | `7d8a2c4` |
+| 记录项 7（视口标签禁止缩放） | `b8a0a0f` |
+| 记录项 4（弹窗和抽屉打开时整页变宽 8 像素） | `f1016b3` |
+| 记录项 3（操作列在 1440 宽下在可见范围外） | `39cab70` |
+| 记录项 5 的图表坐标轴文字 | `18e43f8` |
+| 记录项 5 的其余颜色（预设颜色标签、红色按钮文字、色底提示条里的链接、行内代码） | `0adb6d8` |
+
+`2a7d7c2` 里多带了一个不是我的文件：`docs/superpowers/handoff/reports/final-auth-request-review.md`（另一个会话在同一工作区里已经放进了暂存区，我用 `git commit -- <路径>` 提交时它被一起带进来了）。内容没有动，只是提交说明不是它的。
+
+## 二、每一条怎么修的、为什么这样
+
+### 立即修 1：键盘菜单键、Shift+F10、没有原生右键事件的长按打开的标签菜单画在屏幕外
+
+- 做法：`TabManager.tsx` 里每个标签外面的包装从 `display: contents` 改成 `display: inline-flex`，让它有一个真实的盒子，菜单按这个盒子摆放。另外按评审建议，用键盘打开的菜单在 Esc 或选了一项之后，把焦点还给打开它的那个标签（只在焦点已经丢了——回到页面最前面或还在菜单里——的时候才还，用鼠标点到别处关闭的不抢焦点）。
+- 测试（happy-dom 不排版，所以钉样式值）：`TabManager.test.tsx` 里"包装有盒子"断言每个标签的包装 `style.display` 是 `inline-flex` 且计算样式不是 `contents`；"Esc 之后焦点回到标签"。
+- 变异：把 `inline-flex` 改回 `contents`，第一条变红；把还焦点的 `back.focus()` 去掉，第二条变红。
+- 真实浏览器（Playwright Chromium，1200x800，开发服务器和 `max build` 的生产包两个都做了）：菜单键打开 `[452,124,116,200]`（原来 `[-12000,-8000,116,200]`），Shift+F10 `[352,124,116,200]`，用捕获阶段吞掉原生 `contextmenu` 来模拟 iOS 的手指长按后 `[452,124,116,199]`，都在视口里，并且在第三个标签的正下方；Esc 后 `document.activeElement` 是第三个标签。草稿拷贝里把包装改回 `contents`：三个位置又变成 `[-12000,-8000,...]`；去掉还焦点：Esc 后焦点是 `null`。标签栏各标签的矩形在 `contents` 和 `inline-flex` 下完全一样（`[272,88,81,32]`、`[353,88,100,32]`、`[453,88,85,32]`、`[537,88,114,32]`），排版没有变。
+
+### 立即修 2：网关不可用通知条的"重试"静默清掉当前页未保存的编辑
+
+- 选的做法：重试前先走和离开页面同一个确认。没有选"只重发失败的那个读请求"：失败的读请求是各页面自己发的，通知条这一层不知道是哪一个、结果也送不回页面，通用地做不到。
+- 做法：`useLeaveGuard.ts` 里把"有未保存编辑的页面"登记起来（`hasUnsavedChanges`），加了 `releaseLeaveGuards`（人已经同意丢掉编辑后，页面不再拦随后的跳转）和 `useConfirmDiscard`（没有编辑就直接做；有编辑就弹同一个"离开这个页面？"，选"离开"才做，选"留下"什么都不动；问题开着的时候再点不开第二个）。`TabManager.tsx` 的通知条重试走它；重试只重挂当前页，不再对同一个地址调 `history.push`（否则离开提示会问第二次）。语言文件用的是现有的 `pages.leave.*`，没有新文字，所以中英文语言文件没有改。
+- 测试：`TabManager.test.tsx` 四条（重试先问且不重挂、选"留下"后页面和通知条都还在、选"离开"后重挂且通知条消失、不调 `history.push`）；`useLeaveGuard.test.tsx` 三条（登记随页面出现和消失、`releaseLeaveGuards` 只放开有编辑的页面）。
+- 变异：重试去掉确认，四条全部变红。
+- 真实浏览器（规则词表页，`GET /api/admin/moderation/text-rules` 回 503 的 HTML）：点"保存列表"出现通知条；点"重试"弹出"离开这个页面？"，输入框里的 `typed-but-unsaved` 还在；选"留下"后文字和通知条都还在；再点"重试"选"离开"，页面重新挂载、通知条消失、没有第二个确认。
+
+### 记录项 1：关闭有未保存编辑的当前标签，选"留下"后标签没了
+
+- 做法：`closeTabs` 里，会让当前页面卸载的关闭（关当前标签，或"关闭其他/全部/左侧/右侧"把当前页关掉）先走 `useConfirmDiscard`，确认之后才改标签列表并跳转；不是当前页的标签照旧直接关。这样不需要在"留下"之后去补回标签，也没有"等跳转完成再改"的悬空状态。
+- 测试：`TabManager.test.tsx` 五条（先问且标签和页面不动、选"留下"后标签还在并且仍是当前、选"离开"后标签没了并去左边的标签、"关闭其他"同样先问、关的不是当前标签时不问）。变异：把确认去掉，前四条变红。
+- 真实浏览器：规则词表页点"添加规则"，点当前标签的 ×：弹出确认，标签栏不变；"留下"后标签栏仍是 `["Overview","Text rules"]`、`.ant-tabs-tab-active` 有 1 个、"有未保存的更改"还在；再关一次选"离开"：标签栏变成 `["Overview"]`，地址是 `/dashboard`，没有第二个确认。
+
+### 记录项 2：浏览器拒绝站点数据（读 `window.localStorage` 就抛错）时选语言无变化并抛未捕获异常
+
+- 做法：Umi 生成的 `setLocale` 在检查"是否保存到 localStorage"的设置之前就读 `window.localStorage`，在这种浏览器里先抛错、什么都没变。现在 `LangSwitch` 调 `src/locales/initLocale.ts` 里新的 `switchLocale`：先改应用自己的语言记录（内存，再尽力写 localStorage）、标 `<html lang>`，最后用 Umi 的 `addLocale`（语言已经是当前语言时它只负责通知界面重画，不碰 localStorage）通知 Umi。没有用 Umi 的 `setLocale`。
+- 测试：新文件 `src/components/layout/LangSwitch.test.tsx`，里面按 Umi 生成代码的行为做了一个模型（`setLocale` 在检查设置前读 `window.localStorage`、`addLocale` 只在语言已是当前语言时通知），让 `window.localStorage` 的读取本身抛 `SecurityError`：选"简体中文"后没有未捕获异常、应用的语言记录和 `<html lang>` 变了、下拉显示"简体中文"。同时 `tests/stubs/umi-max.tsx` 加了 `addLocale`（只有这一处共用文件的改动）。变异：把 `LangSwitch.tsx` 换回 HEAD 的版本，这条测试变红。
+- 真实浏览器（开发服务器和生产包）：页面加载前把 `window.localStorage` 定义成读取就抛 `SecurityError`，能登录；选"简体中文"后 `<html lang>` 是 `zh-CN`、菜单是"总览"、下拉是"简体中文"，没有页面错误；再选回 English 也对。
+
+### 记录项 6：改密码被拒、错误码是 `INVALID_REQUEST` 时把后端 message 接在译文后面
+
+- 做法：`ChangePasswordForm.tsx` 的通知条只显示错误码的译文；如果 `details` 里的 `reason` 有译文（`reason.*`），把这些译文接在后面（去重）；没有 `reason` 或没有译文就只显示错误码的译文，不附后端的句子，也不显示没有译文的 `reason` 原文。
+- 测试：新文件 `src/components/layout/ChangePasswordForm.test.tsx`（中英文各一）：没有 reason 时只有错误码的译文；有已知 reason（`TOO_LONG`）时显示它的译文；reason 没有译文时不出现后端句子和 reason 原文。因为行为改了，`src/pages/user/change-password/changePassword.test.tsx` 里原来断言"显示后端句子"的那一条（"leaves the length to the server and shows its sentence ..."）改成断言错误码的译文且不含后端句子；这是我唯一动过 `src/pages/user` 下的地方（一个断言，没有碰这个目录的其他文件）。
+- 变异：换回 HEAD 的 `alertText`，新增的五条变红。
+
+### 记录项 7：视口标签禁止缩放
+
+- 做法：新文件 `config/viewport.ts` 导出 `viewportMetas`（`width=device-width, initial-scale=1`），`config/config.ts` 用 `metas: viewportMetas`（Umi 在配置里已有视口标签时不再写它自己的那个，已读 `@umijs/server` 的代码确认）。
+- 测试：`config/viewport.test.ts` 三条（设备宽度和初始比例；没有 `user-scalable=no`、`maximum-scale` 没有或不小于 2；`config/config.ts` 确实用它）。变异：往内容里加 `maximum-scale=1.0, user-scalable=no`、或去掉 `metas`，对应的测试变红。
+- 构建：`max build` 之后 `dist/index.html` 里是 `<meta name="viewport" content="width=device-width, initial-scale=1">`，整个文件里没有 `user-scalable`。
+
+### 记录项 4：所有弹窗和抽屉打开时整页变宽 8 像素
+
+- 做法：`src/global.css` 开头加 `body { margin: 0; }`。登录三页的框（`AuthFrame`，`position: fixed; inset: 0`）不依赖 body 的外边距，没有被破坏（`AuthFrame.test.tsx` 仍通过）。
+- 测试：`src/theme/modes.test.ts` 里读 `global.css`，断言 `body` 的规则是 `margin: 0;`；原来"每个选择器都以 `html[data-theme]` 开头"的断言改成只针对颜色规则。变异：把 `global.css` 换回 HEAD，这条变红。
+- 真实浏览器（1440x900、1360x800、390x800，订阅列表的"详情"抽屉和页头的"修改密码"弹窗）：打开后 `scrollWidth` 等于 `clientWidth`（1440/1440、1360/1360、390/390）；`body` 外边距 `0px`，整个外壳的 `x` 是 0。草稿拷贝里去掉这条规则：1440 下抽屉和弹窗打开时 `scrollWidth` 是 1448，`body` 外边距 `8px`，外壳的 `x` 是 8，复现了原来的缺陷。
+
+### 记录项 3：1440 宽下操作列在可见范围外
+
+- 做法：新文件 `src/components/actionsColumn.ts` 导出 `ACTIONS_COLUMN = { fixed: 'right' }`（antd 把它渲染成 `ant-table-cell-fix-end`）。所有"操作列"（`key` 是 `actions`、`valueType` 是 `option`、标题文字键以 `.actions` 结尾、或渲染里有 `<RowActions`）都用 `...ACTIONS_COLUMN`：原来已经各自写了 `fixed: 'right'` 的 18 处也改成它，没有固定的 23 处新加（共 41 处），其中有评审点名的邮件模板、客户端配置、广告位、告警、广告单元、订阅列表、短信模板、广告计划。所有这些表格已有 `scroll={{ x: 'max-content' }}`（固定列需要它）。另外邮件模板页的"说明"文字原来不换行，把表格撑到 2030 像素；现在限制为最宽 320 像素并换行，1440 下整个表格不再需要横向滚动（`scrollWidth` 1152 = `clientWidth` 1152）。
+- 测试：新文件 `src/components/actionsColumn.test.tsx`：一条用 antd 表格渲染，断言用了它的操作列的表头和单元格都有 `ant-table-cell-fix-end`；一条用 TypeScript 解析 `src` 下所有非测试文件，找出所有操作列的对象，断言每一个都用了 `...ACTIONS_COLUMN`（并断言至少找到 30 个，防止扫描什么都没找到而通过）。`email/templates.test.tsx` 加一条：表头"Actions"是固定列、说明文字的 `maxWidth` 是 320 像素且 `white-space: normal`。变异前原来的状态下扫描列出 41 处未用，红。
+- 真实浏览器（1440x900，侧栏展开，`config/routes` 里所有不带参数的页面，共 77 页 76 个表格；开发服务器和生产包各跑一遍，结果相同）：所有有"操作"表头的表格，操作列都固定且右边缘在表格容器里（`pinnedOut` 全是 0）；评审点名的 8 页（邮件模板、客户端配置、广告位、告警、广告单元、订阅列表、短信模板、广告计划）都是这样。脚本报的另外 3 个"不对"是脚本的误判：交易流水表和审计日志表的"Transactions""Action"列名里带 action，不是操作列；系统管理的权限页是下面第四节的记录项 2。
+- 例外：`src/pages/system/admins.tsx`、`roles.tsx`、`permissions.tsx` 是另一个会话正在改的文件，我没有碰，扫描测试里把这三个文件放进了 `LATER`；见第四节。
+
+### 记录项 5：对比度
+
+方法：先用已有的 `contrastRatio`、`readableText` 工具在 `src/theme/modes.ts` 里算，再用 `global.css` 的 `html[data-theme] ...` 规则（比 Ant Design 运行时样式优先，沿用已有做法）和 `applyModeToDocument` 写进文档的变量。每一类都在测试里对三个主题逐一断言 4.5:1，并读 `global.css` 断言规则存在。
+
+- 预设颜色标签（13 种预设）：`getPresetTagColors(mode)`，把 Ant Design 的"7 号色"在它自己的标签底色（"1 号色"）和容器、页面、浮层背景上移到 4.5:1，已经够的保持原色；变量 `--avatar-tag-<颜色>-text`，13 条规则。浏览器里量：绿色 3.37 到 4.68、橙色 3.34 到 4.52、金色 2.76 到 4.53。
+- 红色按钮文字（`danger` 的链接、文字、描边、虚线、浅填充，不含实心）：`getStatusTextColors` 里加了 `errorHover`、`errorActive`，悬停和按下也到 4.5:1；规则排除了禁用。浏览器里量：告警页"关闭" 3.27 到 4.98。
+- 信息或错误底色提示条里的链接：链接色（`colorLink`、悬停、按下）现在同时对成功、警告、错误、信息四种提示条的底色取 4.5:1（底色来自 Ant Design 自己的算法，不依赖这个主题的颜色，所以可以在建主题之前算）。只有浅色主题里有变化（深色主题原来就够）。浏览器里量：通知页"打开手动推送任务"的链接 4.27 到 4.56，用户删除页的链接 4.37 到 4.68。
+- 行内 `code`：`getCodeTextColor`，次要文字色在 Ant Design 垫在 `code` 下面的灰底（按 20% 算，留余量）上移到 4.5:1，变量 `--avatar-code-text`。浏览器里量：4.35 到 5.9。
+- 图表坐标轴文字：`chartTheme.ts` 里新的 `axisTextStyle(theme)`（`labelFill`、`labelOpacity: 1`、`titleFill`、`titleOpacity: 1`），11 个文件里的 `labelFill`/`titleFill` 全部换成它；测试扫描 `src` 断言除 `chartTheme.ts` 外没有任何文件再写 `labelFill` 或 `titleFill`，`TrendChart` 的测试断言两条轴的 `labelOpacity` 是 1。浏览器里（画布像素：左侧坐标轴文字所在的竖条里对比最强的像素，合成到卡片底色上）：9 个页面、三个主题共 27 张图都在 6.19:1 以上（浅色 6.2 左右，暗蓝 6.7 到 7.9，深青 7.8 到 8.7）；草稿拷贝里把 `labelOpacity` 改成 0.45，日报页的轴文字量出 `#AEB4BA`、2.0:1，复现了原来的缺陷。
+- 变异：去掉链接对提示条底色的计算，"提示条里的链接"两条（浅色主题）变红；删掉 `code` 规则或金色标签的规则，对应的测试变红。
+- 三个主题 45 个页面的整页扫描（对每个可见文字节点算对比度）：低于 4.5:1 的节点 0 个（原来 12 类）。
+
+## 三、测试和检查
+
+- 相关目录：先分别跑过 `src/components/layout`、`src/hooks`、`src/locales`、`src/app.test.tsx`、`config` 下的视口和路由测试（全部通过）；然后 `src/components`、`src/theme` 和所有改过的页面目录（活动、广告、应用版本、形象、投放、渠道、客户端配置、投诉、成本、额度、邮件、邀请、记忆、审核、监控、通知、推送、短信、订阅、客服、用户、总览、统计、会话）一起跑过一次（这一次跑的时候对比度那批改动还没写完，所以之后又单独重跑了 `src/theme`）：214 个文件、3712 条，3709 条通过。3 条失败都在 `src/pages/sessions/list.test.tsx`（机器负载高时的超时）；这个文件单独重跑全部通过，与本次改动无关。图表相关目录之后又单独重跑一次，1499 条里 1 条（`accounts.campaigns.test.tsx` 的链接对话框）在负载下失败，单独重跑 42 条全部通过。
+- `npx tsc --noEmit` 无输出；`npx biome check src config tests` 无问题；每次提交的钩子（lint-staged 和暂存文件的类型检查）都通过，没有绕过。
+- 草稿目录里起了 `dev:mock`（端口 8421，`MFSU=none`）和 `max build`，生产包放在 8431 的小静态服务（带 `docs/deploy.md` 里的内容安全策略，`/api` 转给 8421）。浏览器脚本都在草稿目录里，名字以 `fx-` 开头；它们不是测试，没有进仓库（仓库里没有 Playwright 的依赖，我没有加）。用完后按进程号停了开发服务器和静态服务，没有用 `pkill`。
+
+## 四、修的时候新发现的记录项 2
+
+1. **实心红色按钮（`danger` 的主按钮，例如"离开"确认、删除确认）白字对红底只有 3.4:1（浅色）和 4.0:1（暗蓝、深青）。** 位置：Ant Design 的 `ant-btn-color-dangerous ant-btn-variant-solid`（`src/global.css` 没有覆盖）。触发：规则词表页点"添加规则"，再点"总览"标签，弹窗里的红色"离开"按钮；量得文字 `rgb(255,255,255)`，底 `rgb(255,77,79)`（浅色）、`rgb(220,68,70)`（暗蓝、深青）。不在评审第二节第 5 条点名的范围里，是我扫描时发现的。建议修：把红色实心按钮的底色移到和白字 4.5:1（`readableText(colorError, ['#FFFFFF'])`），悬停和按下同理。
+2. **系统管理三页（`admins.tsx`、`roles.tsx`、`permissions.tsx`）还没有用 `ACTIONS_COLUMN`，其中权限页的操作列没有固定。** 这三个文件是另一个会话在改，我没有碰。触发：把浏览器窗口缩到小于表格宽度时，权限页的"操作"列要横向滚动才看得到（1440 宽下 6 列放得下，所以评审没发现）。建议那个会话完成后把这三处换成 `...ACTIONS_COLUMN` 并从 `actionsColumn.test.tsx` 的 `LATER` 里删掉。
+
+## 五、未运行 3
+
+1. 全量测试和全量构建：按约定留到全部任务做完后跑一次；这次只跑了第三节的相关目录，生产构建只在草稿拷贝里跑过。
+2. iOS Safari 和 Firefox 里真正的手指长按、读屏软件读标签菜单：这台机器只有 Playwright Chromium（长按是用 CDP 发的触摸事件加吞掉原生 `contextmenu` 来模拟的），没有读屏软件。
+3. 右键菜单里的"刷新"在当前页有未保存编辑时仍然直接重挂页面：评审认定这是主动操作、不算缺陷，我没有改；如果负责人希望它也先确认，在 `TabManager.tsx` 里把 `refresh` 也包进 `useConfirmDiscard` 即可（这是行为变更，需要先定）。
+
+## 六、阻塞 0
+
+没有只有别人能给的输入。
