@@ -1,8 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { act, renderHook } from '@testing-library/react';
 import { theme as antdTheme } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { contrastRatio, pickOnPrimary } from './contrast';
 import {
+  applyModeToDocument,
   getModeTokens,
   resetThemeModeForTests,
   THEME_MODES,
@@ -208,6 +210,103 @@ const PRIMARIES = [
   { base: '#FFFFFF', hover: '#FFFFFF', active: '#EEEEEE' },
   { base: '#000000', hover: '#222222', active: '#000000' },
 ];
+
+describe.each(THEME_MODES)('secondary, hint and placeholder text in %s mode', (mode: ThemeMode) => {
+  const resolved = () =>
+    antdTheme.getDesignToken(toAntdTheme(getModeTokens(mode))) as unknown as Record<string, string>;
+
+  it.each([
+    'colorTextSecondary',
+    'colorTextDescription',
+    'colorTextTertiary',
+    'colorTextPlaceholder',
+  ])('%s is at least 4.5:1 on the container, the page and the raised background', (name) => {
+    const tokens = getModeTokens(mode);
+    const value = resolved()[name];
+    expect(value).toMatch(/^#[0-9a-f]{6}$/i);
+    for (const bg of TEXT_BACKGROUNDS(tokens)) {
+      expect(contrastRatio(value, bg)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('hint text is still weaker than the body text', () => {
+    const tokens = getModeTokens(mode);
+    const hint = resolved().colorTextDescription;
+    const [bg] = TEXT_BACKGROUNDS(tokens);
+    expect(contrastRatio(hint, bg)).toBeLessThan(contrastRatio(tokens.colorText, bg));
+  });
+});
+
+describe.each(THEME_MODES)('solid primary fills in %s mode', (mode: ThemeMode) => {
+  it('a selected solid radio button carries the same text as a primary button, not white', () => {
+    const tokens = getModeTokens(mode);
+    const components = toAntdTheme(tokens).components as Record<string, Record<string, string>>;
+    expect(components.Radio.buttonSolidCheckedColor).toBe(tokens.colorTextOnPrimary);
+    expect(contrastRatio(tokens.colorTextOnPrimary, tokens.colorPrimary)).toBeGreaterThanOrEqual(
+      4.5,
+    );
+  });
+
+  it('puts the colours the global style sheet uses on the document: link, hover, press, text on primary', () => {
+    const tokens = getModeTokens(mode);
+    applyModeToDocument(mode);
+    const style = document.documentElement.style;
+    expect(style.getPropertyValue('--avatar-link')).toBe(tokens.colorLink);
+    expect(style.getPropertyValue('--avatar-link-hover')).toBe(tokens.colorLinkHover);
+    expect(style.getPropertyValue('--avatar-link-active')).toBe(tokens.colorLinkActive);
+    expect(style.getPropertyValue('--avatar-on-primary')).toBe(tokens.colorTextOnPrimary);
+  });
+});
+
+describe('src/global.css (what Ant Design draws with the raw primary colour, set right)', () => {
+  const css = readFileSync('src/global.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = css
+    .split('}')
+    .map((rule) => rule.split('{'))
+    .filter((parts) => parts.length === 2)
+    .map(([selectors, body]) => ({
+      selectors: selectors
+        .split(',')
+        .map((selector) => selector.replace(/\s+/g, ' ').trim())
+        .filter(Boolean),
+      body: body.trim(),
+    }));
+  /** The declarations of the rule that has a selector ending in `ending`. */
+  const bodyOf = (ending: string) =>
+    rules.find((rule) => rule.selectors.some((selector) => selector.endsWith(ending)))?.body;
+
+  it('moves the text of the selected and hovered round radio buttons to the readable link colours, not on the solid style', () => {
+    const base = '.ant-radio-group:not(.ant-radio-group-solid) .ant-radio-button-wrapper';
+    const checked = `${base}-checked:not(.ant-radio-button-wrapper-disabled)`;
+    expect(bodyOf(checked)).toBe('color: var(--avatar-link);');
+    expect(bodyOf(`${base}:not(.ant-radio-button-wrapper-disabled):hover`)).toBe(
+      'color: var(--avatar-link);',
+    );
+    expect(bodyOf(`${checked}:hover`)).toBe('color: var(--avatar-link-hover);');
+    expect(bodyOf(`${checked}:active`)).toBe('color: var(--avatar-link-active);');
+  });
+
+  it('gives the selected day, and the ends of a selected range, of a date picker the text of a primary button', () => {
+    for (const state of ['selected', 'range-start', 'range-end']) {
+      expect(
+        bodyOf(
+          `.ant-picker-cell-in-view.ant-picker-cell-${state}:not(.ant-picker-cell-disabled) .ant-picker-cell-inner`,
+        ),
+      ).toBe('color: var(--avatar-on-primary);');
+    }
+  });
+
+  it('gives the fold and unfold link of a search form the link colour', () => {
+    expect(bodyOf('.ant-pro-query-filter-collapse-button')).toBe('color: var(--avatar-link);');
+  });
+
+  it('beats the rules Ant Design injects at run time: every selector starts with html[data-theme]', () => {
+    expect(rules.length).toBeGreaterThanOrEqual(5);
+    for (const rule of rules)
+      for (const selector of rule.selectors)
+        expect(selector.startsWith('html[data-theme] ')).toBe(true);
+  });
+});
 
 describe.each(THEME_MODES)('links and primary-coloured text in %s mode', (mode: ThemeMode) => {
   const resolved = (tokens = getModeTokens(mode)) =>

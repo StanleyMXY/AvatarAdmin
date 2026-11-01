@@ -51,9 +51,9 @@
 2. 409 `MEMORY_MODEL_CONFLICT` 里的 `detail`（记忆服务那句话）在响应的哪里：`data.detail`，还是 `message`？
 3. 名字不合格（`^[A-Za-z0-9_-]{1,64}$`）、`teiBaseUrl` 的主机不在白名单、`dimensions` 越界时，`data.details` 的 `ref` 和 `reason` 各是什么？（我们的页面发请求前就按同一规则拦住，这是给后端校验兜底时的显示用。）
 
-**我们为什么需要：** 页面要把记忆服务写的那句话原样展示给技术人员（它写明了原来登记的维度）；校验失败要对到表单项。
+**我们为什么需要：** 技术人员需要知道原来登记的维度是多少；校验失败要对到表单项。
 
-**暂定做法：** 成功响应的 `data` 一律忽略，写完重新读列表；冲突的句子读 `data.detail`，不是字符串就显示 `error.MEMORY_MODEL_CONFLICT` 的通用文字；校验失败按 `ref` 为 `name`、`teiBaseUrl`、`dimensions`、`topK`、`recencyChannelCount`、`consolidationThreshold`、`recencyChannelEnabled`、`consolidationEnabled`、`modelName` 对到表单项，原因用现有的 `reason` 代码（路径里的名字不合格用 `INVALID_PATH`，主机不允许用 `INVALID_HOST`，非 http(s) 用 `NOT_HTTPS`，越界用 `OUT_OF_RANGE`，不是整数用 `NOT_AN_INTEGER`，不是布尔用 `NOT_BOOLEAN`）。
+**暂定做法：** 成功响应的 `data` 一律忽略，写完重新读列表；冲突时只显示 `error.MEMORY_MODEL_CONFLICT` 的译文（按负责人的规则，已知错误码只显示按码翻译的文字，记忆服务那句只有一种语言的 `detail` 不显示；曾经的"读 `data.detail` 原样显示"已取消）。要让页面写出原来登记的维度，请在这个 409 的 `data` 里给结构化字段，见 `2026-11-01-admin-frontend-translated-error-texts.md`；校验失败按 `ref` 为 `name`、`teiBaseUrl`、`dimensions`、`topK`、`recencyChannelCount`、`consolidationThreshold`、`recencyChannelEnabled`、`consolidationEnabled`、`modelName` 对到表单项，原因用现有的 `reason` 代码（路径里的名字不合格用 `INVALID_PATH`，主机不允许用 `INVALID_HOST`，非 http(s) 用 `NOT_HTTPS`，越界用 `OUT_OF_RANGE`，不是整数用 `NOT_AN_INTEGER`，不是布尔用 `NOT_BOOLEAN`）。
 
 ## 五、管线监控页的时间范围上限从哪里读
 
@@ -63,7 +63,7 @@
 
 **我们为什么需要：** 页面的时间范围选项（最近 1 小时、6 小时、24 小时、3 天、7 天）要和上限一致，否则这个配置调小以后，"最近 7 天"会稳定地得到 400。
 
-**暂定做法：** 页面固定提供到 7 天；超限时显示后端的 400 文字，其他选项照常可用。
+**暂定做法：** 页面固定提供到 7 天；超限时显示 400 `INVALID_REQUEST` 按码翻译的文字（不显示后端的 `message`），其他选项照常可用。
 
 ## 六、`embeddingAssignments` 的顺序
 

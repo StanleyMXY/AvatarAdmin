@@ -1,0 +1,46 @@
+/*
+ * What Ant Design and its pro components draw with the raw primary colour (#0ABAB5), which is
+ * only 2.4:1 against white (needs 4.5:1), or with white on the primary colour. The colours are the
+ * readable ones of src/theme/modes.ts, put on the document by applyModeToDocument. The selectors
+ * start with html[data-theme] so that they win over the rules Ant Design injects while the app runs.
+ */
+
+/* The selected and the hovered round radio button (the outline style; the solid style has its own token). */
+html[data-theme]
+  .ant-radio-group:not(.ant-radio-group-solid)
+  .ant-radio-button-wrapper:not(.ant-radio-button-wrapper-disabled):hover,
+html[data-theme]
+  .ant-radio-group:not(.ant-radio-group-solid)
+  .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled) {
+  color: var(--avatar-link);
+}
+
+html[data-theme]
+  .ant-radio-group:not(.ant-radio-group-solid)
+  .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled):hover {
+  color: var(--avatar-link-hover);
+}
+
+html[data-theme]
+  .ant-radio-group:not(.ant-radio-group-solid)
+  .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled):active {
+  color: var(--avatar-link-active);
+}
+
+/* The selected day, and the two ends of a selected range, in a date picker. */
+html[data-theme]
+  .ant-picker-cell-in-view.ant-picker-cell-selected:not(.ant-picker-cell-disabled)
+  .ant-picker-cell-inner,
+html[data-theme]
+  .ant-picker-cell-in-view.ant-picker-cell-range-start:not(.ant-picker-cell-disabled)
+  .ant-picker-cell-inner,
+html[data-theme]
+  .ant-picker-cell-in-view.ant-picker-cell-range-end:not(.ant-picker-cell-disabled)
+  .ant-picker-cell-inner {
+  color: var(--avatar-on-primary);
+}
+
+/* "Expand" and "Collapse" of a search form. */
+html[data-theme] .ant-pro-query-filter-collapse-button {
+  color: var(--avatar-link);
+}

@@ -31,6 +31,11 @@ export type ModeTokens = {
   colorLink: string;
   colorLinkHover: string;
   colorLinkActive: string;
+  /**
+   * Hint, helper and placeholder text: Ant Design draws these at 45% and 25% opacity, which is
+   * 3.4:1 or less on the light page. Moved just far enough to reach 4.5:1 on every background.
+   */
+  colorTextHint: string;
   fontFamily: string;
 };
 
@@ -46,6 +51,7 @@ const BASE: Record<
     | 'colorLink'
     | 'colorLinkHover'
     | 'colorLinkActive'
+    | 'colorTextHint'
     | 'fontFamily'
   >
 > = {
@@ -93,6 +99,12 @@ function linkColors(base: (typeof BASE)[ThemeMode], primary: string) {
   };
 }
 
+/** The hint text colour: the text colour at the strength Ant Design uses for hints, moved to 4.5:1 where it falls short. */
+function hintColor(base: (typeof BASE)[ThemeMode]): string {
+  const backgrounds = [base.colorBgContainer, base.colorBgLayout, base.colorBgElevated];
+  return readableText(mixHex(base.colorTextSecondary, base.colorBgContainer, 0.15), backgrounds);
+}
+
 /** The tokens of a mode. `primary` is the build's primary colour set (the default is the build's own). */
 export function getModeTokens(
   mode: ThemeMode,
@@ -106,6 +118,7 @@ export function getModeTokens(
     colorPrimaryActive: primary.active,
     colorTextOnPrimary: pickOnPrimary(primary.base),
     ...linkColors(BASE[mode], primary.base),
+    colorTextHint: hintColor(BASE[mode]),
     fontFamily: FONT_FAMILY,
   };
 }
@@ -149,6 +162,8 @@ export function toAntdTheme(tokens: ModeTokens): ThemeConfig {
       colorPrimaryText: tokens.colorLink,
       colorPrimaryTextHover: tokens.colorLinkHover,
       colorPrimaryTextActive: tokens.colorLinkActive,
+      colorTextTertiary: tokens.colorTextHint,
+      colorTextPlaceholder: tokens.colorTextHint,
       colorBgContainer: tokens.colorBgContainer,
       colorBgLayout: tokens.colorBgLayout,
       colorBgElevated: tokens.colorBgElevated,
@@ -164,6 +179,8 @@ export function toAntdTheme(tokens: ModeTokens): ThemeConfig {
     components: {
       // Solid primary buttons carry dark text: white on the primary colour is only 2.4:1.
       Button: { primaryColor: tokens.colorTextOnPrimary },
+      // The same for a selected radio button in the solid style.
+      Radio: { buttonSolidCheckedColor: tokens.colorTextOnPrimary },
       Menu: {
         itemSelectedColor: tokens.colorLink,
         subMenuItemSelectedColor: tokens.colorLink,
@@ -217,6 +234,13 @@ export function applyModeToDocument(mode: ThemeMode): void {
   document.documentElement.style.colorScheme = BASE[mode].isDark ? 'dark' : 'light';
   // The page behind the app (before it is drawn, and when scrolled past its end) is the layout colour.
   document.documentElement.style.backgroundColor = BASE[mode].colorBgLayout;
+  // The colours src/global.css uses for what Ant Design draws with the raw primary colour.
+  const tokens = getModeTokens(mode);
+  const style = document.documentElement.style;
+  style.setProperty('--avatar-link', tokens.colorLink);
+  style.setProperty('--avatar-link-hover', tokens.colorLinkHover);
+  style.setProperty('--avatar-link-active', tokens.colorLinkActive);
+  style.setProperty('--avatar-on-primary', tokens.colorTextOnPrimary);
 }
 
 export function setThemeMode(mode: ThemeMode): void {
