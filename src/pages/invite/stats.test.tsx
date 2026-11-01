@@ -197,6 +197,14 @@ describe('the invite statistics page: the overview', { timeout: 30000 }, () => {
     expect(day('Daily invitees registered', '2026-10-26')).toBe(8);
     expect(day('Daily active inviters', '2026-10-24')).toBe(3);
     expect(day('Daily invitees registered', '2026-10-25')).toBe(0);
+    // people are whole numbers: the vertical axis has no tick at 0.5 (the chart stand-in drops the
+    // tick function and keeps the scale that carries it)
+    const config = JSON.parse(
+      within(screen.getByTestId('invite-trend'))
+        .getByTestId('chart-line')
+        .getAttribute('data-config') ?? '{}',
+    );
+    expect(config.scale?.y).toBeDefined();
   });
 
   it('lists the ranking as sent, with the account id and a "View fission" button on each row', async () => {
@@ -384,6 +392,17 @@ describe('the invite statistics page: the invitation chain', { timeout: 30000 },
     expect(screen.getByTestId('invite-chain-summary').textContent).toBe(
       '3 descendants, 2 levels deep',
     );
+  });
+
+  it('lays a label that starts with an Arabic letter out from the left, so the domain is not read first', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<StatsPage />);
+    await openFission(user);
+    await load(user, 'acc-top-1');
+    const tree = await screen.findByTestId('invite-chain-tree');
+    const label = await within(tree).findByText(/م\*\*\*@y\*\*\*\.com/);
+    expect(label.closest('bdi')).toHaveAttribute('dir', 'ltr');
   });
 
   it('shows the time of each invitation beside the label', async () => {

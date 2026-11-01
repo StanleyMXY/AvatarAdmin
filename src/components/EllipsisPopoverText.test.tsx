@@ -80,6 +80,15 @@ describe('EllipsisPopoverText', () => {
     expect(await screen.findByTestId('full-text')).toHaveAttribute('dir', 'auto');
   });
 
+  it('can fix the direction to left-to-right for an identifier that starts with an Arabic letter', async () => {
+    const user = userEvent.setup();
+    const label = '\u0645***@y***.com';
+    renderPage(<EllipsisPopoverText text={label} dir="ltr" />);
+    expect(screen.getByTitle('Show full text')).toHaveAttribute('dir', 'ltr');
+    await user.click(screen.getByTitle('Show full text'));
+    expect(await screen.findByTestId('full-text')).toHaveAttribute('dir', 'ltr');
+  });
+
   it('keeps the text of the cell as the readable name of the button', () => {
     renderPage(<EllipsisPopoverText text="Hello there" />);
     expect(screen.getByRole('button', { name: 'Hello there' })).toBeInTheDocument();

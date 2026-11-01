@@ -147,7 +147,7 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
     key: row.key,
     title: (
       <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-all' }}>
-        <bdi>{row.label === '' ? DASH : row.label}</bdi>
+        <bdi dir="ltr">{row.label === '' ? DASH : row.label}</bdi>
         {row.time === '' ? null : (
           <Typography.Text type="secondary">
             {' '}

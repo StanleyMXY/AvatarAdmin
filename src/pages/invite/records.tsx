@@ -51,13 +51,17 @@ export default function InviteRecordsPage() {
       title: t('invite.records.inviter'),
       dataIndex: 'inviterLabel',
       search: false,
-      render: (_, row) => <EllipsisPopoverText text={plainText(row.inviterLabel)} width={220} />,
+      render: (_, row) => (
+        <EllipsisPopoverText text={plainText(row.inviterLabel)} width={220} dir="ltr" />
+      ),
     },
     {
       title: t('invite.records.invitee'),
       dataIndex: 'inviteeLabel',
       search: false,
-      render: (_, row) => <EllipsisPopoverText text={plainText(row.inviteeLabel)} width={220} />,
+      render: (_, row) => (
+        <EllipsisPopoverText text={plainText(row.inviteeLabel)} width={220} dir="ltr" />
+      ),
     },
     {
       title: t('invite.records.redeemedAt'),

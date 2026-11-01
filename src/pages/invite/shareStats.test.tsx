@@ -102,6 +102,13 @@ const called = (calls: { url: string }[], path: string) =>
   calls.filter((c) => c.url.startsWith(`/api/admin/invites/${path}`));
 const json = (id: string, kind: string) =>
   JSON.parse(within(screen.getByTestId(id)).getByTestId(`chart-${kind}`).textContent ?? '[]');
+// The stand-in chart prints its settings as JSON, which drops the tick function but keeps the
+// vertical scale that carries it: a chart of counts has one, a chart that leaves the ticks to the
+// library has none.
+const hasWholeNumberAxis = (id: string) =>
+  JSON.parse(
+    within(screen.getByTestId(id)).getByTestId('chart-line').getAttribute('data-config') ?? '{}',
+  ).scale?.y !== undefined;
 const card = async (name: string) =>
   (await screen.findByTestId(`invite-share-card-${name}`)).querySelector('.ant-statistic-content')
     ?.textContent;
@@ -176,6 +183,7 @@ describe('the share statistics page: the range and the overview', { timeout: 300
       '2026-10-26',
     ]);
     expect(data.map((d) => d.value)).toEqual([0, 0, 0, 0, 100, 300, 0]);
+    expect(hasWholeNumberAxis('invite-share-trend')).toBe(true);
   });
 
   it('shows a dash instead of 0 when no day has a row, and sums a day without a number as nothing', async () => {
@@ -286,6 +294,7 @@ describe('the share statistics page: the funnel', { timeout: 30000 }, () => {
     ]);
     expect(data).toHaveLength(28);
     expect(screen.getAllByTestId('chart-line').length).toBeGreaterThan(0);
+    expect(hasWholeNumberAxis('invite-share-lines')).toBe(true);
   });
 
   it('lists the days with the six columns, the unique visitors of each day and no total row', async () => {
@@ -400,6 +409,7 @@ describe('the share statistics page: the channels', { timeout: 30000 }, () => {
     expect(at('Other', '2026-10-25')).toBe(140);
     expect(at('whatsapp', '2026-10-25')).toBe(400);
     expect(at('whatsapp', '2026-10-22')).toBe(0);
+    expect(hasWholeNumberAxis('invite-channel-lines')).toBe(true);
   });
 
   it('draws no "Other" when there are five channels or fewer, and breaks a tie by name', async () => {

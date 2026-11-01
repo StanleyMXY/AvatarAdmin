@@ -73,6 +73,7 @@ export function ShareFunnelTab({ rows, from, to }: Props) {
         style={{ marginTop: 16 }}
       >
         <TrendChart
+          wholeNumbers
           rows={rows.map((row) => ({
             statDate: row.statDate,
             sharePv: count(row.sharePv),

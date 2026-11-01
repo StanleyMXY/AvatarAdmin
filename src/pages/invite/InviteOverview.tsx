@@ -111,6 +111,7 @@ export function InviteOverview({ query, onViewFission }: Props) {
       </Flex>
       <Card size="small" title={t('invite.stats.trend')} data-testid="invite-trend">
         <TrendChart
+          wholeNumbers
           rows={daily}
           xField="statDate"
           from={query.from}
@@ -134,7 +135,9 @@ export function InviteOverview({ query, onViewFission }: Props) {
               {
                 title: t('invite.stats.inviterAccountId'),
                 dataIndex: 'accountId',
-                render: (value: string) => <EllipsisPopoverText text={value} width={320} />,
+                render: (value: string) => (
+                  <EllipsisPopoverText text={value} width={320} dir="ltr" />
+                ),
               },
               {
                 title: t('invite.stats.inviteCount'),

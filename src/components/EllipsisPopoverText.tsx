@@ -7,6 +7,13 @@ type Props = {
   /** Lines shown before the text is cut with an ellipsis (default 2). */
   lines?: number;
   width?: number | string;
+  /**
+   * Text direction. Left as `auto`, each text picks its own from its first strong letter, which is
+   * right for prose. An identifier (a masked e-mail, a code, an account id) is read from the left
+   * whatever it starts with, so it passes `ltr`: otherwise `م***@y***.com` is laid out as
+   * `y***.com@***م`.
+   */
+  dir?: 'auto' | 'ltr';
 };
 
 const WRAP: CSSProperties = {
@@ -28,7 +35,7 @@ async function writeClipboard(text: string): Promise<void> {
  * button. Words are broken anywhere, so Thai and Arabic text, an emoji run or a string without
  * spaces never widens the table.
  */
-export function EllipsisPopoverText({ text, lines = 2, width = 240 }: Props) {
+export function EllipsisPopoverText({ text, lines = 2, width = 240, dir = 'auto' }: Props) {
   const intl = useIntl();
   const { message } = App.useApp();
   if (text === null || text === undefined || text === '') return <span>—</span>;
@@ -44,7 +51,7 @@ export function EllipsisPopoverText({ text, lines = 2, width = 240 }: Props) {
 
   const full = (
     <Space orientation="vertical" size={8} style={{ maxWidth: 420 }}>
-      <div dir="auto" data-testid="full-text" style={{ ...WRAP, maxHeight: 320, overflow: 'auto' }}>
+      <div dir={dir} data-testid="full-text" style={{ ...WRAP, maxHeight: 320, overflow: 'auto' }}>
         {text}
       </div>
       <Button size="small" onClick={copy}>
@@ -57,7 +64,7 @@ export function EllipsisPopoverText({ text, lines = 2, width = 240 }: Props) {
     <Popover trigger="click" content={full}>
       <button
         type="button"
-        dir="auto"
+        dir={dir}
         aria-haspopup="dialog"
         title={intl.formatMessage({ id: 'pages.common.expand' })}
         data-lines={lines}
