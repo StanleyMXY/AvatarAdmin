@@ -6,9 +6,9 @@ import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { FailureBar } from '../../components/FailureBar';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import { type EmailTemplate, listEmailTemplates } from '../../services/email';
+import { adminText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { TemplateEditor } from './TemplateEditor';
-import { adminText, instantText } from './texts';
 
 const isRecord = (row: unknown): row is EmailTemplate => typeof row === 'object' && row !== null;
 

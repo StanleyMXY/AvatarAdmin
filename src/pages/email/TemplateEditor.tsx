@@ -7,9 +7,9 @@ import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type EmailTemplate, resetEmailTemplate, saveEmailTemplate } from '../../services/email';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { failureToForm } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 import { listOfText, missingPlaceholders } from './placeholders';
 
 export const SUBJECT_MAX = 200;
@@ -55,7 +55,14 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
         body: trimSpec(values.body),
       });
     } catch (error) {
-      const result = failureToForm(intl, form, error, ['subject', 'body']);
+      const result = failureToForm(
+        intl,
+        form,
+        error,
+        ['subject', 'body'],
+        {},
+        { generalReason: true },
+      );
       setFailure({ text: result.text, more: result.unplaced });
       return;
     }
