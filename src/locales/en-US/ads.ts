@@ -195,6 +195,8 @@ const messages: Record<string, string> = {
   'ads.units.pauseAsk': 'Pause this unit?',
   'ads.units.resumeAsk': 'Resume this unit?',
   'ads.units.deleteAsk': 'Delete this unit? Only a draft unit without creatives can be deleted.',
+  'ads.units.deleteRefused':
+    '{reason} A unit that still has creatives cannot be deleted: delete its creatives first, or leave the unit as it is.',
   'ads.units.field.campaign': 'Campaign',
   'ads.units.field.placement': 'Placement',
   'ads.units.field.name': 'Name',

@@ -30,6 +30,18 @@ type Props<T extends { uploadId: string }> = {
    * `uploadId` from the earlier one must not be submitted any more).
    */
   onCleared?: () => void;
+  /** Called when a file is chosen, before anything else (the form forgets the last refusal). */
+  onStart?: () => void;
+  /**
+   * Called with the error of a failed upload. It returns `true` when the page shows that failure
+   * itself (a page that has to say what to set up, for example); the control then does not repeat
+   * it in its own words.
+   */
+  onFailed?: (error: unknown) => boolean | undefined;
+  /** Say, with the text of the error, the reason the backend gave for each field (default: the text of the error only). */
+  withFieldReasons?: boolean;
+  /** Show a small preview of a chosen picture (default: yes). */
+  showPreview?: boolean;
   disabled?: boolean;
 };
 
@@ -48,6 +60,10 @@ export function UploadField<T extends { uploadId: string }>({
   onUploaded,
   onBusyChange,
   onCleared,
+  onStart,
+  onFailed,
+  withFieldReasons,
+  showPreview = true,
   disabled,
 }: Props<T>) {
   const intl = useIntl();
@@ -100,8 +116,8 @@ export function UploadField<T extends { uploadId: string }>({
   const abort = useRef<AbortController | null>(null);
   const busy = useRef(false);
   const holdsResult = useRef(false);
-  const latest = useRef({ onUploaded, onBusyChange, onCleared });
-  latest.current = { onUploaded, onBusyChange, onCleared };
+  const latest = useRef({ onUploaded, onBusyChange, onCleared, onStart, onFailed });
+  latest.current = { onUploaded, onBusyChange, onCleared, onStart, onFailed };
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -117,6 +133,7 @@ export function UploadField<T extends { uploadId: string }>({
     setDoneName(null);
     setPercent(null);
     setPreview(null);
+    latest.current.onStart?.();
     if (holdsResult.current) {
       holdsResult.current = false;
       latest.current.onCleared?.();
@@ -136,7 +153,7 @@ export function UploadField<T extends { uploadId: string }>({
     }
     // A picture is shown only after the check, and only when its header says it is small: the
     // browser decodes the whole picture to show it, and a small file can declare a huge one.
-    if (file.type.startsWith('image/') || /\.(png|jpe?g)$/i.test(file.name)) {
+    if (showPreview && (file.type.startsWith('image/') || /\.(png|jpe?g)$/i.test(file.name))) {
       const size = await readImageSize(file).catch(() => null);
       if (alive.current && size && size.width * size.height <= PREVIEW_MAX_PIXELS) {
         setPreview(URL.createObjectURL(file));
@@ -160,7 +177,15 @@ export function UploadField<T extends { uploadId: string }>({
     } catch (error) {
       if (alive.current) {
         setPreview(null);
-        setFailure(describeFailure(intl, error).text);
+        const shownByPage = latest.current.onFailed?.(error) === true;
+        if (!shownByPage) {
+          const described = describeFailure(intl, error);
+          setFailure(
+            withFieldReasons
+              ? [described.text, ...described.fields.map((f) => f.text)].join(' ')
+              : described.text,
+          );
+        }
       }
     } finally {
       abort.current = null;

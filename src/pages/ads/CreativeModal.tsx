@@ -16,6 +16,7 @@ import {
 } from 'antd';
 import { useState } from 'react';
 import { linkRule } from '../../components/LinkInput';
+import { UploadField } from '../../components/UploadField';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { ApiError } from '../../request/errors';
@@ -39,11 +40,9 @@ import { DASH } from '../../utils/ratio';
 import { SCREEN_TARGETS } from '../../utils/screenTargets';
 import { trimSpec } from '../../utils/trimSpec';
 import { isUploadIdRejection } from '../../utils/uploadErrors';
-import { AdMediaUpload } from './AdMediaUpload';
 import { bytesProblemTexts, checkMediaSpec } from './mediaSpec';
 import { Picker } from './Picker';
 import { Thumb } from './Thumb';
-import { UploadBox } from './UploadBox';
 import { useUploadSlot } from './uploadSlot';
 import type { OptionsStatus } from './useOptions';
 
@@ -455,26 +454,26 @@ export function CreativeModal({
           <Flex vertical gap={8}>
             {mediaBlock}
             {specBlock}
-            <UploadBox>
-              <AdMediaUpload
-                key={slot.version}
-                onBusyChange={slot.fieldProps.onBusyChange}
-                onUploaded={(result) => {
-                  slot.fieldProps.onUploaded(result);
-                  setRejected(false);
-                  setNeedFile(false);
-                }}
-                onCleared={slot.fieldProps.onCleared}
-                onStart={() => setUnavailable(false)}
-                onFailed={(error) => {
-                  if (error instanceof ApiError && error.code === 'DEPENDENCY_UNAVAILABLE') {
-                    setUnavailable(true);
-                    return true;
-                  }
-                  return false;
-                }}
-              />
-            </UploadBox>
+            <UploadField<MediaUpload>
+              kind="adMedia"
+              showPreview={false}
+              key={slot.version}
+              onBusyChange={slot.fieldProps.onBusyChange}
+              onUploaded={(result) => {
+                slot.fieldProps.onUploaded(result);
+                setRejected(false);
+                setNeedFile(false);
+              }}
+              onCleared={slot.fieldProps.onCleared}
+              onStart={() => setUnavailable(false)}
+              onFailed={(error) => {
+                if (error instanceof ApiError && error.code === 'DEPENDENCY_UNAVAILABLE') {
+                  setUnavailable(true);
+                  return true;
+                }
+                return false;
+              }}
+            />
             {slot.busy ? (
               <Alert type="info" showIcon title={t('ads.creatives.uploadWait')} />
             ) : null}
@@ -678,7 +677,7 @@ export function CreativeModal({
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

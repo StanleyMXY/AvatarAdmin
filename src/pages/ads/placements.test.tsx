@@ -386,6 +386,29 @@ describe('the enabled switch', { timeout: 30000 }, () => {
     );
   });
 
+  it('keeps the table on the page while it reads again after a change (the rows do not vanish and come back)', async () => {
+    const { calls, user } = await load();
+    const rowBefore = await rowOf('app_open');
+    const present: boolean[] = [];
+    const watcher = new MutationObserver(() => {
+      present.push(tableRows().some((r) => r.textContent?.includes('app_open')));
+    });
+    watcher.observe(document.body, { childList: true, subtree: true });
+    await user.click(within(rowBefore).getByRole('switch'));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    await waitFor(() =>
+      expect(
+        calls.filter((c) => c.method === 'GET' && c.url.startsWith('/api/admin/ads/placements'))
+          .length,
+      ).toBeGreaterThan(1),
+    );
+    await settled();
+    watcher.disconnect();
+    expect(present.length).toBeGreaterThan(0);
+    expect(present.every(Boolean)).toBe(true);
+    expect(rowBefore.isConnected).toBe(true);
+  });
+
   it('sends one request when it is pressed twice', async () => {
     const { calls, user } = await load();
     const gate = holdWrites();

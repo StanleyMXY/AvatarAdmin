@@ -585,7 +585,10 @@ describe('the form: the file', { timeout: 60000 }, () => {
   it('does not show a second, native file box (only the button)', async () => {
     const { user } = await load();
     await open(user);
-    expect(document.querySelector('.ads-upload-box')).not.toBeNull();
+    const box = screen.getByTestId('upload-input');
+    // the shared control hides the native box with its own style, which the form style cannot undo
+    expect(box.style.display).toBe('none');
+    expect(screen.getByRole('button', { name: 'Choose file' })).toBeInTheDocument();
   });
 
   it('stops a file of another type before any upload, and says what is accepted', async () => {
@@ -1097,6 +1100,27 @@ describe('the form: creating', { timeout: 60000 }, () => {
     const form = await open(user);
     await pickUnit(user, form, '1');
     expect(form.queryByRole('spinbutton', { name: 'Reward threshold (seconds)' })).toBeNull();
+  });
+
+  it('sends no reward threshold when the unit was changed to a placement that is not rewarded after one was typed', async () => {
+    nextMedia();
+    const { calls, user } = await load();
+    const form = await open(user);
+    await pickUnit(user, form, '4');
+    choose(png());
+    await form.findByTestId('creative-media');
+    await user.type(form.getByRole('spinbutton', { name: 'Reward threshold (seconds)' }), '10');
+    await pickUnit(user, form, '1');
+    await waitFor(() =>
+      expect(form.queryByRole('spinbutton', { name: 'Reward threshold (seconds)' })).toBeNull(),
+    );
+    const field = form.getByRole('textbox', { name: 'Click target' });
+    await user.type(field, 'https://example.com/a');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
+    const body = writesOf(calls)[1].body as Record<string, unknown>;
+    expect(body.adUnitId).toBe('1');
+    expect(body.rewardAfterSeconds).toBeNull();
   });
 
   it('puts the upload again when the backend does not accept the upload id, and sends nothing until a new file is uploaded', async () => {

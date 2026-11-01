@@ -194,7 +194,7 @@ export function PlacementModal({ open, placement, onClose, onSaved }: Props) {
             description={
               failure.more.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20 }}>
-                  {failure.more.map((line) => (
+                  {[...new Set(failure.more)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>

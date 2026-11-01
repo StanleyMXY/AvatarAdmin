@@ -97,12 +97,18 @@ export default function UnitsPage() {
     UNIT_STATUSES.map((s) => [s, { label: t(`ads.status.unit.${s}`), color: STATUS_COLOR[s] }]),
   );
 
-  const act = (change: () => Promise<unknown>) => async () => {
+  const act = (change: () => Promise<unknown>, refusedBy?: string) => async () => {
     try {
       await change();
       message.success(t('ads.common.saved'));
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      const failed = describeFailure(intl, error);
+      // A 409 on the delete of a draft unit can only be the creatives it still has (contract 22.3).
+      message.error(
+        refusedBy && failed.error.code === 'INVALID_STATE'
+          ? t(refusedBy, { reason: failed.text })
+          : failed.text,
+      );
     }
     state.reload();
   };
@@ -143,7 +149,7 @@ export default function UnitsPage() {
         key: 'delete',
         label: t('ads.common.delete'),
         confirmText: t('ads.units.deleteAsk'),
-        onClick: act(() => deleteUnit(id)),
+        onClick: act(() => deleteUnit(id), 'ads.units.deleteRefused'),
       });
     }
     return actions;

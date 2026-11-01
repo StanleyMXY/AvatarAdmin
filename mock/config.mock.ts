@@ -1,6 +1,7 @@
 import type { PermissionCode } from '../src/access/permissionCodes';
-import { CONFIG_SCHEMA, specOf } from '../src/pages/config/configSchema';
+import { CONFIG_SCHEMA, specOf, validateValue } from '../src/pages/config/configSchema';
 import { validateServerLink } from '../src/utils/linkRule';
+import { adsState } from './_core/adsData';
 import { guard, hasPermission } from './_core/auth';
 import { campaignState } from './_core/campaignData';
 import { currentValue, defaultOf, saved } from './_core/configStore';
@@ -38,7 +39,7 @@ function problemWith(key: string, value: unknown): string | null {
       return null;
     }
     case 'number':
-      return typeof value === 'number' && Number.isFinite(value) ? null : 'NOT_AN_INTEGER';
+      return validateValue(spec, value);
     case 'bool':
       return typeof value === 'boolean' ? null : 'NOT_BOOLEAN';
     case 'url': {
@@ -48,7 +49,7 @@ function problemWith(key: string, value: unknown): string | null {
     }
     case 'string':
       if (typeof value !== 'string' || value.length === 0) return 'EMPTY_NOT_ALLOWED';
-      return spec.pattern && !spec.pattern.test(value) ? 'OUT_OF_RANGE' : null;
+      return validateValue(spec, value);
     case 'json':
       return spec.validate ? spec.validate(value) : null;
   }
@@ -183,6 +184,19 @@ function refusalFor(key: string, value: unknown): Refusal | null {
       };
     }
   }
+  if (key === 'invite.reward_start_at' || key === 'invite.reward_end_at') {
+    // With both set, the start must be earlier than the end (instants, whatever zone they are written in).
+    const other =
+      key === 'invite.reward_start_at' ? 'invite.reward_end_at' : 'invite.reward_start_at';
+    const start = Date.parse(String(numberOf(key, 'invite.reward_start_at', value) ?? ''));
+    const end = Date.parse(String(numberOf(key, 'invite.reward_end_at', value) ?? ''));
+    if (Number.isFinite(start) && Number.isFinite(end) && start >= end) {
+      return {
+        message: 'invite.reward_start_at must be earlier than invite.reward_end_at',
+        details: outOfRange(key, other),
+      };
+    }
+  }
   if (key === 'auth.phone_login_enabled' && value === true) {
     const served = [...smsState.templates.values()].some(
       (t) =>
@@ -208,8 +222,46 @@ function warningsFor(
       { code: 'PHONE_LOGIN_DISABLED_ACCOUNTS', message: 'Phone-number accounts exist', count: 3 },
     ];
   }
+  if (key === 'sms.allowed_country_codes' && Array.isArray(value)) {
+    // A country of the list that no enabled OTP channel serves (a channel with no countries serves all).
+    const channels = [...smsState.channels.values()].filter(
+      (c) => c.enabled && c.smsType === 'OTP',
+    );
+    const serves = (country: string) =>
+      channels.some((c) => c.countries.length === 0 || c.countries.includes(country));
+    const uncovered = value.filter((c): c is string => typeof c === 'string' && !serves(c));
+    if (uncovered.length > 0) {
+      return [
+        {
+          code: 'SMS_COUNTRY_UNCOVERED',
+          message: `No enabled channel serves: ${uncovered.join(', ')}`,
+        },
+      ];
+    }
+  }
   if (key === 'ads.skip_after_seconds' && typeof value === 'number' && value > 5) {
     return [{ code: 'AD_SKIP_AFTER_TOO_LONG', message: 'A long skip delay can break store rules' }];
+  }
+  if (key === 'ads.force_close_seconds' && value === 0) {
+    // Contract 17.4: a creative that cannot be skipped on a splash or interstitial placement can
+    // then never be closed. A rejected creative is never served, so it does not count.
+    const fullScreen = (unitId: string): boolean => {
+      const unit = adsState.units.get(unitId);
+      const format = unit ? adsState.placements.get(unit.placementId)?.adFormat : undefined;
+      return format === 'SPLASH' || format === 'INTERSTITIAL';
+    };
+    const count = [...adsState.creatives.values()].filter(
+      (c) => !c.skippable && c.reviewStatus !== 'REJECTED' && fullScreen(c.adUnitId),
+    ).length;
+    if (count > 0) {
+      return [
+        {
+          code: 'AD_FORCE_CLOSE_DISABLED',
+          message: 'A creative that cannot be skipped has no way out',
+          count,
+        },
+      ];
+    }
   }
   return [];
 }

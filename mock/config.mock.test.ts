@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { adsState, resetAdsStore } from './_core/adsData';
 import { resetConfigStore } from './_core/configStore';
 import { pushState, resetPushStore } from './_core/pushData';
 import { resetSmsStore, smsState } from './_core/smsData';
@@ -11,6 +12,7 @@ beforeEach(() => {
   resetConfigStore();
   resetSmsStore();
   resetPushStore();
+  resetAdsStore();
 });
 
 type H = Parameters<typeof call>[0];
@@ -188,6 +190,30 @@ describe('PUT /config/:key', () => {
     expect(body.data.warnings).toEqual([
       { code: 'PHONE_LOGIN_DISABLED_ACCOUNTS', message: expect.any(String), count: 3 },
     ]);
+  });
+});
+
+describe('PUT /config/ads.force_close_seconds', () => {
+  const codes = (body: { data: { warnings: { code: string }[] } }) =>
+    body.data.warnings.map((w) => w.code);
+
+  it('warns, without refusing, when it is saved as 0 while a creative that cannot be skipped is on a splash or interstitial placement', async () => {
+    const { status, body } = await put('root', 'ads.force_close_seconds', 0);
+    expect(status).toBe(200);
+    expect(body.data.warnings).toEqual([
+      { code: 'AD_FORCE_CLOSE_DISABLED', message: expect.any(String), count: expect.any(Number) },
+    ]);
+    expect(body.data.warnings[0].count).toBeGreaterThan(0);
+  });
+
+  it('does not warn for a value above 0, when no creative that cannot be skipped is left on such a placement, or when the only one is rejected', async () => {
+    expect(codes((await put('root', 'ads.force_close_seconds', 15)).body)).toEqual([]);
+    for (const creative of adsState.creatives.values()) {
+      if (!creative.skippable) creative.reviewStatus = 'REJECTED';
+    }
+    expect(codes((await put('root', 'ads.force_close_seconds', 0)).body)).toEqual([]);
+    for (const creative of adsState.creatives.values()) creative.skippable = true;
+    expect(codes((await put('root', 'ads.force_close_seconds', 0)).body)).toEqual([]);
   });
 });
 

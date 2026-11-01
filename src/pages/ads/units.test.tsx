@@ -343,9 +343,26 @@ describe('the state changes and the delete', { timeout: 30000 }, () => {
     await user.click(within(await rowOf('8')).getByRole('button', { name: 'Delete' }));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
-      await screen.findByText('The current state of the item does not allow this action.'),
+      await screen.findByText(
+        /The current state of the item does not allow this action\. A unit that still has creatives cannot be deleted/,
+      ),
     ).toBeInTheDocument();
     expect(adsState.units.has('8')).toBe(true);
+  });
+
+  it('does not blame the creatives for a refusal that is not a state refusal', async () => {
+    const { user } = await load();
+    overrideFetch(async ({ url, method }) =>
+      method === 'DELETE' && url.pathname === '/api/admin/ads/units/6'
+        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', null)
+        : undefined,
+    );
+    await user.click(within(await rowOf('6')).getByRole('button', { name: 'Delete' }));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('You do not have permission to do this.'),
+    );
+    expect(document.body.textContent).not.toContain('still has creatives cannot be deleted');
   });
 });
 

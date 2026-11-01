@@ -179,6 +179,8 @@ const messages: Record<string, string> = {
   'ads.units.pauseAsk': '暂停这个单元？',
   'ads.units.resumeAsk': '恢复这个单元？',
   'ads.units.deleteAsk': '删除这个单元？只有名下没有素材的草稿单元才能删除。',
+  'ads.units.deleteRefused':
+    '{reason}。名下还有素材的单元不能删除：请先删除它的素材，或保留这个单元。',
   'ads.units.field.campaign': '计划',
   'ads.units.field.placement': '广告位',
   'ads.units.field.name': '名称',

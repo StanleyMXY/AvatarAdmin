@@ -92,6 +92,31 @@ describe('toTargeting', () => {
     expect(toTargeting(emptyTargetingForm(), null)).toEqual({});
   });
 
+  it('writes null for every one of the six keys when the form emptied it, under the name the backend uses', () => {
+    const before = {
+      platforms: ['IOS'],
+      geo: ['TH'],
+      os_version_min: '13',
+      app_version_min: '1.0',
+      languages: ['th'],
+      day_parts: [{ start: '8:00', end: '9:00' }],
+    };
+    expect(toTargeting(emptyTargetingForm(), before)).toEqual({
+      platforms: null,
+      geo: null,
+      os_version_min: null,
+      app_version_min: null,
+      languages: null,
+      day_parts: null,
+    });
+    // The last time row removed: the key `day_parts` (not `dayParts`) goes as null.
+    const withoutParts = { ...emptyTargetingForm(), platforms: ['IOS'] };
+    const sent = toTargeting(withoutParts, before);
+    expect(Object.keys(sent)).toContain('day_parts');
+    expect(sent.day_parts).toBeNull();
+    expect(Object.keys(sent)).not.toContain('dayParts');
+  });
+
   it('does not send a row of the time list that is half filled in', () => {
     expect(
       toTargeting({

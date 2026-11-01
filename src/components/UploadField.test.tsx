@@ -323,6 +323,67 @@ describe('UploadField: review fixes', () => {
     expect(onCleared).toHaveBeenCalledTimes(1); // nothing held any more
   });
 
+  it('calls onStart when a file is chosen, also when that file is refused', async () => {
+    const onStart = vi.fn();
+    mount('pushImage', { onStart });
+    choose(new File([], 'empty.png'));
+    await screen.findByText('The file is empty');
+    expect(onStart).toHaveBeenCalledTimes(1);
+    choose(GOOD.pushImage());
+    await waitFor(() => expect(xhrs).toHaveLength(1));
+    expect(onStart).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets the page say a failed upload itself: onFailed gets the error, and when it answers true the control does not repeat it', async () => {
+    const seen: unknown[] = [];
+    const onFailed = vi.fn((error: unknown) => {
+      seen.push(error);
+      return true;
+    });
+    mount('adMedia', { onFailed });
+    choose(GOOD.adMedia());
+    await waitFor(() => expect(xhrs).toHaveLength(1));
+    xhrs[0].respond(503, JSON.stringify(envelope('DEPENDENCY_UNAVAILABLE')));
+    await waitFor(() => expect(onFailed).toHaveBeenCalledTimes(1));
+    expect(seen[0]).toBeInstanceOf(ApiError);
+    expect((seen[0] as ApiError).code).toBe('DEPENDENCY_UNAVAILABLE');
+    expect(document.querySelector('.ant-alert-error')).toBeNull();
+  });
+
+  it('says the failure in its own words when onFailed answers false, and adds the reasons of the fields only when asked', async () => {
+    const { unmount } = mount('adMedia', { onFailed: () => false });
+    choose(GOOD.adMedia());
+    await waitFor(() => expect(xhrs).toHaveLength(1));
+    xhrs[0].respond(
+      400,
+      JSON.stringify(envelope('INVALID_FILE', { details: [{ ref: 'file', reason: 'TOO_LONG' }] })),
+    );
+    await waitFor(() =>
+      expect(document.querySelector('.ant-alert-error')?.textContent).toMatch(/unsupported type/),
+    );
+    expect(document.querySelector('.ant-alert-error')?.textContent).not.toMatch(/too long/i);
+    unmount();
+    xhrs = stubXhr();
+    mount('adMedia', { withFieldReasons: true });
+    choose(GOOD.adMedia());
+    await waitFor(() => expect(xhrs).toHaveLength(1));
+    xhrs[0].respond(
+      400,
+      JSON.stringify(envelope('INVALID_FILE', { details: [{ ref: 'file', reason: 'TOO_LONG' }] })),
+    );
+    await waitFor(() =>
+      expect(document.querySelector('.ant-alert-error')?.textContent).toMatch(/too long/i),
+    );
+  });
+
+  it('makes no preview when showPreview is off, and uploads all the same', async () => {
+    mount('pushImage', { showPreview: false });
+    choose(GOOD.pushImage());
+    await waitFor(() => expect(xhrs).toHaveLength(1));
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(document.querySelector('img')).toBeNull();
+  });
+
   it('writes the "images only" note beside the control once, not in the message about one picture', async () => {
     setTestInitialState({ me: {}, meta: { ...META, adImageMaxPixels: 1_000_000 } });
     mount('adMedia');
