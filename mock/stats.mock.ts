@@ -2,6 +2,7 @@ import { guard } from './_core/auth';
 import { sampleText } from './_core/fixtures';
 import { invalidRequest, MockHttpError, ok } from './_core/http';
 import {
+  addDays,
   between,
   dailyRow,
   guestCohortRow,
@@ -279,6 +280,9 @@ export default {
         { ref: 'date', reason: 'OUT_OF_RANGE' },
       ]);
     }
+    // Contract 22.8: `ad-daily` of a day older than the last 7 UTC days leaves the table of the
+    // reasons for no ad as it was and says so.
+    if (name === 'ad-daily') return ok({ nofillSkipped: date < addDays(todayOf(), -6) });
     return ok(null);
   }),
 };

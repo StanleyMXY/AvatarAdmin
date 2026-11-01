@@ -143,6 +143,17 @@ describe('landStat', () => {
     expect(calls[0].init.method).toBe('POST');
   });
 
+  it('says whether the table of the reasons for no ad was left as it was', async () => {
+    stubFetch(() => jsonResponse(200, envelope('200', { nofillSkipped: true })));
+    expect(await landStat('ad-daily', '2026-10-01')).toEqual({ nofillSkipped: true });
+    stubFetch(() => jsonResponse(200, envelope('200', { nofillSkipped: false })));
+    expect(await landStat('ad-daily', '2026-10-20')).toEqual({ nofillSkipped: false });
+    stubFetch(() => jsonResponse(200, envelope('200', null)));
+    expect(await landStat('daily-event', '2026-10-20')).toEqual({ nofillSkipped: false });
+    stubFetch(() => jsonResponse(200, envelope('200', { nofillSkipped: 'true' })));
+    expect(await landStat('ad-daily', '2026-10-01')).toEqual({ nofillSkipped: false });
+  });
+
   it('lists the sixteen names of the contract', () => {
     expect(LAND_NAMES).toHaveLength(16);
     expect(new Set(LAND_NAMES).size).toBe(16);

@@ -35,12 +35,16 @@ export function LandBar({ name, onLanded, dateLabelId = 'stat.common.land.date',
 
   const { run, pending } = useSingleFlight(async () => {
     let landed = 0;
+    let nofillSkipped = false;
     try {
       for (const one of Array.isArray(name) ? name : [name]) {
-        await landStat(one, day);
+        const result = await landStat(one, day);
+        if (result?.nofillSkipped) nofillSkipped = true;
         landed += 1;
       }
       message.success(intl.formatMessage({ id: 'stat.common.land.done' }, { date: day }));
+      // The backend leaves the table of the reasons for no ad as it was for a day it no longer holds.
+      if (nofillSkipped) message.info(intl.formatMessage({ id: 'stat.common.land.nofillSkipped' }));
     } catch (error) {
       message.error(describeFailure(intl, error).text);
     } finally {

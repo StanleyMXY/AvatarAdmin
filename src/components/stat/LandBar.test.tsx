@@ -77,6 +77,24 @@ describe('LandBar', () => {
     expect(await screen.findByText('Re-landed 2026-10-20')).toBeInTheDocument();
   });
 
+  it('adds that the table of the reasons for no ad was not recomputed when the backend says so, and says nothing more otherwise', async () => {
+    stubFetch(() => jsonResponse(200, envelope('200', { nofillSkipped: true })));
+    renderPage(<LandBar name="ad-daily" onLanded={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
+    expect(await screen.findByText('Re-landed 2026-10-20')).toBeInTheDocument();
+    expect(
+      await screen.findByText(/The table of the reasons for no ad was not recomputed for this day/),
+    ).toBeInTheDocument();
+  });
+
+  it('does not add it when the table was recomputed', async () => {
+    stubFetch(() => jsonResponse(200, envelope('200', { nofillSkipped: false })));
+    renderPage(<LandBar name="ad-daily" onLanded={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Re-land this day' }));
+    expect(await screen.findByText('Re-landed 2026-10-20')).toBeInTheDocument();
+    expect(screen.queryByText(/was not recomputed for this day/)).toBeNull();
+  });
+
   it('runs several names one after the other and stops at the first failure', async () => {
     const calls = stubFetch((call) =>
       call.url.includes('daily-event')

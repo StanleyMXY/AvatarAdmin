@@ -305,6 +305,16 @@ describe('POST /stats/land/:name', () => {
     expect((await land('finance', 'daily-event', addDays(today, -1))).status).toBe(200);
   });
 
+  it('says nofillSkipped for ad-daily of a day older than the last 7 UTC days, and not for a recent day or another summary', async () => {
+    expect((await land('root', 'ad-daily', addDays(today, -7))).body.data).toEqual({
+      nofillSkipped: true,
+    });
+    expect((await land('root', 'ad-daily', addDays(today, -6))).body.data).toEqual({
+      nofillSkipped: false,
+    });
+    expect((await land('root', 'daily-event', addDays(today, -30))).body.data).toBeNull();
+  });
+
   it('refuses a name it does not know with 404, and a bad or future date with 400', async () => {
     expect((await land('root', 'nope', addDays(today, -1))).status).toBe(404);
     expect((await land('root', 'push', 'yesterday')).status).toBe(400);
