@@ -243,6 +243,47 @@ const subscribe = (listener: () => void) => {
   };
 };
 
+export type StatusTextColors = { success: string; warning: string; error: string; info: string };
+
+const statusCache = new Map<ThemeMode, StatusTextColors>();
+
+/**
+ * The text colours of the four statuses (a "success" tag, red "danger" text ...). Ant Design draws
+ * them in its status colours, which are 1.8:1 to 4.0:1 on the tag's own tint and on the page in
+ * the themes; these are those colours moved just far enough to reach 4.5:1 on the tint of their
+ * tag and on the container, the page and the raised background. Fills and borders keep the
+ * status colours.
+ */
+export function getStatusTextColors(mode: ThemeMode): StatusTextColors {
+  const cached = statusCache.get(mode);
+  if (cached) return cached;
+  const tokens = getModeTokens(mode);
+  const resolved = antdTheme.getDesignToken(toAntdTheme(tokens)) as unknown as Record<
+    string,
+    string
+  >;
+  const toHex = (color: string) => {
+    const rgb = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);
+    if (!rgb) return color.slice(0, 7);
+    return `#${[rgb[1], rgb[2], rgb[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+  };
+  const readable = (status: 'Success' | 'Warning' | 'Error' | 'Info') =>
+    readableText(toHex(resolved[`color${status}`]), [
+      toHex(resolved[`color${status}Bg`]),
+      tokens.colorBgContainer,
+      tokens.colorBgLayout,
+      tokens.colorBgElevated,
+    ]);
+  const colors = {
+    success: readable('Success'),
+    warning: readable('Warning'),
+    error: readable('Error'),
+    info: readable('Info'),
+  };
+  statusCache.set(mode, colors);
+  return colors;
+}
+
 /** Marks the document with the mode, for CSS and for the browser's own controls. */
 export function applyModeToDocument(mode: ThemeMode): void {
   document.documentElement.dataset.theme = mode;
@@ -256,6 +297,11 @@ export function applyModeToDocument(mode: ThemeMode): void {
   style.setProperty('--avatar-link-hover', tokens.colorLinkHover);
   style.setProperty('--avatar-link-active', tokens.colorLinkActive);
   style.setProperty('--avatar-on-primary', tokens.colorTextOnPrimary);
+  const status = getStatusTextColors(mode);
+  style.setProperty('--avatar-success-text', status.success);
+  style.setProperty('--avatar-warning-text', status.warning);
+  style.setProperty('--avatar-error-text', status.error);
+  style.setProperty('--avatar-info-text', status.info);
 }
 
 export function setThemeMode(mode: ThemeMode): void {

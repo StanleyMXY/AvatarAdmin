@@ -44,3 +44,23 @@ html[data-theme]
 html[data-theme] .ant-pro-query-filter-collapse-button {
   color: var(--avatar-link);
 }
+
+/* The status tags (not the solid ones) and the status colours of text. */
+html[data-theme] .ant-tag-success:not(.ant-tag-solid):not(.ant-tag-disabled),
+html[data-theme] .ant-typography.ant-typography-success {
+  color: var(--avatar-success-text);
+}
+
+html[data-theme] .ant-tag-warning:not(.ant-tag-solid):not(.ant-tag-disabled),
+html[data-theme] .ant-typography.ant-typography-warning {
+  color: var(--avatar-warning-text);
+}
+
+html[data-theme] .ant-tag-error:not(.ant-tag-solid):not(.ant-tag-disabled),
+html[data-theme] .ant-typography.ant-typography-danger {
+  color: var(--avatar-error-text);
+}
+
+html[data-theme] .ant-tag-processing:not(.ant-tag-solid):not(.ant-tag-disabled) {
+  color: var(--avatar-info-text);
+}

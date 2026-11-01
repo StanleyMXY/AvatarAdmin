@@ -6,6 +6,7 @@ import { contrastRatio, pickOnPrimary } from './contrast';
 import {
   applyModeToDocument,
   getModeTokens,
+  getStatusTextColors,
   resetThemeModeForTests,
   THEME_MODES,
   THEME_STORAGE_KEY,
@@ -269,6 +270,46 @@ describe.each(THEME_MODES)(
   },
 );
 
+describe.each(THEME_MODES)(
+  'the text colours of the four statuses in %s mode',
+  (mode: ThemeMode) => {
+    const resolved = antdTheme.getDesignToken(
+      toAntdTheme(getModeTokens(mode)),
+    ) as unknown as Record<string, string>;
+    const hex = (color: string) => {
+      const rgb = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);
+      if (!rgb) return color.slice(0, 7);
+      return `#${[rgb[1], rgb[2], rgb[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`;
+    };
+
+    it.each([
+      ['success', 'Success'],
+      ['warning', 'Warning'],
+      ['error', 'Error'],
+      ['info', 'Info'],
+    ] as const)(
+      '%s reaches 4.5:1 on the tint of its tag and on the container, the page and the raised background',
+      (name, status) => {
+        const tokens = getModeTokens(mode);
+        const text = getStatusTextColors(mode)[name];
+        for (const bg of [hex(resolved[`color${status}Bg`]), ...TEXT_BACKGROUNDS(tokens)]) {
+          expect(contrastRatio(text, bg), `${name} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+        }
+      },
+    );
+
+    it('puts the four colours on the document for the style sheet', () => {
+      applyModeToDocument(mode);
+      const style = document.documentElement.style;
+      const colors = getStatusTextColors(mode);
+      expect(style.getPropertyValue('--avatar-success-text')).toBe(colors.success);
+      expect(style.getPropertyValue('--avatar-warning-text')).toBe(colors.warning);
+      expect(style.getPropertyValue('--avatar-error-text')).toBe(colors.error);
+      expect(style.getPropertyValue('--avatar-info-text')).toBe(colors.info);
+    });
+  },
+);
+
 describe.each(THEME_MODES)('solid primary fills in %s mode', (mode: ThemeMode) => {
   it('a selected solid radio button carries the same text as a primary button, not white', () => {
     const tokens = getModeTokens(mode);
@@ -326,6 +367,24 @@ describe('src/global.css (what Ant Design draws with the raw primary colour, set
         ),
       ).toBe('color: var(--avatar-on-primary);');
     }
+  });
+
+  it('gives the status tags and the status colours of text the readable shades', () => {
+    for (const [tag, text, variable] of [
+      ['success', 'success', 'success'],
+      ['warning', 'warning', 'warning'],
+      ['error', 'danger', 'error'],
+    ]) {
+      expect(bodyOf(`.ant-typography.ant-typography-${text}`)).toBe(
+        `color: var(--avatar-${variable}-text);`,
+      );
+      expect(bodyOf(`.ant-tag-${tag}:not(.ant-tag-solid):not(.ant-tag-disabled)`)).toBe(
+        `color: var(--avatar-${variable}-text);`,
+      );
+    }
+    expect(bodyOf('.ant-tag-processing:not(.ant-tag-solid):not(.ant-tag-disabled)')).toBe(
+      'color: var(--avatar-info-text);',
+    );
   });
 
   it('gives the fold and unfold link of a search form the link colour', () => {
