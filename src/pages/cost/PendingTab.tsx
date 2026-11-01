@@ -13,8 +13,9 @@ import {
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ReasonModalForm } from '../../components/ReasonModalForm';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { ApiError } from '../../request/errors';
 import {
   type Band,
@@ -24,12 +25,14 @@ import {
   type PendingBatch,
   rejectBatch,
 } from '../../services/cost';
+import { clipCodePoints } from '../../utils/codePoints';
+import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { pickedDay, todayUtc } from '../../utils/utcDay';
 import { ActionModal } from './ActionModal';
+import { BatchSummary } from './BatchSummary';
 import { labelOf } from './labels';
 import { rangeText } from './PriceLines';
-import { useLatestRead } from './useLatestRead';
 import { Price, WrapText } from './WrapText';
 
 type Access = { canAccess: (code?: string) => boolean };
@@ -198,7 +201,8 @@ function PendingCard({
             <WrapText value={batch.model} testId="pending-model" lines={3} />
           </Typography.Text>
           <Tag>{labelOf(intl, 'cost.resourceType', batch.resourceType)}</Tag>
-          <Tag>
+          {/* A tag does not break its text by itself: a long provider name would widen the page. */}
+          <Tag style={{ whiteSpace: 'normal', maxWidth: '100%', overflowWrap: 'anywhere' }}>
             <WrapText value={batch.provider} />
           </Tag>
           <Tag>{labelOf(intl, 'cost.prices.source', batch.source)}</Tag>
@@ -295,6 +299,9 @@ export function PendingTab({
   const { data, failure, reload } = useLatestRead(listPendingBatches);
   const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [rejecting, setRejecting] = useState<PendingBatch | null>(null);
+  // The summary stays while the dialog closes.
+  const rejectingShown = useRef<PendingBatch | null>(null);
+  if (rejecting) rejectingShown.current = rejecting;
   const [reading, setReading] = useState(false);
 
   // Opening the confirm dialog reads the allowed currencies again; until that is back the dialog
@@ -405,7 +412,20 @@ export function PendingTab({
         open={rejecting !== null}
         title={t('cost.pending.rejectTitle')}
         reasonLabel={t('cost.pending.rejectNote')}
-        hint={t('cost.pending.rejectHint')}
+        hint={
+          rejectingShown.current ? (
+            <BatchSummary
+              summary={t('cost.pending.rejectSummary', {
+                model: clipCodePoints(plainText(rejectingShown.current.model), 60),
+                currency: plainText(rejectingShown.current.currency),
+                date: plainText(rejectingShown.current.effectiveFrom),
+              })}
+              consequence={t('cost.pending.rejectHint')}
+            />
+          ) : (
+            t('cost.pending.rejectHint')
+          )
+        }
         onClose={() => setRejecting(null)}
         onSubmit={async (note) => {
           if (!rejecting) return;

@@ -15,6 +15,8 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useMemo, useState } from 'react';
+import { type Kept, useKeptState } from '../../hooks/useKeptState';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import {
   listUsageModels,
   loadAllPages,
@@ -30,7 +32,6 @@ import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { ActionModal } from './ActionModal';
 import { labelOf } from './labels';
-import { useLatestRead } from './useLatestRead';
 import { WrapText } from './WrapText';
 
 type Access = { canAccess: (code?: string) => boolean };
@@ -122,7 +123,14 @@ function EditModel({
  * red and can be filtered), the sync adapter and the model name the sync reads. The registration is
  * edited with `COST:PRICE`; the adapter can only be set for an LLM model.
  */
-export function ModelsTab({ onlyUnpricedInitially }: { onlyUnpricedInitially: boolean }) {
+export function ModelsTab({
+  onlyUnpricedInitially,
+  kept,
+}: {
+  onlyUnpricedInitially: boolean;
+  /** The filters are kept here for when the tab is opened again (the tab is drawn again each time). */
+  kept: Kept;
+}) {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
@@ -131,8 +139,12 @@ export function ModelsTab({ onlyUnpricedInitially }: { onlyUnpricedInitially: bo
   const canPrice = access.canAccess('COST:PRICE');
   const fetcher = useCallback(() => loadAllPages(listUsageModels), []);
   const { data, failure, reload } = useLatestRead(fetcher);
-  const [onlyUnpriced, setOnlyUnpriced] = useState(onlyUnpricedInitially);
-  const [type, setType] = useState<string | undefined>();
+  const [onlyUnpriced, setOnlyUnpriced] = useKeptState(
+    kept,
+    'models.onlyUnpriced',
+    onlyUnpricedInitially,
+  );
+  const [type, setType] = useKeptState<string | undefined>(kept, 'models.type', undefined);
   const [editing, setEditing] = useState<UsageModel | null>(null);
 
   const rows = useMemo(

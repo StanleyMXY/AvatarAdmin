@@ -18,6 +18,7 @@ import { ExportButton } from '../../components/ExportButton';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { LandBar } from '../../components/stat/LandBar';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { formatAmount, listUsageModels, loadAllPages, RESOURCE_TYPES } from '../../services/cost';
 import { getUsageCost } from '../../services/stats/reports';
 import { useAdminMeta } from '../../session/useSession';
@@ -28,7 +29,6 @@ import { daysBetween, lastNDaysUtc } from '../../utils/utcDay';
 import { CostChart } from './CostChart';
 import { type CostGroup, chartSeries, groupLines, NO_COST, summarize, toLine } from './costRows';
 import { labelOf, quantityText } from './labels';
-import { useLatestRead } from './useLatestRead';
 
 const SOURCES = ['CALL', 'TEXT', 'GENERATION'] as const;
 const TIERS = ['GUEST', 'FREE', 'PAID', 'SYSTEM', 'UNKNOWN'] as const;
@@ -109,7 +109,11 @@ export default function CostReportPage() {
 
   const lines = useMemo(() => (data ? data.items.map(toLine) : null), [data]);
   useEffect(() => {
-    if (lines) setSeen([...new Set(lines.map((l) => l.currency).filter((c) => c !== NO_COST))]);
+    // Added to what was seen before, so that choosing one currency does not take the others off the list.
+    if (lines) {
+      const now = lines.map((l) => l.currency).filter((c) => c !== NO_COST);
+      setSeen((before) => [...new Set([...before, ...now])]);
+    }
   }, [lines]);
 
   const summary = useMemo(() => (lines ? summarize(lines) : null), [lines]);

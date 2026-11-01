@@ -285,6 +285,72 @@ describe('permissions', () => {
       .items;
     expect(only.every((r: { currency: string }) => r.currency === 'USD')).toBe(true);
   });
+
+  const usage = async (query: Record<string, string> = {}) =>
+    (await get('usage-cost', 'finance', { ...range, ...query })).body.data.items as Record<
+      string,
+      unknown
+    >[];
+
+  it('usage cost uses the resource types, sources and tiers of the contract, not others', async () => {
+    const rows = await usage();
+    const RESOURCE = [
+      'LLM',
+      'IMAGE_EDIT',
+      'IMAGE_TO_VIDEO',
+      'MATTING',
+      'DRIVING_PREP',
+      'AGE_ESTIMATION',
+      'CLOUD_RENDER',
+    ];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(RESOURCE).toContain(row.resourceType);
+      expect(['CALL', 'TEXT', 'GENERATION']).toContain(row.source);
+      expect(['GUEST', 'FREE', 'PAID', 'SYSTEM', 'UNKNOWN']).toContain(row.tier);
+    }
+    expect(new Set(rows.map((r) => r.resourceType)).size).toBeGreaterThan(2);
+  });
+
+  it('usage cost writes an amount as a decimal text, never as a number', async () => {
+    const priced = (await usage()).filter((r) => r.currency !== 'NONE');
+    expect(priced.length).toBeGreaterThan(0);
+    for (const row of priced) {
+      expect(typeof row.costAmount).toBe('string');
+      expect(row.costAmount).toMatch(/^\d+\.\d{6}$/);
+    }
+  });
+
+  it('usage cost narrows by resource type, provider, model, source, tier and currency, and the filters add up', async () => {
+    const all = await usage();
+    const type = all[0].resourceType as string;
+    const byType = await usage({ resourceType: type });
+    expect(byType.length).toBeGreaterThan(0);
+    expect(byType.length).toBeLessThan(all.length);
+    expect(byType.every((r) => r.resourceType === type)).toBe(true);
+    for (const [name, field] of [
+      ['provider', 'provider'],
+      ['model', 'model'],
+      ['source', 'source'],
+      ['tier', 'tier'],
+    ] as const) {
+      const value = all[0][field] as string;
+      const rows = await usage({ [name]: value });
+      expect(rows.length, name).toBeGreaterThan(0);
+      expect(
+        rows.every((r) => r[field] === value),
+        name,
+      ).toBe(true);
+    }
+    const both = await usage({ resourceType: type, source: all[0].source as string });
+    expect(both.every((r) => r.resourceType === type && r.source === all[0].source)).toBe(true);
+    expect(await usage({ model: 'no-such-model' })).toEqual([]);
+  });
+
+  it('usage cost has a row group with two currencies that stay apart and a group without a price', async () => {
+    const rows = await usage();
+    expect(new Set(rows.map((r) => r.currency))).toEqual(new Set(['USD', 'EUR', 'NONE']));
+  });
 });
 
 describe('POST /stats/land/:name', () => {

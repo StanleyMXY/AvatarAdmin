@@ -1,7 +1,8 @@
-import { useAccess, useIntl, useLocation } from '@umijs/max';
+import { history, useAccess, useIntl, useLocation } from '@umijs/max';
 import { Card, Flex, Tabs } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Can } from '../../components/Can';
+import { forgetKept, type Kept } from '../../hooks/useKeptState';
 import { getAdminMeta } from '../../services/auth';
 import { useAdminMeta } from '../../session/useSession';
 import { ConfigForm } from '../config/ConfigForm';
@@ -55,6 +56,15 @@ export default function PricesPage() {
       : 'pending',
   );
   const [onlyUnpriced] = useState(() => query.get('hasPrice') === 'false');
+  // A tab is drawn again each time it is opened, so that it reads fresh data; what the person typed
+  // into the hand-entry form and chose in the model filters is kept here.
+  const kept = useRef<Kept['current']>({}) as Kept;
+
+  // The tab is written into the address, so that a reload or a copied link opens the same tab.
+  const openTab = (key: TabKey) => {
+    setTab(key);
+    history.replace({ search: `?tab=${key}` });
+  };
 
   const items = [
     {
@@ -69,7 +79,15 @@ export default function PricesPage() {
             key: 'manual',
             label: t('cost.prices.tab.manual'),
             children: (
-              <ManualTab allowedCurrencies={allowedCurrencies} onSaved={() => setTab('current')} />
+              <ManualTab
+                allowedCurrencies={allowedCurrencies}
+                kept={kept}
+                onSaved={() => {
+                  // A saved batch is not entered again by accident: the next form starts empty.
+                  forgetKept(kept, 'manual.');
+                  openTab('current');
+                }}
+              />
             ),
           },
         ]
@@ -77,7 +95,7 @@ export default function PricesPage() {
     {
       key: 'models',
       label: t('cost.prices.tab.models'),
-      children: <ModelsTab onlyUnpricedInitially={onlyUnpriced} />,
+      children: <ModelsTab onlyUnpricedInitially={onlyUnpriced} kept={kept} />,
     },
   ];
 
@@ -86,7 +104,7 @@ export default function PricesPage() {
       {canAlerts ? <AlertsLine /> : null}
       <Tabs
         activeKey={tab}
-        onChange={(key) => setTab(key as TabKey)}
+        onChange={(key) => openTab(key as TabKey)}
         items={items}
         destroyOnHidden
       />
