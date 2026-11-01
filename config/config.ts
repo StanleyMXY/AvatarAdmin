@@ -4,6 +4,7 @@ import { localeConfig } from './localeConfig';
 import { preloadThemeScripts } from './preloadTheme';
 import proxy from './proxy';
 import routes from './routes';
+import { viewportMetas } from './viewport';
 
 export default defineConfig({
   hash: true,
@@ -21,6 +22,7 @@ export default defineConfig({
   // Initial language is resolved by the app itself; Umi only provides the intl plumbing.
   locale: localeConfig,
   antd: {},
+  metas: viewportMetas,
   // The saved theme's background before the app has loaded (no flash of white in the dark themes).
   headScripts: preloadThemeScripts,
   define: toDefine(buildVars),
