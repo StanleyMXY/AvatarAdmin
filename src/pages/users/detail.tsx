@@ -2,6 +2,7 @@ import { history, Link, useAccess, useIntl, useLocation } from '@umijs/max';
 import { Alert, Button, Flex, Spin, Tabs, Typography } from 'antd';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { ApiError } from '../../request/errors';
 import { getUser } from '../../services/users';
 import { plainText } from '../../utils/plainText';
@@ -15,7 +16,6 @@ import { DevicesTab } from './DevicesTab';
 import { EntitlementsTab } from './EntitlementsTab';
 import { OverviewTab, useStatusOptions } from './OverviewTab';
 import { SessionsTab } from './SessionsTab';
-import { useRead } from './useRead';
 
 type Access = { canAccess: (code?: string) => boolean };
 
@@ -91,7 +91,7 @@ function UserDetailView({ id, search }: { id: string; search: string }) {
   const access = useAccess() as unknown as Access;
   const statusOptions = useStatusOptions();
   const fetcher = useCallback(() => getUser(id), [id]);
-  const { data: user, error, failure, reload } = useRead(fetcher, { keep: true });
+  const { data: user, error, failure, reload } = useLatestRead(fetcher, { keepWhileReading: true });
 
   const visible = TAB_KEYS.filter((key) => access.canAccess(TAB_CODE[key]));
   const wanted = (raw: string | null): TabKey =>

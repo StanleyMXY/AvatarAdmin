@@ -1,12 +1,12 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Flex, Table, type TableColumnsType, Typography } from 'antd';
 import { useCallback } from 'react';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { listDevices, type UserDevice } from '../../services/users';
 import { formatInstant } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { Cell } from './Cell';
-import { useRead } from './useRead';
 
 /**
  * The push registrations of the account (`GET /users/{id}/devices`, not paged). The backend gives
@@ -17,7 +17,7 @@ export function DevicesTab({ accountId }: { accountId: string }) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
   const fetcher = useCallback(() => listDevices(accountId), [accountId]);
-  const { data, failure, loading, reload } = useRead(fetcher);
+  const { data, failure, loading, reload } = useLatestRead(fetcher);
 
   const columns: TableColumnsType<UserDevice> = [
     { title: t('users.devices.platform'), render: (_, row) => <Cell value={row.platform} /> },

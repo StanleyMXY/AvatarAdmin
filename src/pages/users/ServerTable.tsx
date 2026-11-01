@@ -2,8 +2,8 @@ import { useIntl } from '@umijs/max';
 import { Alert, Button, Table, type TableColumnsType } from 'antd';
 import { type MutableRefObject, type ReactNode, useCallback, useState } from 'react';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import type { Page } from '../../request/errors';
-import { useRead } from './useRead';
 
 type Props<T> = {
   /** A test id for the wrapper (the tabs are found by it). */
@@ -37,7 +37,7 @@ export function ServerTable<T extends object>({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const fetcher = useCallback(() => load({ page, pageSize }), [load, page, pageSize]);
-  const { data, failure, loading, reload } = useRead(fetcher, { keep: true });
+  const { data, failure, loading, reload } = useLatestRead(fetcher, { keepWhileReading: true });
   if (reloadRef) reloadRef.current = reload;
 
   return (
