@@ -4,8 +4,10 @@ import { App, Button, Card, Flex, Form, InputNumber, Select, Table, Tag, Typogra
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { ReadState } from '../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import {
   createSavedFunnel,
   deleteSavedFunnel,
@@ -29,8 +31,6 @@ import {
   funnelProblems,
   normalizeSteps,
 } from './funnelRules';
-import { ReadState } from './ReadState';
-import { useRead } from './useRead';
 
 const PROBLEM_TEXT: Record<FunnelProblem, string> = {
   tooFewSteps: 'analytics.funnel.problem.stepCount',
@@ -67,12 +67,12 @@ export default function FunnelPage() {
   const [dialog, setDialog] = useState<Dialog>(null);
 
   const savedFetcher = useCallback(() => listSavedFunnels(), []);
-  const saved = useRead(savedFetcher, { keep: true });
+  const saved = useLatestRead(savedFetcher, { keepWhileReading: true });
   const savedList = saved.data ?? [];
   const selected = savedList.find((f) => f.id === selectedId);
 
   const namesFetcher = useCallback(() => getEventNames(range), [range]);
-  const names = useRead(namesFetcher, { keep: true }).data?.items ?? [];
+  const names = useLatestRead(namesFetcher, { keepWhileReading: true }).data?.items ?? [];
   const stepOptions = useMemo(() => names.map((value) => ({ value, label: value })), [names]);
 
   const problems = funnelProblems(steps, windowHours);

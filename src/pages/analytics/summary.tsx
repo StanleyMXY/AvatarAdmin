@@ -2,14 +2,14 @@ import { useIntl } from '@umijs/max';
 import { Button, Flex, Table, Typography } from 'antd';
 import { useCallback, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { ReadState } from '../../components/ReadState';
 import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { UtcNotice } from '../../components/stat/UtcNotice';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { type EventSummaryRow, getEventSummary } from '../../services/analytics';
 import { useAdminMeta } from '../../session/useSession';
 import { formatCount } from '../../utils/ratio';
 import { defaultRange } from './defaultRange';
-import { ReadState } from './ReadState';
-import { useRead } from './useRead';
 
 const PAGE_SIZE = 50;
 
@@ -27,7 +27,7 @@ export default function EventSummaryPage() {
   // `asked` is a new object at every press of Query, so pressing it again reads again.
   const [asked, setAsked] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getEventSummary(asked), [asked]);
-  const { data, failure, loading, reload } = useRead(fetcher);
+  const { data, failure, loading, reload } = useLatestRead(fetcher);
 
   const number = (n: number) => formatCount(n, intl.locale);
   const rows = data?.items ?? [];
