@@ -5,8 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { contrastRatio, pickOnPrimary } from './contrast';
 import {
   applyModeToDocument,
+  getCodeTextColor,
   getModeTokens,
+  getPresetTagColors,
   getStatusTextColors,
+  PRESET_TAG_COLORS,
   resetThemeModeForTests,
   THEME_MODES,
   THEME_STORAGE_KEY,
@@ -495,5 +498,165 @@ describe.each(THEME_MODES)('links and primary-coloured text in %s mode', (mode: 
     expect((toAntdTheme(tokens).token as Record<string, string>).colorPrimary).toBe(
       tokens.colorPrimary,
     );
+  });
+});
+
+// ---- what was still below 4.5:1: preset colour tags, danger buttons, links on a tinted bar, inline code ----
+const hexOf = (color: string) => {
+  const rgb = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);
+  if (!rgb) return color.slice(0, 7).toUpperCase();
+  return `#${[rgb[1], rgb[2], rgb[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+};
+const resolvedTokens = (mode: ThemeMode) =>
+  antdTheme.getDesignToken(toAntdTheme(getModeTokens(mode))) as unknown as Record<string, string>;
+
+describe.each(THEME_MODES)('preset colour tags in %s mode', (mode: ThemeMode) => {
+  it.each(PRESET_TAG_COLORS)(
+    '%s: the text is at least 4.5:1 on the tint of its own tag and on the container, the page and the raised background',
+    (name) => {
+      const tokens = getModeTokens(mode);
+      const text = getPresetTagColors(mode)[name];
+      const tint = hexOf(resolvedTokens(mode)[`${name}1`]);
+      for (const bg of [tint, ...TEXT_BACKGROUNDS(tokens)]) {
+        expect(contrastRatio(text, bg), `${name} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
+
+  it('keeps the colour of Ant Design where it already reads, and moves it only as far as needed', () => {
+    const tokens = getModeTokens(mode);
+    for (const name of PRESET_TAG_COLORS) {
+      const own = hexOf(resolvedTokens(mode)[`${name}7`]);
+      const tint = hexOf(resolvedTokens(mode)[`${name}1`]);
+      const readable = [tint, ...TEXT_BACKGROUNDS(tokens)].every(
+        (bg) => contrastRatio(own, bg) >= 4.5,
+      );
+      if (readable) expect(getPresetTagColors(mode)[name]).toBe(own);
+      else expect(getPresetTagColors(mode)[name]).not.toBe(own);
+    }
+  });
+
+  it('puts the colours on the document for the style sheet', () => {
+    applyModeToDocument(mode);
+    const style = document.documentElement.style;
+    for (const name of PRESET_TAG_COLORS)
+      expect(style.getPropertyValue(`--avatar-tag-${name}-text`)).toBe(
+        getPresetTagColors(mode)[name],
+      );
+  });
+});
+
+describe.each(THEME_MODES)('red (danger) text of buttons in %s mode', (mode: ThemeMode) => {
+  it('rest, hover and press are at least 4.5:1 on the tint of the error bar, the container, the page and the raised background', () => {
+    const tokens = getModeTokens(mode);
+    const colors = getStatusTextColors(mode);
+    const tint = hexOf(resolvedTokens(mode).colorErrorBg);
+    for (const text of [colors.error, colors.errorHover, colors.errorActive])
+      for (const bg of [tint, ...TEXT_BACKGROUNDS(tokens)])
+        expect(contrastRatio(text, bg), `${text} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('puts hover and press on the document for the style sheet', () => {
+    applyModeToDocument(mode);
+    const style = document.documentElement.style;
+    const colors = getStatusTextColors(mode);
+    expect(style.getPropertyValue('--avatar-error-text-hover')).toBe(colors.errorHover);
+    expect(style.getPropertyValue('--avatar-error-text-active')).toBe(colors.errorActive);
+  });
+});
+
+describe.each(THEME_MODES)(
+  'links in a bar with a tinted background in %s mode',
+  (mode: ThemeMode) => {
+    it('stay at least 4.5:1 on the tint of the information, success, warning and error bars', () => {
+      const tokens = getModeTokens(mode);
+      const resolved = resolvedTokens(mode);
+      for (const status of ['Info', 'Success', 'Warning', 'Error'])
+        for (const link of [tokens.colorLink, tokens.colorLinkHover, tokens.colorLinkActive])
+          expect(
+            contrastRatio(link, hexOf(resolved[`color${status}Bg`])),
+            `${link} on ${status}`,
+          ).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('stay readable on those tints whatever primary colour the build sets', () => {
+      for (const primary of PRIMARIES) {
+        const tokens = getModeTokens(mode, primary);
+        const resolved = antdTheme.getDesignToken(toAntdTheme(tokens)) as unknown as Record<
+          string,
+          string
+        >;
+        for (const status of ['Info', 'Success', 'Warning', 'Error'])
+          expect(
+            contrastRatio(tokens.colorLink, hexOf(resolved[`color${status}Bg`])),
+          ).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  },
+);
+
+describe.each(THEME_MODES)('inline code in %s mode', (mode: ThemeMode) => {
+  it('is at least 4.5:1 on the grey tint Ant Design lays under it, on every background', () => {
+    const tokens = getModeTokens(mode);
+    const text = getCodeTextColor(mode);
+    for (const bg of TEXT_BACKGROUNDS(tokens)) {
+      // rgba(150, 150, 150, 0.2) is what Ant Design draws under `code`.
+      expect(contrastRatio(text, mixToward(bg, '#969696', 0.2))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('puts the colour on the document for the style sheet', () => {
+    applyModeToDocument(mode);
+    expect(document.documentElement.style.getPropertyValue('--avatar-code-text')).toBe(
+      getCodeTextColor(mode),
+    );
+  });
+});
+
+function mixToward(a: string, b: string, amount: number): string {
+  const ch = (hex: string, i: number) => Number.parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  return `#${[0, 1, 2]
+    .map((i) =>
+      Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * amount)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+}
+
+describe('src/global.css: the colours moved to 4.5:1', () => {
+  const css = readFileSync('src/global.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const bodies = (selectorPart: string) =>
+    css
+      .split('}')
+      .map((rule) => rule.split('{'))
+      .filter((parts) => parts.length === 2)
+      .filter(([selectors]) =>
+        selectors
+          .split(',')
+          .some((selector) => selector.replace(/\s+/g, ' ').trim().endsWith(selectorPart)),
+      )
+      .map(([, body]) => body.trim());
+
+  it.each(PRESET_TAG_COLORS)('gives the %s tag the readable text colour', (name) => {
+    expect(bodies(`.ant-tag-${name}:not(.ant-tag-solid):not(.ant-tag-disabled)`)).toEqual([
+      `color: var(--avatar-tag-${name}-text);`,
+    ]);
+  });
+
+  it('gives the red button text (link, text, outlined and filled, not the solid one) the readable red, also on hover and press', () => {
+    const base = '.ant-btn-color-dangerous';
+    for (const variant of ['link', 'text', 'outlined', 'dashed', 'filled']) {
+      const rest = `${base}.ant-btn-variant-${variant}:not(:disabled):not(.ant-btn-disabled)`;
+      expect(bodies(rest), variant).toEqual(['color: var(--avatar-error-text);']);
+      expect(bodies(`${rest}:hover`), variant).toEqual(['color: var(--avatar-error-text-hover);']);
+      expect(bodies(`${rest}:active`), variant).toEqual([
+        'color: var(--avatar-error-text-active);',
+      ]);
+    }
+  });
+
+  it('gives inline code its own readable text colour', () => {
+    expect(bodies('.ant-typography code')).toEqual(['color: var(--avatar-code-text);']);
   });
 });

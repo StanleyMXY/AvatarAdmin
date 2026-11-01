@@ -96,8 +96,40 @@ const BASE: Record<
 const LINK_HOVER_SHIFT = 0.18;
 const LINK_ACTIVE_SHIFT = 0.32;
 
+const toHex = (color: string) => {
+  const rgb = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);
+  if (!rgb) return color.slice(0, 7).toUpperCase();
+  return `#${[rgb[1], rgb[2], rgb[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+};
+
+const tintCache = new Map<boolean, string[]>();
+
+/**
+ * The tints of the four status bars (information, success, warning, error: an `Alert`, an inline
+ * notice). They come from Ant Design's own algorithm and do not depend on any colour of this theme,
+ * so the link colours can be chosen against them before the theme is built.
+ */
+function statusTints(isDark: boolean): string[] {
+  const cached = tintCache.get(isDark);
+  if (cached) return cached;
+  const resolved = antdTheme.getDesignToken({
+    algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+  }) as unknown as Record<string, string>;
+  const tints = ['Success', 'Warning', 'Error', 'Info'].map((status) =>
+    toHex(resolved[`color${status}Bg`]),
+  );
+  tintCache.set(isDark, tints);
+  return tints;
+}
+
 function linkColors(base: (typeof BASE)[ThemeMode], primary: string) {
-  const backgrounds = [base.colorBgContainer, base.colorBgLayout, base.colorBgElevated];
+  // A link also stands in a bar with a tinted background, so it must read on those tints too.
+  const backgrounds = [
+    base.colorBgContainer,
+    base.colorBgLayout,
+    base.colorBgElevated,
+    ...statusTints(base.isDark),
+  ];
   const colorLink = readableText(primary, backgrounds);
   const away = base.isDark ? '#FFFFFF' : '#000000';
   return {
@@ -243,7 +275,15 @@ const subscribe = (listener: () => void) => {
   };
 };
 
-export type StatusTextColors = { success: string; warning: string; error: string; info: string };
+export type StatusTextColors = {
+  success: string;
+  warning: string;
+  error: string;
+  info: string;
+  /** The red text of a button (link, text, outlined) when hovered and when pressed. */
+  errorHover: string;
+  errorActive: string;
+};
 
 const statusCache = new Map<ThemeMode, StatusTextColors>();
 
@@ -262,11 +302,6 @@ export function getStatusTextColors(mode: ThemeMode): StatusTextColors {
     string,
     string
   >;
-  const toHex = (color: string) => {
-    const rgb = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);
-    if (!rgb) return color.slice(0, 7);
-    return `#${[rgb[1], rgb[2], rgb[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
-  };
   const readable = (status: 'Success' | 'Warning' | 'Error' | 'Info') =>
     readableText(toHex(resolved[`color${status}`]), [
       toHex(resolved[`color${status}Bg`]),
@@ -274,14 +309,90 @@ export function getStatusTextColors(mode: ThemeMode): StatusTextColors {
       tokens.colorBgLayout,
       tokens.colorBgElevated,
     ]);
+  const error = readable('Error');
+  const errorBackgrounds = [
+    toHex(resolved.colorErrorBg),
+    tokens.colorBgContainer,
+    tokens.colorBgLayout,
+    tokens.colorBgElevated,
+  ];
+  const away = tokens.isDark ? '#FFFFFF' : '#000000';
   const colors = {
     success: readable('Success'),
     warning: readable('Warning'),
-    error: readable('Error'),
+    error,
     info: readable('Info'),
+    errorHover: readableText(mixHex(error, away, LINK_HOVER_SHIFT), errorBackgrounds),
+    errorActive: readableText(mixHex(error, away, LINK_ACTIVE_SHIFT), errorBackgrounds),
   };
   statusCache.set(mode, colors);
   return colors;
+}
+
+/** The preset colours a tag can be given (`<Tag color="green">`). */
+export const PRESET_TAG_COLORS = [
+  'blue',
+  'purple',
+  'cyan',
+  'green',
+  'magenta',
+  'pink',
+  'red',
+  'orange',
+  'yellow',
+  'volcano',
+  'geekblue',
+  'lime',
+  'gold',
+] as const;
+export type PresetTagColor = (typeof PRESET_TAG_COLORS)[number];
+
+const presetCache = new Map<ThemeMode, Record<PresetTagColor, string>>();
+
+/**
+ * The text colour of each preset colour tag. Ant Design writes the seventh shade of the colour on
+ * its first shade, which is 2.1:1 to 3.4:1 for green, orange, gold, yellow, lime and cyan on the
+ * light page; these are those colours moved just far enough to reach 4.5:1 on the tint of the tag
+ * itself and on the container, the page and the raised background.
+ */
+export function getPresetTagColors(mode: ThemeMode): Record<PresetTagColor, string> {
+  const cached = presetCache.get(mode);
+  if (cached) return cached;
+  const tokens = getModeTokens(mode);
+  const resolved = antdTheme.getDesignToken(toAntdTheme(tokens)) as unknown as Record<
+    string,
+    string
+  >;
+  const colors = Object.fromEntries(
+    PRESET_TAG_COLORS.map((name) => [
+      name,
+      readableText(toHex(resolved[`${name}7`]), [
+        toHex(resolved[`${name}1`]),
+        tokens.colorBgContainer,
+        tokens.colorBgLayout,
+        tokens.colorBgElevated,
+      ]),
+    ]),
+  ) as Record<PresetTagColor, string>;
+  presetCache.set(mode, colors);
+  return colors;
+}
+
+/** The grey Ant Design lays under inline `code` is 10% of rgb(150,150,150); 20% leaves a margin. */
+const CODE_TINT = { color: '#969696', amount: 0.2 };
+
+/**
+ * The text colour of inline `code`. Inside secondary text it is a grey that is 4.4:1 on the grey
+ * tint under it; this is the secondary text colour moved to 4.5:1 on that tint over every background.
+ */
+export function getCodeTextColor(mode: ThemeMode): string {
+  const tokens = getModeTokens(mode);
+  return readableText(
+    tokens.colorTextSecondary,
+    [tokens.colorBgContainer, tokens.colorBgLayout, tokens.colorBgElevated].map((bg) =>
+      mixHex(bg, CODE_TINT.color, CODE_TINT.amount),
+    ),
+  );
 }
 
 /** Marks the document with the mode, for CSS and for the browser's own controls. */
@@ -302,6 +413,12 @@ export function applyModeToDocument(mode: ThemeMode): void {
   style.setProperty('--avatar-warning-text', status.warning);
   style.setProperty('--avatar-error-text', status.error);
   style.setProperty('--avatar-info-text', status.info);
+  style.setProperty('--avatar-error-text-hover', status.errorHover);
+  style.setProperty('--avatar-error-text-active', status.errorActive);
+  const presets = getPresetTagColors(mode);
+  for (const name of PRESET_TAG_COLORS)
+    style.setProperty(`--avatar-tag-${name}-text`, presets[name]);
+  style.setProperty('--avatar-code-text', getCodeTextColor(mode));
 }
 
 export function setThemeMode(mode: ThemeMode): void {
