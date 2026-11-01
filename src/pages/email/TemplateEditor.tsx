@@ -1,13 +1,13 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Divider, Flex, Form, Input, Modal, Typography } from 'antd';
-import { useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
+import { type FailureLines, useFailureView } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type EmailTemplate, resetEmailTemplate, saveEmailTemplate } from '../../services/email';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
-import { failureToForm } from '../../utils/failureToForm';
+import { failureToForm, failureWords } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { listOfText, missingPlaceholders } from './placeholders';
@@ -35,7 +35,7 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const [failure, setFailure] = useState<{ text: string; more: string[] } | null>(null);
+  const { view: failure, show, clear } = useFailureView<FailureLines>();
   const code = plainText(template.templateCode);
   const placeholders = listOfText(template.placeholders);
   const required = listOfText(template.requiredPlaceholders);
@@ -48,22 +48,18 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
   };
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
-    setFailure(null);
+    clear();
     try {
       await saveEmailTemplate(code, {
         subject: trimSpec(values.subject),
         body: trimSpec(values.body),
       });
     } catch (error) {
-      const result = failureToForm(
-        intl,
-        form,
-        error,
-        ['subject', 'body'],
-        {},
-        { generalReason: true },
-      );
-      setFailure({ text: result.text, more: result.unplaced });
+      failureToForm(intl, form, error, ['subject', 'body'], {}, { generalReason: true });
+      show((words) => {
+        const result = failureWords(words, error, ['subject', 'body'], {}, { generalReason: true });
+        return { text: result.text, more: result.unplaced };
+      });
       return;
     }
     message.success(t('email.templates.saved'));
