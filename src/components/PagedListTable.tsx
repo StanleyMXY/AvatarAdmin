@@ -16,17 +16,29 @@ type Props<T extends Record<string, any>, F extends Record<string, unknown>> = {
   request: (params: { page: number; pageSize: number } & F) => Promise<Page<T>>;
   /** Buttons above the table, on the right. */
   toolbar?: ReactNode[];
-  /** The search form starts folded (the default). */
-  defaultCollapsed?: true;
+  /**
+   * The search form starts folded (the default), showing the first filters; `false` opens it, for a
+   * list whose filters all matter at once.
+   */
+  defaultCollapsed?: boolean;
   /** Lets the page reload the table after a write. */
   actionRef?: React.MutableRefObject<ActionType | undefined>;
 };
+
+/** Whether ProTable would draw a filter for this column (the form is left out when none would be drawn). */
+const hasFilter = (column: ProColumns<Record<string, unknown>>): boolean =>
+  column.search !== false &&
+  column.valueType !== 'option' &&
+  column.valueType !== 'index' &&
+  column.valueType !== 'indexBorder' &&
+  (column.dataIndex !== undefined || column.key !== undefined);
 
 /**
  * A server-paged list on ProTable: `Page<T>` in the backend's shape (`items`, `total`) becomes what
  * the table wants; the page sizes are 10, 20, 50 and 100 (20 by default). When two requests overlap
  * the answer of the newest one is what is shown, whichever arrives first. A failed request shows the
- * error above the table, with a retry, and the table does not break.
+ * error above the table, with a retry, and the table does not break. When no column has a filter
+ * there is no search area at all (it would be a card with two buttons that do nothing).
  */
 export function PagedListTable<
   // biome-ignore lint/suspicious/noExplicitAny: ProTable's own row constraint, so that `interface` rows work
@@ -78,7 +90,11 @@ export function PagedListTable<
         columns={columns}
         actionRef={ref}
         request={load}
-        search={{ defaultCollapsed, labelWidth: 'auto' }}
+        search={
+          columns.some((column) => hasFilter(column as ProColumns<Record<string, unknown>>))
+            ? { defaultCollapsed, labelWidth: 'auto' }
+            : false
+        }
         toolBarRender={toolbar ? () => toolbar : false}
         options={false}
         scroll={{ x: 'max-content' }}

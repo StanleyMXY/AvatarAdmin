@@ -147,4 +147,61 @@ describe('PagedListTable', () => {
       expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'สม ชาย', page: 1 })),
     );
   });
+  it('draws no search area when no column can be searched (an empty card with two buttons does nothing)', async () => {
+    const plain: ProColumns<Row>[] = [
+      { title: 'Name', dataIndex: 'name', search: false },
+      { title: 'Hidden', dataIndex: 'q', hideInTable: true, search: false },
+      { title: 'Actions', valueType: 'option', render: () => null },
+    ];
+    renderPage(
+      <PagedListTable<Row>
+        rowKey="id"
+        columns={plain}
+        request={async () => ({ items: [{ id: '1', name: 'Only row' }], total: 1 })}
+      />,
+    );
+    expect(await screen.findByText('Only row')).toBeInTheDocument();
+    expect(document.querySelector('.ant-pro-table-search')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^(Query|Reset|Search)$/ })).toBeNull();
+  });
+
+  it('keeps the search area when at least one column can be searched', async () => {
+    renderPage(
+      <PagedListTable<Row, { q?: string }>
+        rowKey="id"
+        columns={columns}
+        request={async () => ({ items: [], total: 0 })}
+      />,
+    );
+    expect(await screen.findByLabelText('Keyword')).toBeInTheDocument();
+    expect(document.querySelector('.ant-pro-table-search')).not.toBeNull();
+  });
+
+  it('shows every filter at once when defaultCollapsed is false, and folds them by default', async () => {
+    const many: ProColumns<Row>[] = ['a', 'b', 'c', 'd', 'e', 'f'].map((key) => ({
+      title: `Filter ${key}`,
+      dataIndex: key,
+      hideInTable: true,
+    }));
+    const { unmount } = renderPage(
+      <PagedListTable<Row>
+        rowKey="id"
+        columns={many}
+        request={async () => ({ items: [], total: 0 })}
+      />,
+    );
+    await waitFor(() => expect(document.querySelector('.ant-pro-table-search')).not.toBeNull());
+    expect(screen.getByLabelText('Filter f')).not.toBeVisible();
+    unmount();
+    renderPage(
+      <PagedListTable<Row>
+        rowKey="id"
+        columns={many}
+        defaultCollapsed={false}
+        request={async () => ({ items: [], total: 0 })}
+      />,
+    );
+    await waitFor(() => expect(document.querySelector('.ant-pro-table-search')).not.toBeNull());
+    expect(screen.getByLabelText('Filter f')).toBeVisible();
+  });
 });
