@@ -1,7 +1,7 @@
 import { ApiError, describeError, unknownError } from '../request/errors';
 
 /** The part of `useIntl()` this needs (Umi's copy of react-intl and ours have different types). */
-type Translator = {
+export type Translator = {
   messages: Record<string, unknown>;
   formatMessage: (descriptor: { id: string }, values?: Record<string, string | number>) => string;
 };
@@ -18,6 +18,11 @@ export function describeFailure(intl: Translator, failure: unknown) {
     intl.messages[key] ? intl.formatMessage({ id: key }) : key,
   );
   return { error, ...described };
+}
+
+/** The error code of a failure (the unknown error's code for anything that is not an `ApiError`), whatever the language. */
+export function failureCode(failure: unknown): string {
+  return (failure instanceof ApiError ? failure : unknownError()).code;
 }
 
 /**

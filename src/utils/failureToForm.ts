@@ -18,23 +18,18 @@ type Options = {
 };
 
 /**
- * Puts a failed save into the form: the text of each field detail goes under its field when the
- * form has it, and the whole text is returned for the bar at the bottom of the dialog. The words
- * are those of the error code and of the reasons, never the backend's own message (see `options`
- * for a reason the language file does not know). `uploadRejected` is true when the backend refused
- * the `uploadId` the request carried (the form must ask for the file again; call it for a request
- * that carries one). `aliases` maps a name the backend uses to the form field that holds it
- * (`linkTarget` to `link`). `unplaced` is the text of each detail that no field of the form took,
- * for the bar. `code` is the error code of the failure.
+ * The words of a failed save, without touching a form: the whole text, the text of each field
+ * detail (`named`), the ones that fall on a field of `fields` (`mine`) and the ones that do not
+ * (`unplaced`). A page keeps the failure and calls this when it draws, so the words follow the
+ * language; `failureToForm` is this plus putting `mine` under the fields of a form.
  */
-export function failureToForm(
+export function failureWords(
   intl: Translator,
-  form: FormInstance,
   error: unknown,
   fields: readonly string[],
   aliases: Record<string, string> = {},
   options: Options = {},
-): { text: string; uploadRejected: boolean; unplaced: string[]; code: string } {
+) {
   const { text, fields: details, error: failure } = describeFailure(intl, error);
   const general = intl.formatMessage({ id: 'error.INVALID_REQUEST' });
   const named = options.generalReason
@@ -45,12 +40,36 @@ export function failureToForm(
           : general,
       }))
     : details.map((d) => ({ ref: aliases[d.ref] ?? d.ref, text: d.text }));
-  const mine = named.filter((d) => fields.includes(d.ref));
-  if (mine.length > 0) form.setFields(mine.map((d) => ({ name: d.ref, errors: [d.text] })));
   return {
     text,
-    uploadRejected: isUploadIdRejection(error),
+    named,
+    mine: named.filter((d) => fields.includes(d.ref)),
     unplaced: named.filter((d) => !fields.includes(d.ref)).map((d) => d.text),
     code: failure.code,
   };
+}
+
+/**
+ * Puts a failed save into the form: the text of each field detail goes under its field when the
+ * form has it, and the whole text is returned for the bar at the bottom of the dialog. The words
+ * are those of the error code and of the reasons, never the backend's own message (see `options`
+ * for a reason the language file does not know). `uploadRejected` is true when the backend refused
+ * the `uploadId` the request carried (the form must ask for the file again; call it for a request
+ * that carries one). `aliases` maps a name the backend uses to the form field that holds it
+ * (`linkTarget` to `link`). `unplaced` is the text of each detail that no field of the form took,
+ * for the bar. `code` is the error code of the failure. These words are in the language of this
+ * moment: a page that keeps them in its state shows them in that language for good, so it keeps
+ * the failure and calls `failureWords` when it draws.
+ */
+export function failureToForm(
+  intl: Translator,
+  form: FormInstance,
+  error: unknown,
+  fields: readonly string[],
+  aliases: Record<string, string> = {},
+  options: Options = {},
+): { text: string; uploadRejected: boolean; unplaced: string[]; code: string } {
+  const { text, mine, unplaced, code } = failureWords(intl, error, fields, aliases, options);
+  if (mine.length > 0) form.setFields(mine.map((d) => ({ name: d.ref, errors: [d.text] })));
+  return { text, uploadRejected: isUploadIdRejection(error), unplaced, code };
 }
