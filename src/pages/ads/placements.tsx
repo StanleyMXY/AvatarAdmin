@@ -1,13 +1,12 @@
 import { useAccess, useIntl } from '@umijs/max';
-import { Alert, App, Button, Card, Flex, Spin, Switch, Table, Typography } from 'antd';
+import { Alert, Button, Card, Flex, Spin, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { FailureBar } from '../../components/FailureBar';
 import { useLatestRead } from '../../hooks/useLatestRead';
-import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdPlacement, listPlacements, updatePlacement } from '../../services/ads';
-import { describeFailure } from '../../session/describe';
 import { codeText, countText } from '../../utils/displayText';
 import { formatBytes } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
@@ -17,40 +16,6 @@ import { AdsWarnings } from './AdsWarnings';
 import { Checklist } from './Checklist';
 import { PlacementModal } from './PlacementModal';
 import { dailyMax } from './placementRows';
-
-/** The switch of a placement: one request per change, and the list is read again afterwards so that it shows what the backend holds. */
-function EnabledSwitch({
-  row,
-  disabled,
-  onDone,
-}: {
-  row: AdPlacement;
-  disabled: boolean;
-  onDone: () => void;
-}) {
-  const intl = useIntl();
-  const { message } = App.useApp();
-  const { run, pending } = useSingleFlight(async (next: boolean) => {
-    try {
-      await updatePlacement(plainText(row.id), { enabled: next });
-    } catch (error) {
-      message.error(describeFailure(intl, error).text);
-    }
-    onDone();
-  });
-  return (
-    <Switch
-      checked={row.enabled === true}
-      loading={pending}
-      disabled={disabled}
-      aria-label={intl.formatMessage(
-        { id: 'ads.placements.enabledOf' },
-        { slot: plainText(row.slotKey) },
-      )}
-      onChange={(next) => void run(next).catch(() => {})}
-    />
-  );
-}
 
 /**
  * 广告位与全局设置: the global settings of `ads.*` (nine keys of `ADS:PLACEMENT`; the tenth, the
@@ -91,7 +56,15 @@ export default function PlacementsPage() {
     {
       key: 'enabled',
       title: t('ads.placements.col.enabled'),
-      render: (_, row) => <EnabledSwitch row={row} disabled={!canWrite} onDone={reload} />,
+      render: (_, row) => (
+        <EnabledSwitch
+          checked={row.enabled === true}
+          label={t('ads.placements.enabledOf', { slot: plainText(row.slotKey) })}
+          disabled={!canWrite}
+          onToggle={(enabled) => updatePlacement(plainText(row.id), { enabled })}
+          onDone={reload}
+        />
+      ),
     },
     {
       key: 'frequencyCap',
