@@ -1,3 +1,8 @@
+/* The browser's default 8px margin around the page body is not wanted (see src/theme/modes.test.ts). */
+body {
+  margin: 0;
+}
+
 /*
  * What Ant Design and its pro components draw with the raw primary colour (#0ABAB5), which is
  * only 2.4:1 against white (needs 4.5:1), or with white on the primary colour. The colours are the

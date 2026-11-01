@@ -391,11 +391,19 @@ describe('src/global.css (what Ant Design draws with the raw primary colour, set
     expect(bodyOf('.ant-pro-query-filter-collapse-button')).toBe('color: var(--avatar-link);');
   });
 
-  it('beats the rules Ant Design injects at run time: every selector starts with html[data-theme]', () => {
-    expect(rules.length).toBeGreaterThanOrEqual(5);
-    for (const rule of rules)
+  it('beats the rules Ant Design injects at run time: every colour selector starts with html[data-theme]', () => {
+    const colours = rules.filter((rule) => !rule.selectors.includes('body'));
+    expect(colours.length).toBeGreaterThanOrEqual(5);
+    for (const rule of colours)
       for (const selector of rule.selectors)
         expect(selector.startsWith('html[data-theme] ')).toBe(true);
+  });
+
+  // The browser gives the body 8px of margin. A modal or a drawer locks the scroll of the page with
+  // `width: calc(100% + <scroll bar>)` on the body; with the margin around it the document becomes
+  // 8px wider than the window and can be dragged sideways while a dialog is open.
+  it('takes the default margin off the body, so that a dialog or a drawer does not make the page wider than the window', () => {
+    expect(bodyOf('body')).toBe('margin: 0;');
   });
 });
 
