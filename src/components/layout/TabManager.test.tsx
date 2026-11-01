@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { App } from 'antd';
 import { type ReactNode, useEffect } from 'react';
 import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { history, resetUmiStub, setTestLocation } from '../../../tests/stubs/umi-max';
 import type { AdminRoute } from '../../access/canAccess';
+import { useLeaveGuard } from '../../hooks/useLeaveGuard';
 import {
   markServiceReachable,
   markServiceUnavailable,
@@ -54,6 +56,10 @@ const messages = {
     'pages.tabs.closeAll': 'Close all',
     'pages.tabs.closeLeft': 'Close left',
     'pages.tabs.closeRight': 'Close right',
+    'pages.leave.title': 'Leave this page?',
+    'pages.leave.content': 'Your changes have not been saved and will be lost.',
+    'pages.leave.leave': 'Leave',
+    'pages.leave.stay': 'Stay',
   },
   'zh-CN': {
     'menu.dashboard.dashboard': '总览',
@@ -69,6 +75,10 @@ const messages = {
     'pages.tabs.closeAll': '关闭全部',
     'pages.tabs.closeLeft': '关闭左侧',
     'pages.tabs.closeRight': '关闭右侧',
+    'pages.leave.title': '离开这个页面？',
+    'pages.leave.content': '你的修改还没有保存，离开后会丢失。',
+    'pages.leave.leave': '离开',
+    'pages.leave.stay': '留下',
   },
 };
 
@@ -93,11 +103,19 @@ function Shell({
 }) {
   return (
     <IntlProvider locale={locale} messages={messages[locale]} onError={() => {}}>
-      <TabManager routes={routes} can={can} locale={locale}>
-        {children}
-      </TabManager>
+      <App>
+        <TabManager routes={routes} can={can} locale={locale}>
+          {children}
+        </TabManager>
+      </App>
     </IntlProvider>
   );
+}
+
+// A page with changes that are not saved (the rule list page does this).
+function Unsaved() {
+  useLeaveGuard(true);
+  return <Probe />;
 }
 
 const tabLabels = () =>
@@ -327,6 +345,32 @@ describe('TabManager: the tab menu without a mouse', () => {
     await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true));
   });
 
+  it('gives the tab a wrapper that has a box: the menu is placed at the tab, not off screen', () => {
+    // A box-less wrapper (display: contents) leaves the menu nothing to be placed by when it is
+    // opened without a mouse position; the browser then puts it far outside the window. happy-dom
+    // does not lay out, so the style itself is what is pinned here; the real placement is measured
+    // in a browser (see the fix notes of the page review).
+    const ui = render(<Shell />);
+    visit('/users/list', ui);
+    for (const name of ['Overview', 'User list']) {
+      const wrapper = tab(name).parentElement as HTMLElement;
+      expect(wrapper.tagName).toBe('SPAN');
+      expect(wrapper.style.display).toBe('inline-flex');
+      expect(getComputedStyle(wrapper).display).not.toBe('contents');
+    }
+  });
+
+  it('gives the focus back to the tab when the menu that was opened with the keyboard is closed with Escape', async () => {
+    const ui = render(<Shell />);
+    visit('/users/list', ui);
+    tabButton('User list').focus();
+    fireEvent.keyDown(tabButton('User list'), { key: 'ContextMenu' });
+    const menu = await screen.findByRole('menu');
+    await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' });
+    await waitFor(() => expect(document.activeElement).toBe(tabButton('User list')));
+  });
+
   it('does not open for F10 alone or for other keys', () => {
     const ui = render(<Shell />);
     visit('/users/list', ui);
@@ -419,6 +463,64 @@ describe('TabManager: refresh', () => {
     await choose('User list', 'Refresh');
     await choose('User list', 'Refresh');
     expect(mounts).toBe(before + 2);
+  });
+});
+
+describe('TabManager: closing the open tab of a page with unsaved changes', () => {
+  const openUnsaved = () => {
+    const ui = render(
+      <Shell>
+        <Unsaved />
+      </Shell>,
+    );
+    visit('/users/list', ui, { children: <Unsaved /> });
+    visit('/users/abuse', ui, { children: <Unsaved /> });
+    history.push.mockClear();
+    return ui;
+  };
+  const closeButton = (name: string) =>
+    tab(name).querySelector('.ant-tabs-tab-remove') as HTMLElement;
+
+  it('asks first and keeps the tab and the page where they are until the answer is "Leave"', async () => {
+    openUnsaved();
+    fireEvent.click(closeButton('Multi-account'));
+    expect(await screen.findByRole('dialog', { name: 'Leave this page?' })).toBeInTheDocument();
+    expect(tabLabels()).toEqual(['Overview', 'User list', 'Multi-account']);
+    expect(history.push).not.toHaveBeenCalled();
+  });
+
+  it('after "Stay" the tab is still in the bar and still the open one', async () => {
+    openUnsaved();
+    fireEvent.click(closeButton('Multi-account'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Stay' }));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(tabLabels()).toEqual(['Overview', 'User list', 'Multi-account']);
+    expect(tab('Multi-account').className).toContain('ant-tabs-tab-active');
+    expect(history.push).not.toHaveBeenCalled();
+  });
+
+  it('after "Leave" the tab goes and the tab to its left opens', async () => {
+    openUnsaved();
+    fireEvent.click(closeButton('Multi-account'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Leave' }));
+    await waitFor(() => expect(tabLabels()).toEqual(['Overview', 'User list']));
+    expect(history.push).toHaveBeenLastCalledWith('/users/list');
+  });
+
+  it('asks for "close others" and "close all" that would drop the open page, in the same way', async () => {
+    openUnsaved();
+    fireEvent.contextMenu(tab('User list'));
+    fireEvent.click(within(await screen.findByRole('menu')).getByText('Close others'));
+    expect(await screen.findByRole('dialog', { name: 'Leave this page?' })).toBeInTheDocument();
+    expect(tabLabels()).toEqual(['Overview', 'User list', 'Multi-account']);
+    expect(history.push).not.toHaveBeenCalled();
+  });
+
+  it('does not ask when the tab that is closed is not the open one', () => {
+    openUnsaved();
+    fireEvent.click(closeButton('User list'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(tabLabels()).toEqual(['Overview', 'Multi-account']);
   });
 });
 
@@ -564,6 +666,56 @@ describe('TabManager: the service is unavailable', () => {
     fireEvent.click(within(notice() as HTMLElement).getByRole('button', { name: 'Retry' }));
     expect(mounts).toBe(before + 1);
     expect(notice()).toBeNull();
+  });
+
+  describe('with changes on the page that are not saved', () => {
+    const unsavedPage = () => {
+      render(
+        <Shell>
+          <Unsaved />
+        </Shell>,
+      );
+      act(() => markServiceUnavailable());
+    };
+    const retry = () =>
+      fireEvent.click(within(notice() as HTMLElement).getByRole('button', { name: 'Retry' }));
+
+    it('retry asks first and does not draw the page again, so the changes are not lost without a word', async () => {
+      unsavedPage();
+      const before = mounts;
+      retry();
+      expect(await screen.findByRole('dialog', { name: 'Leave this page?' })).toBeInTheDocument();
+      expect(mounts).toBe(before);
+      expect(notice()).not.toBeNull();
+    });
+
+    it('after "Stay" the page and its changes are untouched and the notice is still there', async () => {
+      unsavedPage();
+      const before = mounts;
+      retry();
+      fireEvent.click(await screen.findByRole('button', { name: 'Stay' }));
+      await new Promise((r) => setTimeout(r, 100));
+      expect(mounts).toBe(before);
+      expect(notice()).not.toBeNull();
+    });
+
+    it('after "Leave" the page is drawn again and the notice goes', async () => {
+      unsavedPage();
+      const before = mounts;
+      retry();
+      fireEvent.click(await screen.findByRole('button', { name: 'Leave' }));
+      await waitFor(() => expect(mounts).toBe(before + 1));
+      expect(notice()).toBeNull();
+    });
+
+    it('does not move to the same address through the history (the guard would ask a second time)', async () => {
+      unsavedPage();
+      history.push.mockClear();
+      retry();
+      fireEvent.click(await screen.findByRole('button', { name: 'Leave' }));
+      await waitFor(() => expect(notice()).toBeNull());
+      expect(history.push).not.toHaveBeenCalled();
+    });
   });
 
   it('goes away by itself when a request is answered again', () => {

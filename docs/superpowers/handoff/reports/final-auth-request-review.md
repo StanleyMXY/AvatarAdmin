@@ -149,3 +149,46 @@ g1 的其它句子：0 字节拒绝（M4 变红）、方向字符（M5 变红）
 1. 真实浏览器：Safari 对 10 秒后撤销对象地址的下载（`download.ts:65` 的 `setTimeout`）、`filename=` 里原始 UTF-8 字节被当 Latin-1 解码、认证页面和系统管理页面的版式；`happy-dom` 看不到这些。这三点在 `batch-fix-g1-report.md` 里已经列为未运行，我没有碰。
 2. 全量测试和构建：按 `execution-conventions.md` 留到全部任务做完后由主会话跑一次。我只跑了第六节写的局部；`src/pages`、`src/components`、`src/services`、`src/hooks` 的带记录的页面测试因为机器负载高只跑了约 690 条就停了（见第三节第 5 条 c），所以“全部页面测试里没有 `TypeError`”这一句我不能写，只能写“已跑过的约 690 条为 0”。
 3. 对着真实后端：改密码旧密码错时返回哪个码（`ADMIN_INVALID_CREDENTIALS` 是暂定，已有问题文件）、导出没有数据时是不是仍然给带表头的工作簿、新建权限节点的代码格式（记录项 6）；契约没有写，我没有后端可问，也不能读其它仓库。
+
+## 八、修复（针对第二节的 7 条记录项；前面的内容没有改）
+
+负责人规则：记录项全部修，修法按业界通行做法自己定。每条先写会失败的测试并看到红，再修；认证和请求层的改动再对每条规则做改坏代码的检查。7 条各一个提交，在分支 `claude/jolly-dirac-4pq9g6` 上，没有推送。
+
+### 提交和修法
+
+| 第二节的条目 | 提交 | 修法 | 红（修之前） | 改坏检查 |
+|---|---|---|---|---|
+| 1 退出后迟到的 403 | `6ff7861` | `readMeAgain`（`src/session/loadSession.ts`）在没有令牌时直接返回 `undefined`，不发 `/me`。 | 2 条新测试红：没有令牌时仍发出了 1 次 `GET /me`（期望 0 次） | 把判断改成恒假：2 条红 |
+| 2 角色没有 `permissionCodes` | `0f8ecba` | `codesNotHeld` 的参数改成 `unknown`，不是数组就当没有；`RoleModal` 里 `held` 的 `wanted` 也用 `Array.isArray`（原来只防 `null`，字符串会抛 `filter is not a function`）。 | 4 条红：`roleCodes is not iterable`（缺、`null`），`wanted.filter is not a function`（字符串），单元测试 1 条 | 只还原 `wanted` 的防护：字符串那条红 |
+| 3 请求体序列化失败 | `38f57ee` | 选 `TypeError`（不是 `ApiError`），理由：与地址、查询参数的早失败一致，这是调用方的编程错误，不是后端或网络的结果，页面不应把它当成“结果不确定”。新函数 `serializeBody` 在读令牌、开计时器之前执行；消息固定（“the request body cannot be written as JSON”），不带原始异常文字，也不设 `cause`（请求体可能含密码，`toJSON` 里抛出的文字也可能含）。返回 `undefined` 的体（函数、符号）同样拒绝。 | 7 条红（环、BigInt、`toJSON` 抛错、函数、符号、不是 `NETWORK_ERROR`、没有计时器）；全部断言 `fetch` 调用 0 次 | 4 处：去掉 `undefined` 检查（7 红）、把原异常抛出去（2 红：消息含 `hunter2`、不是 `TypeError`）、把序列化放回传输 `try`（7 红）、失败时抛 `networkError()`（7 红） |
+| 4 `describeFailure` 与 `describeError` 不一致 | `6bcbed5` | `describeFailure` 对非 `ApiError` 返回 `unknownError()`（新，`src/request/errors.ts`，码 `UNKNOWN`，固定消息，`httpStatus` 0，所以 `isOutcomeUnknown` 仍为真，与之前的 `networkError()` 一样保守），文字因此是 `error.UNKNOWN`，与 `describeError` 相同。`AbortError` 没有特殊处理：和 `describeError` 一样给 `UNKNOWN`（调用方在显示前本来就过滤取消）。注释已改。 | 新增 `src/session/describe.test.ts` 14 条红，另有 4 个旧测试（`failureLine`、`users/text`、`cost/failure`、`system/formFailure`）原来把“网络错误”写成期望，改成 `error.UNKNOWN` 后红；`failureToForm.test.tsx` 的 `code` 期望由 `NETWORK_ERROR` 改成 `UNKNOWN`（全仓库没有按这个码分支的代码，已 `grep`） | 把 `unknownError()` 换回 `networkError()`：15 红 |
+| 5 无调用方的 `reportSession` | `38f57ee` | 从 `apiRequest` 的选项里删除，`anonymous` 是唯一不报告会话的做法（`unwrapAndReport` 的内部参数改由 `!o.anonymous` 决定）；过时注释改成说明 `anonymous` 的含义；`review7.test.tsx` 里唯一的用法改成 `anonymous: true`。 | 新增 1 条测试，带 `@ts-expect-error`（选项不存在）并断言遗留的 `reportSession:false` 被忽略、`onExpired` 被调用 1 次：修之前红 | 把 `!o.anonymous` 改成 `true`：2 红 |
+| 6 权限码 `.`、`..` | `c41fb7d` | `codeProblem`（`permissionRules.ts`）新增结果 `dots`：去空白后以 `.` 开头或结尾（含只由点组成）。字符集仍是原来的（不含空白、控制符、格式符、分隔符，不超过 100 码点）：评审说明里没有给出别的字符集，泰语、阿拉伯语、中文等的码和中间有点的码（`a.b`、`v1.2.3`）照常放行。检查顺序：必填、字符、点、重复。新增中英文提示 `system.permissions.field.code.dots`。 | 17 条红（单元 + 对话框里 4 条：`.`、`..`、`.hidden`、`trailing.`） | 3 处：只查开头、只查结尾、只拒绝 `..`：4、4、11 条红 |
+| 7 审计详情遮蔽 | `89a8f75` | 见下 | 59 条红（其中 2 条是我写错的断言：`tokenVersion`、`mustChangePassword` 的字符串值本来就会被遮，已从“不遮”清单里删掉） | 31 处，全部变红；其中 3 处第一次存活（见下） |
+
+### 第 7 条：补了什么、没有误遮什么
+
+补的（`src/pages/system/auditDetail.ts`）：
+
+- 键名：`auth_key`、`authKey`、`creds`、`cred`、`refresh`（只有键名整个就是 `refresh` 才遮，`refreshInterval`、`lastRefresh`、`autoRefresh` 不遮），其余沿用原来的数字、布尔、日期不遮规则。
+- 链接查询串：`?sig=`、`&sign=`、`;hmac=` 等签名参数（只认 `?`、`&`、`;` 之后的参数名，所以 `design=blue`、`assign=me`、“sign in to continue”、路径里的 `/sig/` 不受影响）。
+- 自由文本里的改变：`reset password for user x to Hunter2!`（`for/of` 后面最多三个词再接 `to/into`），“password was/has been changed/reset/updated to x”，西班牙语（`de … a`）、印尼语（`untuk … menjadi`）、越南语（`cho … thành`）、中文（`密码改为x`、`重置为`）各一种说法；`from A to B` 两个值都遮，条件是名字像设置名（有点、横线或下划线，如 `sms.api_key`）或前面有变更动词（`changed password from a to b`）。`moved token from header to body`、`role changed from support to admin`、`changed sms.daily_cap from 100 to 200` 不遮。
+- `password=hunter two`：等号后面如果值是一个只含字母的词，再向后吃最多 5 个只含字母的词，遇到功能词（for、to、by、and、de、para、untuk、cho 等多语言）、带数字或符号的词、逗号、分号、引号就停。`set password=hunter2 for anna` 照旧只遮 `hunter2`。冒号和 `is` 后面不吃（`password: wrong again`、`password is incorrect for user x` 保持原样），这是有意的取舍：这类句子里后面的词多半是普通话。
+- 其他：`access_key`、`auth_key`（自由文本）、`creds`（自由文本）、私钥块（`-----BEGIN … PRIVATE KEY-----` 到 `END`，没有结束行就遮到文本末尾；公钥和证书不遮）；`password was changed from …` 里的 `changed` 不再被当成密码（`is/was` 后面是变更动词时不遮）。
+
+不遮、测试守着的：`permissionCodes`、`tokenVersion: 3`、`mustChangePassword: true`、`tokenVersion=3 updated`、`passwordChangedAt=2026-10-01`、`author`、`authors`、`authority`、`credit(s)`、`monkey`、`screds`、`keyCount`、各种密码重置的普通说明（`Password reset by admin for user 42`、`reset password for user x was done by admin`、泰语、越南语、中文、西班牙语的“已重置”）等共 50 多个。
+
+没有补的（有意）：值是数字的凭据（`{"password":123456}`，决定文件规定数字不遮）；冒号后面的多词口令；`password is …` 后面的多词口令。
+
+线性：200000 个字符的 16 种对抗输入（重复的 `password for `、`password for user x to `、`password=a b c d … `、`set sms.api_key from a to `、`?sig=`、`-----BEGIN PRIVATE KEY-----`、`creds `、`密码`、`api_key from "` 等），每条先后经 `detailText` 的字符串和对象两种路径，测试里的上限是 1500 毫秒；本机（负载约 10）实测每条 0.3 到 32 毫秒，最慢的是 200000 个字符的 `密码`（约 300 毫秒，改动前同样的输入约 145 毫秒，来自原来就有的“键名后跟最多 40 个字母”的有界回溯）。另有一条“长度乘 4，耗时之比小于 12”的线性检查。
+
+改坏检查（31 处）：每条新规则单独改坏，都有测试变红。第一次存活的 3 处：“等号后的词吃到 5 个为止”改成 500（补了“第 6 个词不吃”的断言后变红）、“自由文本里的 access_key”去掉（补了 `access_key=`、`accessKey:` 的断言后变红）、“等号后吃词”整体去掉（上一次改坏时语法错误没有真的运行，重新改成 `if (false)` 后 13 条红）。
+
+### 验证
+
+提交前按要求跑的：见本节最后一行（结果出来后补写）。`npx tsc --noEmit` 没有报错；`npx biome check` 对我改的文件没有报错；每次提交的钩子（lint-staged、暂存文件的类型检查）都通过，没有 `--no-verify`。
+
+### 没有做、需要说明
+
+- 第 4 条里评审说“和请求层的 `AbortError` 区别开”：`describeError` 对 `AbortError` 也给 `UNKNOWN`，我没有另加分支，因为所有调用方在显示前已经把取消过滤掉了；如果以后有页面要对取消说另一句话，那是新行为。
+- 第 6 条：评审建议顺带去问后端权限码的格式规则。我没有改 `docs/contract-requests/` 里的文件（任务限定了文件），这一问仍然开着；前端只做了“不以点开头或结尾”这一条最小规则。

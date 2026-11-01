@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderPage } from '../../tests/renderPage';
-import { useLeaveGuard } from './useLeaveGuard';
+import { hasUnsavedChanges, releaseLeaveGuards, useLeaveGuard } from './useLeaveGuard';
 
 type Blocker = (tx: { action: string; retry: () => void }) => void;
 const blocking = vi.hoisted(() => ({
@@ -110,5 +110,32 @@ describe('useLeaveGuard', () => {
     renderPage(<Probe active />, 'zh-CN');
     act(() => blocking.blocker?.({ action: 'PUSH', retry: vi.fn() }));
     expect(await screen.findByRole('dialog', { name: '离开这个页面？' })).toBeInTheDocument();
+  });
+});
+
+describe('the record of pages with unsaved changes', () => {
+  it('knows that a page holds changes while the guard is on, and no longer once it is off or the page is gone', () => {
+    expect(hasUnsavedChanges()).toBe(false);
+    const view = renderPage(<Saves />);
+    expect(hasUnsavedChanges()).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'save' }));
+    expect(hasUnsavedChanges()).toBe(false);
+    view.unmount();
+    const other = renderPage(<Probe active />);
+    expect(hasUnsavedChanges()).toBe(true);
+    other.unmount();
+    expect(hasUnsavedChanges()).toBe(false);
+  });
+
+  it('lets go of the page for a move the person has agreed to already, without asking again', () => {
+    renderPage(<Probe active />);
+    releaseLeaveGuards();
+    expect(blocking.unblock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing when no page holds changes', () => {
+    renderPage(<Probe active={false} />);
+    releaseLeaveGuards();
+    expect(blocking.unblock).not.toHaveBeenCalled();
   });
 });
