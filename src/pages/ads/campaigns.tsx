@@ -19,11 +19,11 @@ import {
   setCampaignStatus,
 } from '../../services/ads';
 import { describeFailure } from '../../session/describe';
+import { adminText, countText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { CampaignModal } from './CampaignModal';
 import { Checklist } from './Checklist';
-import { adminText, countText, instantText } from './texts';
 import { useOptions } from './useOptions';
 
 type Filters = { name: string; status: string };

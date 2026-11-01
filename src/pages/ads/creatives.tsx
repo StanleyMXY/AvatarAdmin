@@ -7,6 +7,7 @@ import { PagedTable } from '../../components/PagedTable';
 import { ReasonModalForm } from '../../components/ReasonModalForm';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { useServerPage } from '../../hooks/useServerPage';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -27,15 +28,14 @@ import {
 } from '../../services/ads';
 import { listConfig } from '../../services/config';
 import { describeFailure } from '../../session/describe';
+import { codeText, countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { Checklist } from './Checklist';
 import { CreativeModal } from './CreativeModal';
 import { Picker } from './Picker';
 import { Thumb } from './Thumb';
-import { codeText, countText } from './texts';
 import { useOptions } from './useOptions';
-import { useRead } from './useRead';
 
 type Filters = {
   adUnitId: string;
@@ -123,7 +123,7 @@ export default function CreativesPage() {
     loadAllPages((page, pageSize) => listCampaigns({ page, pageSize })),
   );
   const placements = useOptions(listPlacements);
-  const tolerance = useRead(readTolerance);
+  const tolerance = useLatestRead(readTolerance, { keepWhileReading: true });
 
   const state = useServerPage<AdCreative, Filters>(
     (query) =>

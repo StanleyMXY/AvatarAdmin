@@ -6,6 +6,7 @@ import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedTable } from '../../components/PagedTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import { StatusTag } from '../../components/StatusTag';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { useServerPage } from '../../hooks/useServerPage';
 import {
   type AdUnit,
@@ -20,15 +21,14 @@ import {
   type UnitStatus,
 } from '../../services/ads';
 import { describeFailure } from '../../session/describe';
+import { countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { Checklist } from './Checklist';
 import { Picker } from './Picker';
 import { summarizeTargeting } from './targeting';
-import { countText } from './texts';
 import { UnitModal } from './UnitModal';
 import { useOptions } from './useOptions';
-import { useRead } from './useRead';
 
 type Filters = { campaignId: string; placementId: string; status: string; name: string };
 const NO_FILTERS: Filters = { campaignId: '', placementId: '', status: '', name: '' };
@@ -60,7 +60,7 @@ export default function UnitsPage() {
     loadAllPages((page, pageSize) => listCampaigns({ page, pageSize })),
   );
   const placements = useOptions(listPlacements);
-  const meta = useRead(getAdsMeta);
+  const meta = useLatestRead(getAdsMeta, { keepWhileReading: true });
 
   const state = useServerPage<AdUnit, Filters>(
     (query) =>

@@ -1,7 +1,7 @@
 import type { DayPart, Targeting } from '../../services/ads';
+import type { Translator } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import type { Translator } from './texts';
 
 // The targeting of a unit (contract 22.5): snake_case keys in the request, all optional, an empty
 // one meaning "no limit". The form holds the same things as text and lists so that it can be edited,

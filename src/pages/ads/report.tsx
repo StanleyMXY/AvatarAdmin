@@ -13,6 +13,7 @@ import { UtcNotice } from '../../components/stat/UtcNotice';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import { getReport, type ReportParams } from '../../services/ads';
 import { useAdminMeta } from '../../session/useSession';
+import { codeText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { safeRatio } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
@@ -20,7 +21,6 @@ import { Checklist } from './Checklist';
 import { type DrillRow, DrillTable } from './DrillTable';
 import { ReportCards } from './ReportCards';
 import { countCell, percentText } from './reportFigures';
-import { codeText } from './texts';
 
 const TABS = [
   ['placement', 'by-placement'],

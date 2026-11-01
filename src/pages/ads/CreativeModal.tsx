@@ -19,6 +19,7 @@ import { linkRule } from '../../components/LinkInput';
 import { UploadField } from '../../components/UploadField';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import { ApiError } from '../../request/errors';
 import {
   type AdCreative,
@@ -43,7 +44,6 @@ import { isUploadIdRejection } from '../../utils/uploadErrors';
 import { bytesProblemTexts, checkMediaSpec } from './mediaSpec';
 import { Picker } from './Picker';
 import { Thumb } from './Thumb';
-import { useUploadSlot } from './uploadSlot';
 import type { OptionsStatus } from './useOptions';
 
 type Values = {

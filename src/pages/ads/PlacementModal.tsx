@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdPlacement, type PlacementPatch, updatePlacement } from '../../services/ads';
+import { failureToForm } from '../../utils/failureToForm';
 import { DASH } from '../../utils/ratio';
-import { failureToForm } from './formFailure';
 import { dailyMax } from './placementRows';
 
 type Values = {

@@ -4,9 +4,11 @@ import type { ColumnsType } from 'antd/es/table';
 import { useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { FailureBar } from '../../components/FailureBar';
+import { useLatestRead } from '../../hooks/useLatestRead';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdPlacement, listPlacements, updatePlacement } from '../../services/ads';
 import { describeFailure } from '../../session/describe';
+import { codeText, countText } from '../../utils/displayText';
 import { formatBytes } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
@@ -15,8 +17,6 @@ import { AdsWarnings } from './AdsWarnings';
 import { Checklist } from './Checklist';
 import { PlacementModal } from './PlacementModal';
 import { dailyMax } from './placementRows';
-import { codeText, countText } from './texts';
-import { useRead } from './useRead';
 
 /** The switch of a placement: one request per change, and the list is read again afterwards so that it shows what the backend holds. */
 function EnabledSwitch({
@@ -66,7 +66,9 @@ export default function PlacementsPage() {
     intl.formatMessage({ id }, values);
   const [editing, setEditing] = useState<AdPlacement | null>(null);
   const [settingsVersion, setSettingsVersion] = useState(0);
-  const { data, failure, loading, reload } = useRead(listPlacements);
+  const { data, failure, loading, reload } = useLatestRead(listPlacements, {
+    keepWhileReading: true,
+  });
 
   const columns: ColumnsType<AdPlacement> = [
     {
