@@ -20,6 +20,21 @@ describe('DangerConfirmButton', () => {
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
   });
 
+  it('wraps a very long question inside a bounded width instead of making the bubble as wide as the window', async () => {
+    const long = `${'Closing this alert resets the failure count and queues the preparation again. '.repeat(3)}Sure?`;
+    const user = userEvent.setup();
+    renderPage(
+      <DangerConfirmButton confirmText={long} onConfirm={async () => {}}>
+        Close
+      </DangerConfirmButton>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    const question = await screen.findByText(long);
+    expect(question.style.maxWidth).toBe('min(360px, 80vw)');
+    expect(question.style.whiteSpace).toBe('normal');
+    expect(question.style.overflowWrap).toBe('anywhere');
+  });
+
   it('calls the action once when the confirm button is pressed twice', async () => {
     let release: () => void = () => {};
     const onConfirm = vi.fn(
