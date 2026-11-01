@@ -13,11 +13,11 @@ import {
   generateDefaultAvatar,
   listDefaultAvatars,
 } from '../../services/avatar';
+import { codeText } from '../../utils/displayText';
 import { defaultAvatarFailure } from './defaultAvatarFailure';
 import { NewDefaultAvatarModal } from './NewDefaultAvatarModal';
 import { RenameDefaultAvatarModal } from './RenameDefaultAvatarModal';
 import { Thumb } from './Thumb';
-import { codeText } from './texts';
 import { useGenerationPolling } from './useGenerationPolling';
 
 /**

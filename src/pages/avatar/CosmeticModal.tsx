@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import {
   AVATAR_STYLES,
   type AvatarStyle,
@@ -15,14 +16,13 @@ import {
   updateCosmetic,
 } from '../../services/avatar';
 import { countCodePoints } from '../../utils/codePoints';
+import { codeText } from '../../utils/displayText';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 import { LocalizedTextsField } from './LocalizedTextsField';
 import { cleanTexts, type Texts } from './localized';
 import { SurfacesPicker } from './SurfacesPicker';
 import { Thumb } from './Thumb';
-import { codeText } from './texts';
-import { useUploadSlot } from './uploadSlot';
 
 type Values = {
   key: string;

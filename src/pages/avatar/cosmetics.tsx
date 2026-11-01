@@ -3,6 +3,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Button, Flex, Tag, Typography } from 'antd';
 import { useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import {
   AVATAR_STYLES,
@@ -13,12 +14,12 @@ import {
   listCosmetics,
   setCosmeticEnabled,
 } from '../../services/avatar';
+import { codeText } from '../../utils/displayText';
 import { DASH, formatCount } from '../../utils/ratio';
 import { CosmeticModal } from './CosmeticModal';
-import { EnabledSwitch } from './EnabledSwitch';
 import { pickText } from './localized';
 import { Thumb } from './Thumb';
-import { codeText, describeSurfaces } from './texts';
+import { describeSurfaces } from './texts';
 
 type Filter = { kind?: CosmeticKind; enabled?: string; style?: AvatarStyle };
 

@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { createDeclaration } from '../../services/avatar';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 import { LocalizedTextsField } from './LocalizedTextsField';
 import { cleanTexts, type Texts } from './localized';
 

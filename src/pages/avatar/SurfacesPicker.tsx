@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { loadChannels, resetChannelsCache } from '../../components/ChannelSelect';
 import { PLATFORMS, type Platform, type Surface } from '../../services/avatar';
 import type { ChannelRow } from '../../services/channels/getChannels';
+import { codeText } from '../../utils/displayText';
 import { ALL_CHANNELS, applyChange, toSelections, toSurfaces } from './surfaces';
-import { codeText } from './texts';
 
 type Props = {
   /** The stored list (contract 3.7). An empty list means every end. */

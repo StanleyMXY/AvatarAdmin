@@ -3,6 +3,7 @@ import { useAccess, useIntl } from '@umijs/max';
 import { Alert, App, Button, Flex, Tag } from 'antd';
 import { useRef, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
+import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
 import { type RowAction, RowActions } from '../../components/RowActions';
 import {
@@ -12,11 +13,11 @@ import {
   setActionEnabled,
 } from '../../services/avatar';
 import { describeFailure } from '../../session/describe';
+import { codeText } from '../../utils/displayText';
 import { ActionModal } from './ActionModal';
-import { EnabledSwitch } from './EnabledSwitch';
 import { pickText } from './localized';
 import { Thumb } from './Thumb';
-import { codeText, describeSurfaces } from './texts';
+import { describeSurfaces } from './texts';
 
 /** 动作目录 (`ACTION:MANAGE`): the gestures a character can make, each a clip generated in advance. */
 export default function ActionsPage() {

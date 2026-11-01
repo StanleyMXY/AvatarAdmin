@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type DefaultAvatar, renameDefaultAvatar } from '../../services/avatar';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
 import { nameProblem } from './avatarName';
 import { defaultAvatarFailure } from './defaultAvatarFailure';
-import { failureToForm } from './formFailure';
 
 type Props = {
   avatar: DefaultAvatar | null;

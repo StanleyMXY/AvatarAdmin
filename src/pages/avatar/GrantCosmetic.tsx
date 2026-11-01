@@ -7,10 +7,10 @@ import { ApiError } from '../../request/errors';
 import { type CosmeticItem, grantCosmetic, listAllCosmetics } from '../../services/avatar';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { codeText } from '../../utils/displayText';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
 import { pickText } from './localized';
-import { codeText } from './texts';
 
 const REASON_MAX = 500;
 

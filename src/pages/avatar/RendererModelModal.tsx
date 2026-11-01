@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { UploadField } from '../../components/UploadField';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { useUploadSlot } from '../../hooks/useUploadSlot';
 import { createRendererModel, PLATFORMS, type Platform } from '../../services/avatar';
+import { codeText } from '../../utils/displayText';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
-import { failureToForm } from './formFailure';
-import { codeText } from './texts';
-import { useUploadSlot } from './uploadSlot';
 
 type Values = {
   rendererKind: string;
