@@ -248,7 +248,7 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     );
   });
 
-  it('keeps the title and the fixed fields of the edit dialog while it fades out, instead of turning into the new-pack dialog', async () => {
+  it('keeps the title and the fixed fields of the edit dialog while it fades out, instead of turning into the new-pack dialog (the dialog library keeps the content of a closing dialog as it was)', async () => {
     useMockBackend(creditsMock);
     const user = userEvent.setup();
     renderPage(<ProductsPage />);

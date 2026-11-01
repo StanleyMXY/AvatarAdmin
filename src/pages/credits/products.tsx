@@ -56,11 +56,6 @@ export default function CreditProductsPage() {
   const actionRef = useRef<ActionType | undefined>(undefined);
   const [editing, setEditing] = useState<CreditProduct | null | 'new'>(null);
   const reload = () => actionRef.current?.reload();
-  // While the dialog fades out `editing` is already null; it keeps the pack it showed until the
-  // next time it opens, so that it does not turn into the new-pack dialog on its way out.
-  const lastEditing = useRef<CreditProduct | null | 'new'>(null);
-  if (editing !== null) lastEditing.current = editing;
-  const dialogPack = lastEditing.current === 'new' ? null : lastEditing.current;
 
   const columns: ProColumns<CreditProduct>[] = [
     { title: t('credits.products.store'), dataIndex: 'store', search: false },
@@ -124,7 +119,7 @@ export default function CreditProductsPage() {
       />
       <ProductModal
         open={editing !== null}
-        pack={dialogPack}
+        pack={editing === 'new' || editing === null ? null : editing}
         onClose={() => setEditing(null)}
         onSaved={reload}
       />
