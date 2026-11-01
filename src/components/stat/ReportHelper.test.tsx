@@ -47,9 +47,19 @@ describe('ReportHelper', () => {
     });
     mount();
     expect(screen.getByText('About this report')).toBeInTheDocument();
+    // An exception inside a React event handler does not fail a test by itself: it is reported to the
+    // window, so it is collected here and must be none.
+    const uncaught: unknown[] = [];
+    const collect = (event: ErrorEvent) => {
+      uncaught.push(event.error ?? event.message);
+      event.preventDefault();
+    };
+    window.addEventListener('error', collect);
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: /close/i }));
     });
+    window.removeEventListener('error', collect);
+    expect(uncaught).toEqual([]);
     expect(screen.queryByText('About this report')).toBeNull(); // closed for this page view
     vi.restoreAllMocks();
   });

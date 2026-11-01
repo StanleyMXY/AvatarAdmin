@@ -57,6 +57,11 @@ export function RetentionTrendChart({
           labelFormatter: (value: number) => formatPercent(value, intl.locale),
         },
       }}
+      tooltip={{
+        items: [
+          { channel: 'y', valueFormatter: (value: number) => formatPercent(value, intl.locale) },
+        ],
+      }}
       height={260}
     />
   );
