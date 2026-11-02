@@ -14,12 +14,13 @@ import {
   type SummaryGroup,
   type SummaryRow,
 } from '../../services/campaign';
+import { useAdminMeta } from '../../session/useSession';
 import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { codeText, countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import { costsText, numberOf } from './figures';
 
 type Row = SummaryRow & { rowKey: string };
@@ -45,7 +46,10 @@ export function SummaryTab({ kept }: { kept: Kept }) {
   const theme = getChartTheme(mode);
 
   const [groupBy, setGroupBy] = useKeptState<SummaryGroup>(kept, 'summary.groupBy', 'source');
-  const [draft, setDraft] = useKeptState<DayRange>(kept, 'summary.draft', () => lastNDaysUtc(7));
+  const meta = useAdminMeta();
+  const [draft, setDraft] = useKeptState<DayRange>(kept, 'summary.draft', () =>
+    defaultRange(meta.statsMaxRangeDays, 7),
+  );
   // A new object for each search, so that a search with the same days asks again.
   const [applied, setApplied] = useKeptState<DayRange>(kept, 'summary.applied', draft);
 
@@ -147,7 +151,12 @@ export function SummaryTab({ kept }: { kept: Kept }) {
         </Flex>
         <Flex gap={8} align="center" wrap>
           <Typography.Text>{t('campaign.summary.time')}</Typography.Text>
-          <DateRangeUtc value={draft} onChange={setDraft} refused={read.error} />
+          <DateRangeUtc
+            value={draft}
+            onChange={setDraft}
+            refused={read.error}
+            maxDays={meta.statsMaxRangeDays ?? undefined}
+          />
         </Flex>
         <Button type="primary" onClick={() => setApplied({ ...draft })}>
           {t('stat.common.query')}

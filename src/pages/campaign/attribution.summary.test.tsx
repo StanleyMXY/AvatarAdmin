@@ -5,6 +5,7 @@ import { campaignState } from '../../../mock/_core/campaignData';
 import campaignMock from '../../../mock/campaign.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
+import { setTestInitialState } from '../../../tests/stubs/umi-max';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import AttributionPage from './attribution';
 import { jsonAnswer, NOW, overrideFetch, signIn } from './testSetup';
@@ -73,6 +74,16 @@ describe('the summary', { timeout: 30000 }, () => {
       expect(read.get('from')).toBe('2026-10-20');
       expect(read.get('to')).toBe('2026-10-26');
     });
+  });
+
+  it('starts with the longest range the backend allows when that is shorter than seven days, so the first ask is not refused', async () => {
+    vi.setSystemTime(new Date('2026-10-26T20:00:00Z'));
+    signIn('root');
+    setTestInitialState({ meta: { statsMaxRangeDays: 3 } });
+    const { calls } = await load();
+    const read = summaryReads(calls)[0];
+    expect(read.get('from')).toBe('2026-10-24');
+    expect(read.get('to')).toBe('2026-10-26');
   });
 
   it('has the source, the installs, the activations and the cost when grouped by source, and the key as well when grouped by anything else', async () => {
