@@ -57,8 +57,7 @@ export type MockRequest = {
 };
 
 export type MockProduct = {
-  id: string;
-  store: 'APPLE' | 'GOOGLE';
+  store: string;
   productId: string;
   credits: number;
   enabled: boolean;
@@ -72,7 +71,7 @@ export type CreditsState = {
   purchases: MockPurchase[];
   requests: MockRequest[];
   products: MockProduct[];
-  next: { ledger: number; request: number; product: number };
+  next: { ledger: number; request: number };
 };
 
 const HOUR = 3600 * 1000;
@@ -391,14 +390,12 @@ function seed(now: Date): CreditsState {
   ];
 
   const pack = (
-    n: number,
     store: MockProduct['store'],
     productId: string,
     credits: number,
     sortOrder: number,
     enabled = true,
   ): MockProduct => ({
-    id: String(3000 + n),
     store,
     productId,
     credits,
@@ -407,12 +404,12 @@ function seed(now: Date): CreditsState {
     surfaces: [],
   });
   const products = [
-    pack(1, 'APPLE', 'credits_100', 100, 1),
-    pack(2, 'APPLE', 'credits_500', 500, 2),
-    pack(3, 'APPLE', 'credits_1200', 1200, 3, false),
-    pack(4, 'GOOGLE', 'credits_100', 100, 1),
-    pack(5, 'GOOGLE', 'credits_500', 500, 2),
-    pack(6, 'GOOGLE', 'credits_1200', 1200, 3),
+    pack('APPLE', 'credits_100', 100, 1),
+    pack('APPLE', 'credits_500', 500, 2),
+    pack('APPLE', 'credits_1200', 1200, 3, false),
+    pack('GOOGLE', 'credits_100', 100, 1),
+    pack('GOOGLE', 'credits_500', 500, 2),
+    pack('GOOGLE', 'credits_1200', 1200, 3),
   ];
 
   return {
@@ -421,7 +418,7 @@ function seed(now: Date): CreditsState {
     purchases,
     requests,
     products,
-    next: { ledger: 1001 + ledger.length, request: 5007, product: 3007 },
+    next: { ledger: 1001 + ledger.length, request: 5007 },
   };
 }
 
@@ -466,4 +463,3 @@ export function balanceOf(accountId: string): {
 
 export const nextLedgerId = (): string => String(creditsState.next.ledger++);
 export const nextRequestId = (): string => String(creditsState.next.request++);
-export const nextProductId = (): string => String(creditsState.next.product++);

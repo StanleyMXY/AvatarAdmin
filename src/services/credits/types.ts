@@ -11,30 +11,21 @@ export type Surface = { platform: 'ANDROID' | 'IOS'; channel: string | null };
 /** The stores a pack can be created for now (contract 15.9: `APPLE`, `GOOGLE`; the list can grow). */
 export const CREDIT_STORES = ['APPLE', 'GOOGLE'] as const;
 
+/**
+ * A row of `GET /credit-products` (backend reply 30). There is no id: a pack is named by
+ * (store, productId). `surfaces` is always there: [] is every end.
+ */
 export type CreditProduct = {
-  id: string;
   store: string;
   productId: string;
   credits: number;
   enabled: boolean;
   sortOrder: number;
-  surfaces?: Surface[];
+  surfaces: Surface[];
 };
 
-export type CreditProductBody = {
-  store: string;
-  productId: string;
-  credits: number;
-  enabled: boolean;
-  sortOrder: number;
-};
-
-export type CreditProductUpdate = {
-  credits: number;
-  enabled: boolean;
-  sortOrder: number;
-  surfaces?: Surface[];
-};
+/** `POST` and `PUT /credit-products` take the same six fields, all of them required. */
+export type CreditProductBody = CreditProduct;
 
 export type AdjustKind = 'GRANT' | 'ADJUST';
 export type AdjustStatus = 'PENDING' | 'APPROVED' | 'REJECTED';

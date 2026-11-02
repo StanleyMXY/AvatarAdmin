@@ -56,8 +56,9 @@ server {
     # 部分 location 里悄悄消失，在 /api/ 里又可能和后端自己加的头重复。每个 location 自己写它需要的头。
     # Referrer-Policy 用 no-referrer：被审核内容的文件地址是带签名的短时效地址，不要通过 Referer 发出去。
 
-    # 接口：原样转发给后端（保留 /api/ 前缀）。后端已经在响应里自己加了安全响应头（X-Content-Type-Options
-    # 等），这里不要再给 /api/ 加它们（否则同一个头出现两次）：这个 location 只加 Cache-Control。
+    # 接口：原样转发给后端（保留 /api/ 前缀）。后端已经给业务端口上的每一个响应自己加了六个安全响应头
+    # （含 Cache-Control: no-store），这里不要再给 /api/ 加其中任何一个，包括 Cache-Control（nginx 的
+    # add_header 是追加，不是替换：再加就会出现两个 Cache-Control）。这个 location 里一个 add_header 也没有。
     location /api/ {
         proxy_pass         http://127.0.0.1:8080;
         proxy_http_version 1.1;
@@ -69,8 +70,6 @@ server {
         client_max_body_size 110m;
         proxy_read_timeout   120s;
         proxy_send_timeout   120s;
-        # 接口响应不要被中间层缓存（里面有个人数据和签名地址）。
-        add_header Cache-Control "no-store" always;
     }
 
     # 带内容哈希的脚本和样式：长期缓存。
@@ -119,7 +118,7 @@ server {
 注意：
 
 - nginx 里 `add_header` 写在某个 `location` 里时，会**覆盖**（不是叠加）外层 `server` 里的 `add_header`。所以上面 `server` 一级没有 `add_header`，每个 `location` 自己写需要的头；改配置时不要在 `server` 一级加头，也不要漏掉某个 `location`。
-- **`/api/` 的响应不会重复这些安全头。** 后端在它的响应里自己加了一组安全响应头（后端清单的第 4 节第 10 条说是六个，只点名了 `Content-Security-Policy: default-src 'none'`），nginx 转发时原样带上；`/api/` 的 `location` 里只有一条 `add_header Cache-Control`，所以 nginx 自己不会再给 `/api/` 加这些头（用 nginx 1.24 和一个返回 `X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`、`Content-Security-Policy` 的假后端实测：`/api/` 响应里它们各出现一次，都来自后端）。如果有人在 `server` 一级加了 `add_header`，又把 `/api/` 里的 `add_header` 去掉，这些头就会在 `/api/` 的响应里出现两次（同样实测过）；`/api/` 里加了 `Cache-Control` 之后，如果后端自己也发 `Cache-Control`，响应里会有两个值，发布后用 `curl -i` 看一次（见"发布后的检查"）。
+- **`/api/` 的响应不会重复这些安全头，包括 `Cache-Control`。** 后端给管理端业务端口（8080）的每一个响应（成功、各种错误、401/403、404）都加了六个头：`X-Content-Type-Options: nosniff`、`Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`、`X-Frame-Options: DENY`、`Strict-Transport-Security: max-age=31536000; includeSubDomains`；管理端的接口自己不改 `Cache-Control`，所以接口响应的 `Cache-Control` 恒为 `no-store`（后端对本问题的答复第 16 条）。因此 `/api/` 的 `location` 里**没有任何 `add_header`**：nginx 只转发，响应里每个头各一个。如果有人在这个 `location` 里再写 `add_header Cache-Control "no-store" always;`，响应里就会有两个 `Cache-Control`；确实要由 nginx 保证，必须写成替换，不是追加：先 `proxy_hide_header Cache-Control;`，再 `add_header Cache-Control "no-store" always;`（其余五个头同理）。如果有人在 `server` 一级加了 `add_header`，又没有给 `/api/` 去掉，这些头也会在 `/api/` 的响应里出现两次。后端的 HSTS 带 `includeSubDomains`，会波及同一个主域名下的所有子域，要求这些主机只走 HTTPS。管理端口 9080（健康检查和指标）不经反向代理，前端也不访问它。发布后用 `curl -i` 看一次（见"发布后的检查"）。
 - **前端的静态文件要由上面的 nginx（或别的静态文件服务器）提供，不要由后端的 admin 应用提供。** 后端给响应加的内容安全策略是 `default-src 'none'`（后端清单第 4 节第 10 条；它加在哪些响应上还没有答复），如果静态页面也经过那条规则，脚本和样式都加载不出来。后端会不会这样处理自己提供的页面，本仓库核实不了，已写成给后端的问题（`docs/contract-requests/2026-10-31-backend-question-static-files-and-security-headers.md`）。
 - 找不到的文件（例如旧的哈希文件）要返回 404，不要回退到 `index.html`，否则浏览器会把 HTML 当脚本解析，页面白屏；上面哈希文件的 `location` 用了 `try_files $uri =404`。
 - 这份配置的语法和响应头已在 nginx 1.24 上验证过（`nginx -t` 通过；用一个固定返回安全头的假后端，逐个 `location` 用 `curl -i` 看响应头）；没有验证的是证书、HTTP/2 和真实后端。上线前仍用 `nginx -t` 检查语法，并在预发环境走一遍：登录、刷新一个深层地址（例如 `/users/42`）、导出一个文件、上传一张图。
@@ -140,6 +139,6 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style
 
 1. 打开 `https://<域名>/`，登录（用户名、密码、验证码三步）。
 2. 直接在地址栏打开一个深层地址（例如 `/users/list`）并刷新，应该回到该页面（没登录时跳到登录页，登录后回到原地址）。
-3. 浏览器开发者工具的网络面板：接口请求都是 `/api/admin/...`，没有跨域请求，没有请求带固定令牌；令牌只在 `Authorization` 头里。再用 `curl -i https://<域名>/api/admin/meta`（带或不带令牌都行，401 也有响应头）看响应头：`X-Content-Type-Options`、`Content-Security-Policy` 等安全头各只出现一次，`Cache-Control` 只出现一次；`curl -i https://<域名>/` 的响应有 `X-Frame-Options: DENY`。
+3. 浏览器开发者工具的网络面板：接口请求都是 `/api/admin/...`，没有跨域请求，没有请求带固定令牌；令牌只在 `Authorization` 头里。再用 `curl -i https://<域名>/api/admin/meta`（带或不带令牌都行，401 也有响应头）看响应头：`X-Content-Type-Options`、`Content-Security-Policy` 等安全头各只出现一次，`Cache-Control` 只出现一次，值是 `no-store`；`curl -i https://<域名>/` 的响应有 `X-Frame-Options: DENY`。
 4. 搜索产物：`grep -r "mock-password" dist/` 应该没有结果。
 5. 登出后再按浏览器的后退，应该停在登录页（令牌放在 `sessionStorage`，关闭标签页即清除）。

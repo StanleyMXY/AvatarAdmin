@@ -484,83 +484,130 @@ describe('GET /credits/stats', () => {
   });
 });
 
-describe('credit packs', () => {
+describe('credit packs (backend reply 30)', () => {
   const PRODUCT_LIST = 'GET /api/admin/credit-products';
   const PRODUCT_CREATE = 'POST /api/admin/credit-products';
-  const PRODUCT_UPDATE = 'PUT /api/admin/credit-products/:id';
+  const PRODUCT_UPDATE = 'PUT /api/admin/credit-products';
+  const full = (over: Record<string, unknown> = {}) => ({
+    store: 'GOOGLE',
+    productId: 'credits_3000',
+    credits: 3000,
+    enabled: true,
+    sortOrder: 9,
+    surfaces: [],
+    ...over,
+  });
 
-  it('lists the packs of every store, on sale or not, by sort order', async () => {
+  it('has no PUT with an id in the path', () => {
+    expect(Object.keys(credits)).not.toContain('PUT /api/admin/credit-products/:id');
+  });
+
+  it('lists the six columns and no id, no total, on sale or not, by sortOrder, store, productId', async () => {
     const { body } = await get(PRODUCT_LIST, 'finance');
     const rows = body.data.items;
+    expect(Object.keys(body.data)).toEqual(['items']);
+    expect(Object.keys(rows[0]).sort()).toEqual([
+      'credits',
+      'enabled',
+      'productId',
+      'sortOrder',
+      'store',
+      'surfaces',
+    ]);
     expect(new Set(rows.map((r: { store: string }) => r.store))).toEqual(
       new Set(['APPLE', 'GOOGLE']),
     );
     expect(rows.some((r: { enabled: boolean }) => !r.enabled)).toBe(true);
-    const order = rows.map((r: { sortOrder: number }) => r.sortOrder);
-    expect(order).toEqual([...order].sort((a: number, b: number) => a - b));
-    expect(rows[0]).toEqual(
-      expect.objectContaining({ id: expect.any(String), productId: expect.any(String) }),
+    const keys = rows.map(
+      (r: { sortOrder: number; store: string; productId: string }) =>
+        `${String(r.sortOrder).padStart(6, '0')}|${r.store}|${r.productId}`,
     );
+    expect(keys).toEqual([...keys].sort());
   });
 
-  it('creates a pack, refuses the same store and product again with 409 DUPLICATE_RESOURCE', async () => {
-    const body = {
-      store: 'GOOGLE',
-      productId: 'credits_3000',
-      credits: 3000,
-      enabled: true,
-      sortOrder: 9,
-    };
-    const first = await send(PRODUCT_CREATE, 'finance', body);
+  it('creates a pack and answers { store, productId }; the same store and product again is 409 DUPLICATE_RESOURCE with field productId', async () => {
+    const first = await send(PRODUCT_CREATE, 'finance', full());
     expect(first.status).toBe(200);
-    expect(first.body.data).toMatchObject(body);
-    const again = await send(PRODUCT_CREATE, 'finance', body);
+    expect(first.body.data).toEqual({ store: 'GOOGLE', productId: 'credits_3000' });
+    const listed = (await get(PRODUCT_LIST, 'finance')).body.data.items;
+    expect(listed.find((r: { productId: string }) => r.productId === 'credits_3000')).toEqual(
+      full(),
+    );
+    const again = await send(PRODUCT_CREATE, 'finance', full());
     expect(again.status).toBe(409);
     expect(again.body.code).toBe('DUPLICATE_RESOURCE');
-    expect(again.body.data).toMatchObject({ field: 'productId' });
-    expect((await send(PRODUCT_CREATE, 'finance', { ...body, store: 'APPLE' })).status).toBe(200);
+    expect(again.body.data).toEqual({ field: 'productId' });
+    expect((await send(PRODUCT_CREATE, 'finance', full({ store: 'APPLE' }))).status).toBe(200);
   });
 
-  it('checks the fields: a store that is not known, an empty product, credits that are not a positive whole number', async () => {
-    const base = { store: 'GOOGLE', productId: 'p', credits: 10, enabled: true, sortOrder: 1 };
+  it('checks the fields: store [A-Z][A-Z0-9_]{1,31}, productId 1 to 255 code points, credits 1 to 1000000000, surfaces required', async () => {
     const refs = async (over: Record<string, unknown>) =>
-      (await send(PRODUCT_CREATE, 'finance', { ...base, ...over })).body.data.details.map(
+      (await send(PRODUCT_CREATE, 'finance', full(over))).body.data.details.map(
         (d: { ref: string }) => d.ref,
       );
-    expect(await refs({ store: 'OTHER' })).toEqual(['store']);
+    expect(await refs({ store: 'apple' })).toEqual(['store']);
+    expect(await refs({ store: 'A' })).toEqual(['store']);
     expect(await refs({ productId: '  ' })).toEqual(['productId']);
+    expect(await refs({ productId: 'p'.repeat(256) })).toEqual(['productId']);
     expect(await refs({ credits: 0 })).toEqual(['credits']);
+    expect(await refs({ credits: 1_000_000_001 })).toEqual(['credits']);
     expect(await refs({ credits: 1.5 })).toEqual(['credits']);
     expect(await refs({ sortOrder: 'a' })).toEqual(['sortOrder']);
     expect(await refs({ enabled: 'yes' })).toEqual(['enabled']);
+    expect(await refs({ surfaces: null })).toEqual(['surfaces']);
+    const none = full();
+    delete (none as Partial<typeof none>).surfaces;
+    const missing = await send(PRODUCT_CREATE, 'finance', none);
+    expect(missing.body.data.details).toEqual([{ ref: 'surfaces', reason: 'EMPTY_NOT_ALLOWED' }]);
+    // a store other than the two of today is fine
+    expect((await send(PRODUCT_CREATE, 'finance', full({ store: 'HUAWEI_2' }))).status).toBe(200);
   });
 
-  it('updates the credits, the sale switch and the order, keeps the store and product, answers 404 for another id', async () => {
+  it('updates by (store, productId) from the body and answers data null; 404 for a pack that does not exist', async () => {
     const row = (await get(PRODUCT_LIST, 'finance')).body.data.items[0];
-    const { body } = await send(
-      PRODUCT_UPDATE,
-      'finance',
-      { credits: 777, enabled: !row.enabled, sortOrder: 42, store: 'OTHER', productId: 'x' },
-      { id: row.id },
+    const surfaces = [{ platform: 'IOS', channel: null }];
+    const { status, body } = await send(PRODUCT_UPDATE, 'finance', {
+      ...row,
+      credits: 777,
+      enabled: !row.enabled,
+      sortOrder: 42,
+      surfaces,
+    });
+    expect(status).toBe(200);
+    expect(body.data).toBeNull();
+    const after = (await get(PRODUCT_LIST, 'finance')).body.data.items.find(
+      (r: { store: string; productId: string }) =>
+        r.store === row.store && r.productId === row.productId,
     );
-    expect(body.data).toMatchObject({
-      id: row.id,
+    expect(after).toEqual({
       store: row.store,
       productId: row.productId,
       credits: 777,
       enabled: !row.enabled,
       sortOrder: 42,
+      surfaces,
     });
-    expect(
-      (
-        await send(
-          PRODUCT_UPDATE,
-          'finance',
-          { credits: 1, enabled: true, sortOrder: 1 },
-          { id: 'nope' },
-        )
-      ).status,
-    ).toBe(404);
+    const gone = await send(PRODUCT_UPDATE, 'finance', full({ productId: 'nope' }));
+    expect(gone.status).toBe(404);
+    expect(gone.body.code).toBe('RESOURCE_NOT_FOUND');
+  });
+
+  it('does not keep or clear the surfaces when they are left out of an update: it is 400, nothing changes', async () => {
+    const row = (await get(PRODUCT_LIST, 'finance')).body.data.items[0];
+    await send(PRODUCT_UPDATE, 'finance', {
+      ...row,
+      surfaces: [{ platform: 'IOS', channel: null }],
+    });
+    const { surfaces: _drop, ...without } = row;
+    const refused = await send(PRODUCT_UPDATE, 'finance', { ...without, credits: 5 });
+    expect(refused.status).toBe(400);
+    expect(refused.body.data.details).toEqual([{ ref: 'surfaces', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const after = (await get(PRODUCT_LIST, 'finance')).body.data.items.find(
+      (r: { store: string; productId: string }) =>
+        r.store === row.store && r.productId === row.productId,
+    );
+    expect(after.credits).toBe(row.credits);
+    expect(after.surfaces).toEqual([{ platform: 'IOS', channel: null }]);
   });
 });
 

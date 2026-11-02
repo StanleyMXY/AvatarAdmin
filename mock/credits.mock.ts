@@ -1,6 +1,6 @@
 // The credit endpoints of the mock backend (contract 15.9 and 17.4, credit row). State lives in
-// _core/creditsData.ts. The credit pack endpoints follow the temporary shape written in
-// docs/contract-requests/2026-10-26-admin-frontend-credits.md.
+// _core/creditsData.ts. The credit pack endpoints follow the backend's reply 30: no id, the pack is
+// named by (store, productId), PUT /credit-products with six required fields, success data null.
 import { countCodePoints } from '../src/utils/codePoints';
 import { trimSpec } from '../src/utils/trimSpec';
 import { guard } from './_core/auth';
@@ -12,7 +12,6 @@ import {
   type MockProduct,
   type MockRequest,
   nextLedgerId,
-  nextProductId,
   nextRequestId,
 } from './_core/creditsData';
 import { bodyOf, invalidRequest, MockHttpError, type MockReq, ok } from './_core/http';
@@ -37,7 +36,6 @@ const REASONS = [
   'SPEND_REVERSED',
 ];
 const STATUSES = ['PENDING', 'APPROVED', 'REJECTED'];
-const STORES = ['APPLE', 'GOOGLE'];
 const TEXT_MAX = 500;
 
 const usernameOf = (adminId: string | null): string | null =>
@@ -87,20 +85,51 @@ function instantParam(req: MockReq, name: string): number | undefined {
 
 const byIdDesc = (a: { id: string }, b: { id: string }) => Number(b.id) - Number(a.id);
 
-function checkProduct(body: Record<string, unknown>, creating: boolean): Detail[] {
+const PRODUCT_STORE = /^[A-Z][A-Z0-9_]{1,31}$/;
+const CREDITS_MAX = 1_000_000_000;
+
+/** The fields of `POST` and `PUT /credit-products`: the same six, all required (backend reply 30). */
+function checkProduct(body: Record<string, unknown>): Detail[] {
   const details: Detail[] = [];
-  if (creating) {
-    if (typeof body.store !== 'string' || !STORES.includes(body.store)) {
-      details.push({ ref: 'store', reason: 'OUT_OF_RANGE' });
-    }
-    if (typeof body.productId !== 'string' || trimSpec(body.productId) === '') {
-      details.push({ ref: 'productId', reason: 'EMPTY_NOT_ALLOWED' });
-    }
+  if (typeof body.store !== 'string' || body.store === '') {
+    details.push({ ref: 'store', reason: 'EMPTY_NOT_ALLOWED' });
+  } else if (!PRODUCT_STORE.test(body.store)) {
+    details.push({ ref: 'store', reason: 'OUT_OF_RANGE' });
   }
-  if (!isInt(body.credits)) details.push({ ref: 'credits', reason: 'NOT_AN_INTEGER' });
-  else if (body.credits < 1) details.push({ ref: 'credits', reason: 'OUT_OF_RANGE' });
-  if (!isInt(body.sortOrder)) details.push({ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' });
-  if (typeof body.enabled !== 'boolean') details.push({ ref: 'enabled', reason: 'NOT_BOOLEAN' });
+  if (typeof body.productId !== 'string' || trimSpec(body.productId) === '') {
+    details.push({ ref: 'productId', reason: 'EMPTY_NOT_ALLOWED' });
+  } else if (countCodePoints(trimSpec(body.productId)) > 255) {
+    details.push({ ref: 'productId', reason: 'TOO_LONG' });
+  }
+  if (body.credits === undefined || body.credits === null) {
+    details.push({ ref: 'credits', reason: 'EMPTY_NOT_ALLOWED' });
+  } else if (!isInt(body.credits)) details.push({ ref: 'credits', reason: 'NOT_AN_INTEGER' });
+  else if (body.credits < 1 || body.credits > CREDITS_MAX) {
+    details.push({ ref: 'credits', reason: 'OUT_OF_RANGE' });
+  }
+  if (body.sortOrder === undefined || body.sortOrder === null) {
+    details.push({ ref: 'sortOrder', reason: 'EMPTY_NOT_ALLOWED' });
+  } else if (!isInt(body.sortOrder)) details.push({ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' });
+  if (body.enabled === undefined || body.enabled === null) {
+    details.push({ ref: 'enabled', reason: 'EMPTY_NOT_ALLOWED' });
+  } else if (typeof body.enabled !== 'boolean') {
+    details.push({ ref: 'enabled', reason: 'NOT_BOOLEAN' });
+  }
+  const surfaces = body.surfaces;
+  if (surfaces === undefined || surfaces === null) {
+    details.push({ ref: 'surfaces', reason: 'EMPTY_NOT_ALLOWED' });
+  } else if (
+    !Array.isArray(surfaces) ||
+    surfaces.length > 50 ||
+    surfaces.some(
+      (x) =>
+        !x ||
+        (x.platform !== 'ANDROID' && x.platform !== 'IOS') ||
+        (x.channel !== null && x.channel !== undefined && typeof x.channel !== 'string'),
+    )
+  ) {
+    details.push({ ref: 'surfaces', reason: 'OUT_OF_RANGE' });
+  }
   return details;
 }
 
@@ -112,46 +141,60 @@ export default {
   // ---- credit packs (SUBSCRIPTION:CONFIG) ----
   'GET /api/admin/credit-products': guard('SUBSCRIPTION:CONFIG', () => {
     const items = [...creditsState.products]
-      .sort((a, b) => a.sortOrder - b.sortOrder || Number(a.id) - Number(b.id))
+      .sort(
+        (a, b) =>
+          a.sortOrder - b.sortOrder ||
+          (a.store < b.store ? -1 : a.store > b.store ? 1 : 0) ||
+          (a.productId < b.productId ? -1 : a.productId > b.productId ? 1 : 0),
+      )
       .map(productRow);
     return ok({ items });
   }),
 
+  // The answer is { store, productId }; the same pair again is 409 with field productId.
   'POST /api/admin/credit-products': guard('SUBSCRIPTION:CONFIG', (req) => {
     const body = bodyOf(req);
-    const details = checkProduct(body, true);
+    const details = checkProduct(body);
     if (details.length > 0) throw fail(details);
     const productId = trimSpec(body.productId as string);
-    const storeName = body.store as MockProduct['store'];
+    const storeName = body.store as string;
     if (creditsState.products.some((p) => p.store === storeName && p.productId === productId)) {
       throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The pack exists already', {
         field: 'productId',
       });
     }
-    const created: MockProduct = {
-      id: nextProductId(),
+    creditsState.products.push({
       store: storeName,
       productId,
       credits: body.credits as number,
       enabled: body.enabled as boolean,
       sortOrder: body.sortOrder as number,
-      surfaces: [],
-    };
-    creditsState.products.push(created);
-    return ok(productRow(created));
+      surfaces: (body.surfaces as MockProduct['surfaces']).map((s) => ({
+        platform: s.platform,
+        channel: s.channel ?? null,
+      })),
+    });
+    return ok({ store: storeName, productId });
   }),
 
-  'PUT /api/admin/credit-products/:id': guard('SUBSCRIPTION:CONFIG', (req) => {
-    const found = creditsState.products.find((p) => p.id === req.params.id);
-    if (!found) throw new MockHttpError(404, 'RESOURCE_NOT_FOUND', 'There is no such pack');
+  // No id in the path: the pack is named by store and productId in the body; success is data null.
+  'PUT /api/admin/credit-products': guard('SUBSCRIPTION:CONFIG', (req) => {
     const body = bodyOf(req);
-    const details = checkProduct(body, false);
+    const details = checkProduct(body);
     if (details.length > 0) throw fail(details);
+    const productId = trimSpec(body.productId as string);
+    const found = creditsState.products.find(
+      (p) => p.store === body.store && p.productId === productId,
+    );
+    if (!found) throw new MockHttpError(404, 'RESOURCE_NOT_FOUND', 'There is no such pack');
     found.credits = body.credits as number;
     found.enabled = body.enabled as boolean;
     found.sortOrder = body.sortOrder as number;
-    if (Array.isArray(body.surfaces)) found.surfaces = body.surfaces as MockProduct['surfaces'];
-    return ok(productRow(found));
+    found.surfaces = (body.surfaces as MockProduct['surfaces']).map((s) => ({
+      platform: s.platform,
+      channel: s.channel ?? null,
+    }));
+    return ok(null);
   }),
 
   // ---- adjustment requests ----
