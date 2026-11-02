@@ -249,21 +249,34 @@ describe('the permission tree', () => {
     ]);
   });
 
-  it('sends the parent for a custom node and never for a built-in one', async () => {
+  it('always sends the parent: the one given for a custom node, null for a root; for a built-in node its own parent, whatever the patch holds (backend answer 87)', async () => {
     const calls = answer({});
     await updatePermission(
       'CUSTOM:A',
       { nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: 'CUSTOM:B' },
-      { builtin: false },
+      { builtin: false, parent: 'CUSTOM:C' },
     );
     expect(body(calls[0])).toEqual({ nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: 'CUSTOM:B' });
     await updatePermission(
+      'CUSTOM:A',
+      { nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: null },
+      { builtin: false, parent: 'CUSTOM:C' },
+    );
+    expect(body(calls[1])).toEqual({ nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: null });
+    await updatePermission(
       'USER:VIEW',
       { nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: 'CUSTOM:B' },
-      { builtin: true },
+      { builtin: true, parent: 'USER:ROOT' },
     );
-    expect(body(calls[1])).toEqual({ nameZh: 'a', nameEn: 'b', sortOrder: 2 });
-    expect(path(calls[1])).toBe('/api/admin/permissions/USER%3AVIEW');
+    expect(body(calls[2])).toEqual({ nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: 'USER:ROOT' });
+    expect(path(calls[2])).toBe('/api/admin/permissions/USER%3AVIEW');
+    // a built-in root: null is sent, not left out
+    await updatePermission(
+      'ROOT:X',
+      { nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: null },
+      { builtin: true, parent: null },
+    );
+    expect(body(calls[3])).toHaveProperty('parent', null);
   });
 });
 
@@ -308,7 +321,7 @@ describe('the type of a node on update', () => {
     await updatePermission(
       'CUSTOM:A',
       { nameZh: '甲', nameEn: 'A', sortOrder: 1, parent: null, type: 'MENU' } as never,
-      { builtin: false },
+      { builtin: false, parent: null },
     );
     expect(JSON.parse(calls[0].init.body as string)).toEqual({
       nameZh: '甲',

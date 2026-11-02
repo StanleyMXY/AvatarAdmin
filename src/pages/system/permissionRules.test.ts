@@ -21,16 +21,22 @@ const nodes = [
 const values = { nameZh: ' 名 ', nameEn: ' name ', sortOrder: 3 };
 
 describe('the patch of a node that is edited', () => {
-  it('trims the names and sends the parent of a custom node only when it changed', () => {
+  it('trims the names and always carries the parent: the current one when the node is not moved (null for a root), the new one when it is (backend answer 87)', () => {
+    // a root stays a root: parent null is in the request
     expect(buildPermissionPatch(nodes, nodes[0], { ...values, parent: null })).toEqual({
       ok: true,
-      patch: { nameZh: '名', nameEn: 'name', sortOrder: 3 },
+      patch: { nameZh: '名', nameEn: 'name', sortOrder: 3, parent: null },
+    });
+    // a node under a parent keeps it when it is not moved
+    expect(buildPermissionPatch(nodes, nodes[1], { ...values, parent: 'A' })).toEqual({
+      ok: true,
+      patch: { nameZh: '名', nameEn: 'name', sortOrder: 3, parent: 'A' },
     });
     expect(buildPermissionPatch(nodes, nodes[0], { ...values, parent: 'D' })).toEqual({
       ok: true,
       patch: { nameZh: '名', nameEn: 'name', sortOrder: 3, parent: 'D' },
     });
-    // the first parent of a node under a parent can become none
+    // the parent of a node under a parent can become none
     expect(buildPermissionPatch(nodes, nodes[1], { ...values, parent: null })).toEqual({
       ok: true,
       patch: { nameZh: '名', nameEn: 'name', sortOrder: 3, parent: null },
@@ -50,10 +56,17 @@ describe('the patch of a node that is edited', () => {
     });
   });
 
-  it('never moves a built-in node', () => {
+  it('never moves a built-in node, and sends its own parent', () => {
     expect(buildPermissionPatch(nodes, nodes[4], { ...values, parent: null })).toEqual({
       ok: true,
-      patch: { nameZh: '名', nameEn: 'name', sortOrder: 3 },
+      patch: { nameZh: '名', nameEn: 'name', sortOrder: 3, parent: null },
+    });
+    const withParent = [...nodes, node('USER:BAN', 'USER:VIEW', true)];
+    expect(
+      buildPermissionPatch(withParent, withParent[5], { ...values, parent: 'USER:VIEW' }),
+    ).toEqual({
+      ok: true,
+      patch: { nameZh: '名', nameEn: 'name', sortOrder: 3, parent: 'USER:VIEW' },
     });
     expect(buildPermissionPatch(nodes, nodes[4], { ...values, parent: 'D' })).toEqual({
       ok: false,
@@ -71,62 +84,73 @@ describe('the patch of a node that is edited', () => {
 });
 
 describe('the code of a new node', () => {
-  it('is required, has no white space or control characters inside, is not too long and is not taken', () => {
+  it('is required, 1 to 128 of ASCII letters, digits and _ : # / . - (case sensitive), and not taken', () => {
     expect(codeProblem('', nodes)).toBe('required');
     expect(codeProblem('   ', nodes)).toBe('required');
     expect(codeProblem('CUSTOM:NEW', nodes)).toBeNull();
     expect(codeProblem('  CUSTOM:NEW  ', nodes)).toBeNull();
-    expect(codeProblem('has space', nodes)).toBe('invalid');
-    expect(codeProblem(`tab${String.fromCharCode(9)}x`, nodes)).toBe('invalid');
-    expect(codeProblem(`nbsp${String.fromCharCode(0xa0)}x`, nodes)).toBe('invalid');
-    expect(codeProblem(`bidi${String.fromCharCode(0x202e)}x`, nodes)).toBe('invalid');
-    expect(codeProblem('x'.repeat(101), nodes)).toBe('invalid');
-    expect(codeProblem('x'.repeat(100), nodes)).toBeNull();
+    expect(codeProblem('a.b/c#d_e:f-g', nodes)).toBeNull();
+    expect(codeProblem('MENU:/system/audit', nodes)).toBeNull();
+    expect(codeProblem('x'.repeat(128), nodes)).toBeNull();
+    expect(codeProblem('x'.repeat(129), nodes)).toBe('invalid');
     expect(codeProblem('A', nodes)).toBe('taken');
+    // a code differs by case: another node
+    expect(codeProblem('a', nodes)).toBeNull();
     expect(codeProblem(' USER:VIEW ', nodes)).toBe('taken');
   });
 
-  // The code is also a path segment of the edit and delete requests: `.` and `..` are read as the
-  // current and the parent directory there, so a node with such a code could never be reached again.
   it.each([
-    '.',
-    '..',
-    '...',
-    ' . ',
-    ' .. ',
+    'has space',
+    `tab${String.fromCharCode(9)}x`,
+    `nbsp${String.fromCharCode(0xa0)}x`,
+    `bidi${String.fromCharCode(0x202e)}x`,
+    `zero${String.fromCharCode(0x200b)}width`,
+    'a,b',
+    'a;b',
+    'a%2Fb',
+    'a\\b',
+    'a?b',
+    'a*b',
+    'ผู้ใช้.ดู',
+    'نص.عرض',
+    '用户.查看',
+    'José',
+    'Nguyễn',
+  ])('refuses %j: a character that is not in the set of the backend', (code) => {
+    expect(codeProblem(code, nodes)).toBe('invalid');
+  });
+
+  // A dot anywhere is fine for the backend, at either end too (this replaces the earlier rule of the
+  // page that a code does not start or end with a dot).
+  it.each([
     '.hidden',
     'trailing.',
     'USER:VIEW.',
     'a..',
     '..a',
-    '.ผู้ใช้',
-    'نص.',
-  ])('refuses %j: a code does not start or end with a dot', (code) => {
-    expect(codeProblem(code, nodes)).toBe('dots');
-  });
-
-  it.each([
     'a.b',
     'a..b',
     'USER.VIEW',
     'custom.report:view',
-    'ผู้ใช้.ดู',
-    'usuario.ver',
-    'pengguna.lihat',
-    'người.dùng',
-    'مستخدم.عرض',
-    '用户.查看',
     'v1.2.3',
-  ])('allows %j: a dot inside the code is fine', (code) => {
+  ])('allows %j: a dot is a character of the set, also at the ends', (code) => {
     expect(codeProblem(code, nodes)).toBeNull();
   });
 
-  it('names the character problem before the dot problem, and the dot problem before "taken"', () => {
+  // The code is also a path segment of the edit and delete requests: `.` and `..` are read as the
+  // current and the parent directory there, so a node with such a code could never be reached again.
+  it.each(['.', '..', '...', ' . ', ' .. '])(
+    'refuses %j: a code made only of dots (the page keeps this one back although the backend takes it)',
+    (code) => {
+      expect(codeProblem(code, nodes)).toBe('dots');
+    },
+  );
+
+  it('names the character problem before the dots problem, and the dots problem before "taken"', () => {
     expect(codeProblem('. x', nodes)).toBe('invalid');
-    expect(codeProblem('x .', nodes)).toBe('invalid');
-    expect(codeProblem('.'.repeat(101), nodes)).toBe('invalid');
-    const withDots = [...nodes, node('.dotted', null)];
-    expect(codeProblem('.dotted', withDots)).toBe('dots');
+    expect(codeProblem('.'.repeat(129), nodes)).toBe('invalid');
+    const withDots = [...nodes, node('..', null)];
+    expect(codeProblem('..', withDots)).toBe('dots');
   });
 });
 

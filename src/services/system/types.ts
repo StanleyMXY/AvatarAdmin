@@ -96,10 +96,14 @@ export type PermissionCreateInput = {
   nameEn: string;
 };
 
-/** A built-in node may change names and order only; a custom node may also change its parent. */
+/**
+ * A built-in node may change names and order only; a custom node may also change its parent. The
+ * parent is always there: the current one (null for a root) when the node does not move, because the
+ * backend reads a missing parent as null (backend answer 87).
+ */
 export type PermissionPatch = {
   nameZh: string;
   nameEn: string;
   sortOrder: number;
-  parent?: string | null;
+  parent: string | null;
 };

@@ -107,7 +107,7 @@ export function PermissionNodeModal({ node, nodes, onDone, onClose }: Props) {
           ]);
           return;
         }
-        await updatePermission(node.code, built.patch, { builtin });
+        await updatePermission(node.code, built.patch, { builtin, parent: node.parent ?? null });
       }
       message.success(t('system.common.saved'));
       onDone();

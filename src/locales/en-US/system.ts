@@ -156,8 +156,8 @@ const messages: Record<string, string> = {
   'system.permissions.field.codeHint': 'Cannot be changed after the node is made.',
   'system.permissions.field.code.required': 'Enter a code',
   'system.permissions.field.code.invalid':
-    'The code cannot contain spaces or control characters, and is at most 100 characters.',
-  'system.permissions.field.code.dots': 'The code cannot start or end with a dot.',
+    'Use 1 to 128 of letters A-Z, digits and the characters _ : # / . - (no spaces, no other letters).',
+  'system.permissions.field.code.dots': 'A code made only of dots cannot be used.',
   'system.permissions.field.code.taken': 'A node with this code exists already.',
   'system.permissions.field.type': 'Type',
   'system.permissions.field.parent': 'Parent node',

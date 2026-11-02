@@ -154,6 +154,20 @@ function roleFields(
   };
 }
 
+/** ASCII letters, digits and `_ : # / . -`, 1 to 128, case sensitive (backend answer 87). */
+const NODE_CODE = /^[A-Za-z0-9_:#/.-]{1,128}$/;
+
+/** Both names of a node: 1 to 100 code points each, no control characters; the first bad one is the 400. */
+function nodeNames(body: Record<string, unknown>): { nameZh: string; nameEn: string } {
+  const names = { nameZh: textOf(body.nameZh), nameEn: textOf(body.nameEn) };
+  for (const ref of ['nameZh', 'nameEn'] as const) {
+    if (names[ref] === '') refuse([{ ref, reason: 'EMPTY_NOT_ALLOWED' }]);
+    if (countCodePoints(names[ref]) > 100) refuse([{ ref, reason: 'TOO_LONG' }]);
+    if (/\p{Cc}/u.test(names[ref])) refuse([{ ref, reason: 'OUT_OF_RANGE' }]);
+  }
+  return names;
+}
+
 const sortedNodes = () => [...systemState.nodes.values()];
 
 export default {
@@ -368,30 +382,28 @@ export default {
   }),
 
   // ---- the writes of the permission tree (PERMISSION:MANAGE) ----
+  // The checks stop at the first that fails, in the order code, type, parent, nameZh, nameEn, then the
+  // order: one detail (backend answer 87). A code is 1 to 128 of ASCII letters, digits and `_ : # / . -`.
   'POST /api/admin/permissions': guard('PERMISSION:MANAGE', (req) => {
     const body = bodyOf(req);
     const code = textOf(body.code);
-    const details: Detail[] = [];
-    if (code === '') details.push({ ref: 'code', reason: 'EMPTY_NOT_ALLOWED' });
-    else if (countCodePoints(code) > 100) details.push({ ref: 'code', reason: 'TOO_LONG' });
+    if (code === '') refuse([{ ref: 'code', reason: 'EMPTY_NOT_ALLOWED' }]);
+    if (countCodePoints(code) > 128) refuse([{ ref: 'code', reason: 'TOO_LONG' }]);
+    if (!NODE_CODE.test(code)) refuse([{ ref: 'code', reason: 'OUT_OF_RANGE' }]);
     if (body.type !== 'MENU' && body.type !== 'FUNCTION')
-      details.push({ ref: 'type', reason: 'OUT_OF_RANGE' });
-    if (!Number.isInteger(body.sortOrder))
-      details.push({ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' });
-    const nameZh = textOf(body.nameZh);
-    const nameEn = textOf(body.nameEn);
-    if (nameZh === '') details.push({ ref: 'nameZh', reason: 'EMPTY_NOT_ALLOWED' });
-    if (nameEn === '') details.push({ ref: 'nameEn', reason: 'EMPTY_NOT_ALLOWED' });
+      refuse([{ ref: 'type', reason: 'OUT_OF_RANGE' }]);
     const parent = body.parent === null || body.parent === undefined ? null : String(body.parent);
     if (parent !== null && !systemState.nodes.has(parent))
-      details.push({ ref: 'parent', reason: 'OUT_OF_RANGE' });
-    if (details.length > 0) refuse(details);
+      refuse([{ ref: 'parent', reason: 'OUT_OF_RANGE' }]);
+    const { nameZh, nameEn } = nodeNames(body);
+    const sortOrder = body.sortOrder === undefined || body.sortOrder === null ? 0 : body.sortOrder;
+    if (!Number.isInteger(sortOrder)) refuse([{ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' }]);
     if (systemState.nodes.has(code)) duplicate('code');
     const node = {
       code,
       parent,
       type: body.type as 'MENU' | 'FUNCTION',
-      sortOrder: body.sortOrder as number,
+      sortOrder: sortOrder as number,
       nameZh,
       nameEn,
       builtin: false,
@@ -402,44 +414,40 @@ export default {
     return ok(node);
   }),
 
+  // An update has no "keep the parent": a missing parent is null, which moves a custom node to the root
+  // and is refused for a built-in node that has a parent, so a client always sends the current one
+  // (backend answers 87 and 88). The code and the type of the body must be the node's own, or absent.
   'PUT /api/admin/permissions/:code': guard('PERMISSION:MANAGE', (req) => {
     const node = systemState.nodes.get(req.params.code) ?? notFound('The permission node');
     const body = bodyOf(req);
-    const details: Detail[] = [];
-    const nameZh = textOf(body.nameZh);
-    const nameEn = textOf(body.nameEn);
-    if (nameZh === '') details.push({ ref: 'nameZh', reason: 'EMPTY_NOT_ALLOWED' });
-    if (nameEn === '') details.push({ ref: 'nameEn', reason: 'EMPTY_NOT_ALLOWED' });
-    if (!Number.isInteger(body.sortOrder))
-      details.push({ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' });
+    if (body.code !== undefined && body.code !== null && body.code !== node.code)
+      refuse([{ ref: 'code', reason: 'OUT_OF_RANGE' }]);
     // The type of a node never changes (400 on `type`); writing the same type again is no change.
-    if (body.type !== undefined && body.type !== node.type)
-      details.push({ ref: 'type', reason: 'OUT_OF_RANGE' });
-    let parent = node.parent;
-    if (body.parent !== undefined) {
-      const wanted = body.parent === null ? null : String(body.parent);
-      if (wanted !== node.parent) {
-        // The code and the parent of a built-in node cannot change: the checks of the application rely on them.
-        if (node.builtin) details.push({ ref: 'parent', reason: 'OUT_OF_RANGE' });
-        else if (wanted !== null) {
-          // Not under itself, not under one of its own descendants (that would make a loop).
-          if (
-            !systemState.nodes.has(wanted) ||
-            wanted === node.code ||
-            descendantCodes(node.code).has(wanted)
-          )
-            details.push({ ref: 'parent', reason: 'OUT_OF_RANGE' });
-        }
-        parent = wanted;
-      }
+    if (body.type !== undefined && body.type !== null && body.type !== node.type)
+      refuse([{ ref: 'type', reason: 'OUT_OF_RANGE' }]);
+    const wanted = body.parent === undefined || body.parent === null ? null : String(body.parent);
+    if (wanted !== node.parent) {
+      // The parent of a built-in node cannot change: the checks of the application rely on it.
+      if (node.builtin) refuse([{ ref: 'parent', reason: 'OUT_OF_RANGE' }]);
+      // Not under itself, not under one of its own descendants (that would make a loop), and it exists.
+      if (
+        wanted !== null &&
+        (!systemState.nodes.has(wanted) ||
+          wanted === node.code ||
+          descendantCodes(node.code).has(wanted))
+      )
+        refuse([{ ref: 'parent', reason: 'OUT_OF_RANGE' }]);
     }
-    if (details.length > 0) refuse(details);
+    const { nameZh, nameEn } = nodeNames(body);
+    const sortOrder =
+      body.sortOrder === undefined || body.sortOrder === null ? node.sortOrder : body.sortOrder;
+    if (!Number.isInteger(sortOrder)) refuse([{ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' }]);
     node.nameZh = nameZh;
     node.nameEn = nameEn;
-    node.sortOrder = body.sortOrder as number;
-    node.parent = parent;
+    node.sortOrder = sortOrder as number;
+    node.parent = wanted;
     writeAudit(req.admin, 'PERMISSION_UPDATE', 'PERMISSION', node.code, {
-      parent,
+      parent: wanted,
       sortOrder: node.sortOrder,
     });
     return ok(node);

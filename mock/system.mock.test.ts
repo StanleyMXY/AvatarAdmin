@@ -525,7 +525,10 @@ describe('the permission tree', () => {
     });
   const update = (code: string, body: Record<string, unknown>) =>
     run('PUT /api/admin/permissions/:code', 'root', { params: { code }, body });
+  // An update always carries the parent: absent is null (backend answer 87), not "unchanged".
   const rename = { nameZh: '名', nameEn: 'name', sortOrder: 5 };
+  const parentOf = (code: string) => systemState.nodes.get(code)?.parent ?? null;
+  const renameKeepingParent = (code: string) => ({ ...rename, parent: parentOf(code) });
 
   it('is read with ROLE:MANAGE or PERMISSION:MANAGE and with nothing else', async () => {
     for (const [codes, status] of [
@@ -561,7 +564,7 @@ describe('the permission tree', () => {
   });
 
   it('lets a built-in node change its names and order, and refuses a new parent', async () => {
-    const done = await update('USER:BAN', rename);
+    const done = await update('USER:BAN', renameKeepingParent('USER:BAN'));
     expect(done.body.data).toMatchObject({
       code: 'USER:BAN',
       nameEn: 'name',
@@ -584,7 +587,7 @@ describe('the permission tree', () => {
       ['CUSTOM:T', 'MENU'],
     ]) {
       const before = JSON.stringify(systemState.nodes.get(code));
-      const refused = await update(code, { ...rename, type });
+      const refused = await update(code, { ...renameKeepingParent(code), type });
       expect([code, refused.status, refused.body.code, refused.body.data.details]).toEqual([
         code,
         400,
@@ -593,8 +596,9 @@ describe('the permission tree', () => {
       ]);
       expect(JSON.stringify(systemState.nodes.get(code))).toBe(before);
     }
-    expect((await update('CUSTOM:T', { ...rename, type: 'FUNCTION' })).status).toBe(200);
-    expect((await update('CUSTOM:T', rename)).status).toBe(200);
+    const keep = renameKeepingParent('CUSTOM:T');
+    expect((await update('CUSTOM:T', { ...keep, type: 'FUNCTION' })).status).toBe(200);
+    expect((await update('CUSTOM:T', keep)).status).toBe(200);
   });
 
   it('lets a custom node change its parent, and refuses a loop: under itself or under a descendant', async () => {
@@ -612,6 +616,126 @@ describe('the permission tree', () => {
     expect(systemState.nodes.get('CUSTOM:A')?.parent).toBe(null);
     expect((await update('CUSTOM:C', { ...rename, parent: 'CUSTOM:A' })).status).toBe(200);
     expect((await update('CUSTOM:A', { ...rename, parent: null })).status).toBe(200);
+  });
+
+  it('takes an update without parent as parent null (backend answer 87): a custom node goes to the root, a built-in node with a parent is refused on parent', async () => {
+    await create({ code: 'CUSTOM:A' });
+    await create({ code: 'CUSTOM:B', parent: 'CUSTOM:A' });
+    const moved = await update('CUSTOM:B', rename);
+    expect([moved.status, moved.body.data.parent]).toEqual([200, null]);
+    const builtin = await update('USER:BAN', rename);
+    expect([builtin.status, builtin.body.code, builtin.body.data.details]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      [{ ref: 'parent', reason: 'OUT_OF_RANGE' }],
+    ]);
+    expect(parentOf('USER:BAN')).toBe('USER:VIEW');
+    // with the parent it was read with, the same update is fine; a built-in node that is a root needs null
+    expect((await update('USER:BAN', renameKeepingParent('USER:BAN'))).status).toBe(200);
+    const root = [...systemState.nodes.values()].find((n) => n.builtin && n.parent === null);
+    expect(root).toBeDefined();
+    expect((await update(String(root?.code), rename)).status).toBe(200);
+  });
+
+  it('needs both names on an update: a missing or blank one is 400 on that name; the order stays when it is not sent', async () => {
+    await create({ code: 'CUSTOM:A', sortOrder: 77 });
+    const noZh = await update('CUSTOM:A', { nameEn: 'x', parent: null });
+    expect([noZh.status, noZh.body.data.details]).toEqual([
+      400,
+      [{ ref: 'nameZh', reason: 'EMPTY_NOT_ALLOWED' }],
+    ]);
+    const blankEn = await update('CUSTOM:A', { nameZh: 'x', nameEn: '  ', parent: null });
+    expect(blankEn.body.data.details).toEqual([{ ref: 'nameEn', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const kept = await update('CUSTOM:A', { nameZh: 'x', nameEn: 'y', parent: null });
+    expect([kept.status, kept.body.data.sortOrder]).toEqual([200, 77]);
+  });
+
+  it('takes the code and the type of the body as no change when they are the path / the current type, and refuses another code on code', async () => {
+    await create({ code: 'CUSTOM:A' });
+    expect(
+      (await update('CUSTOM:A', { ...renameKeepingParent('CUSTOM:A'), code: 'CUSTOM:A' })).status,
+    ).toBe(200);
+    for (const code of ['CUSTOM:A', 'USER:BAN']) {
+      const other = await update(code, { ...renameKeepingParent(code), code: 'CUSTOM:Z' });
+      expect([code, other.status, other.body.data.details]).toEqual([
+        code,
+        400,
+        [{ ref: 'code', reason: 'OUT_OF_RANGE' }],
+      ]);
+    }
+    expect(systemState.nodes.has('CUSTOM:Z')).toBe(false);
+  });
+
+  it('answers the cycle, the unknown parent and the parent of a built-in node on the parent field, one detail each (backend answer 88)', async () => {
+    await create({ code: 'CUSTOM:A' });
+    await create({ code: 'CUSTOM:B', parent: 'CUSTOM:A' });
+    for (const [code, parent] of [
+      ['CUSTOM:A', 'CUSTOM:A'],
+      ['CUSTOM:A', 'CUSTOM:B'],
+      ['CUSTOM:B', 'NO:SUCH'],
+      ['USER:BAN', 'CUSTOM:A'],
+    ] as const) {
+      const refused = await update(code, { ...rename, parent });
+      expect([code, parent, refused.status, refused.body.code, refused.body.data.details]).toEqual([
+        code,
+        parent,
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'parent', reason: 'OUT_OF_RANGE' }],
+      ]);
+    }
+  });
+
+  it('accepts a code of ASCII letters, digits and _ : # / . - (1 to 128, case sensitive, a dot anywhere) and refuses the rest on code (backend answer 87)', async () => {
+    for (const code of [
+      'a.b/c#d_e:f-g',
+      'A'.repeat(128),
+      '.x',
+      'x.',
+      '.',
+      '..',
+      'custom:group',
+      'CUSTOM:GROUP',
+    ]) {
+      const made = await create({ code });
+      expect([code, made.status]).toEqual([code, 200]);
+    }
+    for (const [code, reason] of [
+      ['has space', 'OUT_OF_RANGE'],
+      ['ก:ไทย', 'OUT_OF_RANGE'],
+      ['a,b', 'OUT_OF_RANGE'],
+      ['a\u200bb', 'OUT_OF_RANGE'],
+      ['a%b', 'OUT_OF_RANGE'],
+      ['', 'EMPTY_NOT_ALLOWED'],
+      ['A'.repeat(129), 'TOO_LONG'],
+    ] as const) {
+      const refused = await create({ code });
+      expect([
+        code.length > 20 ? code.length : code,
+        refused.status,
+        refused.body.data.details,
+      ]).toEqual([code.length > 20 ? code.length : code, 400, [{ ref: 'code', reason }]]);
+    }
+  });
+
+  it('gives only the first failing check on a create, in the order code, type, parent, nameZh, nameEn', async () => {
+    const all = await create({
+      code: 'bad code',
+      type: 'X',
+      parent: 'NO:SUCH',
+      nameZh: '',
+      nameEn: '',
+    });
+    expect(all.body.data.details).toEqual([{ ref: 'code', reason: 'OUT_OF_RANGE' }]);
+    const noType = await create({ type: 'X', parent: 'NO:SUCH', nameZh: '', nameEn: '' });
+    expect(noType.body.data.details).toEqual([{ ref: 'type', reason: 'OUT_OF_RANGE' }]);
+    const noParent = await create({ parent: 'NO:SUCH', nameZh: '', nameEn: '' });
+    expect(noParent.body.data.details).toEqual([{ ref: 'parent', reason: 'OUT_OF_RANGE' }]);
+    const noZh = await create({ nameZh: '', nameEn: '' });
+    expect(noZh.body.data.details).toEqual([{ ref: 'nameZh', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const longEn = await create({ nameEn: 'ก'.repeat(101) });
+    expect(longEn.body.data.details).toEqual([{ ref: 'nameEn', reason: 'TOO_LONG' }]);
+    expect((await create({ nameEn: 'ก'.repeat(100) })).status).toBe(200);
   });
 
   it('deletes a custom node without children and clears its grants from the roles', async () => {
@@ -639,8 +763,11 @@ describe('the permission tree', () => {
     const builtin = await run('DELETE /api/admin/permissions/:code', 'root', {
       params: { code: 'USER:BAN' },
     });
-    expect([builtin.status, builtin.body.code]).toEqual([400, 'INVALID_REQUEST']);
-    expect(Array.isArray(builtin.body.data.details)).toBe(true);
+    expect([builtin.status, builtin.body.code, builtin.body.data.details]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      [{ ref: 'code', reason: 'OUT_OF_RANGE' }],
+    ]);
     expect(systemState.nodes.has('USER:BAN')).toBe(true);
     // a node the application checks by code is built in too, whatever its flag says
     const node = systemState.nodes.get('CUSTOM:B');

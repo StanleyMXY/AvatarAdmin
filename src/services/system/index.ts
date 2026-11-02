@@ -155,18 +155,22 @@ export async function listPermissions(): Promise<PermissionNode[]> {
 export const createPermission = (input: PermissionCreateInput): Promise<PermissionNode> =>
   apiRequest({ method: 'POST', url: '/permissions', body: input });
 
-/** The code and the type never change; a built-in node does not get a new parent either. */
+/**
+ * The code and the type never change. The parent is always in the body (the backend reads a missing
+ * one as null: a custom node would go to the root, a built-in node would be refused). A built-in node
+ * does not get a new parent: its own is sent, whatever the patch holds.
+ */
 export const updatePermission = (
   code: string,
   patch: PermissionPatch,
-  node: { builtin: boolean },
+  node: { builtin: boolean; parent: string | null },
 ): Promise<PermissionNode> => {
   const body: PermissionPatch = {
     nameZh: patch.nameZh,
     nameEn: patch.nameEn,
     sortOrder: patch.sortOrder,
+    parent: node.builtin ? node.parent : (patch.parent ?? null),
   };
-  if (!node.builtin && patch.parent !== undefined) body.parent = patch.parent;
   return apiRequest({ method: 'PUT', url: `/permissions/${enc(code)}`, body });
 };
 
