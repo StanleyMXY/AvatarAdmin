@@ -176,20 +176,18 @@ describe('the review queue', { timeout: 30000 }, () => {
     await waitFor(() => expect(statsCalls()).toBe(2));
   });
 
-  it('shows only the rows of the content type that was chosen, also when the backend does not filter by it', async () => {
-    installMockBackend(moderationMock);
-    const real = globalThis.fetch;
-    interceptFetch((url, init) =>
-      url.includes('/moderation/records?') && url.includes('contentType=')
-        ? real(url.replace(/&?contentType=[A-Z_]+/, ''), init)
-        : undefined,
-    );
+  it('shows the rows of the content type that was chosen from the page that was read, sends no content type to the backend, and says so on the page', async () => {
+    const calls = installMockBackend(moderationMock);
     const user = userEvent.setup();
     renderPage(<QueuePage />);
     await rowOf(RECORD_ID.oldestImage);
+    // the limit of the filter is said before it is used
+    expect(screen.getByText(/only hides the other types in the page that is shown/)).toBeVisible();
+    expect(screen.queryByTestId('moderation-type-filter')).toBeNull();
     await expandSearch(user);
     await chooseOption(user, 'Content type', 'Action clip');
     await user.click(screen.getByRole('button', { name: /查\s*询|Query|Search/ }));
+    const note = await screen.findByTestId('moderation-type-filter', undefined, { timeout: 10000 });
     await waitFor(
       () => expect(screen.queryByRole('link', { name: RECORD_ID.oldestImage })).toBeNull(),
       { timeout: 10000 },
@@ -201,9 +199,54 @@ describe('the review queue', { timeout: 30000 }, () => {
       .map((r) => r.textContent ?? '');
     expect(types.length).toBeGreaterThan(0);
     for (const text of types) expect(text).toContain('Action clip');
+    // nothing about the type reached the backend: the page and the total are the backend's
+    for (const call of listCalls(calls)) expect(call.url).not.toContain('contentType');
+    expect(listCalls(calls).at(-1)?.url).toBe('/api/admin/moderation/records?page=1&pageSize=20');
+    // the note says how many of the page are shown and that the total counts every type
+    const total = moderationState.records.length;
+    expect(note).toHaveTextContent(
+      new RegExp(`1 of the \\d+ records on this page .*Action clip.*${total}.*every type`),
+    );
   });
 
-  it('has Complaint among the sources and the generated image and the action clip among the content types, and sends what is chosen', async () => {
+  it('says it in Chinese, and shows the note about the limit before a type is chosen', async () => {
+    installMockBackend(moderationMock);
+    const user = userEvent.setup();
+    renderPage(<QueuePage />, 'zh-CN');
+    await rowOf(RECORD_ID.oldestImage);
+    expect(screen.getByText(/只是把本页里其他类型的行隐藏/)).toBeVisible();
+    await expandSearch(user);
+    await chooseOption(user, '内容类型', '动作片段');
+    await user.click(screen.getByRole('button', { name: /查\s*询/ }));
+    const note = await screen.findByTestId('moderation-type-filter', undefined, { timeout: 10000 });
+    expect(note).toHaveTextContent(/本页 \d+ 条记录中有 1 条是“动作片段”/);
+    expect(note).toHaveTextContent(/总数/);
+  });
+
+  it('tells that a page can have no row of the chosen type, and takes the note away when the type is cleared', async () => {
+    installMockBackend(moderationMock);
+    const user = userEvent.setup();
+    renderPage(<QueuePage />);
+    await rowOf(RECORD_ID.oldestImage);
+    await expandSearch(user);
+    await chooseOption(user, 'Content type', 'Companion name');
+    await user.click(screen.getByRole('button', { name: /查\s*询|Query|Search/ }));
+    await waitFor(
+      () => expect(screen.queryByRole('link', { name: RECORD_ID.oldestImage })).toBeNull(),
+      {
+        timeout: 10000,
+      },
+    );
+    const note = await screen.findByTestId('moderation-type-filter');
+    expect(note).toHaveTextContent(/Companion name/);
+    await user.click(screen.getByRole('button', { name: /重\s*置|Reset/ }));
+    await waitFor(() => expect(screen.queryByTestId('moderation-type-filter')).toBeNull(), {
+      timeout: 10000,
+    });
+    await rowOf(RECORD_ID.oldestImage);
+  });
+
+  it('has Complaint among the sources and the generated image and the action clip among the content types, and sends the source but not the content type', async () => {
     const calls = installMockBackend(moderationMock);
     const user = userEvent.setup();
     renderPage(<QueuePage />);
@@ -244,8 +287,8 @@ describe('the review queue', { timeout: 30000 }, () => {
     await waitFor(() => {
       const last = listCalls(calls).at(-1)?.url as string;
       expect(last).toContain('source=COMPLAINT');
-      expect(last).toContain('contentType=ACTION_CLIP');
     });
+    for (const call of listCalls(calls)) expect(call.url).not.toContain('contentType');
   });
 
   it('sends no filter when none is chosen', async () => {

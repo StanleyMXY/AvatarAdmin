@@ -53,8 +53,6 @@ export type ModerationQuery = {
   pageSize: number;
   status?: ModerationStatus;
   source?: ModerationSource;
-  /** Not in the contract's query list; see docs/contract-requests/2026-10-26-admin-frontend-moderation.md. */
-  contentType?: ModerationContentType;
 };
 
 /**

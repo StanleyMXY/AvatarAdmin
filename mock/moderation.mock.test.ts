@@ -134,7 +134,7 @@ describe('GET /moderation/records', () => {
     }
   });
 
-  it('filters by status, source and content type, and by the three together', async () => {
+  it('filters by status and source, and by the two together', async () => {
     const rows = async (query: Record<string, unknown>) =>
       (await get(RECORDS, 'reviewer', { pageSize: '200', ...query })).body.data.items as {
         status: string;
@@ -145,17 +145,29 @@ describe('GET /moderation/records', () => {
     const complaints = await rows({ source: 'COMPLAINT' });
     expect(complaints.length).toBeGreaterThan(0);
     expect(complaints.every((r) => r.source === 'COMPLAINT')).toBe(true);
-    const clips = await rows({ contentType: 'ACTION_CLIP' });
-    expect(clips.map((r) => r.contentType)).toEqual(['ACTION_CLIP']);
-    const both = await rows({ status: 'PENDING_REVIEW', source: 'REPORT', contentType: 'VOICE' });
-    expect(both).toHaveLength(1);
+    const both = await rows({ status: 'PENDING_REVIEW', source: 'REPORT' });
+    expect(both.length).toBeGreaterThan(0);
+    expect(both.every((r) => r.status === 'PENDING_REVIEW' && r.source === 'REPORT')).toBe(true);
+  });
+
+  it('ignores a query parameter it does not know, content type among them: no 400, no filtering, the total of all types', async () => {
+    const plain = await get(RECORDS, 'reviewer', { pageSize: '200' });
+    for (const query of [
+      { contentType: 'ACTION_CLIP' },
+      { contentType: 'GIF' },
+      { colour: 'red' },
+    ]) {
+      const answer = await get(RECORDS, 'reviewer', { pageSize: '200', ...query });
+      expect(answer.status, JSON.stringify(query)).toBe(200);
+      expect(answer.body.data.total).toBe(plain.body.data.total);
+      expect(answer.body.data.items).toEqual(plain.body.data.items);
+    }
   });
 
   it('refuses a value that is not in the list and a paging that is out of range, naming the parameter', async () => {
     for (const query of [
       { status: 'DONE' },
       { source: 'ROBOT' },
-      { contentType: 'GIF' },
       { page: '0' },
       { pageSize: '201' },
     ]) {

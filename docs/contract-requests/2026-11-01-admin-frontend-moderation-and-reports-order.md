@@ -13,13 +13,13 @@
 
 **当前做法：** 前端对这个调用把 `fetch` 的缓存模式设为 `no-store`（`src/services/moderation/index.ts`，`src/request/apiClient.ts` 的 `cache` 参数），不依赖响应头。后端若加了头，前端的这个设置可以保留，不冲突。
 
-## 二、`GET /moderation/records` 不认 `contentType` 时的行为
+## 二、`GET /moderation/records` 不认 `contentType` 时的行为（后端已答复）
 
-这是 `2026-10-26-admin-frontend-moderation.md` 第一问的补充。契约查询参数只有 `status`、`source`，队列页面发 `contentType`。
+这是 `2026-10-26-admin-frontend-moderation.md` 第一问的补充。契约查询参数只有 `status`、`source`。
 
-**问：** 不认识的查询参数是忽略，还是 400 `INVALID_REQUEST`？（忽略的话，列表会返回全部类型。）
+**后端的答复（2026-11-02，第 61 条）：** 不支持 `contentType`；不认识的查询参数被直接忽略，不是 400。后端建议加上这个参数（取值七种之一，非法 400，`ref` 为 `contentType`），这是向后端提出的请求，后端还没有做。
 
-**当前做法：** 页面选了内容类型就发 `contentType=…`，并且对返回的行再按 `contentType` 过滤一次（`src/pages/moderation/queue.tsx`），这样后端忽略参数时列表也不会混进别的类型。代价：后端忽略参数时，每页显示的行数会少于页大小，`total` 仍是后端给的全部条数。后端支持这个参数后，这一层过滤不再起作用，可以去掉。
+**前端现在做的：** 不再发 `contentType`。页面上的内容类型筛选只是把已读到的这一页里其他类型的行隐藏，页面上写明了这一点和读到的条数；页数和总数仍是后端给的全部类型的数。后端支持这个参数后，前端把筛选改回发参数，去掉页内过滤和说明。
 
 ## 三、`GET /stats/daily`、`/stats/retention`、`/stats/reactivation`、`/stats/guest/*` 的行顺序
 
@@ -32,3 +32,7 @@
 **当前做法：** 前端按收到的顺序显示；假后端按升序返回。后端回复"升序"后不用改；回复"不保证"或"倒序"时，前端加排序。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：14、53、61）。
+
+核对于 2026-11-02

@@ -44,6 +44,14 @@ export default function ModerationQueuePage() {
     intl.formatMessage({ id }, values);
   const [oldest, setOldest] = useState<Oldest>({ state: 'loading' });
   const begin = useLatestCall();
+  const beginList = useLatestCall();
+  // What the content type filter of the page left of the list that was read (null: no type chosen).
+  const [typeView, setTypeView] = useState<{
+    type: ModerationContentType;
+    shown: number;
+    onPage: number;
+    total: number;
+  } | null>(null);
 
   // `oldestPendingSeconds` is a current value, whatever the range; one UTC day is the smallest one the endpoint takes.
   const loadOldest = useCallback(async () => {
@@ -187,24 +195,55 @@ export default function ModerationQueuePage() {
         />
       ) : null}
       <Typography.Text type="secondary">{t('moderation.queue.note')}</Typography.Text>
+      <Typography.Text type="secondary">{t('moderation.queue.typeNote')}</Typography.Text>
+      {typeView ? (
+        <Alert
+          type="info"
+          showIcon
+          data-testid="moderation-type-filter"
+          title={t('moderation.queue.typeFilter', {
+            shown: typeView.shown,
+            onPage: typeView.onPage,
+            type: labelOf(t, intl.messages, 'moderation.contentType', typeView.type),
+            total: intl.formatNumber(typeView.total),
+          })}
+        />
+      ) : null}
       <PagedListTable<ModerationRecord, Filters>
         rowKey="id"
         columns={columns}
         request={async ({ page, pageSize, status, source, contentType }) => {
           void loadOldest();
-          const answer = await listModerationRecords({
-            page,
-            pageSize,
-            ...(status ? { status } : {}),
-            ...(source ? { source } : {}),
-            ...(contentType ? { contentType } : {}),
-          });
-          // The contract does not list `contentType` among the query parameters yet (question file,
-          // part one): a backend that does not know it would send every type, which must not look
-          // like a filtered list.
-          return contentType
-            ? { ...answer, items: answer.items.filter((row) => row.contentType === contentType) }
-            : answer;
+          const isCurrent = beginList();
+          // The backend filters by `status` and `source` only and ignores any other parameter, so
+          // the content type is never sent: it only hides rows of the page that was read, and the
+          // page count and the total stay those of every type.
+          let answer: Awaited<ReturnType<typeof listModerationRecords>>;
+          try {
+            answer = await listModerationRecords({
+              page,
+              pageSize,
+              ...(status ? { status } : {}),
+              ...(source ? { source } : {}),
+            });
+          } catch (error) {
+            if (isCurrent()) setTypeView(null);
+            throw error;
+          }
+          if (!contentType) {
+            if (isCurrent()) setTypeView(null);
+            return answer;
+          }
+          const items = answer.items.filter((row) => row.contentType === contentType);
+          if (isCurrent()) {
+            setTypeView({
+              type: contentType,
+              shown: items.length,
+              onPage: answer.items.length,
+              total: answer.total,
+            });
+          }
+          return { ...answer, items };
         }}
       />
     </Flex>

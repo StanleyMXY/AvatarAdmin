@@ -25,15 +25,6 @@ type Detail = { ref: string; reason: string };
 
 const STATUSES = ['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'BLOCKED'];
 const SOURCES = ['AUTO', 'REPORT', 'COMPLAINT'];
-const CONTENT_TYPES = [
-  'AVATAR',
-  'VOICE',
-  'MESSAGE',
-  'PERSONA',
-  'COMPANION_NAME',
-  'AVATAR_IMAGE',
-  'ACTION_CLIP',
-];
 const MATCH_MODES = ['SUBSTRING', 'WORD', 'REGEX'];
 const LEVELS = ['REVIEW', 'BLOCK'];
 const PATTERN_MAX = 200;
@@ -184,14 +175,13 @@ const rulesMax = (): number => {
 };
 
 export default {
+  // Only `status` and `source` filter (and the paging); any other query parameter is ignored, not a 400 (the backend's answer of 2026-11-02, question 61).
   'GET /api/admin/moderation/records': guard('MODERATION:VIEW', (req) => {
     const status = enumParam(req, 'status', STATUSES);
     const source = enumParam(req, 'source', SOURCES);
-    const contentType = enumParam(req, 'contentType', CONTENT_TYPES);
     const rows = moderationState.records
       .filter((r) => (status === '' ? true : r.status === status))
       .filter((r) => (source === '' ? true : r.source === source))
-      .filter((r) => (contentType === '' ? true : r.contentType === contentType))
       .sort(byQueueOrder);
     const page = paginateQuery(rows, req);
     return ok({ items: page.items.map(recordRow), total: page.total });
