@@ -155,10 +155,7 @@ export function ActivityFormModal({ target, open, onClose, onSaved }: Props) {
         try {
           const reply = await updateCheckinActivity(row.id, body);
           // The backend did not apply it (the activity went live meanwhile): ask the overlap question.
-          probeFirst =
-            typeof reply === 'object' &&
-            reply !== null &&
-            (reply as { applied?: unknown }).applied === false;
+          probeFirst = reply?.applied === false;
         } catch (error) {
           show(error);
           return;

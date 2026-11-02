@@ -134,11 +134,15 @@ const overlapping = (id: string, range: { startDate: string | null; endDate: str
     (other) => other.id !== id && other.status === 'ACTIVE' && rangesOverlap(other, range),
   );
 
+const namesOf = (list: MockActivity[]) => list.map((other) => ({ id: other.id, name: other.name }));
+
+/** The overlap question (contract 28.1): nothing was done, the activities that confirming would stop. */
 const probeAnswer = (list: MockActivity[]) =>
-  ok({
-    applied: false,
-    disabledActivities: list.map((other) => ({ id: other.id, name: other.name })),
-  });
+  ok({ applied: false, disabledActivities: namesOf(list), activity: null });
+
+/** A written change: the activities it stopped (none unless confirmed) and the detail as now stored. */
+const writtenAnswer = (target: MockActivity, stopped: MockActivity[]) =>
+  ok({ applied: true, disabledActivities: namesOf(stopped), activity: detailOut(target) });
 
 const stop = (list: MockActivity[], now: string) => {
   for (const other of list) {
@@ -250,15 +254,17 @@ export default {
     const fields = activityFields(body);
     const rangeChanged = fields.startDate !== target.startDate || fields.endDate !== target.endDate;
     const now = new Date().toISOString();
+    let stopped: MockActivity[] = [];
     if (target.status === 'ACTIVE' && rangeChanged) {
       const clashes = overlapping(target.id, fields);
       if (clashes.length > 0) {
         if (body.confirm !== true) return probeAnswer(clashes);
         stop(clashes, now);
+        stopped = clashes;
       }
     }
     Object.assign(target, fields, { updatedAt: now });
-    return ok(activityOut(target));
+    return writtenAnswer(target, stopped);
   }),
 
   'DELETE /api/admin/checkin/activities/:id': guard('CHECKIN:MANAGE', (req) => {
@@ -293,16 +299,18 @@ export default {
       });
     }
     const now = new Date().toISOString();
+    let stopped: MockActivity[] = [];
     if (status === 'ACTIVE') {
       const clashes = overlapping(target.id, target);
       if (clashes.length > 0) {
         if (body.confirm !== true) return probeAnswer(clashes);
         stop(clashes, now);
+        stopped = clashes;
       }
     }
     target.status = status;
     target.updatedAt = now;
-    return ok(activityOut(target));
+    return writtenAnswer(target, stopped);
   }),
 
   'GET /api/admin/checkin/records': guard('CHECKIN:VIEW', (req) => {

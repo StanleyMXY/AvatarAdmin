@@ -796,7 +796,7 @@ AvatarAdmin/
 **Refs:** 规格 5.22；契约 §28。路由取规格 5.0"活动管理"中签到、任务相关的四行（共六条路由；奖励设置那一行在任务 23）。
 
 **Interfaces:**
-- Produces: `probeActivityOverlap(action, id, body)`：先 `confirm=false`，响应有 `disabledActivities` 时返回它们，由页面弹确认框，确认后以 `confirm=true` 再发
+- Produces: `probeActivityOverlap(action, id, body)`：先 `confirm=false`。`PUT /checkin/activities/{id}` 与 `…/status` 的响应是 `{applied: true|false, disabledActivities: [{id, name}], activity: <详情> | null}`（新版契约 28.1）：以 `applied` 判断是否已写入，不看 `disabledActivities` 是否为空——`applied: true` 就是已写入（返回 `null`，不再询问），`applied: false` 才是重叠询问（返回 `disabledActivities`，可以是空列表），由页面弹确认框，确认后以 `confirm=true` 再发
 
 - 响应类型（后端回复第 17 条）：`GET /checkin/activities` 每项是 `CheckinActivity` 的列（`id`、`name`、`startDate`、`endDate`、`status`、`createdBy`、`createdAt`、`updatedAt`）加 `createdByUsername`、`lifecycleStatus`；`GET /checkin/activities/{id}` 另加 `rewards: [{dayNum, rewardCredits, bonusCredits}]`（按 `dayNum` 升序）；`GET /checkin/records` 每项是 `CheckinRecord` 的列加 `activityName`；`GET /tasks/records` 每项是 `TaskRecord` 的列加 `taskName`；名称是读取时的当前名称，对象不存在时为 `null`、ID 照旧（显示"—"和 ID）。
 

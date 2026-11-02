@@ -2,6 +2,7 @@ import { apiRequest } from '../../request/apiClient';
 import type {
   ActivityBody,
   ActivityStatus,
+  ActivityWriteReply,
   CheckinActivity,
   CheckinActivityDetail,
   CheckinRecord,
@@ -40,7 +41,10 @@ export const createCheckinActivity = (body: ActivityBody): Promise<CheckinActivi
  * Saves the activity as it is. The date range of an activity that is `ACTIVE` goes through
  * `probeActivityOverlap` first: a change that overlaps another live activity is not done without `confirm=true`.
  */
-export const updateCheckinActivity = (id: string, body: ActivityBody): Promise<unknown> =>
+export const updateCheckinActivity = (
+  id: string,
+  body: ActivityBody,
+): Promise<ActivityWriteReply> =>
   apiRequest({ method: 'PUT', url: `/checkin/activities/${enc(id)}`, body });
 
 /** 409 INVALID_STATE unless the activity is a draft without sign-in records. */
@@ -48,7 +52,10 @@ export const deleteCheckinActivity = (id: string): Promise<unknown> =>
   apiRequest({ method: 'DELETE', url: `/checkin/activities/${enc(id)}` });
 
 /** Stops a live activity. Going live is `probeActivityOverlap`, never this. */
-export const setCheckinActivityStatus = (id: string, status: 'DISABLED'): Promise<unknown> =>
+export const setCheckinActivityStatus = (
+  id: string,
+  status: 'DISABLED',
+): Promise<ActivityWriteReply> =>
   apiRequest({ method: 'PUT', url: `/checkin/activities/${enc(id)}/status`, body: { status } });
 
 /** What puts an activity on the air or changes the range of one that is: `publish` (draft), `enable` (stopped), `update` (edit the range of a live one). */
@@ -77,9 +84,11 @@ const isDisabledActivity = (value: unknown): value is DisabledActivity =>
 
 /**
  * The first step of publishing, enabling or editing the range of a live activity: the request goes
- * with `confirm=false`. When the backend did it (no overlap) the answer is `null`. When another
- * activity overlaps, nothing was done and the answer is the list of the activities that would be
- * stopped (`disabledActivities`; an empty list when the backend said `applied: false` without names).
+ * with `confirm=false`. `applied` of the answer decides (contract 28.1): `true` means the backend
+ * wrote it, so the answer is `null` whatever `disabledActivities` lists; `false` means nothing was
+ * done and the answer is the list of the activities that confirming would stop (an empty list when
+ * the backend gave no names). An answer without a boolean `applied` is not the contract's: then a
+ * list of names is read as the question and no list as done.
  * The second step, after the person agreed, is `confirmActivityOverlap`.
  */
 export async function probeActivityOverlap(
@@ -92,11 +101,12 @@ export async function probeActivityOverlap(
     applied?: unknown;
     disabledActivities?: unknown;
   };
+  if (reply.applied === true) return null;
   const names = Array.isArray(reply.disabledActivities)
     ? reply.disabledActivities.filter(isDisabledActivity)
     : [];
-  if (names.length > 0) return names;
-  return reply.applied === false ? [] : null;
+  if (reply.applied === false) return names;
+  return names.length > 0 ? names : null;
 }
 
 /** The second step: the same request with `confirm=true`; the backend stops what overlaps at that moment. */

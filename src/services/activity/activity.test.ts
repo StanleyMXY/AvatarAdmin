@@ -112,6 +112,22 @@ describe('probeActivityOverlap', () => {
     expect(await probeActivityOverlap('enable', '7')).toBeNull();
   });
 
+  it('applied true means it was written, even when the answer lists activities (they were stopped, there is nothing to ask)', async () => {
+    answer({
+      applied: true,
+      disabledActivities: [{ id: '3', name: 'Old one' }],
+      activity: { id: '7', status: 'ACTIVE' },
+    });
+    expect(await probeActivityOverlap('publish', '7')).toBeNull();
+    answer({ applied: true, disabledActivities: [{ id: '5', name: 'Other' }], activity: null });
+    expect(await probeActivityOverlap('update', '7', ACTIVITY_BODY)).toBeNull();
+  });
+
+  it('applied false is the question, with the names the answer gives (the detail is null)', async () => {
+    answer({ applied: false, disabledActivities: [{ id: '3', name: 'Old one' }], activity: null });
+    expect(await probeActivityOverlap('enable', '7')).toEqual([{ id: '3', name: 'Old one' }]);
+  });
+
   it('an answer with applied false and no names still means it was not done', async () => {
     answer({ applied: false });
     expect(await probeActivityOverlap('enable', '7')).toEqual([]);
