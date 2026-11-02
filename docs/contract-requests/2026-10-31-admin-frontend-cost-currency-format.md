@@ -19,3 +19,7 @@
 **暂定做法：** 如上；假后端目前对这个键只做“有成本行时不能改”一种拒绝。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：70）。
+
+核对于 2026-11-02

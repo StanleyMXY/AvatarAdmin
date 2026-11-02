@@ -45,3 +45,7 @@
 **现状（2026-11-01）：** 假后端的 `TRIGGERS` 已改成契约的四个值（`mock/_core/statRange.ts`），这一节不再需要处理。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：12、33、34、71、72、113、114、115）。
+
+核对于 2026-11-02

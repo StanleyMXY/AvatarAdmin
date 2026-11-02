@@ -51,3 +51,7 @@
 2. 规格 5.0 的用户详情路由没有写页签怎么选。额度账户页和额度流水页已经链接到 `/users/<id>?tab=credits`。前端把 `?tab=` 的取值定为：`overview`、`avatars`、`attribution`、`sessions`、`devices`、`authEvents`、`entitlements`、`credits`、`memory`；没有查看权限的页签、不认识的取值都打开概览。请把它写进 5.0 或 5.7。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：13、58、59、60、83、94）。
+
+核对于 2026-11-02

@@ -62,3 +62,7 @@
 **暂定做法：** 前端两种都收：字符串原样保留，数用 JavaScript 写出的十进制文字展开（不带指数）；提交 `POST /usage/prices` 时单价始终是字符串。如果后端回的是数，精度在 JSON 解析时已经丢了，这是前端补不回来的。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：31、32、69、110、111）。
+
+核对于 2026-11-02

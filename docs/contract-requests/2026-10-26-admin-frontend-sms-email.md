@@ -45,3 +45,7 @@
 `src/components/JsonField.tsx` 不接收表单传来的 `id`，在 `Form.Item` 里不能和标签关联，本任务的扩展配置框改用自己的文本域；`src/components/ExportButton.tsx` 的按钮文字是"导出"，规格写"导出 Excel"。这不是契约的问题，不需要后端回复。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：6、41、78、79、83、126、138）。
+
+核对于 2026-11-02

@@ -22,3 +22,7 @@
 **暂定做法：** 如上；假后端对 null 值、空名称（含只有空白的名称）、非映射（null、文本、列表）答 400 `INVALID_REQUEST`，`details` 为 `[{"ref":"credentials","reason":"EMPTY_NOT_ALLOWED"}]`。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：5）。
+
+核对于 2026-11-02

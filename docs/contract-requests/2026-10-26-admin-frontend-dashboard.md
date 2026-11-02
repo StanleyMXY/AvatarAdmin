@@ -36,3 +36,7 @@
 **暂定做法：** 把 `total` 当作满足筛选的总数；不是数字时卡片显示"—"。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：24、27、51、63）。
+
+核对于 2026-11-02

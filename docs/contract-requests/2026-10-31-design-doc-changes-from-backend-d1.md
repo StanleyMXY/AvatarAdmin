@@ -262,3 +262,7 @@
 5. 第 8.1 条：召回模板被拒时三种情形的结构化区分字段（不读 `message` 就能区分）。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：35、43、45）。
+
+核对于 2026-11-02

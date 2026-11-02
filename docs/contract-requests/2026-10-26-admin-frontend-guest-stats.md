@@ -28,3 +28,7 @@
 **暂定做法：** 前端只提供 `ALL`、`ANDROID`、`IOS` 三个选项（用的是统计共用的平台筛选）。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：25、52）。
+
+核对于 2026-11-02

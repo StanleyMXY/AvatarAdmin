@@ -47,3 +47,7 @@
 **暂定做法：** 假后端把这几个码挂在同领域的页面下（`COSMETIC:GRANT` → `COSMETIC:MANAGE`，`STATS:EXPORT`/`STATS:LAND` → `STATS:VIEW`），`SUBSCRIPTION:CONFIG` 是 MENU。前端不写死任何父子关系，全部用 `GET /permissions` 返回的 `parent`。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：10、20、21）。
+
+核对于 2026-11-02
