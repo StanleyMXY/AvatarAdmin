@@ -272,14 +272,16 @@ describe('the protections of the own account and of the last super administrator
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Possible reasons: it is your own account; it is the last enabled super administrator; or the account was changed by someone else meanwhile/,
+        /Possible reasons: it is the last enabled super administrator .*; or the account was changed by someone else meanwhile/,
       ),
     ).toBeInTheDocument();
+    // another row: the sentence of the own account is not said
+    expect(screen.queryByText(/refused this.*This is your own account/)).not.toBeInTheDocument();
     // never the backend's own words
     expect(screen.queryByText(/The last enabled super administrator$/)).not.toBeInTheDocument();
   });
 
-  it('shows 403 for the own account as the text of its code too, when the request does go out', async () => {
+  it('shows a 403 of the status route as the text of its code, with the sentence of the 403 rules', async () => {
     const { user } = await load();
     const taken = overrideFetch(({ url, method }) =>
       method === 'POST' && url.pathname.endsWith('/status')
@@ -1073,7 +1075,7 @@ describe('editing an administrator', () => {
     return within(await dialog());
   };
 
-  it('shows the user name read only, and changes the roles with the body of the roles only', async () => {
+  it('shows the user name read only, and changes the roles with a body that holds the user name and the whole list of roles', async () => {
     const { user, calls } = await load();
     const box = await edit(user, 'reviewer');
     expect(box.getByText('Edit administrator: reviewer')).toBeInTheDocument();
@@ -1087,7 +1089,8 @@ describe('editing an administrator', () => {
     expect(writesOf(calls)[0]).toEqual({
       method: 'PUT',
       url: '/api/admin/admins/1004',
-      body: { roleIds: ['3', '2'] },
+      // the user name and the whole list of roles, the chosen one added to the current one (backend answer 44)
+      body: { username: 'reviewer', roleIds: ['3', '2'] },
     });
     await dialogsClosed();
     await waitFor(() => {
@@ -1321,17 +1324,21 @@ describe('editing an administrator', () => {
     await chooseRole(user, rolesBox(box), 'Pengguna baru');
     await user.click(box.getByRole('button', { name: /Save$/ }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect(Object.keys(writesOf(calls)[0].body as object)).toEqual(['roleIds']);
+    expect(Object.keys(writesOf(calls)[0].body as object)).toEqual(['username', 'roleIds']);
   });
 
-  it('lets a super administrator set the flag: the body holds the flag only when only the flag changed', async () => {
+  it('lets a super administrator set the flag: the body holds the flag, and still the user name and the current roles, when only the flag changed', async () => {
     const { user, calls } = await load();
     const box = await edit(user, 'reviewer');
     await waitFor(() => expect(rolesBox(box)).toBeEnabled());
     await user.click(box.getByRole('switch', { name: 'Super administrator' }));
     await user.click(box.getByRole('button', { name: /Save$/ }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect(writesOf(calls)[0].body).toEqual({ superAdmin: true });
+    expect(writesOf(calls)[0].body).toEqual({
+      username: 'reviewer',
+      roleIds: ['3'],
+      superAdmin: true,
+    });
   });
 
   it('does not send the roles when they could not be read: the list would take every role away', async () => {
@@ -1349,7 +1356,11 @@ describe('editing an administrator', () => {
     await user.click(box.getByRole('switch', { name: 'Super administrator' }));
     await user.click(box.getByRole('button', { name: /Save$/ }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect(writesOf(calls)[0].body).toEqual({ superAdmin: true });
+    expect(writesOf(calls)[0].body).toEqual({
+      username: 'reviewer',
+      roleIds: ['3'],
+      superAdmin: true,
+    });
   });
 
   it('opens with the values of the administrator clicked, not the ones of the last dialog', async () => {
@@ -1425,7 +1436,89 @@ describe('the own account, if the controls were not disabled', () => {
     await user.click(box.getByRole('button', { name: /Save$/ }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(writesOf(calls)[0].method).toBe('PUT');
-    expect(writesOf(calls)[0].body).toEqual({});
+    // the own row: the user name and the current roles (none here), never the flag nor the chosen role
+    expect(writesOf(calls)[0].body).toEqual({ username: 'root', roleIds: [] });
+  });
+});
+
+describe('an update repeats the user name and the current roles (backend answer 44)', () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: '1004',
+    username: 'reviewer',
+    superAdmin: false,
+    status: 'ACTIVE' as const,
+    mustChangePassword: false,
+    totpEnrolledAt: null,
+    lastLoginAt: null,
+    createdAt: '2026-08-01T00:00:00Z',
+    roles: [{ id: '3', name: 'ผู้ตรวจสอบเนื้อหา' }],
+    ...over,
+  });
+  const open = (admin: ReturnType<typeof row>, protection = { own: false, lastSuper: false }) =>
+    renderPage(
+      <AdminFormModal
+        admin={admin as never}
+        me={{
+          id: '1001',
+          username: 'root',
+          superAdmin: true,
+          mustChangePassword: false,
+          permissions: [],
+          passwordMinLength: 12,
+        }}
+        protection={protection}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+  it('sends the current roles when only the flag is changed, also when the list of roles cannot be read: never []', async () => {
+    const calls = backend();
+    overrideFetch(({ url }) =>
+      url.pathname === '/api/admin/roles' ? jsonAnswer(403, 'ADMIN_FORBIDDEN') : undefined,
+    );
+    const user = userEvent.setup();
+    open(row());
+    const box = within(await dialog());
+    await box.findByText(/needs the permission Manage roles/);
+    await user.click(box.getByRole('switch', { name: 'Super administrator' }));
+    await user.click(box.getByRole('button', { name: /Save$/ }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(writesOf(calls)[0].body).toEqual({
+      username: 'reviewer',
+      roleIds: ['3'],
+      superAdmin: true,
+    });
+  });
+
+  it('cannot be saved for a row that arrived without its roles or its user name: nothing is sent', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    open(row({ roles: undefined }));
+    const box = within(await dialog());
+    await waitFor(() => expect(rolesBox(box)).toBeEnabled());
+    await user.click(box.getByRole('switch', { name: 'Super administrator' }));
+    expect(box.getByRole('button', { name: /Save$/ })).toBeDisabled();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('says the sentence for another row after a 409 in the dialog, never the words of the backend', async () => {
+    backend();
+    overrideFetch(({ url, method }) =>
+      method === 'PUT' && url.pathname.startsWith('/api/admin/admins/')
+        ? jsonAnswer(409, 'INVALID_STATE', { status: 'ACTIVE' }, 'LEAK-last super words')
+        : undefined,
+    );
+    const user = userEvent.setup();
+    open(row());
+    const box = within(await dialog());
+    await waitFor(() => expect(rolesBox(box)).toBeEnabled());
+    await user.click(box.getByRole('switch', { name: 'Super administrator' }));
+    await user.click(box.getByRole('button', { name: /Save$/ }));
+    expect(
+      await box.findByText(/Possible reasons: it is the last enabled super administrator/),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('LEAK-');
   });
 });
 
@@ -1495,7 +1588,7 @@ describe('in Chinese', () => {
 describe('an administrator who is not a super administrator acts only on administrators within what they hold', () => {
   const HELD = ['ADMIN:MANAGE', 'USER:VIEW', 'STATS:VIEW'];
   const SENTENCE =
-    /administrators can only grant permissions they hold; and can only act on administrators whose permissions they all hold\./;
+    /administrators can only grant permissions they hold; they can only act on administrators whose permissions they all hold; and only a super administrator can act on a super administrator\./;
 
   it('shows the sentence of the rules after the text of the code when the backend refuses a row, never its words, and does not leave the page', async () => {
     signIn('support', { codes: HELD });

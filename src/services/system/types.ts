@@ -78,9 +78,10 @@ export type AdminCreateInput = {
 };
 
 /**
- * What the edit form may change. The username cannot be changed after creation, so it is not here.
- * `roleIds` is left out when the role list could not be read (sending `[]` would take every role away),
- * `superAdmin` is left out for an administrator who is not a super administrator.
+ * What the edit form changes. The user name cannot be changed in the form, so it is not here; an update
+ * repeats it, and the current roles when `roleIds` is not here (see `adminPatchBody`). `roleIds` is
+ * left out when the role list could not be read, `superAdmin` for an administrator who is not a super
+ * administrator and when the flag did not change.
  */
 export type AdminPatch = { roleIds?: string[]; superAdmin?: boolean };
 

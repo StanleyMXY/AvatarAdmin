@@ -20,9 +20,9 @@ import {
 // roles, the writes of the permission tree (the read is in system.permissions.mock.ts) and the audit
 // log. The protections are the contract's: nobody changes their own roles or super administrator
 // flag, disables or deletes themselves, or takes the last enabled super administrator away; only a
-// super administrator sets or clears the flag. The contract gives no error code for them, so the
-// mock answers 403 ADMIN_FORBIDDEN for what is about the person themselves and 409 INVALID_STATE for
-// the last super administrator (see docs/contract-requests/2026-10-26-admin-frontend-system.md).
+// super administrator sets or clears the flag. The backend answers all of those protections 409
+// INVALID_STATE with `data.status` (its answer 22; 403 ADMIN_FORBIDDEN is for the rules about what the
+// operator holds and about super administrators), and the 409 does not say which rule it was.
 
 type Detail = { ref: string; reason: string };
 const refuse = (details: Detail[]): never => {
@@ -67,6 +67,17 @@ const requireHoldsTarget = (operator: MockAdmin, target: MockAdmin): void =>
   requireHolds(operator, heldCodes(target), SCOPE.admin);
 const duplicate = (field: string): never => {
   throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The value exists already', { field });
+};
+/** 409 INVALID_STATE with the current status of the target: the own account, the last super administrator. */
+const invalidState = (target: MockAdmin): never => {
+  throw new MockHttpError(
+    409,
+    'INVALID_STATE',
+    'The state of the administrator does not allow this',
+    {
+      status: target.status,
+    },
+  );
 };
 const notFound = (what: string): never => {
   throw new MockHttpError(404, 'RESOURCE_NOT_FOUND', `${what} is not there`);
@@ -195,53 +206,69 @@ export default {
     return ok(adminView(admin));
   }),
 
+  // The update repeats the user name and the whole list of roles every time (backend answer 44): a
+  // missing one is a 400, not "keep it". The flag is optional; the same value is not a change. The
+  // order is the contract's (2392): the target exists, 403 for a super administrator target and for a
+  // target with codes the operator lacks, the input, 403 for the flag and the roles handed out, 409 for
+  // the own account (a changed set of roles or a changed flag), 409 for the last super administrator.
   'PUT /api/admin/admins/:id': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
     const body = bodyOf(req);
-    const touchesRoles = body.roleIds !== undefined;
-    const touchesFlag = body.superAdmin !== undefined;
     requireHoldsTarget(req.admin, admin);
-    if (admin.id === req.admin.id && (touchesRoles || touchesFlag))
-      forbidden('An administrator cannot change their own roles or super administrator flag');
-    if (touchesFlag && typeof body.superAdmin !== 'boolean')
+    const username = textOf(body.username);
+    if (username === '') refuse([{ ref: 'username', reason: 'EMPTY_NOT_ALLOWED' }]);
+    if (body.roleIds === undefined || body.roleIds === null)
+      refuse([{ ref: 'roleIds', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const roleIds = roleIdsOf(body.roleIds);
+    const given = body.superAdmin;
+    if (given !== undefined && given !== null && typeof given !== 'boolean')
       refuse([{ ref: 'superAdmin', reason: 'NOT_BOOLEAN' }]);
-    if (touchesFlag && !req.admin.superAdmin)
+    const current = extraOf(admin).roleIds;
+    const rolesChanged =
+      roleIds.length !== current.length || !roleIds.every((id) => current.includes(id));
+    const flagChanged = typeof given === 'boolean' && given !== Boolean(admin.superAdmin);
+    if (flagChanged && !req.admin.superAdmin)
       forbidden('Only a super administrator sets or clears the super administrator flag');
-    const roleIds = touchesRoles ? roleIdsOf(body.roleIds) : undefined;
-    if (roleIds) requireHolds(req.admin, codesOfRoles(roleIds), SCOPE.grant);
+    if (rolesChanged) requireHolds(req.admin, codesOfRoles(roleIds), SCOPE.grant);
+    if ((rolesChanged || flagChanged) && admin.id === req.admin.id) invalidState(admin);
+    if (flagChanged && given === false && admin.superAdmin && isLastEnabledSuper(admin.id))
+      invalidState(admin);
     if (
-      touchesFlag &&
-      body.superAdmin === false &&
-      admin.superAdmin &&
-      isLastEnabledSuper(admin.id)
+      [...store.admins.values()].some(
+        (a) => a.id !== admin.id && a.username.toLowerCase() === username.toLowerCase(),
+      )
     )
-      throw new MockHttpError(409, 'INVALID_STATE', 'The last enabled super administrator', {
-        status: admin.status,
-      });
+      duplicate('username');
     const before = adminView(admin);
-    if (roleIds) extraOf(admin).roleIds = roleIds;
-    if (touchesFlag) admin.superAdmin = body.superAdmin as boolean;
-    syncPermissions(admin);
+    if (rolesChanged) extraOf(admin).roleIds = roleIds;
+    if (flagChanged) admin.superAdmin = given as boolean;
+    admin.username = username;
+    if (rolesChanged || flagChanged) syncPermissions(admin);
     writeAudit(req.admin, 'ADMIN_UPDATE', 'ADMIN', admin.id, {
-      roleIds: roleIds ? { old: before.roles.map((r) => r.id), new: roleIds } : undefined,
-      superAdmin: touchesFlag ? { old: before.superAdmin, new: admin.superAdmin } : undefined,
+      username: username !== before.username ? { old: before.username, new: username } : undefined,
+      roleIds: rolesChanged ? { old: before.roles.map((r) => r.id), new: roleIds } : undefined,
+      superAdmin: flagChanged ? { old: before.superAdmin, new: admin.superAdmin } : undefined,
     });
     return ok(adminView(admin));
   }),
 
+  // The status is checked first, then the administrator is looked up (backend answer 1), then the
+  // protections: the own account answers 409 for either value, the last enabled super administrator
+  // for DISABLED.
   'POST /api/admin/admins/:id/status': guard('ADMIN:MANAGE', (req) => {
-    const admin = adminOrFail(req.params.id);
-    requireHoldsTarget(req.admin, admin);
     const status = bodyOf(req).status;
     if (status !== 'ACTIVE' && status !== 'DISABLED')
       refuse([{ ref: 'status', reason: 'OUT_OF_RANGE' }]);
-    if (status === 'DISABLED') {
-      if (admin.id === req.admin.id) forbidden('An administrator cannot disable themselves');
-      if (admin.superAdmin && admin.status === 'ACTIVE' && isLastEnabledSuper(admin.id))
-        throw new MockHttpError(409, 'INVALID_STATE', 'The last enabled super administrator', {
-          status: admin.status,
-        });
-    }
+    const admin = adminOrFail(req.params.id);
+    requireHoldsTarget(req.admin, admin);
+    if (admin.id === req.admin.id) invalidState(admin);
+    if (
+      status === 'DISABLED' &&
+      admin.superAdmin &&
+      admin.status === 'ACTIVE' &&
+      isLastEnabledSuper(admin.id)
+    )
+      invalidState(admin);
     admin.status = status as 'ACTIVE' | 'DISABLED';
     // A disabled administrator's tokens are void at once.
     if (status === 'DISABLED') admin.tokenVersion += 1;
@@ -275,11 +302,9 @@ export default {
   'DELETE /api/admin/admins/:id': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
     requireHoldsTarget(req.admin, admin);
-    if (admin.id === req.admin.id) forbidden('An administrator cannot delete themselves');
+    if (admin.id === req.admin.id) invalidState(admin);
     if (admin.superAdmin && admin.status === 'ACTIVE' && isLastEnabledSuper(admin.id))
-      throw new MockHttpError(409, 'INVALID_STATE', 'The last enabled super administrator', {
-        status: admin.status,
-      });
+      invalidState(admin);
     store.admins.delete(admin.id);
     systemState.extras.delete(admin.id);
     // The audit rows of the administrator stay, with the name they were written with.

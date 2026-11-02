@@ -18,7 +18,7 @@ import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { checkNewPassword, type RowProtection } from './adminRules';
 import { failureToForm, failureView } from './formFailure';
-import { withScopeHint } from './texts';
+import { withScopeHint, withStateHint } from './texts';
 
 type Values = {
   username: string;
@@ -50,8 +50,11 @@ const sameSet = (a: readonly string[], b: readonly string[]) =>
  * - The user name is typed once, at creation; afterwards it is shown and cannot be changed.
  * - The initial password goes to the server as typed. It is not kept: the form is emptied of it as
  *   soon as the request has gone, and nothing of the answer is read for a password.
- * - On the own row the roles and the flag are disabled and nothing of them is sent (the service
- *   leaves them out too). The flag is for a super administrator only, and cannot be cleared on the last
+ * - An update always sends the user name and the whole list of roles of the row, the current ones when
+ *   they were not changed (the backend reads a missing one as an error, and `[]` as "no role"); the
+ *   flag goes only when it was changed.
+ * - On the own row the roles and the flag are disabled and the current roles are sent back as they
+ *   are (the service sends no flag). The flag is for a super administrator only, and cannot be cleared on the last
  *   enabled super administrator. The roles come from `GET /roles`; when they cannot be read the choice
  *   is disabled and the roles are not sent.
  */
@@ -83,7 +86,13 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
   const flagLocked = protection.own || !canSetSuper || protection.lastSuper;
   const rolesChanged = !rolesLocked && !sameSet(chosenRoles, original);
   const flagChanged = !flagLocked && chosenSuper !== (admin?.superAdmin ?? false);
-  const nothingToSave = !creating && !rolesChanged && !flagChanged;
+  // An update repeats the user name and the current roles: a row without them cannot be saved safely.
+  const rowReadable =
+    creating ||
+    (typeof admin.username === 'string' &&
+      Array.isArray(admin.roles) &&
+      admin.roles.every((r) => typeof r?.id === 'string'));
+  const nothingToSave = !creating && (!rowReadable || (!rolesChanged && !flagChanged));
 
   const forbidden =
     roles.error instanceof ApiError &&
@@ -117,7 +126,8 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
         const patch: AdminPatch = {};
         if (rolesChanged) patch.roleIds = values.roleIds ?? [];
         if (flagChanged) patch.superAdmin = values.superAdmin === true;
-        await updateAdmin(admin, patch, me);
+        // An update repeats the user name and the current roles of the row (backend answer 44).
+        await updateAdmin({ id: admin.id, username: admin.username, roleIds: original }, patch, me);
         message.success(t('system.common.saved'));
       }
       // The dialog is unmounted by `onClose`: the form, and the password in it, is gone with it.
@@ -127,7 +137,9 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
       failureToForm(intl, form, error, FIELDS);
       show((words) => {
         const { text } = failureView(words, error, FIELDS);
-        return text === null ? null : withScopeHint(words, error, text);
+        return text === null
+          ? null
+          : withStateHint(words, error, withScopeHint(words, error, text), protection.own);
       });
     }
   });

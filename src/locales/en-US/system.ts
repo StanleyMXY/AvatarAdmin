@@ -24,10 +24,12 @@ const messages: Record<string, string> = {
   // ---- administrators ----
   'system.admins.note':
     'You cannot change your own roles, super administrator flag or status, and you cannot delete your own account. The last enabled super administrator cannot be disabled or deleted, and its flag cannot be cleared. Only a super administrator sets or clears the super administrator flag.',
-  'system.admins.refusedHint':
-    'The backend refused this and nothing was changed. Possible reasons: it is your own account; it is the last enabled super administrator; or the account was changed by someone else meanwhile (read the list again).',
+  'system.admins.refusedOwnHint':
+    'The backend refused this and nothing was changed. This is your own account: you cannot change your own roles or super administrator flag, and you cannot disable or delete yourself.',
+  'system.admins.refusedOtherHint':
+    'The backend refused this and nothing was changed. Possible reasons: it is the last enabled super administrator (it cannot be disabled or deleted, and its flag cannot be cleared); or the account was changed by someone else meanwhile (read the list again).',
   'system.admins.forbiddenHint':
-    'The backend refused this and nothing was changed. Possible reasons: it is your own account; administrators can only grant permissions they hold; and can only act on administrators whose permissions they all hold.',
+    'The backend refused this and nothing was changed. Possible reasons: administrators can only grant permissions they hold; they can only act on administrators whose permissions they all hold; and only a super administrator can act on a super administrator.',
   'system.admins.new': 'New administrator',
   'system.admins.you': 'You',
   'system.admins.col.username': 'User name',
