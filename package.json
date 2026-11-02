@@ -16,6 +16,7 @@
     "check:config-keys": "tsx scripts/check-config-keys.ts",
     "gen:permission-tree": "tsx scripts/gen-permission-tree.ts",
     "gen:config-keys": "tsx scripts/gen-config-keys.ts",
+    "gen:error-codes": "tsx scripts/gen-error-codes.ts",
     "postinstall": "max setup",
     "prepare": "husky"
   },

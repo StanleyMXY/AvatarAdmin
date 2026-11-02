@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { reasonCodes } from '../../scripts/contractErrors';
+import { errorTable, NEXT_CONTRACT, readContract, reasonCodes } from '../../scripts/contractErrors';
 import enError from './en-US/error';
 import enReason from './en-US/reason';
 import codes from './errorCodes.generated.json';
@@ -8,9 +8,13 @@ import zhError from './zh-CN/error';
 import zhReason from './zh-CN/reason';
 
 // The reason codes the contract defines in its table 1.4 (not a list written here).
-const REASON_CODES = reasonCodes(
-  readFileSync('docs/shared-snapshots/backend-task-java-backend.md', 'utf8'),
-);
+const REASON_CODES = reasonCodes(readContract());
+
+// The codes of the version of the contract that the snapshot does not have yet (NEXT_CONTRACT): the
+// texts exist before it is adopted, so replacing the snapshot does not fail a test for a missing text.
+const NEXT_ERROR_CODES = errorTable(readContract(NEXT_CONTRACT)).codes;
+const ALL_ERROR_CODES = [...new Set([...codes, ...NEXT_ERROR_CODES])];
+const ALL_REASON_CODES = REASON_CODES;
 
 const LOCAL_CODES = [
   'NETWORK_ERROR',
@@ -64,11 +68,18 @@ describe.each(LANGUAGES)('%s error and reason texts', (_name, error, reason) => 
     expect(reason[`reason.${code}`]?.trim()).toBeTruthy();
   });
 
-  it('has no entries other than the contract codes, the local codes and the reason codes', () => {
+  it.each(NEXT_ERROR_CODES)(
+    'has a non-empty text for error.%s of the new contract version',
+    (code) => {
+      expect(error[`error.${code}`]?.trim()).toBeTruthy();
+    },
+  );
+
+  it('has no entries other than the codes of the contract (snapshot and new version), the local codes and the reason codes', () => {
     expect(Object.keys(error).sort()).toEqual(
-      [...codes, ...LOCAL_CODES].map((c) => `error.${c}`).sort(),
+      [...ALL_ERROR_CODES, ...LOCAL_CODES].map((c) => `error.${c}`).sort(),
     );
-    expect(Object.keys(reason).sort()).toEqual(REASON_CODES.map((c) => `reason.${c}`).sort());
+    expect(Object.keys(reason).sort()).toEqual(ALL_REASON_CODES.map((c) => `reason.${c}`).sort());
   });
 });
 
