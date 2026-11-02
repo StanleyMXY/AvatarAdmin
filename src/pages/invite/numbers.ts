@@ -23,3 +23,21 @@ export function rateOf(n: unknown, d: unknown): number | null {
   if (top === null || bottom === null || bottom === 0) return null;
   return top / bottom;
 }
+
+/**
+ * `field` over `previous` summed only over the rows that have a valid count for both, then
+ * divided; null when no row has both or the earlier sum is 0. A day whose earlier step is not known
+ * (null: its events expired) is left out of both sums, so it does not raise the ratio by adding a
+ * numerator to a denominator that has no such day.
+ */
+export function pairedRate<T extends Record<string, unknown>>(
+  rows: readonly T[],
+  field: keyof T,
+  previous: keyof T,
+): number | null {
+  const both = rows.filter((row) => count(row[field]) !== null && count(row[previous]) !== null);
+  return rateOf(
+    sumCounts(both.map((row) => row[field])),
+    sumCounts(both.map((row) => row[previous])),
+  );
+}

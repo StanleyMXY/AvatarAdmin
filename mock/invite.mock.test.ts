@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetConfigStore, saved } from './_core/configStore';
-import { FIXTURE, inviteData, resetInviteStore } from './_core/inviteData';
+import {
+  EVENT_SOURCE_DAYS,
+  FIXTURE,
+  inviteData,
+  inviteLimits,
+  resetInviteStore,
+} from './_core/inviteData';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
 import invite from './invite.mock';
@@ -289,12 +295,12 @@ describe('GET /invites/depth-stats', () => {
     expect(data.totalChains).toBeLessThanOrEqual(total);
   });
 
-  it('has null averages and no chains for a range without invitations', async () => {
+  it('has a null average, a deepest chain of 0 (a number, not null) and no chains for a range without invitations (answer 116)', async () => {
     const { body } = await get(DEPTH, 'root', { from: '2000-01-01', to: '2000-01-02' });
     expect(body.data).toEqual({
       depthDistribution: [],
       avgDepth: null,
-      maxDepth: null,
+      maxDepth: 0,
       totalChains: 0,
     });
   });
@@ -323,6 +329,45 @@ describe('GET /invites/chain', () => {
     };
     collect(data.children);
     expect(labels.length).toBeGreaterThan(0);
+  });
+
+  it('does not cut the chain, and says truncated false, when it has fewer nodes than the limit', async () => {
+    const { body } = await get(CHAIN, 'root', { rootAccountId: FIXTURE.deepRoot });
+    expect(body.data.truncated).toBe(false);
+    expect(Object.keys(body.data).sort()).toEqual(
+      ['children', 'maxDepth', 'root', 'totalDescendants', 'truncated'].sort(),
+    );
+  });
+
+  it('returns at most 10000 nodes (answer 73): the shallow levels first, then the earliest invited under one inviter; truncated is true, totalDescendants stays the whole count and maxDepth is the deepest level returned', async () => {
+    expect(inviteLimits.chainNodes).toBe(10000);
+    const whole = await get(CHAIN, 'root', { rootAccountId: FIXTURE.deepRoot, maxDepth: '5' });
+    expect(whole.body.data.truncated).toBe(false);
+    const total = whole.body.data.totalDescendants as number;
+    expect(total).toBeGreaterThan(5);
+    inviteLimits.chainNodes = 4;
+    const cut = await get(CHAIN, 'root', { rootAccountId: FIXTURE.deepRoot, maxDepth: '5' });
+    const count = (nodes: { children?: unknown[] }[]): number =>
+      nodes.reduce((n, node) => n + 1 + count((node.children ?? []) as typeof nodes), 0);
+    expect(cut.body.data.truncated).toBe(true);
+    expect(cut.body.data.totalDescendants).toBe(total);
+    expect(count(cut.body.data.children)).toBe(4);
+    // every node kept is at least as shallow as any node left out: the deepest kept level is not
+    // deeper than the level the cut falls in
+    const levels = (nodes: { children?: unknown[] }[], depth = 1): number =>
+      nodes.reduce(
+        (deepest, node) =>
+          Math.max(deepest, levels((node.children ?? []) as typeof nodes, depth + 1), depth),
+        0,
+      );
+    expect(cut.body.data.maxDepth).toBe(levels(cut.body.data.children));
+    expect(cut.body.data.maxDepth).toBeLessThan(whole.body.data.maxDepth);
+    // a limit equal to the count is not a cut
+    inviteLimits.chainNodes = total;
+    expect(
+      (await get(CHAIN, 'root', { rootAccountId: FIXTURE.deepRoot, maxDepth: '5' })).body.data
+        .truncated,
+    ).toBe(false);
   });
 
   it('goes deeper with maxDepth and reports the depth really reached', async () => {
@@ -396,9 +441,35 @@ describe('GET /invites/share-funnel', () => {
     }
   });
 
+  it('has the six numbers null, and only registered, for a day whose events are past the event log (answer 36)', async () => {
+    const { body } = await get(FUNNEL, 'root', wide());
+    const rows = body.data.items as Record<string, number | null | string>[];
+    const edge = dayShift(today(), -EVENT_SOURCE_DAYS);
+    const expired = rows.filter((r) => (r.statDate as string) < edge);
+    const fresh = rows.filter((r) => (r.statDate as string) >= edge);
+    expect(expired.length).toBeGreaterThan(3);
+    expect(fresh.length).toBeGreaterThan(3);
+    const six = [
+      'sharePv',
+      'shareUv',
+      'linkClickPv',
+      'linkClickUv',
+      'downloadClickPv',
+      'downloadClickUv',
+    ];
+    for (const r of expired) {
+      for (const field of six)
+        expect([r.statDate, field, r[field]]).toEqual([r.statDate, field, null]);
+      expect(typeof r.registered).toBe('number');
+    }
+    for (const r of fresh) for (const field of six) expect(typeof r[field]).toBe('number');
+  });
+
   it('never has more unique people than page views in a row', async () => {
     const { body } = await get(FUNNEL, 'root', wide());
-    for (const r of body.data.items) {
+    for (const r of body.data.items.filter(
+      (row: { sharePv: number | null }) => row.sharePv !== null,
+    )) {
       expect(r.shareUv).toBeLessThanOrEqual(r.sharePv);
       expect(r.linkClickUv).toBeLessThanOrEqual(r.linkClickPv);
       expect(r.downloadClickUv).toBeLessThanOrEqual(r.downloadClickPv);

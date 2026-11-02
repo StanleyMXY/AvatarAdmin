@@ -7,7 +7,7 @@ import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { plainText } from '../../utils/plainText';
 import { formatCount, formatPercent } from '../../utils/ratio';
-import { count, rateOf, sumCounts } from './numbers';
+import { count, pairedRate, sumCounts } from './numbers';
 
 type Props = { rows: ShareFunnelRow[]; from: string; to: string };
 
@@ -33,8 +33,10 @@ export function ShareFunnelTab({ rows, from, to }: Props) {
   const funnel = STEPS.map(({ step }, index) => {
     const stage = t(step);
     const shown = formatCount(sums[index], intl.locale);
+    // a step is set against the step before it over the days that have both (a day whose events
+    // expired has only the sign-ups)
     const ratio = formatPercent(
-      index === 0 ? null : rateOf(sums[index], sums[index - 1]),
+      index === 0 ? null : pairedRate(rows, STEPS[index].field, STEPS[index - 1].field),
       intl.locale,
     );
     return {

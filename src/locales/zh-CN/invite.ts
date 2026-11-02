@@ -69,6 +69,8 @@ const messages: Record<string, string> = {
   'invite.chain.fieldFailure': '{field}：{reason}',
   'invite.chain.load': '载入邀请链',
   'invite.chain.idle': '输入账号 ID 后载入它的邀请链。',
+  'invite.chain.truncated':
+    '只显示了前 {limit} 个节点（先显示层数浅的）；这个账号的后代共 {total} 人。',
   'invite.chain.summary': '后代 {count} 人，实际深度 {depth} 级',
 
   'invite.share.tab.overview': '总览',

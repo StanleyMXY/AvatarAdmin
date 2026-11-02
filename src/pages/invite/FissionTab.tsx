@@ -2,6 +2,7 @@ import { QuestionCircleOutlined } from '@ant-design/icons';
 import { Column } from '@ant-design/plots';
 import { useIntl } from '@umijs/max';
 import {
+  Alert,
   Button,
   Card,
   Empty,
@@ -24,7 +25,7 @@ import { useThemeMode } from '../../theme/modes';
 import { formatInstant } from '../../utils/format';
 import { DASH, formatCount } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
-import { chainFailureText, checkDepth } from './chainRules';
+import { CHAIN_NODE_LIMIT, chainFailureText, checkDepth } from './chainRules';
 import { descendantsOf, levelsBelow, type TreeRow, treeRows } from './chainTree';
 import { count } from './numbers';
 
@@ -108,6 +109,10 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
     }));
   }, [stats, intl]);
 
+  const noInvitees =
+    !Array.isArray(stats?.depthDistribution) ||
+    stats.depthDistribution.length === 0 ||
+    stats.totalChains === 0;
   const average = count(stats?.avgDepth);
   const numbers = stats
     ? [
@@ -125,7 +130,9 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
         {
           name: 'maxDepth',
           title: t('invite.fission.maxDepth'),
-          value: formatCount(count(stats.maxDepth), intl.locale),
+          // With nobody invited the backend sends maxDepth 0, a number (answer 116): the empty
+          // distribution or no chains is what says there is no deepest chain, not a null.
+          value: noInvitees ? DASH : formatCount(count(stats.maxDepth), intl.locale),
         },
         {
           name: 'totalChains',
@@ -283,6 +290,17 @@ export function FissionTab({ from, to, form, limit, onForm, onLoadChain }: Props
               <Typography.Text strong data-testid="invite-chain-summary">
                 {t('invite.chain.summary', { count: total, depth: reached })}
               </Typography.Text>
+              {loadedChain.truncated === true ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  data-testid="invite-chain-truncated"
+                  title={t('invite.chain.truncated', {
+                    limit: formatCount(CHAIN_NODE_LIMIT, intl.locale),
+                    total: formatCount(total, intl.locale),
+                  })}
+                />
+              ) : null}
               <div data-testid="invite-chain-tree">
                 <Tree
                   key={applied?.nonce}
