@@ -146,7 +146,7 @@ function CreditCostCell({
     <Space size={4}>
       <InputNumber
         aria-label={t('subscriptions.gates.creditCostOf', { key: gate.key })}
-        min={0}
+        min={1}
         precision={0}
         style={{ width: 110 }}
         placeholder="—"

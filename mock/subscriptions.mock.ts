@@ -458,21 +458,23 @@ export default {
     return ok(gate);
   }),
 
+  // Backend reply 105: { creditCost: whole number from 1, or null }; the field has to be there; a price
+  // can be set on assets.avatar_max and assets.voice_max only (any other switch: 400 OUT_OF_RANGE on
+  // creditCost), clearing it (null) is allowed on every switch; the answer is data null.
   'PUT /api/admin/feature-gates/:key/credit-cost': guard('SUBSCRIPTION:CONFIG', (req) => {
     const gate = gateOf(req.params.key ?? '');
     if (!gate) throw notFound('feature switch');
     const cost = bodyOf(req).creditCost;
-    if (cost !== null && cost !== undefined) {
+    if (cost === undefined) throw bad('creditCost', 'EMPTY_NOT_ALLOWED');
+    if (cost !== null) {
       if (typeof cost !== 'number' || !Number.isInteger(cost))
         throw bad('creditCost', 'NOT_AN_INTEGER');
-      if (cost < 0 || cost > 1_000_000) throw bad('creditCost', 'OUT_OF_RANGE');
+      if (cost < 1) throw bad('creditCost', 'OUT_OF_RANGE');
+      if (!['assets.avatar_max', 'assets.voice_max'].includes(gate.key))
+        throw bad('creditCost', 'OUT_OF_RANGE');
     }
-    // only a permanent limit can be bought with credits; avatar.looks_max and credits.period_grant never
-    const buyable =
-      gate.kind === 'LIMIT' && gate.limitScope === 'PERMANENT' && gate.key !== 'avatar.looks_max';
-    if (!buyable && cost !== null && cost !== undefined) throw bad('creditCost', 'OUT_OF_RANGE');
-    gate.creditCost = cost ?? null;
-    return ok(gate);
+    gate.creditCost = cost;
+    return ok(null);
   }),
 
   'GET /api/admin/subscription-products': guard('SUBSCRIPTION:VIEW', () =>

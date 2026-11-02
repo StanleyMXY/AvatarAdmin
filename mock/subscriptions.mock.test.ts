@@ -518,25 +518,50 @@ describe('feature gates', () => {
     expect((await put('nope', { mode: 'UNSET' })).status).toBe(404);
   });
 
-  it('sets a credit price only on a permanent LIMIT, other than avatar.looks_max', async () => {
-    const put = (key: string, creditCost: number | null) =>
-      send('PUT /api/admin/feature-gates/:key/credit-cost', root(), { creditCost }, { key });
-    expect((await put('assets.voice_max', 12)).status).toBe(200);
-    expect(subscriptionsState().gates.find((g) => g.key === 'assets.voice_max')?.creditCost).toBe(
-      12,
-    );
-    expect((await put('assets.voice_max', null)).status).toBe(200);
-    expect(
-      subscriptionsState().gates.find((g) => g.key === 'assets.voice_max')?.creditCost,
-    ).toBeNull();
-    expect((await put('avatar.looks_max', 5)).status).toBe(400);
-    expect((await put('credits.period_grant', 5)).status).toBe(400);
-    expect((await put('call.daily_minutes', 5)).status).toBe(400);
-    expect((await put('ads.removed', 5)).status).toBe(400);
-    expect((await put('assets.avatar_max', -1)).body.data.details[0].reason).toBe('OUT_OF_RANGE');
-    expect((await put('assets.avatar_max', 1.5)).body.data.details[0].reason).toBe(
-      'NOT_AN_INTEGER',
-    );
+  it('sets a credit price only on assets.avatar_max and assets.voice_max, clears it with null on any switch, and answers data null', async () => {
+    const put = (key: string, body: unknown) =>
+      send('PUT /api/admin/feature-gates/:key/credit-cost', root(), body, { key });
+    const price = (key: string) =>
+      subscriptionsState().gates.find((g) => g.key === key)?.creditCost;
+    const set = await put('assets.voice_max', { creditCost: 12 });
+    expect(set.status).toBe(200);
+    expect(set.body.data).toBeNull();
+    expect(price('assets.voice_max')).toBe(12);
+    expect((await put('assets.voice_max', { creditCost: null })).status).toBe(200);
+    expect(price('assets.voice_max')).toBeNull();
+    for (const key of [
+      'avatar.looks_max',
+      'credits.period_grant',
+      'call.daily_minutes',
+      'call.lifetime_minutes',
+      'chat.daily_messages',
+      'ads.removed',
+      'memory.tier',
+    ]) {
+      const refused = await put(key, { creditCost: 5 });
+      expect(refused.status, key).toBe(400);
+      expect(refused.body.data.details, key).toEqual([
+        { ref: 'creditCost', reason: 'OUT_OF_RANGE' },
+      ]);
+      // clearing is allowed everywhere
+      expect((await put(key, { creditCost: null })).status, key).toBe(200);
+    }
+    expect((await put('nope', { creditCost: 5 })).status).toBe(404);
+  });
+
+  it('wants a whole number from 1 with no upper limit, and a creditCost that is there (null or a number)', async () => {
+    const put = (body: unknown) =>
+      send('PUT /api/admin/feature-gates/:key/credit-cost', root(), body, {
+        key: 'assets.avatar_max',
+      });
+    expect((await put({ creditCost: 0 })).body.data.details[0].reason).toBe('OUT_OF_RANGE');
+    expect((await put({ creditCost: -1 })).body.data.details[0].reason).toBe('OUT_OF_RANGE');
+    expect((await put({ creditCost: 1.5 })).body.data.details[0].reason).toBe('NOT_AN_INTEGER');
+    expect((await put({ creditCost: 1 })).status).toBe(200);
+    expect((await put({ creditCost: 5_000_000 })).status).toBe(200);
+    const missing = await put({});
+    expect(missing.status).toBe(400);
+    expect(missing.body.data.details).toEqual([{ ref: 'creditCost', reason: 'EMPTY_NOT_ALLOWED' }]);
   });
 });
 

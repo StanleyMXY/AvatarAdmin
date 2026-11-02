@@ -107,9 +107,13 @@ export const saveGateDefault = (key: string, value: FeatureValue): Promise<Featu
     body: featureValueBody(value),
   });
 
-/** `PUT /feature-gates/{key}/credit-cost`: credits for one more unit; null means it cannot be bought. */
-export const saveGateCreditCost = (key: string, creditCost: number | null): Promise<FeatureGate> =>
-  apiRequest<FeatureGate>({
+/**
+ * `PUT /feature-gates/{key}/credit-cost`: credits for one more unit (a whole number from 1); null
+ * means it cannot be bought. Only `assets.avatar_max` and `assets.voice_max` take a price; the
+ * answer is `data: null`, so the switches are read again.
+ */
+export const saveGateCreditCost = (key: string, creditCost: number | null): Promise<null> =>
+  apiRequest<null>({
     method: 'PUT',
     url: `/feature-gates/${enc(key)}/credit-cost`,
     body: { creditCost },
