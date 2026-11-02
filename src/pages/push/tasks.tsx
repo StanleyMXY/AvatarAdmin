@@ -16,7 +16,7 @@ import { DASH } from '../../utils/ratio';
 import { supportedLocalesOf } from './coverage';
 import { TaskModal } from './TaskModal';
 
-/** 手动推送任务 (`PUSH:SEND`): one-off pushes to an audience, now or at a time. Only a waiting task can be cancelled. */
+/** 手动推送任务 (`PUSH:SEND`): one-off pushes to an audience, now or at a time. A task that is waiting or running can be cancelled (a running one stops at its next step; what was sent stays counted). */
 export default function TasksPage() {
   const intl = useIntl();
   const { message } = App.useApp();
@@ -114,7 +114,7 @@ export default function TasksPage() {
       valueType: 'option',
       ...ACTIONS_COLUMN,
       render: (_, row) =>
-        canSend && row.status === 'PENDING' ? (
+        canSend && (row.status === 'PENDING' || row.status === 'RUNNING') ? (
           <RowActions
             actions={[
               {

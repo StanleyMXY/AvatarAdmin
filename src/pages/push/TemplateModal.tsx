@@ -58,6 +58,8 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
   const [form] = Form.useForm<Values>();
   const { text: failure, failWith, clear } = useFailure();
   const [rejected, setRejected] = useState(false);
+  // The picture is to be taken away on save (a new upload wins over it).
+  const [removeImage, setRemoveImage] = useState(false);
   const picture = useUploadSlot();
   const editing = template !== null;
 
@@ -65,12 +67,17 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
     clear();
     if (rejected && !picture.uploadId) return;
     const fields = {
-      ...contentFields(values, picture.uploadId),
+      ...contentFields(values, picture.uploadId ?? (removeImage ? null : undefined)),
       enabled: values.enabled,
     };
     try {
       if (template) {
-        await updateTemplate(template.id, fields);
+        // A PUT replaces the whole row: the key (fixed in this form) and `enabled` go in every one.
+        await updateTemplate(template.id, {
+          ...fields,
+          triggerReason: template.triggerReason,
+          locale: template.locale,
+        });
       } else {
         await createTemplate({
           ...fields,
@@ -108,6 +115,7 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
         picture.reset();
         clear();
         setRejected(false);
+        setRemoveImage(false);
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}
@@ -182,7 +190,13 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
             <Input disabled={editing} dir="auto" />
           )}
         </Form.Item>
-        <ContentFields slot={picture} currentImageUrl={template?.imageUrl} rejected={rejected} />
+        <ContentFields
+          slot={picture}
+          currentImageUrl={template?.imageUrl}
+          rejected={rejected}
+          removeImage={removeImage}
+          onRemoveChange={editing ? setRemoveImage : undefined}
+        />
         <Form.Item name="enabled" label={t('push.templates.enabled')} valuePropName="checked">
           <Switch />
         </Form.Item>

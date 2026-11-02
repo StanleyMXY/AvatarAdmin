@@ -9,7 +9,6 @@ import {
   deleteSchedule,
   deleteTemplate,
   getRecord,
-  listAllTemplates,
   listRecords,
   listSchedules,
   listTasks,
@@ -29,14 +28,18 @@ const answer = (data: unknown) => stubFetch(() => jsonResponse(200, envelope('20
 const body = (call: { init: RequestInit }) => JSON.parse(call.init.body as string);
 
 describe('the templates', () => {
-  it('lists with the paging and creates, updates and deletes by id', async () => {
-    const calls = answer({ items: [{ id: '1' }], total: 1 });
-    expect(await listTemplates({ page: 2, pageSize: 50 })).toEqual({
+  it('reads the list once, with no paging, and gives the rows and missingLocales', async () => {
+    const calls = answer({ items: [{ id: '1' }], missingLocales: { daily_recall: ['th'] } });
+    expect(await listTemplates()).toEqual({
       items: [{ id: '1' }],
-      total: 1,
+      missingLocales: { daily_recall: ['th'] },
     });
-    expect(calls[0].url).toBe('/api/admin/push/templates?page=2&pageSize=50');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/admin/push/templates');
+  });
 
+  it('creates, updates and deletes by id; a PUT carries the key and the whole row', async () => {
+    const calls = answer({ id: '1' });
     await createTemplate({
       triggerReason: 'daily_recall',
       locale: 'th',
@@ -47,114 +50,70 @@ describe('the templates', () => {
       enabled: false,
       uploadId: 'up-1',
     });
-    expect(calls[1].url).toBe('/api/admin/push/templates');
-    expect(calls[1].init.method).toBe('POST');
-    expect(body(calls[1])).toMatchObject({
+    expect(calls[0].url).toBe('/api/admin/push/templates');
+    expect(calls[0].init.method).toBe('POST');
+    expect(body(calls[0])).toMatchObject({
       triggerReason: 'daily_recall',
       locale: 'th',
       uploadId: 'up-1',
     });
-    expect(body(calls[1])).not.toHaveProperty('imageUrl');
+    expect(body(calls[0])).not.toHaveProperty('imageUrl');
 
     await updateTemplate('7', {
+      triggerReason: 'daily_recall',
+      locale: 'th',
       title: 'x',
       body: 'y',
       linkType: 'SCREEN',
       linkTarget: 'store',
       enabled: true,
     });
-    expect(calls[2].url).toBe('/api/admin/push/templates/7');
-    expect(calls[2].init.method).toBe('PUT');
-    expect(body(calls[2])).toEqual({
+    expect(calls[1].url).toBe('/api/admin/push/templates/7');
+    expect(calls[1].init.method).toBe('PUT');
+    expect(body(calls[1])).toEqual({
+      triggerReason: 'daily_recall',
+      locale: 'th',
       title: 'x',
       body: 'y',
       linkType: 'SCREEN',
       linkTarget: 'store',
       enabled: true,
     });
+
+    await updateTemplate('7', {
+      triggerReason: 'daily_recall',
+      locale: 'th',
+      title: 'x',
+      body: 'y',
+      linkType: 'NONE',
+      linkTarget: '',
+      enabled: true,
+      uploadId: null,
+    });
+    expect(body(calls[2])).toHaveProperty('uploadId', null);
 
     await deleteTemplate('a/b');
     expect(calls[3].url).toBe('/api/admin/push/templates/a%2Fb');
     expect(calls[3].init.method).toBe('DELETE');
   });
 
-  it('reads every page of the templates for the matrix, and stops when it has them all', async () => {
+  // Answers 33: the backend ignores page and pageSize and sends the whole list for every page, so
+  // a second request would bring the same rows and a loop would never meet an empty page.
+  it('asks only once of a backend that answers the whole list for every page, and keeps every row', async () => {
     const all = Array.from({ length: 450 }, (_, n) => ({ id: String(n) }));
-    const calls = stubFetch((call) => {
-      const page = Number(new URL(call.url, 'http://x').searchParams.get('page'));
-      return jsonResponse(
-        200,
-        envelope('200', { items: all.slice((page - 1) * 200, page * 200), total: 450 }),
-      );
-    });
-    const { items: rows } = await listAllTemplates();
-    expect(rows).toHaveLength(450);
-    expect(calls.map((c) => c.url)).toEqual([
-      '/api/admin/push/templates?page=1&pageSize=200',
-      '/api/admin/push/templates?page=2&pageSize=200',
-      '/api/admin/push/templates?page=3&pageSize=200',
-    ]);
-  });
-
-  it('stops reading pages when a page comes back empty, so a wrong total cannot loop for ever', async () => {
-    const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: [], total: 999 })));
-    expect(await listAllTemplates()).toEqual({ items: [], missingLocales: null });
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: all })));
+    const { items } = await listTemplates();
+    expect(items).toHaveLength(450);
     expect(calls).toHaveLength(1);
   });
 
-  describe('an answer without total (the list of the backend has none: contract a14)', () => {
-    const rowsOf = (n: number) => Array.from({ length: n }, (_, i) => ({ id: String(i) }));
-    const pageOf = (call: { url: string }) => {
-      const query = new URL(call.url, 'http://x').searchParams;
-      return { page: Number(query.get('page')), size: Number(query.get('pageSize')) };
-    };
-
-    it('reads pages until one is shorter than the page size, and does not ask for one more', async () => {
-      const all = rowsOf(450);
-      const calls = stubFetch((call) => {
-        const { page, size } = pageOf(call);
-        return jsonResponse(
-          200,
-          envelope('200', { items: all.slice((page - 1) * size, page * size) }),
-        );
-      });
-      const { items } = await listAllTemplates();
-      expect(items).toHaveLength(450);
-      expect(calls).toHaveLength(3);
-    });
-
-    it('stops after one request when the first page is short', async () => {
-      const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: rowsOf(3) })));
-      expect((await listAllTemplates()).items).toHaveLength(3);
-      expect(calls).toHaveLength(1);
-    });
-
-    it('stops when a backend that does not page answers the whole list for every page, and keeps each row once', async () => {
-      const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: rowsOf(250) })));
-      const { items } = await listAllTemplates();
-      expect(items).toHaveLength(250);
-      expect(calls.length).toBeLessThanOrEqual(2);
-    });
-
-    it('stops at a page that brings no row it has not seen, however long the pages are', async () => {
-      const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: rowsOf(200) })));
-      expect((await listAllTemplates()).items).toHaveLength(200);
-      expect(calls.length).toBeLessThanOrEqual(2);
-    });
-
-    it('takes a total that is not a number as no total', async () => {
-      let asked = 0;
-      stubFetch(() => {
-        asked += 1;
-        // The same two rows for the first pages, then nothing: a total taken at its word would read all of them.
-        return jsonResponse(
-          200,
-          envelope('200', asked <= 3 ? { items: rowsOf(2), total: '99' } : { items: [] }),
-        );
-      });
-      expect((await listAllTemplates()).items).toHaveLength(2);
-      expect(asked).toBe(1);
-    });
+  it('reads no rows from an answer that has none or is not a list, without a second request', async () => {
+    const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: 'oops' })));
+    expect(await listTemplates()).toEqual({ items: [], missingLocales: null });
+    expect(calls).toHaveLength(1);
+    const empty = stubFetch(() => jsonResponse(200, envelope('200', null)));
+    expect(await listTemplates()).toEqual({ items: [], missingLocales: null });
+    expect(empty).toHaveLength(1);
   });
 
   it('keeps missingLocales of the answer next to the rows: the languages without an enabled template, for each recall reason', async () => {
@@ -165,8 +124,7 @@ describe('the templates', () => {
         envelope('200', { items: [{ id: '1' }], total: 1, missingLocales: missing }),
       ),
     );
-    expect(await listAllTemplates()).toEqual({ items: [{ id: '1' }], missingLocales: missing });
-    expect((await listTemplates({ page: 1, pageSize: 20 })).missingLocales).toEqual(missing);
+    expect(await listTemplates()).toEqual({ items: [{ id: '1' }], missingLocales: missing });
   });
 
   it.each([
@@ -180,7 +138,7 @@ describe('the templates', () => {
       stubFetch(() =>
         jsonResponse(200, envelope('200', { items: [], total: 0, missingLocales: value })),
       );
-      expect((await listAllTemplates()).missingLocales).toBeNull();
+      expect((await listTemplates()).missingLocales).toBeNull();
       stubFetch(() =>
         jsonResponse(
           200,
@@ -191,7 +149,7 @@ describe('the templates', () => {
           }),
         ),
       );
-      expect((await listAllTemplates()).missingLocales).toEqual({
+      expect((await listTemplates()).missingLocales).toEqual({
         daily_recall: ['th', 'ar'],
         other: [],
       });
@@ -257,6 +215,22 @@ describe('the records', () => {
     const calls = answer({ items: [], total: 0 });
     await listRecords({ page: 3, pageSize: 10 });
     expect(calls[0].url).toBe('/api/admin/push/records?page=3&pageSize=10');
+  });
+
+  it('sends the account and the trigger reason as filters only when they are given, and never a local date', async () => {
+    const calls = answer({ items: [], total: 0 });
+    await listRecords({
+      page: 1,
+      pageSize: 20,
+      accountId: '00000000-0000-4000-8000-000000000011',
+      triggerReason: 'streak_at_risk',
+    });
+    expect(calls[0].url).toBe(
+      '/api/admin/push/records?page=1&pageSize=20&accountId=00000000-0000-4000-8000-000000000011&triggerReason=streak_at_risk',
+    );
+    await listRecords({ page: 1, pageSize: 20, triggerReason: 'admin' });
+    expect(calls[1].url).toBe('/api/admin/push/records?page=1&pageSize=20&triggerReason=admin');
+    expect(calls[1].url).not.toMatch(/accountId|localDate|from=|to=/);
   });
 
   it('reads the deliveries of a record, whatever the list is called, and an empty list when there is none', async () => {

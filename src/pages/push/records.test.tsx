@@ -74,6 +74,130 @@ describe('the send record page: the list', { timeout: 30000 }, () => {
     await waitFor(() => expect(bodyRows().length).toBe(12));
   });
 
+  // Answers 114: the backend filters by account and by trigger reason, not by local date.
+  describe('the filters', () => {
+    const ACCOUNT = '00000000-0000-4000-8000-00000000abcd';
+    const filterBox = () => screen.getByRole('search');
+
+    it('offers an account id and a trigger reason, and no date', async () => {
+      backend();
+      renderPage(<RecordsPage />);
+      await waitFor(() => expect(bodyRows().length).toBe(20));
+      const box = within(filterBox());
+      expect(box.getByRole('textbox', { name: 'Account ID' })).toBeInTheDocument();
+      expect(box.getByRole('combobox', { name: 'Trigger reason' })).toBeInTheDocument();
+      expect(box.queryByLabelText(/date/i)).toBeNull();
+      expect(screen.getByText(/not by date/)).toBeInTheDocument();
+    });
+
+    it('sends the account of a record and shows only its records, from page 1', async () => {
+      const calls = backend();
+      const user = userEvent.setup();
+      renderPage(<RecordsPage />);
+      await waitFor(() => expect(bodyRows().length).toBe(20));
+      await user.click(await screen.findByTitle('2'));
+      await waitFor(() => expect(bodyRows().length).toBe(12));
+      const account = pushState.records[0].accountId;
+      const expected = pushState.records.filter((r) => r.accountId === account).length;
+      expect(expected).toBeGreaterThan(0);
+      await user.type(within(filterBox()).getByRole('textbox', { name: 'Account ID' }), account);
+      await user.click(within(filterBox()).getByRole('button', { name: 'Search' }));
+      await waitFor(() =>
+        expect(
+          calls.some(
+            (c) => c.url === `/api/admin/push/records?page=1&pageSize=20&accountId=${account}`,
+          ),
+        ).toBe(true),
+      );
+      await waitFor(() => expect(bodyRows().length).toBe(expected));
+      expect(bodyRows().every((row) => cells(row).join('|').includes(account))).toBe(true);
+    });
+
+    it('sends the trigger reason, alone and together with the account', async () => {
+      const calls = backend();
+      const user = userEvent.setup();
+      renderPage(<RecordsPage />);
+      await waitFor(() => expect(bodyRows().length).toBe(20));
+      const reasonBox = within(filterBox()).getByRole('combobox', { name: 'Trigger reason' });
+      await user.click(reasonBox);
+      const options = await screen.findAllByText('System event', {
+        selector: '.ant-select-item-option-content',
+      });
+      await user.click(options[options.length - 1]);
+      await user.click(within(filterBox()).getByRole('button', { name: 'Search' }));
+      await waitFor(() =>
+        expect(
+          calls.some(
+            (c) =>
+              c.url === '/api/admin/push/records?page=1&pageSize=20&triggerReason=system_event',
+          ),
+        ).toBe(true),
+      );
+      const account = pushState.records[0].accountId;
+      await user.type(within(filterBox()).getByRole('textbox', { name: 'Account ID' }), account);
+      await user.click(within(filterBox()).getByRole('button', { name: 'Search' }));
+      await waitFor(() =>
+        expect(
+          calls.some(
+            (c) =>
+              c.url ===
+              `/api/admin/push/records?page=1&pageSize=20&accountId=${account}&triggerReason=system_event`,
+          ),
+        ).toBe(true),
+      );
+    });
+
+    it('says an account id that is not an id is not one, and sends nothing', async () => {
+      const calls = backend();
+      const user = userEvent.setup();
+      renderPage(<RecordsPage />);
+      await waitFor(() => expect(bodyRows().length).toBe(20));
+      const before = calls.length;
+      await user.type(within(filterBox()).getByRole('textbox', { name: 'Account ID' }), 'user-42');
+      await user.click(within(filterBox()).getByRole('button', { name: 'Search' }));
+      expect(await screen.findByText(/An account ID has 36 characters/)).toBeInTheDocument();
+      expect(calls).toHaveLength(before);
+    });
+
+    it('goes back to every record with Reset', async () => {
+      const calls = backend();
+      const user = userEvent.setup();
+      renderPage(<RecordsPage />);
+      await waitFor(() => expect(bodyRows().length).toBe(20));
+      await user.type(
+        within(filterBox()).getByRole('textbox', { name: 'Account ID' }),
+        pushState.records[0].accountId,
+      );
+      await user.click(within(filterBox()).getByRole('button', { name: 'Search' }));
+      await waitFor(() => expect(bodyRows().length).toBeLessThan(20));
+      await user.click(within(filterBox()).getByRole('button', { name: 'Reset' }));
+      await waitFor(() => expect(bodyRows().length).toBe(20));
+      expect(calls.at(-1)?.url).toBe('/api/admin/push/records?page=1&pageSize=20');
+      expect(within(filterBox()).getByRole('textbox', { name: 'Account ID' })).toHaveValue('');
+    });
+
+    it('shows what the backend says about a filter it refuses, in the words of the code', async () => {
+      stubFetch((call) =>
+        call.url.includes('accountId=')
+          ? jsonResponse(
+              400,
+              envelope(
+                'INVALID_REQUEST',
+                { details: [{ ref: 'accountId', reason: 'OUT_OF_RANGE' }] },
+                'SECRET BACKEND WORDS',
+              ),
+            )
+          : jsonResponse(200, envelope('200', { items: [], total: 0 })),
+      );
+      const user = userEvent.setup();
+      renderPage(<RecordsPage />);
+      await user.type(within(filterBox()).getByRole('textbox', { name: 'Account ID' }), ACCOUNT);
+      await user.click(within(filterBox()).getByRole('button', { name: 'Search' }));
+      expect(await screen.findByText(/Some input is not valid/)).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
+    });
+  });
+
   it('writes the type and the reason in words, and shows a code it does not know as it is', async () => {
     stubFetch(() =>
       jsonResponse(

@@ -32,7 +32,10 @@ const AUDIENCES = ['ALL', 'ACCOUNTS', 'GUESTS', 'ACCOUNT_IDS'];
 const PLATFORMS = ['ANDROID', 'IOS'];
 const REPEATS = ['DAILY', 'WEEKLY', 'MONTHLY'];
 const LINK_TYPES = ['NONE', 'SCREEN', 'URL'];
-const TEXT_MAX = { title: 200, body: 1000 };
+// Answers 34: the title has 1 to 100 and the body 1 to 500 code points (the columns are wider; the interface is not).
+const TEXT_MAX = { title: 100, body: 500 };
+const RECORD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TRIGGER_REASONS = ['daily_recall', 'streak_at_risk', 'admin', 'system_event'];
 
 const fail = (details: Detail[], message = 'invalid request') => invalidRequest(message, details);
 const notFound = (what: string) =>
@@ -53,7 +56,7 @@ function newUpload() {
 }
 
 /** The upload a request names: 404 when unknown, 409 when it was used already. */
-function takeUpload(id: unknown): string {
+function takeUpload(id: unknown): { id: string; file: string } {
   if (typeof id !== 'string' || id === '') {
     throw fail([{ ref: 'uploadId', reason: 'EMPTY_NOT_ALLOWED' }]);
   }
@@ -61,11 +64,52 @@ function takeUpload(id: unknown): string {
   if (!upload) throw notFound('upload');
   if (upload.used) {
     throw new MockHttpError(409, 'INVALID_STATE', 'The upload belongs to another object already', {
-      status: 'USED',
+      status: 'CONSUMED',
     });
   }
   upload.used = true;
-  return upload.file;
+  return { id: upload.id, file: upload.file };
+}
+
+type Picture = { imageFile: string | null; imageUploadId: string | null };
+
+/** The picture of a row as the answers name it: the upload record and the address made from it. */
+const pictureView = (row: { imageFile: string | null; imageUploadId?: string | null }) => ({
+  imageUploadId: row.imageUploadId ?? (row.imageFile === null ? null : `up-seed-${row.imageFile}`),
+  imageUrl: imageUrlOf(row.imageFile),
+});
+
+/**
+ * The picture a PUT of a template or a periodic push leaves the row with (answers 34): no
+ * `uploadId` (or the current one) keeps it, a new one replaces it, `null` removes it; the old
+ * upload record goes at once. `imageUploadId` in the body is ignored.
+ */
+function replacePicture(row: Picture, body: Record<string, unknown>): Picture {
+  const uploadId = body.uploadId;
+  if (uploadId === undefined || (uploadId !== null && uploadId === row.imageUploadId)) return row;
+  const next: Picture =
+    uploadId === null
+      ? { imageFile: null, imageUploadId: null }
+      : (() => {
+          const taken = takeUpload(uploadId);
+          return { imageFile: taken.file, imageUploadId: taken.id };
+        })();
+  if (row.imageUploadId !== null) pushState.uploads.delete(row.imageUploadId);
+  return next;
+}
+
+/** The picture of a new row: the upload it names, or none. */
+function newPicture(body: Record<string, unknown>): Picture {
+  if (body.uploadId === undefined || body.uploadId === null) {
+    return { imageFile: null, imageUploadId: null };
+  }
+  const taken = takeUpload(body.uploadId);
+  return { imageFile: taken.file, imageUploadId: taken.id };
+}
+
+/** The backend takes no address of a picture from a request: only `uploadId` (answers 34). The reason is not named in the answers; OUT_OF_RANGE is the mock's choice. */
+function noPictureAddress(body: Record<string, unknown>, details: Detail[]): void {
+  if ('imageUrl' in body) details.push({ ref: 'imageUrl', reason: 'OUT_OF_RANGE' });
 }
 
 // ---- field checks shared by the three kinds of objects ----
@@ -156,18 +200,23 @@ function audience(body: Record<string, unknown>, details: Detail[]): MockAudienc
 }
 
 const taskRow = (t: MockTask) => {
-  const { imageFile, ...rest } = t;
-  return { ...rest, createdByUsername: usernameOf(t.createdBy), imageUrl: imageUrlOf(imageFile) };
+  const { imageFile, imageUploadId: _id, finishedAt, ...rest } = t;
+  return {
+    ...rest,
+    finishedAt: finishedAt ?? null,
+    createdByUsername: usernameOf(t.createdBy),
+    ...pictureView(t),
+  };
 };
 
 const scheduleRow = (s: MockSchedule) => {
-  const { imageFile, ...rest } = s;
-  return { ...rest, createdByUsername: usernameOf(s.createdBy), imageUrl: imageUrlOf(imageFile) };
+  const { imageFile, imageUploadId: _id, ...rest } = s;
+  return { ...rest, createdByUsername: usernameOf(s.createdBy), ...pictureView(s) };
 };
 
 const templateRow = (t: MockTemplate) => {
-  const { imageFile, ...rest } = t;
-  return { ...rest, imageUrl: imageUrlOf(imageFile) };
+  const { imageFile, imageUploadId: _id, ...rest } = t;
+  return { ...rest, ...pictureView(t) };
 };
 
 // ---- templates ----
@@ -228,7 +277,12 @@ function templateFields(body: Record<string, unknown>, details: Detail[]) {
   const title = words(body, 'title', details);
   const text = words(body, 'body', details);
   const target = link(body, details);
-  const enabled = flag(body.enabled, 'enabled', details);
+  // A template without `enabled` in the request is off, in a PUT too (answers 34).
+  const enabled =
+    body.enabled === undefined || body.enabled === null
+      ? false
+      : flag(body.enabled, 'enabled', details);
+  noPictureAddress(body, details);
   return { title, body: text, ...target, enabled };
 }
 
@@ -242,25 +296,25 @@ export default {
   }),
 
   // ---- templates ----
+  // Answers 33: not paged (page and pageSize are ignored), no total, the filters triggerReason and
+  // locale match exactly and do not narrow missingLocales; ordered by reason, language and id.
   'GET /api/admin/push/templates': guard('PUSH:TEMPLATE', (req) => {
-    const rows = [...pushState.templates].sort(
-      (a, b) =>
-        a.triggerReason.localeCompare(b.triggerReason) ||
-        a.locale.localeCompare(b.locale) ||
-        Number(a.id) - Number(b.id),
-    );
-    // The contract (a14) has no total; the default answer keeps it, a test can ask for the other shapes.
-    if (pushState.templateList === 'unpaged-without-total') {
-      return ok({ items: rows.map(templateRow), missingLocales: missingLocales() });
-    }
-    const page = paginateQuery(rows, req);
-    return pushState.templateList === 'paged-without-total'
-      ? ok({ items: page.items.map(templateRow), missingLocales: missingLocales() })
-      : ok({
-          items: page.items.map(templateRow),
-          total: page.total,
-          missingLocales: missingLocales(),
-        });
+    const only = (name: string) => (isText(req.query[name]) ? req.query[name] : undefined);
+    const reason = only('triggerReason');
+    const language = only('locale');
+    const rows = pushState.templates
+      .filter(
+        (t) =>
+          (reason === undefined || t.triggerReason === reason) &&
+          (language === undefined || t.locale === language),
+      )
+      .sort(
+        (a, b) =>
+          a.triggerReason.localeCompare(b.triggerReason) ||
+          a.locale.localeCompare(b.locale) ||
+          Number(a.id) - Number(b.id),
+      );
+    return ok({ items: rows.map(templateRow), missingLocales: missingLocales() });
   }),
 
   'POST /api/admin/push/templates': guard('PUSH:TEMPLATE', (req) => {
@@ -280,32 +334,36 @@ export default {
       });
     }
     enforceDefaultLanguage(null, { id: '', triggerReason, locale, imageFile: null, ...fields });
-    const picture = body.uploadId === undefined ? null : takeUpload(body.uploadId);
     const created: MockTemplate = {
       id: String(pushState.next.template++),
       triggerReason,
       locale,
-      imageFile: picture,
+      ...newPicture(body),
       ...fields,
     };
     pushState.templates.push(created);
     return ok(templateRow(created));
   }),
 
+  // The PUT replaces the whole row (answers 34, 35): triggerReason and locale are required, a missing
+  // enabled is false, uploadId decides the picture. The order of the checks is the backend's: the
+  // shape of the body (400), the row (404), the picture, the rule of the default language, then the
+  // pair (409); one transaction, so a refused write uses no upload.
   'PUT /api/admin/push/templates/:id': guard('PUSH:TEMPLATE', (req) => {
-    const found = pushState.templates.find((t) => t.id === idOf(req));
-    if (!found) throw notFound('template');
     const body = bodyOf(req);
     const details: Detail[] = [];
+    const triggerReason = isText(body.triggerReason) ? body.triggerReason : '';
+    if (triggerReason === '') details.push({ ref: 'triggerReason', reason: 'EMPTY_NOT_ALLOWED' });
+    else if (!RECALL_REASONS.includes(triggerReason)) {
+      details.push({ ref: 'triggerReason', reason: 'OUT_OF_RANGE' });
+    }
+    const locale = isText(body.locale) ? trimSpec(body.locale) : '';
+    if (locale === '') details.push({ ref: 'locale', reason: 'EMPTY_NOT_ALLOWED' });
     const fields = templateFields(body, details);
     if (details.length > 0) throw fail(details);
-    // The key may move too (the backend allows it; this page never sends it).
-    const triggerReason = isText(body.triggerReason) ? body.triggerReason : found.triggerReason;
-    const locale = isText(body.locale) ? trimSpec(body.locale) : found.locale;
-    if (!RECALL_REASONS.includes(triggerReason)) {
-      throw fail([{ ref: 'triggerReason', reason: 'OUT_OF_RANGE' }]);
-    }
-    if (locale === '') throw fail([{ ref: 'locale', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const found = pushState.templates.find((t) => t.id === idOf(req));
+    if (!found) throw notFound('template');
+    enforceDefaultLanguage(found, { ...found, triggerReason, locale, ...fields });
     if (
       pushState.templates.some(
         (t) => t !== found && t.triggerReason === triggerReason && t.locale === locale,
@@ -315,9 +373,11 @@ export default {
         field: 'locale',
       });
     }
-    enforceDefaultLanguage(found, { ...found, triggerReason, locale, ...fields });
-    if (body.uploadId !== undefined) found.imageFile = takeUpload(body.uploadId);
-    Object.assign(found, fields, { triggerReason, locale });
+    const picture = replacePicture(
+      { imageFile: found.imageFile, imageUploadId: pictureView(found).imageUploadId },
+      body,
+    );
+    Object.assign(found, fields, picture, { triggerReason, locale });
     return ok(templateRow(found));
   }),
 
@@ -351,8 +411,8 @@ export default {
       if (Number.isNaN(parsed)) details.push({ ref: 'scheduledAt', reason: 'OUT_OF_RANGE' });
       else scheduledAt = new Date(parsed).toISOString();
     }
+    noPictureAddress(body, details);
     if (details.length > 0) throw fail(details);
-    const imageFile = body.uploadId === undefined ? null : takeUpload(body.uploadId);
     const created: MockTask = {
       id: String(pushState.next.task++),
       createdBy: req.admin.id,
@@ -360,7 +420,7 @@ export default {
       title,
       body: text,
       ...target,
-      imageFile,
+      ...newPicture(body),
       scheduledAt,
       scheduleId: null,
       status: 'PENDING',
@@ -372,20 +432,21 @@ export default {
     return ok(taskRow(created));
   }),
 
+  // Answers 72: a task that is PENDING or RUNNING can be cancelled (a running one stops at its next
+  // read of the state; what was sent stays counted); DONE and CANCELLED answer 409 with the status.
   'POST /api/admin/push/tasks/:id/cancel': guard('PUSH:SEND', (req) => {
     const found = pushState.tasks.find((t) => t.id === idOf(req));
     if (!found) throw notFound('task');
-    if (found.status !== 'PENDING') {
+    if (found.status !== 'PENDING' && found.status !== 'RUNNING') {
       throw new MockHttpError(
         409,
         'INVALID_STATE',
-        'Only a task that has not started can be cancelled',
-        {
-          status: found.status,
-        },
+        'Only a task that is pending or running can be cancelled',
+        { status: found.status },
       );
     }
     found.status = 'CANCELLED';
+    found.finishedAt = new Date().toISOString();
     return ok(taskRow(found));
   }),
 
@@ -400,13 +461,13 @@ export default {
     const body = bodyOf(req);
     const details: Detail[] = [];
     const fields = readSchedule(body, details);
+    noPictureAddress(body, details);
     if (details.length > 0) throw fail(details);
-    const imageFile = body.uploadId === undefined ? null : takeUpload(body.uploadId);
     const created: MockSchedule = {
       id: String(pushState.next.schedule++),
       createdBy: req.admin.id,
       ...fields,
-      imageFile,
+      ...newPicture(body),
       nextRunAt: null,
     };
     created.nextRunAt = nextRunAt(created);
@@ -420,9 +481,13 @@ export default {
     const body = bodyOf(req);
     const details: Detail[] = [];
     const fields = readSchedule(body, details);
+    noPictureAddress(body, details);
     if (details.length > 0) throw fail(details);
-    if (body.uploadId !== undefined) found.imageFile = takeUpload(body.uploadId);
-    Object.assign(found, fields);
+    const picture = replacePicture(
+      { imageFile: found.imageFile, imageUploadId: pictureView(found).imageUploadId },
+      body,
+    );
+    Object.assign(found, fields, picture);
     found.nextRunAt = nextRunAt(found);
     return ok(scheduleRow(found));
   }),
@@ -437,10 +502,27 @@ export default {
   }),
 
   // ---- records ----
+  // Answers 114: the filters are accountId (an id) and triggerReason (one of the four), exact, and
+  // may be used together; a value that is not valid is 400 with its ref and OUT_OF_RANGE.
   'GET /api/admin/push/records': guard('PUSH:VIEW', (req) => {
-    const rows = [...pushState.records].sort(
-      (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
-    );
+    const details: Detail[] = [];
+    const text = (name: string) => (isText(req.query[name]) ? req.query[name] : '');
+    const accountId = text('accountId');
+    const reason = text('triggerReason');
+    if (accountId !== '' && !RECORD_ID.test(accountId)) {
+      details.push({ ref: 'accountId', reason: 'OUT_OF_RANGE' });
+    }
+    if (reason !== '' && !TRIGGER_REASONS.includes(reason)) {
+      details.push({ ref: 'triggerReason', reason: 'OUT_OF_RANGE' });
+    }
+    if (details.length > 0) throw fail(details);
+    const rows = pushState.records
+      .filter(
+        (r) =>
+          (accountId === '' || r.accountId.toLowerCase() === accountId.toLowerCase()) &&
+          (reason === '' || r.triggerReason === reason),
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
     return ok(paginateQuery(rows, req));
   }),
 

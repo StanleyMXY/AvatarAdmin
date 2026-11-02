@@ -176,8 +176,7 @@ describe('the template page: the matrix', () => {
         const url = new URL(String(input), 'http://localhost');
         const isAll =
           (init.method ?? 'GET').toUpperCase() === 'GET' &&
-          url.pathname === '/api/admin/push/templates' &&
-          url.searchParams.get('pageSize') === '200';
+          url.pathname === '/api/admin/push/templates';
         if (!isAll) return real(input, init);
         all += 1;
         const answer = await real(input, init); // taken now, so it is the state of this moment

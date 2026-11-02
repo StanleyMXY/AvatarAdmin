@@ -7,12 +7,12 @@ import type {
   PushSchedule,
   PushTask,
   PushTemplate,
+  RecordFilters,
   ScheduleFields,
   TaskCreate,
   TemplateCreate,
-  TemplateFields,
   TemplateOverview,
-  TemplatePage,
+  TemplateUpdate,
 } from './types';
 
 export * from './types';
@@ -21,16 +21,10 @@ const enc = encodeURIComponent;
 
 type Paging = { page: number; pageSize: number };
 
-const list = <T>(url: string, params: Paging): Promise<Page<T>> =>
+const list = <T>(url: string, params: Paging & RecordFilters): Promise<Page<T>> =>
   apiRequest<Page<T>>({ method: 'GET', url, params });
 
 // ---- templates (PUSH:TEMPLATE) ----
-
-/** `GET /push/templates`: the page, and `missingLocales` (the same for every page and filter). */
-export const listTemplates = (params: Paging): Promise<TemplatePage> =>
-  list('/push/templates', params);
-
-const ALL_PAGE_SIZE = 200;
 
 /**
  * For each recall reason, the supported languages that have no enabled template (they fall back to
@@ -49,36 +43,24 @@ export function readMissingLocales(value: unknown): MissingLocales | null {
 }
 
 /**
- * Every template, for the matrix, and `missingLocales` of the answer. It reads page after page.
- * With a numeric `total` it stops when it has that many rows. Without one (the answer of the
- * backend has none: contract a14) it stops at a page shorter than the page size, and at a page
- * that brings no row it has not seen yet, so a backend that does not page cannot make it loop. A
- * page with no rows always stops it. Each row is kept once.
+ * Every template and `missingLocales`: one request. The backend does not page this list (it ignores
+ * `page` and `pageSize`, has no `total` and answers the whole list every time), so nothing is
+ * asked for a second page: a second request would bring the same rows again.
  */
-export async function listAllTemplates(): Promise<TemplateOverview> {
-  const items: PushTemplate[] = [];
-  const seen = new Set<string>();
-  let missingLocales: MissingLocales | null = null;
-  for (let page = 1; ; page += 1) {
-    const answer = await listTemplates({ page, pageSize: ALL_PAGE_SIZE });
-    if (page === 1) missingLocales = readMissingLocales(answer.missingLocales);
-    const fresh = answer.items.filter((row) => !seen.has(String(row.id)));
-    for (const row of fresh) seen.add(String(row.id));
-    items.push(...fresh);
-    if (answer.items.length === 0) return { items, missingLocales };
-    if (typeof answer.total === 'number') {
-      if (items.length >= answer.total) return { items, missingLocales };
-    } else if (answer.items.length < ALL_PAGE_SIZE || fresh.length === 0) {
-      return { items, missingLocales };
-    }
-  }
+export async function listTemplates(): Promise<TemplateOverview> {
+  const data = await apiRequest<{ items?: unknown; missingLocales?: unknown } | null>({
+    method: 'GET',
+    url: '/push/templates',
+  });
+  const items = Array.isArray(data?.items) ? (data.items as PushTemplate[]) : [];
+  return { items, missingLocales: readMissingLocales(data?.missingLocales) };
 }
 
 export const createTemplate = (body: TemplateCreate): Promise<PushTemplate> =>
   apiRequest({ method: 'POST', url: '/push/templates', body });
 
-/** The reason and the language are the key of a template, so they are not part of the body. */
-export const updateTemplate = (id: string, body: TemplateFields): Promise<PushTemplate> =>
+/** A `PUT` replaces the whole row: the reason and the language are in every one (the backend answers 400 without them), and so is `enabled`. */
+export const updateTemplate = (id: string, body: TemplateUpdate): Promise<PushTemplate> =>
   apiRequest({ method: 'PUT', url: `/push/templates/${enc(id)}`, body });
 
 export const deleteTemplate = (id: string): Promise<unknown> =>
@@ -91,7 +73,7 @@ export const listTasks = (params: Paging): Promise<Page<PushTask>> => list('/pus
 export const createTask = (body: TaskCreate): Promise<PushTask> =>
   apiRequest({ method: 'POST', url: '/push/tasks', body });
 
-/** 409 INVALID_STATE (`data.status` is the current state) once the task has started. */
+/** A task that is PENDING or RUNNING can be cancelled; 409 INVALID_STATE (`data.status` is the current state) once it is DONE or CANCELLED. */
 export const cancelTask = (id: string): Promise<unknown> =>
   apiRequest({ method: 'POST', url: `/push/tasks/${enc(id)}/cancel` });
 
@@ -112,7 +94,7 @@ export const deleteSchedule = (id: string): Promise<unknown> =>
 
 // ---- records (PUSH:VIEW) ----
 
-export const listRecords = (params: Paging): Promise<Page<PushRecord>> =>
+export const listRecords = (params: Paging & RecordFilters): Promise<Page<PushRecord>> =>
   list('/push/records', params);
 
 /**

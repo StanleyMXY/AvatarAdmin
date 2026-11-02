@@ -8,6 +8,8 @@ const messages: Record<string, string> = {
   'auth.login.totpRequired': '请输入验证码',
   'auth.login.totpInvalid':
     '验证码错误、已使用或已过期，或者你的二次验证无法校验。如果一直失败，请联系超级管理员重置你的二次验证。',
+  'auth.login.totpInvalidLast':
+    '验证码错误、已使用或已过期，或者你的二次验证无法校验。如果一直失败，请联系超级管理员重置你的二次验证。再输错一次将被暂时锁定。',
   'auth.login.totpHint': '请输入认证器里显示的验证码',
   'auth.login.submit': '登录',
   'auth.login.locked': '尝试次数过多，请 {minutes} 分钟后再试',
