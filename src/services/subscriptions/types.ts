@@ -96,14 +96,17 @@ export type SubscriptionEvent = TimelineEvent & {
   sourceEventId: string;
 };
 
+/** One place a product is shown: a platform, and one channel of it (null is every channel). */
+export type ProductSurface = { platform: 'ANDROID' | 'IOS'; channel: string | null };
+
 export type SubscriptionProduct = {
   store: string;
   productId: string;
   entitlementKey: string;
   enabled: boolean;
   sortOrder: number;
-  /** Where the product is shown ([] is every surface); kept as read when a row is saved. */
-  surfaces: string[];
+  /** Where the product is shown ([] is every surface); always sent, as read (null is refused, not kept). */
+  surfaces: ProductSurface[];
 };
 
 export type EffectiveFeature = {

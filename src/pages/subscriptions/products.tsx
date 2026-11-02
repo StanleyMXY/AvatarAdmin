@@ -107,7 +107,7 @@ function ProductDialog({
         entitlementKey: values.entitlementKey as string,
         enabled: values.enabled,
         sortOrder: values.sortOrder as number,
-        // the surfaces are not edited here: a mapping that has some keeps them
+        // the surfaces are not edited here: a mapping that has some sends them back as read
         surfaces: product?.surfaces ?? [],
       });
     } catch (error) {

@@ -490,7 +490,10 @@ describe('feature gates', () => {
 });
 
 describe('subscription products', () => {
-  it('lists and upserts by (store, productId)', async () => {
+  const put = (items: unknown, headers = root()) =>
+    send('PUT /api/admin/subscription-products', headers, { items });
+
+  it('lists the six columns and upserts by (store, productId) from an items list', async () => {
     const list = await get('GET /api/admin/subscription-products', root());
     expect(list.body.data.items).toHaveLength(4);
     const first = list.body.data.items[0];
@@ -502,50 +505,116 @@ describe('subscription products', () => {
       'store',
       'surfaces',
     ]);
-    const put = await send('PUT /api/admin/subscription-products', root(), {
-      ...first,
-      enabled: false,
-      sortOrder: 9,
-    });
-    expect(put.status).toBe(200);
+    const saved = await put([{ ...first, enabled: false, sortOrder: 9 }]);
+    expect(saved.status).toBe(200);
+    // the backend answers data null: the list has to be read again
+    expect(saved.body.data).toBeNull();
     const again = await get('GET /api/admin/subscription-products', root());
     expect(again.body.data.items).toHaveLength(4);
     expect(
       again.body.data.items.find((p: { productId: string }) => p.productId === first.productId),
     ).toMatchObject({ enabled: false, sortOrder: 9 });
-    await send('PUT /api/admin/subscription-products', root(), {
-      store: 'APPLE',
-      productId: 'new.one',
-      entitlementKey: 'basic',
-      enabled: true,
-      sortOrder: 5,
-    });
+    await put([
+      {
+        store: 'APPLE',
+        productId: 'new.one',
+        entitlementKey: 'basic',
+        enabled: true,
+        sortOrder: 5,
+        surfaces: [],
+      },
+    ]);
     expect(
       (await get('GET /api/admin/subscription-products', root())).body.data.items,
     ).toHaveLength(5);
   });
 
-  it('refuses an entitlement that does not exist and empty fields', async () => {
-    const bad = await send('PUT /api/admin/subscription-products', root(), {
-      store: 'APPLE',
-      productId: 'x',
-      entitlementKey: 'nope',
-      enabled: true,
-      sortOrder: 1,
-    });
-    expect(bad.status).toBe(400);
-    expect(bad.body.data.details[0]).toEqual({ ref: 'entitlementKey', reason: 'OUT_OF_RANGE' });
-    const empty = await send('PUT /api/admin/subscription-products', root(), {
-      store: '',
-      productId: '',
-      entitlementKey: 'basic',
-      enabled: true,
-      sortOrder: 1,
-    });
+  it('does not accept one mapping outside an items list', async () => {
+    const first = (await get('GET /api/admin/subscription-products', root())).body.data.items[0];
+    const bare = await send('PUT /api/admin/subscription-products', root(), first);
+    expect(bare.status).toBe(400);
+    expect(bare.body.data.details[0].ref).toBe('items');
+    const empty = await put([]);
+    expect(empty.status).toBe(400);
+  });
+
+  it('answers 404 RESOURCE_NOT_FOUND, not 400, for an entitlement that does not exist, and saves nothing', async () => {
+    const first = (await get('GET /api/admin/subscription-products', root())).body.data.items[0];
+    const missing = await put([
+      { ...first, sortOrder: 77 },
+      {
+        store: 'APPLE',
+        productId: 'x',
+        entitlementKey: 'nope',
+        enabled: true,
+        sortOrder: 1,
+        surfaces: [],
+      },
+    ]);
+    expect(missing.status).toBe(404);
+    expect(missing.body.code).toBe('RESOURCE_NOT_FOUND');
+    // one transaction: the first item is not kept
+    const after = (await get('GET /api/admin/subscription-products', root())).body.data.items;
+    expect(after.find((p: { productId: string }) => p.productId === first.productId)).toEqual(
+      first,
+    );
+    expect(after).toHaveLength(4);
+  });
+
+  it('refuses empty fields and a missing surfaces list (null is not "keep")', async () => {
+    const empty = await put([
+      {
+        store: '',
+        productId: '',
+        entitlementKey: 'basic',
+        enabled: true,
+        sortOrder: 1,
+        surfaces: [],
+      },
+    ]);
+    expect(empty.status).toBe(400);
     expect(empty.body.data.details.map((d: { ref: string }) => d.ref).sort()).toEqual([
       'productId',
       'store',
     ]);
+    const noSurfaces = await put([
+      { store: 'APPLE', productId: 'y', entitlementKey: 'basic', enabled: true, sortOrder: 1 },
+    ]);
+    expect(noSurfaces.status).toBe(400);
+    expect(noSurfaces.body.data.details).toEqual([
+      { ref: 'surfaces', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    const noEnabled = await put([
+      { store: 'APPLE', productId: 'y', entitlementKey: 'basic', sortOrder: 1, surfaces: [] },
+    ]);
+    expect(noEnabled.body.data.details).toEqual([{ ref: 'enabled', reason: 'EMPTY_NOT_ALLOWED' }]);
+  });
+
+  it('refuses a store outside [A-Z][A-Z0-9_]{1,31}, a product id over 255 code points, and a surface outside ANDROID or IOS', async () => {
+    const base = { entitlementKey: 'basic', enabled: true, sortOrder: 1, surfaces: [] };
+    const store = await put([{ ...base, store: 'apple', productId: 'a' }]);
+    expect(store.body.data.details[0].ref).toBe('store');
+    const long = await put([{ ...base, store: 'APPLE', productId: 'x'.repeat(256) }]);
+    expect(long.body.data.details[0]).toEqual({ ref: 'productId', reason: 'TOO_LONG' });
+    const surface = await put([
+      { ...base, store: 'APPLE', productId: 'a', surfaces: [{ platform: 'WEB', channel: null }] },
+    ]);
+    expect(surface.status).toBe(400);
+  });
+
+  it('answers 409 DUPLICATE_RESOURCE with field productId for the same mapping twice in one request', async () => {
+    const row = {
+      store: 'APPLE',
+      productId: 'twice',
+      entitlementKey: 'basic',
+      enabled: true,
+      sortOrder: 1,
+      surfaces: [],
+    };
+    const dup = await put([row, { ...row, sortOrder: 2 }]);
+    expect(dup.status).toBe(409);
+    expect(dup.body.code).toBe('DUPLICATE_RESOURCE');
+    expect(dup.body.data).toEqual({ field: 'productId' });
   });
 });
 

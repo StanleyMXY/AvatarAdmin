@@ -116,9 +116,14 @@ export const saveGateCreditCost = (key: string, creditCost: number | null): Prom
 export const listSubscriptionProducts = (): Promise<{ items: SubscriptionProduct[] }> =>
   apiRequest<{ items: SubscriptionProduct[] }>({ method: 'GET', url: '/subscription-products' });
 
-/** `PUT /subscription-products`: one mapping, by (store, productId): changed if it exists, else added. */
-export const saveSubscriptionProduct = (input: SubscriptionProduct): Promise<SubscriptionProduct> =>
-  apiRequest<SubscriptionProduct>({ method: 'PUT', url: '/subscription-products', body: input });
+/**
+ * `PUT /subscription-products`: the body is a list, `{ items }`; each item is changed if its
+ * (store, productId) exists, else added, and the ones not listed stay. The mapping that is saved goes
+ * in as the only item. The answer is `data: null`, so the caller reads the list again. All six fields
+ * are required; `surfaces: []` means every end, a missing one is refused, not kept.
+ */
+export const saveSubscriptionProduct = (input: SubscriptionProduct): Promise<null> =>
+  apiRequest<null>({ method: 'PUT', url: '/subscription-products', body: { items: [input] } });
 
 // ---- events ----
 

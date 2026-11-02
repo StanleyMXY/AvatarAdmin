@@ -15,6 +15,7 @@ import {
   MEMORY_TIERS,
   MODEL_TIERS,
   type Mode,
+  type Product,
   QUOTA_KEYS,
   SUBSCRIPTION_STATES,
   subscriptionsState,
@@ -460,34 +461,73 @@ export default {
     }),
   ),
 
+  // Backend reply 28: the body is { items: [...] }, every item carries all six fields; an item is added
+  // or changed by (store, productId), the ones not listed stay; one transaction (a refusal saves
+  // nothing); success is data null; an entitlement that does not exist is 404, not 400.
   'PUT /api/admin/subscription-products': guard('SUBSCRIPTION:CONFIG', (req) => {
-    const body = bodyOf(req);
-    const store = typeof body.store === 'string' ? body.store.trim() : '';
-    const productId = typeof body.productId === 'string' ? body.productId.trim() : '';
-    const entitlementKey = typeof body.entitlementKey === 'string' ? body.entitlementKey : '';
+    const list = bodyOf(req).items;
+    if (!Array.isArray(list) || list.length === 0) throw bad('items', 'EMPTY_NOT_ALLOWED');
     const details: { ref: string; reason: string }[] = [];
-    if (store === '') details.push({ ref: 'store', reason: 'EMPTY_NOT_ALLOWED' });
-    if (productId === '') details.push({ ref: 'productId', reason: 'EMPTY_NOT_ALLOWED' });
-    if (typeof body.enabled !== 'boolean') details.push({ ref: 'enabled', reason: 'NOT_BOOLEAN' });
-    if (typeof body.sortOrder !== 'number' || !Number.isInteger(body.sortOrder))
-      details.push({ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' });
-    if (details.length === 0 && !state().defs.some((d) => d.key === entitlementKey))
-      details.push({ ref: 'entitlementKey', reason: 'OUT_OF_RANGE' });
+    const items: Product[] = [];
+    for (const raw of list as Record<string, unknown>[]) {
+      const row = raw && typeof raw === 'object' ? raw : {};
+      const add = (ref: string, reason: string) => details.push({ ref, reason });
+      const store = typeof row.store === 'string' ? row.store : '';
+      const productId = typeof row.productId === 'string' ? row.productId.trim() : '';
+      if (store === '') add('store', 'EMPTY_NOT_ALLOWED');
+      else if (!/^[A-Z][A-Z0-9_]{1,31}$/.test(store)) add('store', 'OUT_OF_RANGE');
+      if (productId === '') add('productId', 'EMPTY_NOT_ALLOWED');
+      else if ([...productId].length > 255) add('productId', 'TOO_LONG');
+      if (typeof row.entitlementKey !== 'string' || row.entitlementKey.trim() === '')
+        add('entitlementKey', 'EMPTY_NOT_ALLOWED');
+      if (row.enabled === undefined || row.enabled === null) add('enabled', 'EMPTY_NOT_ALLOWED');
+      else if (typeof row.enabled !== 'boolean') add('enabled', 'NOT_BOOLEAN');
+      if (row.sortOrder === undefined || row.sortOrder === null)
+        add('sortOrder', 'EMPTY_NOT_ALLOWED');
+      else if (typeof row.sortOrder !== 'number' || !Number.isInteger(row.sortOrder))
+        add('sortOrder', 'NOT_AN_INTEGER');
+      const surfaces = row.surfaces;
+      if (surfaces === undefined || surfaces === null) add('surfaces', 'EMPTY_NOT_ALLOWED');
+      else if (
+        !Array.isArray(surfaces) ||
+        surfaces.length > 50 ||
+        surfaces.some(
+          (x) =>
+            !x ||
+            (x.platform !== 'ANDROID' && x.platform !== 'IOS') ||
+            (x.channel !== null && x.channel !== undefined && typeof x.channel !== 'string'),
+        )
+      )
+        add('surfaces', 'OUT_OF_RANGE');
+      items.push({
+        store,
+        productId,
+        entitlementKey: typeof row.entitlementKey === 'string' ? row.entitlementKey : '',
+        enabled: row.enabled as boolean,
+        sortOrder: row.sortOrder as number,
+        surfaces: Array.isArray(surfaces) ? (surfaces as Product['surfaces']) : [],
+      });
+    }
     if (details.length > 0) throw invalidRequest('the product is not valid', details);
-    const existing = state().products.find((p) => p.store === store && p.productId === productId);
-    const next = {
-      store,
-      productId,
-      entitlementKey,
-      enabled: body.enabled as boolean,
-      sortOrder: body.sortOrder as number,
-      surfaces: Array.isArray(body.surfaces)
-        ? (body.surfaces as string[])
-        : (existing?.surfaces ?? []),
-    };
-    if (existing) Object.assign(existing, next);
-    else state().products.push(next);
-    return ok(next);
+    const seen = new Set<string>();
+    for (const item of items) {
+      const id = `${item.store}|${item.productId}`;
+      if (seen.has(id))
+        throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The product is listed twice', {
+          field: 'productId',
+        });
+      seen.add(id);
+    }
+    if (items.some((item) => !state().defs.some((d) => d.key === item.entitlementKey)))
+      throw notFound('entitlement');
+    for (const item of items) {
+      const existing = state().products.find(
+        (p) => p.store === item.store && p.productId === item.productId,
+      );
+      if (existing) Object.assign(existing, item);
+      else state().products.push(item);
+    }
+    return ok(null);
   }),
 
   'GET /api/admin/subscription-events': guard('SUBSCRIPTION:VIEW', (req) => {
