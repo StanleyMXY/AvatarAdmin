@@ -111,16 +111,22 @@ export type UserDetail = {
   attribution: Attribution | null;
 };
 
-/** One session of the account (`GET /users/{id}/sessions`); the fields are the columns of `Session` (see the contract request). */
+/**
+ * One session of the account (`GET /users/{id}/sessions`): the nine columns of a call row, as in
+ * `GET /sessions`. There is no `endReason` here (the backend's answer 59); the reason a call ended
+ * is in `GET /sessions/{id}` only.
+ */
 export type UserSession = {
   id: string;
+  accountId: string | null;
+  /** Always null for the session of an account. */
+  deviceId: string | null;
   requestedAt: string | null;
   startedAt: string | null;
   endedAt: string | null;
   durationSeconds: number | null;
   modelTier: string | null;
   language: string | null;
-  endReason: string | null;
 };
 
 /** One push registration of the account; `tokenSuffix` is the last six characters, never the token. */

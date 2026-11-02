@@ -7,7 +7,7 @@ import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { Cell } from './Cell';
 import { ServerTable } from './ServerTable';
-import { formatSeconds, labelOf } from './text';
+import { formatSeconds } from './text';
 
 /** The sessions of the account, newest first, a page at a time (`GET /users/{id}/sessions`). */
 export function SessionsTab({ accountId }: { accountId: string }) {
@@ -36,10 +36,6 @@ export function SessionsTab({ accountId }: { accountId: string }) {
     },
     { title: t('users.sessions.tier'), render: (_, row) => <Cell value={row.modelTier} /> },
     { title: t('users.sessions.language'), render: (_, row) => <Cell value={row.language} /> },
-    {
-      title: t('users.sessions.endReason'),
-      render: (_, row) => labelOf(intl, 'users.endReason', row.endReason),
-    },
   ];
   return (
     <ServerTable<UserSession> testId="sessions-table" rowKey="id" columns={columns} load={load} />

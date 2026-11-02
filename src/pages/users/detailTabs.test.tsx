@@ -26,18 +26,21 @@ const backend = () => useMockBackend(usersMock, avatarMock);
 const rowsOf = (testId: string) => within(screen.getByTestId(testId)).getAllByRole('row').slice(1);
 
 describe('the sessions tab', { timeout: 30000 }, () => {
-  it('lists the sessions of the account with the times, the duration, the tier, the language and why it ended', async () => {
+  it('lists the sessions of the account with the times, the duration, the tier and the language, and has no end reason column: the list does not carry one (answer 59)', async () => {
     backend();
     await open(USER.rich, 'sessions');
     await waitFor(() => expect(rowsOf('sessions-table')).toHaveLength(5));
     const first = rowsOf('sessions-table')[0];
-    // newest first: the first row has a duration written out and an end reason in words
+    // newest first: the first row has a duration written out
     expect(within(first).getByText(/\d+ (s|min)/)).toBeInTheDocument();
+    const table = screen.getByTestId('sessions-table');
+    expect(within(table).queryByText(/Ended by/)).toBeNull();
     expect(
-      within(first).getByText(
-        /The user left|Time limit reached|The room closed|The account was banned/,
+      within(table).queryByText(
+        /The user left|Time limit reached|The room closed|The account was banned|A newer call replaced it/,
       ),
-    ).toBeInTheDocument();
+    ).toBeNull();
+    expect(within(table).getAllByRole('columnheader')).toHaveLength(6);
   });
 
   it('shows a dash for a session that has not ended, and says it is in progress', async () => {
@@ -55,7 +58,6 @@ describe('the sessions tab', { timeout: 30000 }, () => {
                   durationSeconds: null,
                   modelTier: 'STANDARD',
                   language: 'th',
-                  endReason: null,
                 },
               ],
               total: 1,
@@ -69,7 +71,8 @@ describe('the sessions tab', { timeout: 30000 }, () => {
       'tr',
     ) as HTMLElement;
     expect(within(row).getByText(enUS['users.sessions.ongoing'])).toBeInTheDocument();
-    expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(2);
+    // the end time is missing; the row has no other column that could be empty
+    expect(within(row).getAllByText('—')).toHaveLength(1);
   });
 
   it('asks for the page that is chosen, with the page size, and shows the total', async () => {
@@ -88,7 +91,6 @@ describe('the sessions tab', { timeout: 30000 }, () => {
                 durationSeconds: 61,
                 modelTier: `tier-of-page-${page}`,
                 language: 'es',
-                endReason: 'DEADLINE',
               },
             ],
             total: 45,
@@ -170,7 +172,6 @@ describe('the sessions tab', { timeout: 30000 }, () => {
                 durationSeconds: 5,
                 modelTier: `tier-of-page-${page}`,
                 language: 'es',
-                endReason: null,
               },
             ],
             total: 45,

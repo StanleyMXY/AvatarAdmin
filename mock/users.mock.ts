@@ -272,7 +272,22 @@ export default {
     const rows = [...(usersState.sessions.get(user.id) ?? [])].sort((a, b) =>
       a.requestedAt < b.requestedAt ? 1 : -1,
     );
-    return ok(paginateQuery(rows, req));
+    // The nine columns of a call row (answer 59). There is no `endReason`: it is in `GET /sessions/{id}` only.
+    const page = paginateQuery(rows, req);
+    return ok({
+      items: page.items.map((row) => ({
+        id: row.id,
+        accountId: user.id,
+        deviceId: null,
+        requestedAt: row.requestedAt,
+        startedAt: row.startedAt,
+        endedAt: row.endedAt,
+        durationSeconds: row.durationSeconds,
+        modelTier: row.modelTier,
+        language: row.language,
+      })),
+      total: page.total,
+    });
   }),
 
   'GET /api/admin/users/:id/devices': guard('USER:VIEW', (req) => {
