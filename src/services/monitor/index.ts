@@ -46,6 +46,8 @@ export const resolveAlert = async (id: string): Promise<void> => {
 
 /** A sample of the pipeline; every figure can be missing (the sender reports what it can measure). */
 export type PipelinePoint = {
+  /** What identifies the point (a key for a row of a table); the backend does not say more about its type. */
+  id: string | number;
   reportedAt: string;
   effectiveAt?: string;
   source: string;
@@ -57,7 +59,10 @@ export type PipelinePoint = {
 };
 
 export type PipelineQuery = {
-  /** ISO-8601 instants; the backend uses the last 24 hours when they are left out. */
+  /**
+   * ISO-8601 instants with a time zone. Both left out: the last 24 hours; only `from`: the 24 hours
+   * after it; only `to`: the 24 hours before it. `from` after `to`, or not ISO-8601: 400.
+   */
   from?: string;
   to?: string;
   source?: string;
