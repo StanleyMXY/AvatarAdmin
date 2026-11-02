@@ -301,22 +301,26 @@ export default {
     });
   }),
 
+  // Backend reply 106: the fields are checked first (400), then the account (404), then the entitlement
+  // (404 RESOURCE_NOT_FOUND, not 400); the days are 1 to 3650; the answer is { id }.
   'POST /api/admin/accounts/:id/promo-entitlements': guard('SUBSCRIPTION:GRANT', (req) => {
     const accountId = idParam(req);
-    if (!ACCOUNT_IDS.includes(accountId)) throw notFound('account');
     const body = bodyOf(req);
     const details: { ref: string; reason: string }[] = [];
     const key = typeof body.entitlementKey === 'string' ? body.entitlementKey : '';
-    if (!state().defs.some((d) => d.key === key))
-      details.push({ ref: 'entitlementKey', reason: 'OUT_OF_RANGE' });
+    if (key.trim() === '') details.push({ ref: 'entitlementKey', reason: 'EMPTY_NOT_ALLOWED' });
     const days = body.durationDays;
-    if (typeof days !== 'number' || !Number.isInteger(days))
+    if (days === undefined || days === null)
+      details.push({ ref: 'durationDays', reason: 'EMPTY_NOT_ALLOWED' });
+    else if (typeof days !== 'number' || !Number.isInteger(days))
       details.push({ ref: 'durationDays', reason: 'NOT_AN_INTEGER' });
     else if (days < 1 || days > 3650) details.push({ ref: 'durationDays', reason: 'OUT_OF_RANGE' });
     const reason = typeof body.reason === 'string' ? body.reason : '';
     if (codePointLength(reason) === 0) details.push({ ref: 'reason', reason: 'EMPTY_NOT_ALLOWED' });
     else if (codePointLength(reason) > 500) details.push({ ref: 'reason', reason: 'TOO_LONG' });
     if (details.length > 0) throw invalidRequest('the grant is not valid', details);
+    if (!ACCOUNT_IDS.includes(accountId)) throw notFound('account');
+    if (!state().defs.some((d) => d.key === key)) throw notFound('entitlement');
     const now = new Date();
     const row: AccountEntitlementRow = {
       id: String(state().nextPromoId++),
@@ -336,10 +340,12 @@ export default {
     return ok({ id: row.id });
   }),
 
+  // A row that is not there, or is a store subscription's, is 404; one that is no longer active is
+  // 409 with its status; success is data null.
   'POST /api/admin/promo-entitlements/:id/revoke': guard('SUBSCRIPTION:GRANT', (req) => {
     const row = state().accountEntitlements.find((r) => r.id === idParam(req));
-    if (!row) throw notFound('entitlement');
-    const status = row.source === 'STORE' ? 'STORE' : entitlementStatus(row);
+    if (row?.source !== 'PROMO') throw notFound('entitlement');
+    const status = entitlementStatus(row);
     if (status !== 'ACTIVE')
       throw new MockHttpError(
         409,
@@ -348,7 +354,7 @@ export default {
         { status },
       );
     row.revokedAt = new Date().toISOString();
-    return ok({ id: row.id });
+    return ok(null);
   }),
 
   'GET /api/admin/entitlement-defs': guard(['SUBSCRIPTION:VIEW', 'SUBSCRIPTION:GRANT'], () =>

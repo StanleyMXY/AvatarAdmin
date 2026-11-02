@@ -166,7 +166,11 @@ export const getAccountEntitlements = (accountId: string): Promise<AccountEntitl
     url: `/accounts/${enc(accountId)}/entitlements`,
   });
 
-/** `POST /accounts/{id}/promo-entitlements` (`SUBSCRIPTION:GRANT`): a limited-time entitlement; the store subscription is not touched. */
+/**
+ * `POST /accounts/{id}/promo-entitlements` (`SUBSCRIPTION:GRANT`): a limited-time entitlement; the
+ * store subscription is not touched. `durationDays` is 1 to 3650, `reason` 1 to 500 code points; an
+ * entitlement that does not exist is 404.
+ */
 export const grantPromoEntitlement = (
   accountId: string,
   input: { entitlementKey: string; durationDays: number; reason: string },
@@ -177,6 +181,6 @@ export const grantPromoEntitlement = (
     body: input,
   });
 
-/** `POST /promo-entitlements/{id}/revoke` (`SUBSCRIPTION:GRANT`). */
-export const revokePromoEntitlement = (promoId: string): Promise<unknown> =>
-  apiRequest<unknown>({ method: 'POST', url: `/promo-entitlements/${enc(promoId)}/revoke` });
+/** `POST /promo-entitlements/{id}/revoke` (`SUBSCRIPTION:GRANT`): no body; answers `data: null`. */
+export const revokePromoEntitlement = (promoId: string): Promise<null> =>
+  apiRequest<null>({ method: 'POST', url: `/promo-entitlements/${enc(promoId)}/revoke` });

@@ -858,7 +858,7 @@ describe('account entitlements', () => {
     ).toBe(404);
   });
 
-  it('grants a promo entitlement for some days, then revokes it; revoking twice or a STORE row is 409', async () => {
+  it('grants a promo entitlement for some days, then revokes it (data null); revoking twice is 409 with the status, a STORE row or a row that is not there is 404', async () => {
     const grant = await send(
       'POST /api/admin/accounts/:id/promo-entitlements',
       root(),
@@ -886,25 +886,25 @@ describe('account entitlements', () => {
       id,
     });
     expect(revoked.status).toBe(200);
+    expect(revoked.body.data).toBeNull();
     const again = await send('POST /api/admin/promo-entitlements/:id/revoke', root(), undefined, {
       id,
     });
     expect(again.status).toBe(409);
     expect(again.body.data.status).toBe('REVOKED');
-    expect(
-      (
-        await send('POST /api/admin/promo-entitlements/:id/revoke', root(), undefined, {
-          id: '7001',
-        })
-      ).status,
-    ).toBe(409);
+    // a row from a store subscription is not a limited-time entitlement: the backend says it is not there
+    const store = await send('POST /api/admin/promo-entitlements/:id/revoke', root(), undefined, {
+      id: '7001',
+    });
+    expect(store.status).toBe(404);
+    expect(store.body.code).toBe('RESOURCE_NOT_FOUND');
     expect(
       (await send('POST /api/admin/promo-entitlements/:id/revoke', root(), undefined, { id: '1' }))
         .status,
     ).toBe(404);
   });
 
-  it('refuses a grant with a wrong duration, an empty or long reason, or an entitlement that does not exist', async () => {
+  it('refuses a grant with a wrong duration (1 to 3650 days), an empty or long reason, and an entitlement that does not exist (404, not 400)', async () => {
     const grant = (body: unknown) =>
       send('POST /api/admin/accounts/:id/promo-entitlements', root(), body, { id: account });
     expect(
@@ -912,9 +912,20 @@ describe('account entitlements', () => {
         .details[0],
     ).toEqual({ ref: 'durationDays', reason: 'OUT_OF_RANGE' });
     expect(
+      (await grant({ entitlementKey: 'plus_th', durationDays: 3651, reason: 'x' })).body.data
+        .details[0],
+    ).toEqual({ ref: 'durationDays', reason: 'OUT_OF_RANGE' });
+    expect(
+      (await grant({ entitlementKey: 'plus_th', durationDays: 3650, reason: 'x' })).status,
+    ).toBe(200);
+    expect(
       (await grant({ entitlementKey: 'plus_th', durationDays: 1.5, reason: 'x' })).body.data
         .details[0].reason,
     ).toBe('NOT_AN_INTEGER');
+    expect((await grant({ entitlementKey: 'plus_th', reason: 'x' })).body.data.details[0]).toEqual({
+      ref: 'durationDays',
+      reason: 'EMPTY_NOT_ALLOWED',
+    });
     expect(
       (await grant({ entitlementKey: 'plus_th', durationDays: 3, reason: '  ' })).body.data
         .details[0],
@@ -923,10 +934,9 @@ describe('account entitlements', () => {
       (await grant({ entitlementKey: 'plus_th', durationDays: 3, reason: 'x'.repeat(501) })).body
         .data.details[0].reason,
     ).toBe('TOO_LONG');
-    expect(
-      (await grant({ entitlementKey: 'nope', durationDays: 3, reason: 'x' })).body.data.details[0]
-        .ref,
-    ).toBe('entitlementKey');
+    const missing = await grant({ entitlementKey: 'nope', durationDays: 3, reason: 'x' });
+    expect(missing.status).toBe(404);
+    expect(missing.body.code).toBe('RESOURCE_NOT_FOUND');
     const unknown = await send(
       'POST /api/admin/accounts/:id/promo-entitlements',
       root(),
