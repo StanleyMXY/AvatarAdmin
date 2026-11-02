@@ -2,12 +2,12 @@ import { apiRequest } from '../../request/apiClient';
 import type {
   AccountAvatars,
   ActionCreate,
-  ActionFields,
   ActionItem,
+  ActionUpdate,
   CosmeticCreate,
-  CosmeticFields,
   CosmeticItem,
   CosmeticQuery,
+  CosmeticUpdate,
   Declaration,
   DefaultAvatar,
   DefaultAvatarCreate,
@@ -71,8 +71,8 @@ export async function listAllCosmetics(): Promise<CosmeticItem[]> {
 export const createCosmetic = (body: CosmeticCreate): Promise<CosmeticItem> =>
   apiRequest({ method: 'POST', url: '/cosmetics', body });
 
-/** `key` and `kind` are fixed once the item exists, so they are not part of the body. */
-export const updateCosmetic = (id: string, body: CosmeticFields): Promise<CosmeticItem> =>
+/** `PUT` takes the whole item, `kind` and `enabled` included; the key is fixed once the item exists, so it is not sent. */
+export const updateCosmetic = (id: string, body: CosmeticUpdate): Promise<CosmeticItem> =>
   apiRequest({ method: 'PUT', url: `/cosmetics/${enc(id)}`, body });
 
 export const setCosmeticEnabled = (id: string, enabled: boolean): Promise<CosmeticItem> =>
@@ -88,7 +88,8 @@ export const listActions = (params: {
 export const createAction = (body: ActionCreate): Promise<ActionItem> =>
   apiRequest({ method: 'POST', url: '/actions', body });
 
-export const updateAction = (id: string, body: ActionFields): Promise<ActionItem> =>
+/** `PUT` takes the whole action, `enabled` included; the key is not sent. */
+export const updateAction = (id: string, body: ActionUpdate): Promise<ActionItem> =>
   apiRequest({ method: 'PUT', url: `/actions/${enc(id)}`, body });
 
 export const setActionEnabled = (id: string, enabled: boolean): Promise<ActionItem> =>

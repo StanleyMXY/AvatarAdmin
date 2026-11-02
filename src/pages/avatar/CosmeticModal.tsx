@@ -104,7 +104,9 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
     };
     try {
       if (item) {
-        await updateCosmetic(item.id, fields);
+        // The whole item goes to the backend: its kind (not changed here) and its enabled state as
+        // they were when the dialog was opened, and no key.
+        await updateCosmetic(item.id, { ...fields, kind: item.kind, enabled: item.enabled });
       } else {
         await createCosmetic({
           ...fields,

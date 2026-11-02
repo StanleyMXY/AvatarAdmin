@@ -169,6 +169,22 @@ function flag(value: unknown, ref: string, details: Detail[]): boolean {
   return value;
 }
 
+/** A flag the backend needs in the request: missing is EMPTY_NOT_ALLOWED, another type NOT_BOOLEAN. */
+function requiredFlag(value: unknown, ref: string, details: Detail[]): boolean {
+  if (value === undefined || value === null) {
+    details.push({ ref, reason: 'EMPTY_NOT_ALLOWED' });
+    return false;
+  }
+  return flag(value, ref, details);
+}
+
+/** An update may carry the key, but only the one the item has. */
+function sameKey(value: unknown, current: string, details: Detail[]): void {
+  if (value !== undefined && value !== null && value !== current) {
+    details.push({ ref: 'key', reason: 'OUT_OF_RANGE' });
+  }
+}
+
 const keyOf = (value: unknown, details: Detail[]): string => {
   const trimmed = typeof value === 'string' ? trimSpec(value) : '';
   if (trimmed === '') details.push({ ref: 'key', reason: 'EMPTY_NOT_ALLOWED' });
@@ -289,7 +305,7 @@ export default {
       details.push({ ref: 'kind', reason: 'OUT_OF_RANGE' });
     }
     const item = readCosmeticFields(body, details);
-    if (body.enabled !== undefined) flag(body.enabled, 'enabled', details);
+    requiredFlag(body.enabled, 'enabled', details);
     if (details.length > 0) throw fail(details);
     if (avatarState.cosmetics.some((c) => c.key === key)) {
       throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The key exists already', {
@@ -316,6 +332,14 @@ export default {
     if (!found) throw notFound('cosmetic');
     const body = bodyOf(req);
     const details: Detail[] = [];
+    // The whole item is sent: the kind and the enabled state too (the key may be, the picture
+    // is only when it is replaced).
+    sameKey(body.key, found.key, details);
+    const kind = typeof body.kind === 'string' ? body.kind : '';
+    if (body.kind === undefined || body.kind === null || body.kind === '') {
+      details.push({ ref: 'kind', reason: 'EMPTY_NOT_ALLOWED' });
+    } else if (!KINDS.includes(kind)) details.push({ ref: 'kind', reason: 'OUT_OF_RANGE' });
+    const enabled = requiredFlag(body.enabled, 'enabled', details);
     const item = readCosmeticFields(body, details);
     if (details.length > 0) throw fail(details);
     if (body.previewUploadId !== undefined) {
@@ -323,7 +347,7 @@ export default {
       picture.used = true;
       found.previewFile = `${found.key}-${picture.id}.svg`;
     }
-    Object.assign(found, item);
+    Object.assign(found, item, { kind: kind as MockCosmetic['kind'], enabled });
     clearOtherDefaults(found);
     return ok(cosmeticRow(found));
   }),
@@ -351,7 +375,7 @@ export default {
     const details: Detail[] = [];
     const key = keyOf(body.key, details);
     const item = readActionFields(body, details);
-    if (body.enabled !== undefined) flag(body.enabled, 'enabled', details);
+    requiredFlag(body.enabled, 'enabled', details);
     if (details.length > 0) throw fail(details);
     if (avatarState.actions.some((a) => a.key === key)) {
       throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The key exists already', {
@@ -377,6 +401,9 @@ export default {
     if (!found) throw notFound('action');
     const body = bodyOf(req);
     const details: Detail[] = [];
+    // The whole action is sent, the enabled state included (the key may be, the icon is only when it is replaced).
+    sameKey(body.key, found.key, details);
+    const enabled = requiredFlag(body.enabled, 'enabled', details);
     const item = readActionFields(body, details);
     if (details.length > 0) throw fail(details);
     if (body.iconUploadId !== undefined) {
@@ -384,7 +411,7 @@ export default {
       picture.used = true;
       found.iconFile = `${found.key}-${picture.id}.svg`;
     }
-    Object.assign(found, item);
+    Object.assign(found, item, { enabled });
     return ok(actionRow(found));
   }),
 
@@ -690,12 +717,17 @@ function readCosmeticFields(body: Record<string, unknown>, details: Detail[]) {
   const names = localized(body.names, 'names', details);
   const generationSpec = spec(body.generationSpec, 'generationSpec', details);
   const compatibleStyles = styles(body.compatibleStyles, details);
-  const surfaceList = surfaces(body.surfaces, details);
+  // Surfaces left out are none (all ends).
+  const surfaceList = surfaces(body.surfaces ?? [], details);
+  const isFree = flag(body.isFree, 'isFree', details);
+  // No price (null) clears it; a price is 1 to 1000000000 and an item that is free has none.
   let creditPrice: number | null = null;
   if (body.creditPrice !== null && body.creditPrice !== undefined) {
-    creditPrice = whole(body.creditPrice, 'creditPrice', details, 0);
+    creditPrice = whole(body.creditPrice, 'creditPrice', details, 1);
+    if (isInt(body.creditPrice) && (body.creditPrice > 1_000_000_000 || isFree)) {
+      details.push({ ref: 'creditPrice', reason: 'OUT_OF_RANGE' });
+    }
   }
-  const isFree = flag(body.isFree, 'isFree', details);
   const isDefault = flag(body.isDefault, 'isDefault', details);
   if (isDefault && !isFree) details.push({ ref: 'isDefault', reason: 'OUT_OF_RANGE' });
   const sortOrder = whole(body.sortOrder, 'sortOrder', details);
@@ -717,7 +749,7 @@ function readActionFields(body: Record<string, unknown>, details: Detail[]) {
   if (description === '') details.push({ ref: 'description', reason: 'EMPTY_NOT_ALLOWED' });
   const generationSpec = spec(body.generationSpec, 'generationSpec', details);
   const compatibleStyles = styles(body.compatibleStyles, details);
-  const surfaceList = surfaces(body.surfaces, details);
+  const surfaceList = surfaces(body.surfaces ?? [], details);
   if (typeof body.triggerableBy !== 'string' || !TRIGGERS.includes(body.triggerableBy)) {
     details.push({ ref: 'triggerableBy', reason: 'OUT_OF_RANGE' });
   }

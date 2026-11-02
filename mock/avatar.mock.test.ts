@@ -63,9 +63,16 @@ const cosmeticBody = (over: Record<string, unknown> = {}) => ({
   creditPrice: null,
   isFree: false,
   isDefault: false,
+  enabled: false,
   sortOrder: 5,
   ...over,
 });
+
+/** The body of an update: the whole item, and no key (it may be sent, but only the one the item has). */
+const putBody = (over: Record<string, unknown> = {}) => {
+  const { key: _key, ...rest } = cosmeticBody(over);
+  return rest;
+};
 
 describe('permissions (contract 17.4, the 形象与装扮 row)', () => {
   const cases: [string, string][] = [
@@ -167,7 +174,7 @@ describe('uploads and the cosmetic catalog', () => {
 
   it('needs English among the names of an item: the detail is names.en, and names for a missing or empty object', async () => {
     const detailsOf = async (names: unknown) =>
-      (await send(COSMETIC_UPDATE, cosmeticBody({ names }), { id: '3' })).body.data.details;
+      (await send(COSMETIC_UPDATE, putBody({ names }), { id: '3' })).body.data.details;
     expect(await detailsOf({ th: 'ชุดนอน', ar: 'ثوب' })).toEqual([
       { ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' },
     ]);
@@ -176,11 +183,9 @@ describe('uploads and the cosmetic catalog', () => {
     ]);
     expect(await detailsOf({})).toEqual([{ ref: 'names', reason: 'EMPTY_NOT_ALLOWED' }]);
     expect(await detailsOf(undefined)).toEqual([{ ref: 'names', reason: 'EMPTY_NOT_ALLOWED' }]);
-    const fine = await send(
-      COSMETIC_UPDATE,
-      cosmeticBody({ names: { en: 'Pyjamas', th: 'ชุดนอน' } }),
-      { id: '3' },
-    );
+    const fine = await send(COSMETIC_UPDATE, putBody({ names: { en: 'Pyjamas', th: 'ชุดนอน' } }), {
+      id: '3',
+    });
     expect(fine.status).toBe(200);
   });
 
@@ -227,7 +232,7 @@ describe('uploads and the cosmetic catalog', () => {
 
   it('checks the generation text in code points after trimming: Arabic and emoji count one each', async () => {
     const make = (generationSpec: string) =>
-      send(COSMETIC_UPDATE, cosmeticBody({ generationSpec }), { id: '3' });
+      send(COSMETIC_UPDATE, putBody({ generationSpec }), { id: '3' });
     expect((await make('')).body.data.details).toEqual([
       { ref: 'generationSpec', reason: 'EMPTY_NOT_ALLOWED' },
     ]);
@@ -237,23 +242,141 @@ describe('uploads and the cosmetic catalog', () => {
     expect(long.body.data.details).toEqual([{ ref: 'generationSpec', reason: 'TOO_LONG' }]);
   });
 
-  it('updates by id without touching the key, clears the price with null, and answers 404 for an unknown id', async () => {
+  it('updates by id, clears the price with null, and answers 404 for an unknown id', async () => {
     const before = avatarState.cosmetics.find((c) => c.id === '3');
     const updated = await send(
       COSMETIC_UPDATE,
-      cosmeticBody({ key: 'ignored', creditPrice: null }),
+      { ...putBody({ creditPrice: null }), key: before?.key },
       { id: '3' },
     );
     expect(updated.body.data.key).toBe(before?.key);
     expect(updated.body.data.creditPrice).toBeNull();
-    expect((await send(COSMETIC_UPDATE, cosmeticBody(), { id: 'zz' })).status).toBe(404);
+    expect((await send(COSMETIC_UPDATE, putBody(), { id: 'zz' })).status).toBe(404);
+  });
+
+  it('needs the whole item to update it: kind and enabled among the fields, 400 on the ref of each one that is missing', async () => {
+    const full = putBody({ enabled: true });
+    for (const field of [
+      'kind',
+      'enabled',
+      'names',
+      'generationSpec',
+      'compatibleStyles',
+      'isFree',
+      'isDefault',
+      'sortOrder',
+    ]) {
+      const { [field]: _left, ...rest } = full as Record<string, unknown>;
+      const answer = await send(COSMETIC_UPDATE, rest, { id: '3' });
+      expect(answer.status, field).toBe(400);
+      expect(
+        answer.body.data.details.map((d: { ref: string }) => d.ref),
+        field,
+      ).toContain(field);
+    }
+    // the key and the picture can stay out, and so can the surfaces (they become none)
+    const { key: _key, surfaces: _surfaces, ...lean } = full as Record<string, unknown>;
+    const lean200 = await send(COSMETIC_UPDATE, lean, { id: '3' });
+    expect(lean200.status).toBe(200);
+    expect(lean200.body.data.surfaces).toEqual([]);
+  });
+
+  it('writes the kind and the enabled state it is sent, and refuses a key that is not the key of the item', async () => {
+    const answer = await send(
+      COSMETIC_UPDATE,
+      { ...putBody({ kind: 'BACKGROUND', enabled: false }), key: 'outfit_red_dress' },
+      { id: '3' },
+    );
+    expect(answer.body.data).toMatchObject({ kind: 'BACKGROUND', enabled: false });
+    const other = await send(
+      COSMETIC_UPDATE,
+      { ...putBody({ enabled: true }), key: 'other_key' },
+      {
+        id: '3',
+      },
+    );
+    expect(other.status).toBe(400);
+    expect(other.body.data.details).toEqual([{ ref: 'key', reason: 'OUT_OF_RANGE' }]);
+    expect(avatarState.cosmetics.find((c) => c.id === '3')?.key).toBe('outfit_red_dress');
+    const wrongKind = await send(COSMETIC_UPDATE, putBody({ kind: 'HAT', enabled: true }), {
+      id: '3',
+    });
+    expect(wrongKind.body.data.details).toEqual([{ ref: 'kind', reason: 'OUT_OF_RANGE' }]);
+  });
+
+  it('needs enabled to create an item or an action, on the ref enabled', async () => {
+    const { enabled: _enabled, ...noEnabled } = cosmeticBody({
+      previewUploadId: await upload(UPLOAD_IMAGE),
+    }) as Record<string, unknown>;
+    const created = await send(COSMETIC_CREATE, noEnabled);
+    expect(created.status).toBe(400);
+    expect(created.body.data.details).toEqual([{ ref: 'enabled', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const action = await send(ACTION_CREATE, {
+      key: 'spin',
+      names: { en: 'Spin' },
+      description: 'Spins once',
+      generationSpec: 'The person turns around once.',
+      compatibleStyles: ['STYLIZED_3D'],
+      triggerableBy: 'AGENT',
+      sortOrder: 70,
+      iconUploadId: await upload(UPLOAD_IMAGE),
+    });
+    expect(action.status).toBe(400);
+    expect(action.body.data.details).toEqual([{ ref: 'enabled', reason: 'EMPTY_NOT_ALLOWED' }]);
+  });
+
+  it('needs the whole action to update it: description, triggerableBy, enabled, sortOrder, names, generationSpec and compatibleStyles', async () => {
+    const full = {
+      names: { en: 'Wave' },
+      description: 'Waves',
+      generationSpec: 'The person waves.',
+      compatibleStyles: ['REALISTIC'],
+      triggerableBy: 'BOTH',
+      enabled: true,
+      sortOrder: 3,
+    };
+    for (const field of Object.keys(full)) {
+      const { [field]: _left, ...rest } = full as Record<string, unknown>;
+      const answer = await send('PUT /api/admin/actions/:id', rest, { id: '1' });
+      expect(answer.status, field).toBe(400);
+      expect(
+        answer.body.data.details.map((d: { ref: string }) => d.ref),
+        field,
+      ).toContain(field);
+    }
+    const ok = await send('PUT /api/admin/actions/:id', { ...full, enabled: false }, { id: '1' });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.enabled).toBe(false);
+    const wrongKey = await send('PUT /api/admin/actions/:id', { ...full, key: 'zz' }, { id: '1' });
+    expect(wrongKey.body.data.details).toEqual([{ ref: 'key', reason: 'OUT_OF_RANGE' }]);
+  });
+
+  it('refuses a price on a free item, and a price outside 1 to 1000000000', async () => {
+    const detailsOf = async (over: Record<string, unknown>) =>
+      (await send(COSMETIC_UPDATE, putBody({ enabled: true, ...over }), { id: '3' })).body.data
+        .details;
+    expect(await detailsOf({ isFree: true, creditPrice: 10 })).toEqual([
+      { ref: 'creditPrice', reason: 'OUT_OF_RANGE' },
+    ]);
+    expect(await detailsOf({ creditPrice: 0 })).toEqual([
+      { ref: 'creditPrice', reason: 'OUT_OF_RANGE' },
+    ]);
+    expect(await detailsOf({ creditPrice: 1_000_000_001 })).toEqual([
+      { ref: 'creditPrice', reason: 'OUT_OF_RANGE' },
+    ]);
+    const fine = await send(
+      COSMETIC_UPDATE,
+      putBody({ enabled: true, creditPrice: 1_000_000_000 }),
+      { id: '3' },
+    );
+    expect(fine.status).toBe(200);
   });
 
   it('switches an item on and off, and the default of a kind moves to the item that is made the default', async () => {
     const off = await send(COSMETIC_ENABLED, { enabled: false }, { id: '3' });
     expect(off.body.data.enabled).toBe(false);
     expect((await send(COSMETIC_ENABLED, { enabled: 'yes' }, { id: '3' })).status).toBe(400);
-    await send(COSMETIC_UPDATE, cosmeticBody({ isFree: true, isDefault: true }), { id: '3' });
+    await send(COSMETIC_UPDATE, putBody({ isFree: true, isDefault: true }), { id: '3' });
     const defaults = avatarState.cosmetics.filter((c) => c.kind === 'OUTFIT' && c.isDefault);
     expect(defaults.map((c) => c.id)).toEqual(['3']);
   });
@@ -261,7 +384,7 @@ describe('uploads and the cosmetic catalog', () => {
   it('refuses a default that is not free, a surface of a platform that does not exist, and a price that is not whole', async () => {
     const bad = await send(
       COSMETIC_UPDATE,
-      cosmeticBody({
+      putBody({
         isDefault: true,
         isFree: false,
         surfaces: [{ platform: 'WEB', channel: null }],
@@ -304,6 +427,7 @@ describe('actions', () => {
       compatibleStyles: ['STYLIZED_3D'],
       surfaces: [{ platform: 'IOS', channel: null }],
       triggerableBy: 'AGENT',
+      enabled: false,
       sortOrder: 70,
     };
     expect((await send(ACTION_CREATE, body)).status).toBe(400);
@@ -354,6 +478,7 @@ describe('actions', () => {
           compatibleStyles: ['REALISTIC'],
           surfaces: [],
           triggerableBy,
+          enabled: true,
           sortOrder: n,
         },
         { id: '1' },
@@ -370,6 +495,7 @@ describe('actions', () => {
         compatibleStyles: [],
         surfaces: [],
         triggerableBy: 'ROBOT',
+        enabled: true,
         sortOrder: 0,
       },
       { id: '1' },

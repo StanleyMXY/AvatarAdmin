@@ -93,7 +93,8 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
     };
     try {
       if (action) {
-        await updateAction(action.id, fields);
+        // The whole action goes to the backend, its enabled state as it was when the dialog was opened.
+        await updateAction(action.id, { ...fields, enabled: action.enabled });
       } else {
         await createAction({ ...fields, key: trimSpec(values.key), enabled: values.enabled });
       }
