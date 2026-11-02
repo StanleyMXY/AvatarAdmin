@@ -609,6 +609,7 @@ describe('actions', () => {
     const disabled = await send(BACKFILL, undefined, { id: '5' });
     expect(disabled.status).toBe(409);
     expect(disabled.body.code).toBe('INVALID_STATE');
+    expect(disabled.body.data).toBeNull();
   });
 });
 
@@ -797,8 +798,9 @@ describe('default avatars', () => {
     const again = await send(GENERATE, undefined, { id: 'da-3' });
     expect(again.status).toBe(409);
     expect(again.body.code).toBe('INVALID_STATE');
-    expect(again.body.data.status).toBe('GENERATING');
-    expect((await send(GENERATE, undefined, { id: 'da-4' })).body.data.status).toBe('READY');
+    // the backend says nothing about the state in the 409 of the default avatars
+    expect(again.body.data).toBeNull();
+    expect((await send(GENERATE, undefined, { id: 'da-4' })).body.data).toBeNull(); // READY: 409 too
     settleGenerations(Date.now() + GENERATION_MS + 1);
     const row = avatarState.defaultAvatars.find((d) => d.id === 'da-3');
     expect(row).toMatchObject({ status: 'READY', failureReason: null });
@@ -825,7 +827,7 @@ describe('default avatars', () => {
   it('activates only a READY avatar, one at a time: the earlier one stays but is no longer active', async () => {
     const refused = await send(ACTIVATE, undefined, { id: 'da-3' });
     expect(refused.status).toBe(409);
-    expect(refused.body.data.status).toBe('DRAFT');
+    expect(refused.body.data).toBeNull();
     const ok = await send(ACTIVATE, undefined, { id: 'da-4' });
     expect(ok.body.data.isActive).toBe(true);
     expect(avatarState.defaultAvatars.filter((d) => d.isActive).map((d) => d.id)).toEqual(['da-4']);
@@ -835,10 +837,10 @@ describe('default avatars', () => {
   it('deletes only an avatar that is neither active nor generating', async () => {
     const active = await send(REMOVE, undefined, { id: 'da-5' });
     expect(active.status).toBe(409);
-    expect(active.body.data.status).toBe('READY');
+    expect(active.body.data).toBeNull();
     const running = await send(REMOVE, undefined, { id: 'da-2' });
     expect(running.status).toBe(409);
-    expect(running.body.data.status).toBe('GENERATING');
+    expect(running.body.data).toBeNull();
     expect((await send(REMOVE, undefined, { id: 'da-3' })).status).toBe(200);
     expect(avatarState.defaultAvatars.some((d) => d.id === 'da-3')).toBe(false);
     expect((await send(REMOVE, undefined, { id: 'da-3' })).status).toBe(404);

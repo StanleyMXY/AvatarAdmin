@@ -68,7 +68,13 @@ export default function DefaultAvatarsPage() {
   };
 
   const actionsOf = (row: DefaultAvatar): RowAction[] => {
-    if (!canWrite || row.status === 'GENERATING') return [];
+    if (!canWrite) return [];
+    // A generating avatar can be renamed (the backend refuses a rename in no state); nothing else is offered while it runs.
+    if (row.status === 'GENERATING') {
+      return [
+        { key: 'rename', label: t('avatar.defaults.rename'), onClick: () => setRenaming(row) },
+      ];
+    }
     const actions: RowAction[] = [];
     if (row.status === 'DRAFT') {
       actions.push({

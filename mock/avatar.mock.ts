@@ -45,6 +45,10 @@ const notFound = (what: string) =>
 const invalidState = (status: string, message: string) =>
   new MockHttpError(409, 'INVALID_STATE', message, { status });
 
+/** A 409 INVALID_STATE that says nothing about the state (`data` is null), as the backend answers for the default avatars and the backfill. */
+const invalidStateNoData = (message: string) =>
+  new MockHttpError(409, 'INVALID_STATE', message, null);
+
 /** Texts in the order of their code units, as the database sorts a key. */
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -79,7 +83,7 @@ function uploadOf(id: unknown, kind: MockUpload['kind'], ref: string): MockUploa
   if (upload.kind !== kind) {
     throw fail([{ ref, reason: 'OUT_OF_RANGE' }], `${ref} is the upload of another kind`);
   }
-  if (upload.used) throw invalidState('USED', 'The upload belongs to another object already');
+  if (upload.used) throw invalidState('CONSUMED', 'The upload belongs to another object already');
   return upload;
 }
 
@@ -436,7 +440,7 @@ export default {
   'POST /api/admin/actions/:id/backfill': guard('ACTION:MANAGE', (req) => {
     const found = avatarState.actions.find((a) => a.id === req.params.id);
     if (!found) throw notFound('action');
-    if (!found.enabled) throw invalidState('DISABLED', 'The action is disabled');
+    if (!found.enabled) throw invalidStateNoData('The action is disabled');
     const scheduled = found.missingClips;
     found.missingClips = 0;
     return ok({ scheduled });
@@ -615,7 +619,7 @@ export default {
     settleGenerations();
     const found = defaultAvatarOf(req);
     if (found.status !== 'DRAFT') {
-      throw invalidState(found.status, 'Only a draft can be generated');
+      throw invalidStateNoData('Only a draft can be generated');
     }
     if (!avatarState.generationConfigured) {
       throw new MockHttpError(
@@ -634,7 +638,7 @@ export default {
     settleGenerations();
     const found = defaultAvatarOf(req);
     if (found.status !== 'READY')
-      throw invalidState(found.status, 'Only a ready avatar can be activated');
+      throw invalidStateNoData('Only a READY default avatar can be activated');
     for (const d of avatarState.defaultAvatars) d.isActive = false;
     found.isActive = true;
     return ok(defaultAvatarRow(found));
@@ -643,9 +647,9 @@ export default {
   'DELETE /api/admin/default-avatars/:id': guard('DEFAULT_AVATAR:MANAGE', (req) => {
     settleGenerations();
     const found = defaultAvatarOf(req);
-    if (found.isActive) throw invalidState(found.status, 'The active avatar cannot be deleted');
+    if (found.isActive) throw invalidStateNoData('The active avatar cannot be deleted');
     if (found.status === 'GENERATING')
-      throw invalidState(found.status, 'A running generation cannot be deleted');
+      throw invalidStateNoData('A running generation cannot be deleted');
     avatarState.defaultAvatars.splice(avatarState.defaultAvatars.indexOf(found), 1);
     return ok(null);
   }),

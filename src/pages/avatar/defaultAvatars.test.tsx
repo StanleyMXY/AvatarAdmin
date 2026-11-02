@@ -125,12 +125,31 @@ describe('the default avatar page: the buttons follow the state', { timeout: 300
     expect(buttonsOf(await rowOf(LONG))).toEqual(['Generate', 'Rename', 'Delete']);
   });
 
-  it('GENERATING: shows it is running and has no button', async () => {
+  it('GENERATING: shows it is running and has the Rename button only (the backend does not refuse a rename in any state)', async () => {
     backend();
     renderPage(<DefaultAvatarsPage />);
     const row = await rowOf(LUNA);
     expect(within(row).getByText('Generating')).toBeInTheDocument();
-    expect(buttonsOf(row)).toEqual([]);
+    expect(buttonsOf(row)).toEqual(['Rename']);
+  });
+
+  it('GENERATING: Rename sends the new name and the avatar stays generating', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<DefaultAvatarsPage />);
+    await user.click(within(await rowOf(LUNA)).getByRole('button', { name: 'Rename' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Luna 2' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(writesOf(calls)[0]).toMatchObject({
+      method: 'PUT',
+      url: '/api/admin/default-avatars/da-2',
+      body: { name: 'Luna 2' },
+    });
+    const renamed = await rowOf('Luna 2');
+    expect(within(renamed).getByText('Generating')).toBeInTheDocument();
+    expect(buttonsOf(renamed)).toEqual(['Rename']);
   });
 
   it('READY and not active: Set active, Rename, Delete', async () => {
@@ -173,7 +192,7 @@ describe('the default avatar page: the actions', { timeout: 30000 }, () => {
       const again = await rowOf(ARABIC);
       expect(within(again).getByText('Generating')).toBeInTheDocument();
       expect(within(again).queryByTestId('failure-reason')).not.toBeInTheDocument();
-      expect(buttonsOf(again)).toEqual([]);
+      expect(buttonsOf(again)).toEqual(['Rename']);
     });
   });
 
@@ -254,7 +273,7 @@ describe('the default avatar page: the actions', { timeout: 30000 }, () => {
 });
 
 describe('the default avatar page: when the backend refuses', { timeout: 30000 }, () => {
-  it('Generate on an avatar that is generating already (409) says what state it is in, and the row is read again', async () => {
+  it('Generate on an avatar that is generating already (409) says the words of the code, and the row is read again', async () => {
     backend();
     const user = userEvent.setup();
     renderPage(<DefaultAvatarsPage />);
@@ -266,12 +285,12 @@ describe('the default avatar page: when the backend refuses', { timeout: 30000 }
     }
     await user.click(within(row).getByRole('button', { name: 'Generate' }));
     expect(
-      await screen.findByText('The action is not possible now. The avatar is: Generating.'),
+      await screen.findByText('The current state of the item does not allow this action.'),
     ).toBeInTheDocument();
-    await waitFor(async () => expect(buttonsOf(await rowOf(LONG))).toEqual([]));
+    await waitFor(async () => expect(buttonsOf(await rowOf(LONG))).toEqual(['Rename']));
   });
 
-  it('Set active on an avatar that is not ready (409) says its state', async () => {
+  it('Set active on an avatar that is not ready (409) says the words of the code', async () => {
     backend();
     const user = userEvent.setup();
     renderPage(<DefaultAvatarsPage />);
@@ -281,11 +300,11 @@ describe('the default avatar page: when the backend refuses', { timeout: 30000 }
     await user.click(within(row).getByRole('button', { name: 'Set active' }));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
-      await screen.findByText('The action is not possible now. The avatar is: Draft.'),
+      await screen.findByText('The current state of the item does not allow this action.'),
     ).toBeInTheDocument();
   });
 
-  it('Delete of an avatar that became active (409) says its state', async () => {
+  it('Delete of an avatar that became active (409) says the words of the code', async () => {
     backend();
     const user = userEvent.setup();
     renderPage(<DefaultAvatarsPage />);
@@ -294,7 +313,7 @@ describe('the default avatar page: when the backend refuses', { timeout: 30000 }
     await user.click(within(row).getByRole('button', { name: 'Delete' }));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
-      await screen.findByText('The action is not possible now. The avatar is: Ready.'),
+      await screen.findByText('The current state of the item does not allow this action.'),
     ).toBeInTheDocument();
     expect(screen.getByText(THAI)).toBeInTheDocument();
   });
@@ -525,7 +544,7 @@ describe('the default avatar page: rename', { timeout: 30000 }, () => {
     expect(writesOf(calls)).toHaveLength(0);
   });
 
-  it('says the state of an avatar that cannot be renamed now (409) and keeps the dialog open', async () => {
+  it('says the state when a 409 names it in data.status (the backend does not, but the page can tell it) and keeps the dialog open', async () => {
     backend();
     const user = userEvent.setup();
     renderPage(<DefaultAvatarsPage />);
