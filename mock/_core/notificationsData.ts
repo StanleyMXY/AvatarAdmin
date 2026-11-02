@@ -68,11 +68,16 @@ export const SYSTEM_TEMPLATES: {
   },
 ];
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LANGUAGE_TAGS = ['th', 'ar', 'id', 'vi', 'es', 'zh-Hans'] as const;
 const SAMPLE_OF = { th: 'th', ar: 'ar', id: 'id', vi: 'vi', es: 'es', 'zh-Hans': 'zh' } as const;
 
 function seedRows(): MockNotification[] {
-  const accounts = usersState.users.slice(0, 9).map((user) => user.id);
+  // Account ids are UUIDs (the list filters by one); the abuse groups of the sample users have plain ids.
+  const accounts = usersState.users
+    .map((user) => user.id)
+    .filter((id) => UUID.test(id))
+    .slice(0, 9);
   const rows: MockNotification[] = [];
   const hoursAgo = (n: number) => daysAgoIso(n / 24);
   for (let i = 0; i < 36; i += 1) {

@@ -38,13 +38,6 @@ const messages: Record<string, string> = {
   'campaign.stats.col.registerRate': 'Registration rate',
   'campaign.stats.col.registerRate.tip': 'Registrations divided by installs.',
   'campaign.stats.col.cost': 'Total cost',
-  'campaign.stats.range.line': '{field}: {reason} {hint}',
-  'campaign.stats.range.from': 'Start date',
-  'campaign.stats.range.from.hint':
-    'The start date must be a valid day and not after the end date.',
-  'campaign.stats.range.to': 'End date',
-  'campaign.stats.range.to.hint':
-    'The end date must be a valid day, and the range must not be longer than statistics allow (stats.max_range_days).',
   'campaign.stats.col.cost.in': 'Total cost ({currency})',
   'campaign.stats.col.cost.tip':
     'The costs entered for the campaign on the days of the range, in the one currency of the system.',
@@ -280,6 +273,8 @@ const messages: Record<string, string> = {
   'campaign.clicks.ip.masked':
     'IP addresses are masked. The permission "{permission}" shows them in full and lets the keyword match a whole address.',
   'campaign.clicks.ip.full': 'The keyword matches the UTM values and a whole IP address.',
+  'campaign.clicks.status.note':
+    'A click that an install record already holds counts as Matched, so such a click can also be in the list when the Pending state is chosen.',
   'campaign.clicks.time': 'Click time (UTC days)',
   'campaign.clicks.status': 'Status',
   'campaign.clicks.status.all': 'All',

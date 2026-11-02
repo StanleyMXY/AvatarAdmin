@@ -42,6 +42,7 @@ const messages: Record<string, string> = {
 
   'subscriptions.detail.title': 'Subscription {id}',
   'subscriptions.detail.storeRef': 'Store reference',
+  'subscriptions.detail.periodOrderId': 'Billing period order ID',
   'subscriptions.detail.grace': 'Grace period ends',
   'subscriptions.detail.firstActiveAt': 'First active',
   'subscriptions.detail.voidedAt': 'Voided',

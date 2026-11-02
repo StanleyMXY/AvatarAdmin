@@ -46,13 +46,24 @@ export async function listAppVersions(query: VersionQuery): Promise<Page<AppVers
   };
 }
 
+/** The most versions of one channel that are read: a bound, so that a faulty `total` cannot make the loop endless. */
+const CHANNEL_PAGES_MAX = 50;
+const CHANNEL_PAGE_SIZE = 200;
+
 /**
- * The version that is active in a channel, or `null` when there is none. A failure is thrown: the
- * caller then says that the number is not known.
+ * Every version of a channel, of every state, read page by page. The version numbers a new or
+ * edited or activated version has to beat (contract 24.2) and the version that is active now are
+ * worked out from them, as a hint; the backend decides. A failure is thrown: the caller then says
+ * that the numbers are not known.
  */
-export async function readActiveVersion(channelCode: string): Promise<AppVersion | null> {
-  const answer = await listAppVersions({ channelCode, status: 'ACTIVE', page: 1, pageSize: 20 });
-  return answer.items.find((v) => v.status === 'ACTIVE' && v.channelCode === channelCode) ?? null;
+export async function readChannelVersions(channelCode: string): Promise<AppVersion[]> {
+  const found: AppVersion[] = [];
+  for (let page = 1; page <= CHANNEL_PAGES_MAX; page += 1) {
+    const answer = await listAppVersions({ channelCode, page, pageSize: CHANNEL_PAGE_SIZE });
+    found.push(...answer.items.filter((v) => v.channelCode === channelCode));
+    if (answer.items.length === 0 || page * CHANNEL_PAGE_SIZE >= answer.total) break;
+  }
+  return found;
 }
 
 export const getAppVersion = (id: string): Promise<AppVersion> =>

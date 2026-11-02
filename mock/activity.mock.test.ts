@@ -240,6 +240,7 @@ describe('publishing and enabling (the probe)', () => {
     expect(reply.body.data).toEqual({
       applied: false,
       disabledActivities: [{ id: '1', name: 'Autumn check-in 🍂' }],
+      activity: null,
     });
     expect(activityState.activities.find((a) => a.id === '5')?.status).toBe('DRAFT');
     expect(activityState.activities.find((a) => a.id === '1')?.status).toBe('ACTIVE');
@@ -248,6 +249,9 @@ describe('publishing and enabling (the probe)', () => {
   it('with confirm=true it publishes and stops the activity that overlaps', async () => {
     const reply = await send(STATUS, { status: 'ACTIVE', confirm: true }, { id: '5' });
     expect(reply.status).toBe(200);
+    expect(reply.body.data.applied).toBe(true);
+    expect(reply.body.data.disabledActivities).toEqual([{ id: '1', name: 'Autumn check-in 🍂' }]);
+    expect(reply.body.data.activity).toMatchObject({ id: '5', status: 'ACTIVE' });
     expect(activityState.activities.find((a) => a.id === '5')?.status).toBe('ACTIVE');
     expect(activityState.activities.find((a) => a.id === '1')?.status).toBe('DISABLED');
   });
@@ -257,7 +261,10 @@ describe('publishing and enabling (the probe)', () => {
       resetActivityStore();
       const reply = await send(STATUS, { status: 'ACTIVE', confirm }, { id: '3' });
       expect(reply.status).toBe(200);
-      expect(reply.body.data).not.toHaveProperty('disabledActivities');
+      expect(reply.body.data.applied).toBe(true);
+      expect(reply.body.data.disabledActivities).toEqual([]);
+      expect(reply.body.data.activity).toMatchObject({ id: '3', status: 'ACTIVE' });
+      expect(reply.body.data.activity.rewards.length).toBeGreaterThan(0);
       expect(activityState.activities.find((a) => a.id === '3')?.status).toBe('ACTIVE');
     }
   });
@@ -276,6 +283,8 @@ describe('publishing and enabling (the probe)', () => {
   it('stops a live activity without a probe', async () => {
     const reply = await send(STATUS, { status: 'DISABLED' }, { id: '1' });
     expect(reply.status).toBe(200);
+    expect(reply.body.data).toMatchObject({ applied: true, disabledActivities: [] });
+    expect(reply.body.data.activity).toMatchObject({ id: '1', status: 'DISABLED' });
     expect(activityState.activities.find((a) => a.id === '1')?.status).toBe('DISABLED');
   });
 
@@ -316,6 +325,7 @@ describe('editing a sign-in activity', () => {
     expect(reply.status).toBe(200);
     expect(reply.body.data.applied).toBe(false);
     expect(reply.body.data.disabledActivities.length).toBeGreaterThan(0);
+    expect(reply.body.data.activity).toBeNull();
     expect(activityState.activities.find((a) => a.id === '1')?.name).toBe('Autumn check-in 🍂');
   });
 
@@ -327,6 +337,9 @@ describe('editing a sign-in activity', () => {
       { id: '1' },
     );
     expect(reply.status).toBe(200);
+    expect(reply.body.data.applied).toBe(true);
+    expect(reply.body.data.disabledActivities.map((a: { id: string }) => a.id)).toContain('3');
+    expect(reply.body.data.activity).toMatchObject({ id: '1', name: 'Wide' });
     expect(activityState.activities.find((a) => a.id === '1')?.name).toBe('Wide');
     expect(activityState.activities.find((a) => a.id === '3')?.status).toBe('DISABLED');
   });
@@ -339,7 +352,8 @@ describe('editing a sign-in activity', () => {
       { id: '1' },
     );
     expect(reply.status).toBe(200);
-    expect(reply.body.data).not.toHaveProperty('disabledActivities');
+    expect(reply.body.data).toMatchObject({ applied: true, disabledActivities: [] });
+    expect(reply.body.data.activity).toMatchObject({ id: '1', name: 'Same days' });
     expect(activityState.activities.find((a) => a.id === '1')?.name).toBe('Same days');
   });
 

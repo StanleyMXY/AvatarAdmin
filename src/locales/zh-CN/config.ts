@@ -326,7 +326,7 @@ const messages: Record<string, string> = {
   'config.events.rate_limit_per_min.desc': '事件上报每分钟允许的请求数，按设备和按账号各自计算。',
   'config.events.ttl_days.label': '事件保留天数',
   'config.events.ttl_days.desc':
-    '事件记录保留多少天，单位天。写入时算出每条记录的到期时间，修改只影响之后写入的记录。必须不小于 30 加统计回溯天数（回溯天数默认 3，所以默认下限是 33），否则保存失败。',
+    '事件记录保留多少天，单位天。写入时算出每条记录的到期时间，修改只影响之后写入的记录。必须不小于 31 加统计回溯天数（回溯天数默认 3，所以默认下限是 34），否则保存失败。',
   'config.recall.scan_interval_minutes.label': '召回扫描间隔',
   'config.recall.scan_interval_minutes.desc': '扫描需要召回的用户的间隔，单位分钟。',
   'config.recall.local_send_hour.label': '召回推送当地小时',
@@ -394,7 +394,7 @@ const messages: Record<string, string> = {
     '陪伴纪念日的天数清单，用 JSON 数组表示，例如满 7、30、100 天时触发纪念日。',
   'config.moderation.block_score.label': '审核拦截分数',
   'config.moderation.block_score.desc':
-    '审核服务返回的分数（0 到 1）大于或等于这个阈值就拦截；调高它，拦截更少。取值大于 0、不超过 1，最多三位小数，并且必须大于复核分数（两个都保存时检查）。取值随审核服务选型确定，没有默认值。任一分数没保存时不会调用审核服务。生产环境未配置时，依赖审核的用户端接口不可用，生成任务也不处理；管理端不受影响，应先在管理端配置，再让用户端上线。',
+    '审核服务返回的分数（0 到 1）大于或等于这个阈值就拦截；调高它，拦截更少。取值大于 0、不超过 1，最多三位小数，并且必须大于复核分数（两个都保存时检查）。取值随审核服务选型确定，没有默认值。任一分数没保存时不会调用审核服务（模型检查不运行）：不报错、不返回 503，文字仍检查规则词表，其他内容放行；保存后下一次检查生效，不需要重启。',
   'config.moderation.review_score.label': '审核复核分数',
   'config.moderation.review_score.desc':
     '分数大于或等于这个阈值、但低于拦截分数时进入人工复核；低于它则通过。调高它，进入复核的更少。取值大于 0、不超过 1，最多三位小数，并且必须小于拦截分数（两个都保存时检查）。取值随审核服务选型确定，没有默认值。未配置时的后果与拦截分数相同。',
@@ -420,7 +420,8 @@ const messages: Record<string, string> = {
   'config.moderation.face_min_det_score.desc':
     '人脸检测分数的门槛，低于它就不算检测到人脸，取值 0.1 到 1（含两端）；低于 0.1 的值不起作用，会被拒绝。随提交请求传给形象生成服务。',
   'config.moderation.generated_output_review.label': '审核生成结果',
-  'config.moderation.generated_output_review.desc': '是否审核生成的标准图和动作片段。',
+  'config.moderation.generated_output_review.desc':
+    '是否审核生成的标准图和动作片段。“审核服务调用总开关”关闭时不会调用审核服务，这一项开着也查不出东西，生成结果按通过落地。',
   'config.complaint.likeness_due_hours.label': '肖像投诉处理时限',
   'config.complaint.likeness_due_hours.desc':
     '照片里的人投诉的处理时限，单位小时，超过时限会写告警。',
@@ -567,7 +568,7 @@ const messages: Record<string, string> = {
     '直接查询事件日志的接口（事件明细、事件汇总、事件名、漏斗）允许的最大时间跨度，单位天。',
   'config.admin.totp_required.label': '管理员必须二次验证',
   'config.admin.totp_required.desc':
-    '管理员登录是否必须二次验证。生产环境不能关闭：关闭后服务拒绝启动，保存为关闭也会被拒绝。仅非生产环境可以关闭，此时登录只校验用户名和密码，忽略验证码和绑定状态。',
+    '管理员登录是否必须二次验证。生产环境不能保存为关闭，保存会被拒绝；库里已经是关闭时，生产环境照常启动，后台只写一条警告。仅非生产环境可以关闭，此时登录只校验用户名和密码，忽略验证码和绑定状态。',
   'config.admin.password_min_length.label': '管理员密码最小长度',
   'config.admin.password_min_length.desc': '管理员密码允许的最小长度。',
   'config.admin.permission_cache_seconds.label': '权限缓存时长',
@@ -745,6 +746,9 @@ const messages: Record<string, string> = {
   'config.chat.moderation_deadline_ms.label': '聊天审核期限',
   'config.chat.moderation_deadline_ms.desc':
     '一批聊天消息等待审核结果的最长时间，单位毫秒（100 到 2500）。超时该内容进入复核。',
+  'config.moderation.model_check_enabled.label': '审核服务调用总开关',
+  'config.moderation.model_check_enabled.desc':
+    '打开或关闭对外部审核服务的调用，对所有内容类型都起作用：文字、人设、伴侣名字、聊天消息、照片、声音样本、生成的标准图和动作片段。关闭后：从不调用审核服务，模型这一层一律按通过处理；文字仍检查运营维护的规则词表（判为拦截的照常拒绝，判为复核的仍进复核）；生成的标准图和动作片段也不会被审核，直接按通过落地，即使“审核生成结果”是开着的。打开后，要同时满足这些条件才会运行模型检查：已注册审核服务，并且 moderation.block_score 与 moderation.review_score 两个分数都已保存；缺任何一个都不调用服务，也不会报错。每次检查时读取，保存后下一次检查生效，不需要重启。',
   'config.push.schedule_catchup_minutes.hint':
     '规则：catch-up 分钟数×60 须 ≥ 600 + 轮询秒数；默认值下至少 11。',
   'config.push.task_poll_seconds.hint':
@@ -769,9 +773,9 @@ const messages: Record<string, string> = {
   'config.guest.device_retention_days.reject.OUT_OF_RANGE':
     '没有保存。填 0（不删除），或不小于 91 加统计回溯天数（stats.land_window_days）。',
   'config.events.ttl_days.reject.OUT_OF_RANGE':
-    '没有保存。事件保留天数必须不小于 30 加统计回溯天数（stats.land_window_days）。',
+    '没有保存。事件保留天数必须不小于 31 加统计回溯天数（stats.land_window_days）。',
   'config.stats.land_window_days.reject.OUT_OF_RANGE':
-    '没有保存。回溯天数不能小于 1，并且要小于依赖它的几项：事件保留天数（不小于 30 加回溯天数）、聊天消息保留天数（大于回溯天数）、游客设备记录保留天数（不小于 91 加回溯天数）。',
+    '没有保存。回溯天数不能小于 1，并且要小于依赖它的几项：事件保留天数（不小于 31 加回溯天数）、聊天消息保留天数（大于回溯天数）、游客设备记录保留天数（不小于 91 加回溯天数）。',
   'config.sms.allowed_country_codes.reject.EMPTY_NOT_ALLOWED':
     '还不能开启手机号登录：没有保存短信允许的国家码（sms.allowed_country_codes）。先保存至少一个国家码，再重试。',
   'config.sms.daily_global_cap.reject.EMPTY_NOT_ALLOWED':

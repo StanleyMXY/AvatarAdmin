@@ -1,6 +1,7 @@
 import { ALERT_TYPES } from '../src/services/monitor/alertTypes';
 import { guard } from './_core/auth';
 import { invalidRequest, MockHttpError, ok } from './_core/http';
+import { instantMs } from './_core/instant';
 import {
   monitorStore,
   PIPELINE_MAX_POINTS,
@@ -13,6 +14,8 @@ import { paginate, pagingOf } from './_core/paginate';
 const DAY_MS = 24 * 3600_000;
 
 type Point = {
+  /** What a row of a table could be keyed by: different for every point. */
+  id: number;
   reportedAt: string;
   effectiveAt: string;
   source: string;
@@ -28,7 +31,12 @@ const round = (v: number, digits: number) => Number(v.toFixed(digits));
 function pointOf(source: string, at: number): Point {
   const slot = Math.floor(at / PIPELINE_STEP_MS);
   const iso = new Date(slot * PIPELINE_STEP_MS).toISOString();
-  const base = { reportedAt: iso, effectiveAt: iso, source };
+  const base = {
+    id: slot * PIPELINE_SOURCES.length + PIPELINE_SOURCES.indexOf(source as never),
+    reportedAt: iso,
+    effectiveAt: iso,
+    source,
+  };
   if (source === 'agent-server-1') {
     const errors = slot % 11 === 0 ? 4 : slot % 3;
     return {
@@ -54,22 +62,27 @@ function pointOf(source: string, at: number): Point {
   };
 }
 
-const instant = (ref: string, value: unknown): number | null => {
+/** The milliseconds of an instant, or null when it is left out (an empty value counts as left out). */
+function instant(value: unknown): number | null {
   if (value === undefined || value === '') return null;
-  const text = String(value);
-  const ms = /^\d{4}-\d{2}-\d{2}T/.test(text) ? Date.parse(text) : Number.NaN;
+  const ms = instantMs(String(value));
+  // The document gives no details for a value that is not ISO-8601, so there are none here.
   if (Number.isNaN(ms)) {
-    throw invalidRequest(`${ref} is not an instant`, [{ ref, reason: 'INVALID_PATH' }]);
+    throw new MockHttpError(400, 'INVALID_REQUEST', 'from and to must be ISO-8601 instants');
   }
   return ms;
-};
+}
 
 export default {
   'GET /api/admin/monitor/pipeline': guard('MONITOR:VIEW', (req) => {
     const now = Date.now();
-    const to = instant('to', req.query.to) ?? now;
-    const from = instant('from', req.query.from) ?? to - DAY_MS;
-    if (from > to || to - from > PIPELINE_MAX_RANGE_DAYS * DAY_MS) {
+    // Contract 14.1: neither given, the last 24 hours; one given, the 24 hours after `from` or
+    // before `to`; `from` after `to` is 400 (as is a value that is not ISO-8601, above).
+    const given = { from: instant(req.query.from), to: instant(req.query.to) };
+    const to = given.to ?? (given.from === null ? now : given.from + DAY_MS);
+    const from = given.from ?? to - DAY_MS;
+    if (from > to) throw new MockHttpError(400, 'INVALID_REQUEST', 'from is after to');
+    if (to - from > PIPELINE_MAX_RANGE_DAYS * DAY_MS) {
       throw invalidRequest('the range is longer than allowed', [
         { ref: 'from', reason: 'OUT_OF_RANGE' },
       ]);

@@ -6,7 +6,7 @@ import {
   deleteAppVersion,
   getAppVersion,
   listAppVersions,
-  readActiveVersion,
+  readChannelVersions,
   setAppVersionStatus,
   updateAppVersion,
 } from './index';
@@ -89,34 +89,66 @@ describe('listing the versions (contract 24.2)', () => {
   });
 });
 
-describe('the version that is active in a channel', () => {
-  it('asks for the active versions of that channel and returns the one of the channel', async () => {
+describe('the versions of a channel', () => {
+  const row = (id: number, channelCode: string, status: string, versionCode: number) => ({
+    id: String(id),
+    channelCode,
+    status,
+    versionCode,
+  });
+
+  it('asks for the channel with no state filter and returns its versions of every state', async () => {
     const calls = answer({
       items: [
-        { id: '9', channelCode: 'direct', status: 'ACTIVE', versionCode: 5 },
-        { id: '8', channelCode: 'play', status: 'ARCHIVED', versionCode: 4 },
-        { id: '7', channelCode: 'play', status: 'ACTIVE', versionCode: 120 },
+        row(9, 'direct', 'ACTIVE', 5),
+        row(8, 'play', 'ARCHIVED', 4),
+        row(7, 'play', 'ACTIVE', 120),
+        row(6, 'play', 'DRAFT', 121),
       ],
-      total: 3,
+      total: 4,
     });
-    const found = await readActiveVersion('play');
-    expect(found?.id).toBe('7');
-    expect(params(calls[0].url)).toMatchObject({ channelCode: 'play', status: 'ACTIVE' });
+    const found = await readChannelVersions('play');
+    expect(found.map((v) => v.id)).toEqual(['8', '7', '6']);
+    expect(params(calls[0].url)).toMatchObject({ channelCode: 'play', page: '1', pageSize: '200' });
+    expect(params(calls[0].url)).not.toHaveProperty('status');
   });
 
-  it('is null when there is none (nothing that is active in that channel)', async () => {
-    answer({
-      items: [{ id: '8', channelCode: 'play', status: 'ARCHIVED', versionCode: 4 }],
-      total: 1,
+  it('reads on to the next page while the channel has more versions than a page', async () => {
+    const all = Array.from({ length: 250 }, (_, i) => row(i + 1, 'play', 'ARCHIVED', i + 1));
+    const calls = stubFetch((call) => {
+      const page = Number(params(call.url).page);
+      return jsonResponse(
+        200,
+        envelope('200', { items: all.slice((page - 1) * 200, page * 200), total: 250 }),
+      );
     });
-    expect(await readActiveVersion('play')).toBeNull();
+    const found = await readChannelVersions('play');
+    expect(found).toHaveLength(250);
+    expect(calls.map((c) => params(c.url).page)).toEqual(['1', '2']);
+  });
+
+  it('stops at an empty page even if the total promised more', async () => {
+    const calls = stubFetch((call) =>
+      jsonResponse(
+        200,
+        envelope('200', {
+          items: params(call.url).page === '1' ? [row(1, 'play', 'ACTIVE', 1)] : [],
+          total: 999,
+        }),
+      ),
+    );
+    expect(await readChannelVersions('play')).toHaveLength(1);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('is an empty list when the channel has none', async () => {
     answer({ items: [], total: 0 });
-    expect(await readActiveVersion('play')).toBeNull();
+    expect(await readChannelVersions('play')).toEqual([]);
   });
 
-  it('lets a failure through, so the caller can say the number is not known', async () => {
+  it('lets a failure through, so the caller can say the numbers are not known', async () => {
     stubFetch(() => jsonResponse(403, envelope('ADMIN_FORBIDDEN')));
-    await expect(readActiveVersion('play')).rejects.toMatchObject({ code: 'ADMIN_FORBIDDEN' });
+    await expect(readChannelVersions('play')).rejects.toMatchObject({ code: 'ADMIN_FORBIDDEN' });
   });
 });
 

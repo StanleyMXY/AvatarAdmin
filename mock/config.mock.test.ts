@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { adsState, resetAdsStore } from './_core/adsData';
-import { resetConfigStore } from './_core/configStore';
+import { deployEnv, resetConfigStore } from './_core/configStore';
 import { pushState, resetPushStore } from './_core/pushData';
 import { resetSmsStore, smsState } from './_core/smsData';
 import { issueToken, resetStore } from './_core/store';
@@ -27,6 +27,8 @@ const put = (user: string, key: string, value: unknown) =>
     params: { key },
     body: { value },
   });
+const rowOf = async (user: string, key: string) =>
+  (await list(user)).body.data.items.find((r: { key: string }) => r.key === key);
 const del = (user: string, key: string) =>
   call(h('DELETE /api/admin/config/:key'), {
     headers: { authorization: token(user) },
@@ -34,11 +36,11 @@ const del = (user: string, key: string) =>
   });
 
 describe('GET /config', () => {
-  it('gives a super administrator all 250 keys (225 of the contract and 25 the backend has before the contract does), by key name', async () => {
+  it('gives a super administrator all 251 keys (225 of the contract and 26 the backend has before the contract does), by key name', async () => {
     const { status, body } = await list('root');
     expect(status).toBe(200);
     const keys = body.data.items.map((r: { key: string }) => r.key);
-    expect(keys).toHaveLength(250);
+    expect(keys).toHaveLength(251);
     expect(keys).toEqual([...keys].sort());
   });
 
@@ -149,10 +151,29 @@ describe('PUT /config/:key', () => {
     expect((await put('root', 'export.job_timeout_minutes', 11)).status).toBe(200);
   });
 
-  it('keeps events.ttl_days at least 30 days above stats.land_window_days', async () => {
+  it('keeps events.ttl_days at least 31 days above stats.land_window_days (contract of 2026-11-02: default minimum 34)', async () => {
     expect((await put('root', 'events.ttl_days', 10)).status).toBe(400);
-    expect((await put('root', 'events.ttl_days', 33)).status).toBe(200); // the default window is 3
+    expect((await put('root', 'events.ttl_days', 33)).status).toBe(400); // the default window is 3
+    expect((await put('root', 'events.ttl_days', 34)).status).toBe(200);
     expect((await put('root', 'stats.land_window_days', 4)).status).toBe(400);
+    expect((await put('root', 'stats.land_window_days', 3)).status).toBe(200);
+  });
+
+  it('takes an upload size of at most 536870912 (512 MiB) and notification.max_recipients of at most 10000', async () => {
+    for (const key of [
+      'upload.max_bytes',
+      'upload.push_image_max_bytes',
+      'upload.ad_media_max_bytes',
+      'upload.render_asset_max_bytes',
+      'upload.apk_max_bytes',
+    ]) {
+      expect((await put('root', key, 536870912)).status, key).toBe(200);
+      expect((await put('root', key, 536870913)).status, key).toBe(400);
+      expect((await put('root', key, 0)).status, key).toBe(400);
+    }
+    expect((await put('root', 'notification.max_recipients', 10000)).status).toBe(200);
+    expect((await put('root', 'notification.max_recipients', 10001)).status).toBe(400);
+    expect((await put('root', 'notification.max_recipients', 0)).status).toBe(400);
   });
 
   it('keeps generation.max_attempts between 1 and 10', async () => {
@@ -236,10 +257,7 @@ describe('DELETE /config/:key', () => {
 });
 
 describe('GET /config: the keys the contract does not list yet', () => {
-  const rowOf = async (user: string, key: string) =>
-    (await list(user)).body.data.items.find((r: { key: string }) => r.key === key);
-
-  it('reports the default of each of the 25, and no saved row', async () => {
+  it('reports the default of each of the 26, and no saved row', async () => {
     const defaults: Record<string, unknown> = {
       'chat.moderation_global_concurrency': 64,
       'export.parallelism': 3,
@@ -266,8 +284,9 @@ describe('GET /config: the keys the contract does not list yet', () => {
       'ratelimit.events_per_ip_per_minute': 600,
       'chat.moderation_concurrency': 16,
       'chat.moderation_deadline_ms': 2000,
+      'moderation.model_check_enabled': true,
     };
-    expect(Object.keys(defaults)).toHaveLength(25);
+    expect(Object.keys(defaults)).toHaveLength(26);
     const items = (await list('root')).body.data.items as Record<string, unknown>[];
     for (const [key, value] of Object.entries(defaults)) {
       expect(
@@ -296,6 +315,22 @@ describe('GET /config: the keys the contract does not list yet', () => {
     expect((await put('support', 'events.store_client_ip', false)).status).toBe(403);
   });
 
+  it('gives moderation.model_check_enabled to MODERATION:CONFIG and refuses it to CONFIG:MANAGE alone, and it takes a boolean only', async () => {
+    adminOf('support').permissions = ['CONFIG:MANAGE'];
+    expect(await rowOf('support', 'moderation.model_check_enabled')).toBeUndefined();
+    expect((await put('support', 'moderation.model_check_enabled', false)).status).toBe(403);
+    adminOf('support').permissions = ['MODERATION:CONFIG'];
+    expect(await rowOf('support', 'moderation.model_check_enabled')).toMatchObject({
+      editPermission: 'MODERATION:CONFIG',
+      value: true,
+      defaultValue: true,
+    });
+    expect((await put('support', 'moderation.model_check_enabled', false)).status).toBe(200);
+    expect(
+      (await put('support', 'moderation.model_check_enabled', 'no')).body.data.details,
+    ).toEqual([{ ref: 'moderation.model_check_enabled', reason: 'NOT_BOOLEAN' }]);
+  });
+
   it('checks their ranges', async () => {
     expect((await put('root', 'chat.moderation_global_concurrency', 513)).status).toBe(400);
     expect((await put('root', 'export.parallelism', 5)).status).toBe(400);
@@ -312,6 +347,50 @@ describe('GET /config: the keys the contract does not list yet', () => {
     expect((await put('root', 'attribution.facebook_graph_version', 'v26')).status).toBe(400);
     expect((await put('root', 'attribution.facebook_graph_version', 'v27.1')).status).toBe(200);
     expect((await put('root', 'chat.message_retention_days', 31)).status).toBe(400);
+  });
+});
+
+describe('PUT /config/admin.totp_required: the production floor of the administrator sign-in', () => {
+  it('refuses to save false in production with 400 INVALID_REQUEST (contract 17.2, 17.5), and no details', async () => {
+    expect(deployEnv.production).toBe(true);
+    const { status, body } = await put('root', 'admin.totp_required', false);
+    expect(status).toBe(400);
+    expect(body.code).toBe('INVALID_REQUEST');
+    // the contract names no detail for this refusal
+    expect(body.data ?? null).toBeNull();
+    // nothing was saved: the key still reads true, with no saved row
+    expect(await rowOf('root', 'admin.totp_required')).toMatchObject({
+      value: true,
+      updatedAt: null,
+    });
+  });
+
+  it('accepts true in production, and a reset to the default', async () => {
+    expect((await put('root', 'admin.totp_required', true)).status).toBe(200);
+    expect((await del('root', 'admin.totp_required')).status).toBe(200);
+  });
+
+  it('accepts false outside production, and then true again', async () => {
+    deployEnv.production = false;
+    expect((await put('root', 'admin.totp_required', false)).status).toBe(200);
+    expect(await rowOf('root', 'admin.totp_required')).toMatchObject({ value: false });
+    expect((await put('root', 'admin.totp_required', true)).status).toBe(200);
+  });
+
+  it('is production again after the store is reset', async () => {
+    deployEnv.production = false;
+    resetConfigStore();
+    expect(deployEnv.production).toBe(true);
+  });
+
+  it('still takes false for integrity.check_enabled in production: that switch may be off in any environment', async () => {
+    expect((await put('root', 'integrity.check_enabled', false)).status).toBe(200);
+  });
+
+  it('refuses a value that is not a boolean with the reason NOT_BOOLEAN, as for any switch', async () => {
+    expect((await put('root', 'admin.totp_required', 'no')).body.data.details).toEqual([
+      { ref: 'admin.totp_required', reason: 'NOT_BOOLEAN' },
+    ]);
   });
 });
 

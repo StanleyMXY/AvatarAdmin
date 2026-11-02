@@ -82,6 +82,64 @@ describe('the list', () => {
     expect(bad.body.data.details).toEqual([{ ref: 'pageSize', reason: 'OUT_OF_RANGE' }]);
   });
 
+  // Contract 25.4: `from` (included) and `to` (not included) are ISO-8601 instants with a time zone
+  // offset; `category` is ADMIN or SYSTEM_EVENT; `isRead` is true or false; `accountId` is a UUID;
+  // any parameter that is not valid is 400 INVALID_REQUEST (the document gives no details for it).
+  describe('the format of the filters', () => {
+    const asked = async (query: Record<string, unknown>) => {
+      const { status, body: answer } = await get(LIST, { pageSize: '200', ...query });
+      return { status, body: answer };
+    };
+    const rows = () =>
+      [...notificationsState.rows].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+
+    it.each([
+      ['from', '2026-10-20'],
+      ['from', '2026-10-20T00:00:00'],
+      ['from', '2026-10-20 00:00:00Z'],
+      ['from', 'yesterday'],
+      ['from', '1761000000000'],
+      ['from', '2026-02-30T00:00:00Z'],
+      ['to', '2026-10-20'],
+      ['to', '2026-10-20T25:00:00Z'],
+      ['to', '2026-10-20T00:00:00+0800'],
+      ['category', 'WHATEVER'],
+      ['category', 'admin'],
+      ['isRead', 'yes'],
+      ['isRead', 'TRUE'],
+      ['accountId', 'acc-1'],
+    ])('refuses %s=%s with 400 INVALID_REQUEST', async (name, value) => {
+      const { status, body: answer } = await asked({ [name]: value });
+      expect(status).toBe(400);
+      expect(answer.code).toBe('INVALID_REQUEST');
+    });
+
+    it('takes an instant with Z, with an offset and with fractions of a second, and compares the instants, not the texts', async () => {
+      const middle = rows()[Math.floor(rows().length / 2)];
+      const at = Date.parse(middle.createdAt);
+      const iso = new Date(at).toISOString();
+      const withOffset = `${new Date(at + 8 * 3600_000).toISOString().slice(0, 19)}+08:00`;
+      const fractions = `${iso.slice(0, 19)}.123456Z`;
+      const ids = (answer: { body: { data: { items: { id: string }[] } } }) =>
+        answer.body.data.items.map((r) => r.id);
+      const withZ = ids(await asked({ from: iso }));
+      expect(withZ).toContain(middle.id);
+      expect(ids(await asked({ from: withOffset }))).toEqual(withZ);
+      // `from` is included, `to` is not
+      expect(ids(await asked({ to: iso }))).not.toContain(middle.id);
+      expect(ids(await asked({ to: withOffset }))).not.toContain(middle.id);
+      expect((await asked({ from: fractions })).status).toBe(200);
+    });
+
+    it('accepts the ones that are valid, and a missing or empty parameter', async () => {
+      const one = notificationsState.rows[0];
+      expect(
+        (await asked({ category: 'ADMIN', isRead: 'true', accountId: one.accountId })).status,
+      ).toBe(200);
+      expect((await asked({ category: '', isRead: '', from: '', to: '' })).status).toBe(200);
+    });
+  });
+
   it('gives the English title: the en entry for ADMIN, the rendered English text for SYSTEM_EVENT; the sender name is null for the system', async () => {
     const answer = await get(LIST, { pageSize: '200' });
     for (const row of answer.body.data.items) {

@@ -15,7 +15,7 @@ const refused = () =>
   new ApiError({ code: 'INTERNAL_ERROR', httpStatus: 500, message: 'raw words', data: null });
 
 function Shows() {
-  const { text, fail, failWith, clear } = useFailure();
+  const { text, error, fail, failWith, clear } = useFailure();
   return (
     <>
       <button type="button" onClick={() => fail(refused())}>
@@ -31,6 +31,7 @@ function Shows() {
         clear
       </button>
       <p data-testid="bar">{text ?? 'none'}</p>
+      <p data-testid="error">{error === null ? 'no error' : String((error as Error).message)}</p>
     </>
   );
 }
@@ -84,6 +85,18 @@ describe('useFailure', () => {
     expect(screen.getByTestId('bar')).toHaveTextContent('出现未知错误');
     press('clear');
     expect(screen.getByTestId('bar')).toHaveTextContent('none');
+  });
+
+  it('keeps the error itself for a page that reads from it (the dates a range was refused on), until it is cleared or replaced by words', () => {
+    renderWithLocaleSwitch(<Shows />);
+    expect(screen.getByTestId('error')).toHaveTextContent('no error');
+    press('fail');
+    expect(screen.getByTestId('error')).toHaveTextContent('raw words');
+    press('clear');
+    expect(screen.getByTestId('error')).toHaveTextContent('no error');
+    press('fail');
+    press('recipe');
+    expect(screen.getByTestId('error')).toHaveTextContent('no error');
   });
 
   it('useFailureView keeps lines under the text and they follow the language too', async () => {

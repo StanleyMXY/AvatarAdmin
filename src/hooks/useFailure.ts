@@ -33,12 +33,39 @@ export function useFailureView<V>() {
  * The failure a page shows in a bar or a message, kept so that it follows the language. `fail` keeps
  * the error itself (`failWith` keeps a function that makes the words from the translator, for
  * words that need more than the error: a hint, a list of fields). `text` is the words in the
- * current language, null when there is no failure. `clear` takes the failure away.
+ * current language, null when there is no failure; `error` is the error given to `fail`, for what a
+ * page draws from the error itself. `clear` takes the failure away.
  */
 export function useFailure() {
   const { view, show, clear } = useFailureView<string>();
-  const fail = useCallback((error: unknown) => show(wordsOf(error)), [show]);
-  return { text: view, fail, failWith: show, clear };
+  // The error itself, boxed because a thrown value can be anything (even null).
+  const [kept, setKept] = useState<{ error: unknown } | null>(null);
+  const fail = useCallback(
+    (error: unknown) => {
+      setKept({ error });
+      show(wordsOf(error));
+    },
+    [show],
+  );
+  const failWith = useCallback(
+    (make: Parameters<typeof show>[0]) => {
+      setKept(null);
+      show(make);
+    },
+    [show],
+  );
+  const clearAll = useCallback(() => {
+    setKept(null);
+    clear();
+  }, [clear]);
+  return {
+    text: view,
+    /** The error given to `fail`, null when there is none (or the failure was made from a function). */
+    error: kept === null ? null : kept.error,
+    fail,
+    failWith,
+    clear: clearAll,
+  };
 }
 
 /** A failure bar with lines under it: the text of the error, and the details that no field of the form took. */

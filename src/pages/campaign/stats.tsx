@@ -19,7 +19,7 @@ import { useAdminMeta } from '../../session/useSession';
 import { countText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import { CampaignSelect } from './CampaignSelect';
 import {
   isUnattributedRow,
@@ -40,7 +40,10 @@ type Row = PerformanceRow & {
 };
 
 const DAILY_PAGE_SIZE = 20;
-const initialFilter = (): Filter => ({ range: lastNDaysUtc(7), campaignId: undefined });
+const initialFilter = (maxDays: number | null | undefined): Filter => ({
+  range: defaultRange(maxDays, 7),
+  campaignId: undefined,
+});
 const EXPORT_GROUPS = ['campaign', 'day'] as const;
 
 /**
@@ -60,8 +63,8 @@ export default function CampaignStatsPage() {
   const currency = settings.data?.currency ?? null;
 
   // What is being edited, and what was asked for with Search (the reports, the chart and the export).
-  const [draft, setDraft] = useState<Filter>(initialFilter);
-  const [applied, setApplied] = useState<Filter>(initialFilter);
+  const [draft, setDraft] = useState<Filter>(() => initialFilter(meta.statsMaxRangeDays));
+  const [applied, setApplied] = useState<Filter>(() => initialFilter(meta.statsMaxRangeDays));
   const [campaignRows, setCampaignRows] = useState<PerformanceRow[] | null>(null);
   const [dayRows, setDayRows] = useState<PerformanceRow[] | null>(null);
   // How the export is grouped; the backend takes `campaign` (its default) or `day`.
@@ -96,23 +99,6 @@ export default function CampaignStatsPage() {
 
   const described = failed === null ? null : describeFailure(intl, failed.error);
   const failure = described === null ? null : described.text;
-  // A range error names `from` or `to` (the same for every statistics page): say which date, with
-  // the words of the reason and of the field.
-  const rangeRefusals = (described?.fields ?? []).flatMap((field) =>
-    field.ref === 'from' || field.ref === 'to'
-      ? [
-          intl.formatMessage(
-            { id: 'campaign.stats.range.line' },
-            {
-              field: intl.formatMessage({ id: `campaign.stats.range.${field.ref}` }),
-              reason: field.text,
-              hint: intl.formatMessage({ id: `campaign.stats.range.${field.ref}.hint` }),
-            },
-          ),
-        ]
-      : [],
-  );
-
   useEffect(() => {
     void load();
   }, [load]);
@@ -340,6 +326,7 @@ export default function CampaignStatsPage() {
       </Flex>
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={failed?.error}
           value={draft.range}
           onChange={(range) => setDraft((d) => ({ ...d, range }))}
           maxDays={meta.statsMaxRangeDays ?? undefined}
@@ -369,11 +356,6 @@ export default function CampaignStatsPage() {
           }))}
         />
       </Flex>
-      {rangeRefusals.length > 0 ? (
-        <Typography.Text type="danger" data-testid="campaign-stats-range-error">
-          {rangeRefusals.join(' ')}
-        </Typography.Text>
-      ) : null}
       <LandBar name="attribution-daily" onLanded={() => void load()} />
       {failure ? <FailureBar failure={failure} onRetry={() => void load()} /> : null}
       {!loaded && !failure ? <Spin /> : null}

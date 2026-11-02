@@ -9,7 +9,7 @@ import { useLatestCall } from '../../hooks/useLatestCall';
 import { getSubscriptionStats, type SubscriptionStatRow } from '../../services/subscriptions';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
 
@@ -75,9 +75,9 @@ export default function SubscriptionStatsPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
-  const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [range, setRange] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [rows, setRows] = useState<SubscriptionStatRow[] | null>(null);
-  const { text: failure, fail, clear } = useFailure();
+  const { text: failure, error: refusal, fail, clear } = useFailure();
   const begin = useLatestCall();
 
   const load = useCallback(async () => {
@@ -111,6 +111,7 @@ export default function SubscriptionStatsPage() {
     <Flex vertical gap={16}>
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={range}
           onChange={setRange}
           maxDays={meta.statsMaxRangeDays ?? undefined}

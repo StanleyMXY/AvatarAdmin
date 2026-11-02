@@ -49,7 +49,13 @@ const messages: Record<string, string> = {
   'complaints.status.submit': '更改状态',
   'complaints.status.saved': '状态已更改。',
   'complaints.note.length': '备注最多 {max} 个字符。',
-  'complaints.remove.intro': '按形象 ID 删除查到的形象（可以填多个）。删除后这条投诉算已结案。',
+  'complaints.note.control': '备注里不能有换行或其他控制字符。',
+  'complaints.remove.intro':
+    '按形象 ID 删除查到的形象（ID 是 UUID，一次最多 20 个）。删除后这条投诉算已结案。',
+  'complaints.remove.count': '已填 {n} 个，最多 {max} 个',
+  'complaints.remove.cut': '只保留了前 {max} 个。',
+  'complaints.remove.notUuid':
+    '{id} 不是 UUID。形象 ID 是 36 个字符：数字、a 到 f 的字母和连字符，例如 00000000-0000-4000-8000-000000000001。',
   'complaints.remove.ids': '形象 ID',
   'complaints.remove.placeholder': '输入或粘贴一个 ID 后按回车',
   'complaints.remove.button': '删除形象',

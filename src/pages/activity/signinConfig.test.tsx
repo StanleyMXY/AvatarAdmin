@@ -294,6 +294,41 @@ describe('publishing and enabling ask first (the probe)', { timeout: 30000 }, ()
     expect(status('4')).toBe('ACTIVE');
   });
 
+  it('an answer with applied true is the end of it even when it names activities: they were stopped, nothing is asked', async () => {
+    const key = 'PUT /api/admin/checkin/activities/:id/status';
+    type Res = { status: (code: number) => Res; json: (value: unknown) => void };
+    type Handler = (req: unknown, res: Res) => unknown;
+    const real = (activityMock as unknown as Record<string, Handler>)[key];
+    const calls = useMockBackend(
+      {
+        default: {
+          [key]: (req: unknown, res: Res) => {
+            const inner: Res = {
+              status: () => inner,
+              json: (reply: unknown) => {
+                // What the backend says when it did the change and stopped the overlapping activity.
+                const data = (reply as { data: Record<string, unknown> }).data;
+                res.status(200).json({
+                  ...(reply as object),
+                  data: { ...data, applied: true, disabledActivities: [{ id: '1', name: AUTUMN }] },
+                });
+              },
+            };
+            real(req, inner);
+            return undefined;
+          },
+        },
+      },
+      mock,
+    );
+    const user = userEvent.setup();
+    renderPage(<SigninConfigPage />);
+    await fromMore(user, await rowOf(THAI), 'Publish');
+    expect(await screen.findByText('Check-in activity published')).toBeInTheDocument();
+    expect(statusCalls(calls)).toHaveLength(1);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('a name that is not text in the question does not break the dialog', async () => {
     const list = [
       {

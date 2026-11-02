@@ -42,6 +42,7 @@ const messages: Record<string, string> = {
 
   'subscriptions.detail.title': '订阅 {id}',
   'subscriptions.detail.storeRef': '商店侧订阅标识',
+  'subscriptions.detail.periodOrderId': '当前计费周期订单号',
   'subscriptions.detail.grace': '宽限期结束',
   'subscriptions.detail.firstActiveAt': '首次生效',
   'subscriptions.detail.voidedAt': '作废时间',

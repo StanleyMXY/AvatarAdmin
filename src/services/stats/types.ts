@@ -1,6 +1,13 @@
 // Row shapes of the report endpoints (contract 17.6). A column that can be missing is `| null`:
 // the page shows a dash for it, never a 0.
 
+/**
+ * The UTC days of a statistics query, both ends included. One range rule for every statistics
+ * endpoint (contract 17.6): neither given is the last 7 days, one given makes the other six days
+ * away (never later than today); `from` after `to` is 400 on `from`, a span over
+ * `stats.max_range_days` is 400 on `to`, a date that is not a day is 400 `OUT_OF_RANGE` on itself.
+ * The pages always send both.
+ */
 export type DateRange = { from: string; to: string };
 export type PlatformChannel = { platform?: string; channel?: string };
 

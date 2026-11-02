@@ -8,6 +8,7 @@ import { SCREEN_TARGETS } from '../src/utils/screenTargets';
 import { trimSpec } from '../src/utils/trimSpec';
 import { guard } from './_core/auth';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
+import { instantMs } from './_core/instant';
 import { META_DEFAULTS } from './_core/meta';
 import { type MockNotification, notificationsState } from './_core/notificationsData';
 import { paginateQuery } from './_core/paginate';
@@ -53,13 +54,18 @@ const detailOf = (row: MockNotification) => ({
   createdAt: row.createdAt,
 });
 
-function instant(value: unknown, ref: string): number | null {
+/** The milliseconds of an ISO-8601 instant with a time zone; null when the parameter is left out or empty. */
+function instant(value: unknown): number | null {
   if (value === undefined || value === '') return null;
-  const time = typeof value === 'string' ? Date.parse(value) : Number.NaN;
-  if (Number.isNaN(time))
-    throw invalidRequest(`${ref} is not an instant`, [{ ref, reason: 'INVALID_VALUE' }]);
+  const time = typeof value === 'string' ? instantMs(value) : Number.NaN;
+  if (Number.isNaN(time)) throw refusedFilter();
   return time;
 }
+
+// Contract 25.4: any filter that is not valid is 400 INVALID_REQUEST; the document gives no details for it.
+const refusedFilter = () =>
+  new MockHttpError(400, 'INVALID_REQUEST', 'a filter of the notification list is not valid');
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A map of language tag to text: `en` required, every text 1 to `max` code points once trimmed. */
 function texts(input: unknown, ref: 'titleI18n' | 'bodyI18n', max: number, details: Detail[]) {
@@ -90,8 +96,11 @@ function texts(input: unknown, ref: 'titleI18n' | 'bodyI18n', max: number, detai
 export default {
   'GET /api/admin/notifications': guard('NOTIFICATION:VIEW', (req) => {
     const { accountId, category, isRead } = req.query as Record<string, string | undefined>;
-    const from = instant(req.query.from, 'from');
-    const to = instant(req.query.to, 'to');
+    const from = instant(req.query.from);
+    const to = instant(req.query.to);
+    if (accountId && !UUID.test(accountId)) throw refusedFilter();
+    if (category && category !== 'ADMIN' && category !== 'SYSTEM_EVENT') throw refusedFilter();
+    if (isRead && isRead !== 'true' && isRead !== 'false') throw refusedFilter();
     let rows = [...notificationsState.rows].sort((a, b) =>
       a.createdAt === b.createdAt ? (a.id < b.id ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1,
     );

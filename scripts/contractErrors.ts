@@ -1,5 +1,27 @@
 // Reads the error table of contract 1.4: the codes of its rows and the reason codes that its
-// INVALID_REQUEST row defines for `data.details`. Used by the language file tests.
+// INVALID_REQUEST row defines for `data.details`. Used by the language file tests and by
+// gen-error-codes.ts, which rewrites src/locales/errorCodes.generated.json.
+//
+// Every reader takes the text of a contract, so a test or a script can read the snapshot (the
+// default) or another version of the document by naming its path: `readContract(path)`.
+
+import { readFileSync } from 'node:fs';
+
+/** The contract the front end follows: the snapshot of AvatarApp main (read only). */
+export const DEFAULT_CONTRACT = 'docs/shared-snapshots/backend-task-java-backend.md';
+
+/**
+ * The version of the contract the backend gave on 2026-11-02 (commit e07469d1), which the snapshot
+ * does not have yet. The tests check that the texts of its error and reason codes exist, so the
+ * snapshot can be replaced by it without a test failing for a missing text. Delete this constant
+ * and its uses when the snapshot is replaced.
+ */
+export const NEXT_CONTRACT = 'docs/backend-inputs/2026-11-02-backend-task-java-backend-e07469d1.md';
+
+/** The text of the contract at `path` (the snapshot when no path is given). */
+export function readContract(path: string = DEFAULT_CONTRACT): string {
+  return readFileSync(path, 'utf8');
+}
 
 const HEADING = '### 1.4 通用错误码';
 const NEXT_HEADING = '### 1.5';
@@ -42,4 +64,11 @@ export function reasonCodes(contract: string): string[] {
   const listed = row.slice(from, to).replace(/（[^（）]*）/g, '');
   const found = [...listed.matchAll(/`([A-Z][A-Z_]+)`/g)].map((m) => m[1]);
   return [...new Set(found)];
+}
+
+/** The content of errorCodes.generated.json for a contract: its error codes, in the order of table 1.4. */
+export function errorCodesJson(contract: string): string {
+  const { codes, unread } = errorTable(contract);
+  if (unread.length > 0) throw new Error(`table 1.4 has rows that cannot be read: ${unread[0]}`);
+  return `${JSON.stringify(codes, null, 2)}\n`;
 }

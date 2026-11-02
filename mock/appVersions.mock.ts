@@ -10,6 +10,8 @@ import {
   checkVersionCode,
   checkVersionName,
   cleanChangelog,
+  highestLiveCode,
+  highestOtherCode,
   MAX_CODE,
 } from '../src/pages/appVersions/versionRules';
 import { PLATFORMS, VERSION_STATUSES } from '../src/services/appVersions/types';
@@ -74,15 +76,17 @@ const activeIn = (channelCode: string): MockVersion | undefined =>
 const channelOf = (code: unknown): MockChannel | undefined =>
   typeof code === 'string' ? channelsState.channels.get(code) : undefined;
 
-/** The upload a DIRECT version names: it has to be there, be an APK and be free (or be the one this version holds). */
-function uploadFor(id: string, holder: MockVersion | null): MockApkUpload {
+/** The upload a DIRECT version names: it has to be there and be an APK. Whether it is free comes later (`assertFree`). */
+function uploadFor(id: string): MockApkUpload {
   const upload = appVersionsState.uploads.get(id);
   if (!upload) throw notFound('upload');
   if (upload.kind !== 'APK') refuse([{ ref: 'apkUploadId', reason: 'OUT_OF_RANGE' }]);
-  if (upload.used && holder?.apkUploadId !== id) {
-    throw uploadConsumed();
-  }
   return upload;
+}
+
+/** The upload has to be free, or be the one this version holds (409 CONSUMED: the last check of a save). */
+function assertFree(upload: MockApkUpload, holder: MockVersion | null): void {
+  if (upload.used && holder?.apkUploadId !== upload.id) throw uploadConsumed();
 }
 
 type Checked = {
@@ -94,15 +98,40 @@ type Checked = {
   apkUploadId: string | null;
 };
 
+/** The versions of a channel, as the number checks look at them. */
+const versionsOf = (channelCode: string): MockVersion[] =>
+  [...appVersionsState.versions.values()].filter((v) => v.channelCode === channelCode);
+
 /**
- * The checks of contract 24.2 that need no stored object but the channel. `own` is the draft being
- * edited (its own number is not a duplicate).
+ * The number checks of a save, in the backend's order (answers 47): the number the channel has
+ * already is 409 `DUPLICATE_RESOURCE` naming the field; then, when the number is new or changed
+ * (a draft whose number is left alone is not compared), a number that does not beat every other
+ * version of the channel, drafts and taken-down ones included, is 400 `INVALID_REQUEST` with a
+ * message and no field list. `own` is the draft being edited.
  */
-function check(
-  channel: MockChannel,
-  body: Record<string, unknown>,
-  own: MockVersion | null,
-): Checked {
+function checkNumber(channel: MockChannel, code: number, own: MockVersion | null): void {
+  const others = versionsOf(channel.code).filter((v) => v.id !== own?.id);
+  if (others.some((v) => v.versionCode === code)) {
+    throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The version number exists in the channel', {
+      field: 'versionCode',
+    });
+  }
+  if (own !== null && own.versionCode === code) return;
+  const highest = highestOtherCode(others, null);
+  if (!checkVersionCode(code, highest).ok) {
+    throw new MockHttpError(
+      400,
+      'INVALID_REQUEST',
+      `versionCode must be higher than ${highest}, the highest version number of the other versions of the channel`,
+    );
+  }
+}
+
+/**
+ * The checks of contract 24.2 that need no stored object but the channel: the shape of every
+ * field (the numbers are compared with the other versions later, by `checkNumber`).
+ */
+function check(channel: MockChannel, body: Record<string, unknown>): Checked {
   // A number beyond 32 bits cannot be read into the field: a malformed body (not run against the backend).
   for (const field of ['versionCode', 'minVersionCode'] as const) {
     const value = body[field];
@@ -112,8 +141,7 @@ function check(
   const versionName = typeof body.versionName === 'string' ? trimSpec(body.versionName) : '';
   if (!checkVersionName(versionName).ok)
     details.push({ ref: 'versionName', reason: 'INVALID_PATTERN' });
-  const active = activeIn(channel.code);
-  if (!checkVersionCode(body.versionCode, active?.versionCode ?? null).ok) {
+  if (!checkVersionCode(body.versionCode, null).ok) {
     details.push({ ref: 'versionCode', reason: 'OUT_OF_RANGE' });
   }
   const code = typeof body.versionCode === 'number' ? body.versionCode : null;
@@ -169,14 +197,6 @@ function check(
   }
   if (details.length > 0) refuse(details);
 
-  const same = [...appVersionsState.versions.values()].find(
-    (v) => v.channelCode === channel.code && v.versionCode === code && v.id !== own?.id,
-  );
-  if (same) {
-    throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The version number exists in the channel', {
-      field: 'versionCode',
-    });
-  }
   return {
     versionName,
     versionCode: code as number,
@@ -242,9 +262,12 @@ export default {
     const channel = channelOf(body.channelCode);
     if (!channel) refuse([{ ref: 'channelCode', reason: 'OUT_OF_RANGE' }]);
     const target = channel as MockChannel;
+    const fields = check(target, body);
+    const upload = fields.apkUploadId === null ? null : uploadFor(fields.apkUploadId);
+    // answers 47: the numbers, then whether the channel is on, then whether the upload is free
+    checkNumber(target, fields.versionCode, null);
     if (!target.enabled) throw invalidState('The channel is off');
-    const fields = check(target, body, null);
-    const upload = fields.apkUploadId === null ? null : uploadFor(fields.apkUploadId, null);
+    if (upload) assertFree(upload, null);
     const now = new Date().toISOString();
     const version: MockVersion = {
       id: newId(),
@@ -282,8 +305,10 @@ export default {
       refuse([{ ref: 'channelCode', reason: 'OUT_OF_RANGE' }]);
     }
     const channel = channelsState.channels.get(version.channelCode) as MockChannel;
-    const fields = check(channel, body, version);
-    const upload = fields.apkUploadId === null ? null : uploadFor(fields.apkUploadId, version);
+    const fields = check(channel, body);
+    const upload = fields.apkUploadId === null ? null : uploadFor(fields.apkUploadId);
+    checkNumber(channel, fields.versionCode, version);
+    if (upload) assertFree(upload, version);
     const old = version.apkUploadId;
     version.versionName = fields.versionName;
     version.versionCode = fields.versionCode;
@@ -316,14 +341,23 @@ export default {
       return ok(view(version));
     }
     if (version.status !== 'DRAFT') throw invalidState('Only a draft can be activated');
-    if (!channel.enabled) throw invalidState('The channel is off');
+    // answers 47: the state, the store confirmation, the number, and last whether the channel is on
     if (channel.distribution === 'STORE' && body.confirmStoreLive !== true) {
       refuse([{ ref: 'confirmStoreLive', reason: 'EMPTY_NOT_ALLOWED' }]);
     }
-    const active = activeIn(version.channelCode);
-    if (!checkVersionCode(version.versionCode, active?.versionCode ?? null).ok) {
-      refuse([{ ref: 'versionCode', reason: 'OUT_OF_RANGE' }]);
+    // contract 24.2: an activation has to beat every version of the channel that has been live
+    const live = highestLiveCode(
+      versionsOf(version.channelCode).filter((v) => v.id !== version.id),
+    );
+    if (!checkVersionCode(version.versionCode, live).ok) {
+      throw new MockHttpError(
+        400,
+        'INVALID_REQUEST',
+        `versionCode must be higher than ${live}, the highest version number of the versions of the channel that have been active`,
+      );
     }
+    if (!channel.enabled) throw invalidState('The channel is off');
+    const active = activeIn(version.channelCode);
     if (active) {
       active.status = 'ARCHIVED';
       active.updatedAt = now;

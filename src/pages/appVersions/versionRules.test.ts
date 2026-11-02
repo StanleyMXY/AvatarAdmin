@@ -8,6 +8,8 @@ import {
   checkVersionCode,
   checkVersionName,
   cleanChangelog,
+  highestLiveCode,
+  highestOtherCode,
 } from './versionRules';
 
 const reason = (check: { ok: boolean; reasonKey?: string }) => (check.ok ? null : check.reasonKey);
@@ -50,22 +52,22 @@ describe('checkVersionName (x.y.z)', () => {
   });
 });
 
-describe('checkVersionCode: a whole number from 1, strictly above the version that is active', () => {
-  it('accepts a whole number above the active one', () => {
+describe('checkVersionCode: a whole number from 1, strictly above the number it has to beat', () => {
+  it('accepts a whole number above the number to beat', () => {
     expect(checkVersionCode(121, 120).ok).toBe(true);
     expect(checkVersionCode(1, null).ok).toBe(true);
     expect(checkVersionCode(5, 4).ok).toBe(true);
   });
-  it('refuses the active number and lower ones, with the number to beat', () => {
+  it('refuses the number to beat and lower ones, and gives the number to beat', () => {
     expect(checkVersionCode(120, 120)).toEqual({
       ok: false,
       reasonKey: 'appVersions.rule.versionCodeAbove',
-      values: { active: 120 },
+      values: { max: 120 },
     });
     expect(reason(checkVersionCode(119, 120))).toBe('appVersions.rule.versionCodeAbove');
     expect(reason(checkVersionCode(1, 1))).toBe('appVersions.rule.versionCodeAbove');
   });
-  it('without an active version only the whole number from 1 counts', () => {
+  it('with no number to beat only the whole number from 1 counts', () => {
     for (const value of [
       0,
       -1,
@@ -82,17 +84,54 @@ describe('checkVersionCode: a whole number from 1, strictly above the version th
       );
     }
   });
-  it('treats an active number that is not a number as unknown', () => {
+  it('treats a number to beat that is not a number as unknown', () => {
     expect(checkVersionCode(3, Number.NaN).ok).toBe(true);
     expect(checkVersionCode(3, undefined as unknown as null).ok).toBe(true);
   });
-  it('property: ok exactly when it is a whole number from 1 and above the active one (every pair of a range)', () => {
+  it('property: ok exactly when it is a whole number from 1 and above the number to beat (every pair of a range)', () => {
     for (let value = -5; value <= 60; value += 1) {
       for (const active of [null, ...Array.from({ length: 61 }, (_, i) => i)]) {
         const expected = value >= 1 && (active === null || value > active);
         expect(checkVersionCode(value, active).ok, `${value} over ${active}`).toBe(expected);
       }
     }
+  });
+});
+
+// Contract 24.2 (new version): the number of a new version or of an edited draft must beat every
+// other version of the channel (drafts and taken-down ones too); the number to activate must beat
+// every version that has been live (ACTIVE or ARCHIVED).
+describe('highestOtherCode and highestLiveCode: the numbers a version has to beat', () => {
+  const channel = [
+    { id: 'a', versionCode: 100, status: 'ARCHIVED' },
+    { id: 'b', versionCode: 110, status: 'ACTIVE' },
+    { id: 'c', versionCode: 120, status: 'DRAFT' },
+    { id: 'd', versionCode: 115, status: 'ARCHIVED' },
+  ];
+  it('a new version has to beat the highest of all, a draft among them', () => {
+    expect(highestOtherCode(channel, null)).toBe(120);
+  });
+  it('an edited draft does not have to beat itself', () => {
+    expect(highestOtherCode(channel, 'c')).toBe(115);
+    expect(highestOtherCode([channel[2]], 'c')).toBeNull();
+  });
+  it('an activation has to beat the highest that was live: active and taken down, never a draft', () => {
+    expect(highestLiveCode(channel)).toBe(115);
+    expect(highestLiveCode([channel[2]])).toBeNull();
+  });
+  it('a channel with no version, or only rows without a usable number, has nothing to beat', () => {
+    expect(highestOtherCode([], null)).toBeNull();
+    expect(highestLiveCode([])).toBeNull();
+    const odd = [
+      { id: 'x', versionCode: '120', status: 'ACTIVE' },
+      { id: 'y', versionCode: null, status: 'ARCHIVED' },
+      { id: 'z', versionCode: Number.NaN, status: 'DRAFT' },
+    ];
+    expect(highestOtherCode(odd, null)).toBeNull();
+    expect(highestLiveCode(odd)).toBeNull();
+  });
+  it('a state that is not one of the three counts as not live', () => {
+    expect(highestLiveCode([{ id: 'q', versionCode: 900, status: 'SOMETHING' }])).toBeNull();
   });
 });
 

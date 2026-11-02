@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { campaignState } from '../../../mock/_core/campaignData';
@@ -74,6 +74,15 @@ describe('the click details', { timeout: 30000 }, () => {
     await load();
     expect(
       screen.getByText(/direct-install channel from a device that is not Android is not recorded/),
+    ).toBeInTheDocument();
+  });
+
+  it('says that a click an install record already holds can be in the list of the Pending state', async () => {
+    await load();
+    expect(
+      screen.getByText(
+        'A click that an install record already holds counts as Matched, so such a click can also be in the list when the Pending state is chosen.',
+      ),
     ).toBeInTheDocument();
   });
 
@@ -207,6 +216,47 @@ describe('the click details', { timeout: 30000 }, () => {
     expect(read.get('keyword')).toBe('facebook');
     expect(read.get('page')).toBe('1');
     await waitFor(() => expect(rows().every((r) => cellsOf(r)[3] === 'Matched')).toBe(true));
+  });
+
+  it('keeps what is typed in the keyword to 200 code points (an emoji is one), and asks with that', async () => {
+    const { calls, user } = await load();
+    const box = screen.getByRole('textbox', { name: 'Keyword' }) as HTMLInputElement;
+    fireEvent.change(box, { target: { value: `${'ก'.repeat(100)}${'🎉'.repeat(120)}` } });
+    expect([...box.value]).toHaveLength(200);
+    expect(box.value).toBe(`${'ก'.repeat(100)}${'🎉'.repeat(100)}`);
+    const before = clickReads(calls).length;
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(clickReads(calls).length).toBe(before + 1));
+    expect([...(clickReads(calls)[before].get('keyword') ?? '')]).toHaveLength(200);
+  });
+
+  it('shows the words of the error code, not the backend words, when the keyword is refused (U+0000 pasted in), and reads again with the retry button', async () => {
+    const { calls, user } = await load();
+    let refusing = true;
+    overrideFetch(({ url }) =>
+      refusing &&
+      url.pathname === '/api/admin/attribution/clicks' &&
+      url.searchParams.has('keyword')
+        ? jsonAnswer(
+            400,
+            'INVALID_REQUEST',
+            { details: [{ ref: 'keyword', reason: 'INVALID_FORMAT' }] },
+            'raw backend words',
+          )
+        : undefined,
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: 'Keyword' }), {
+      target: { value: 'a\u0000b' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    expect(await screen.findByText(/Failed to load:.*Some input is not valid/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('raw backend words');
+    refusing = false;
+    fireEvent.change(screen.getByRole('textbox', { name: 'Keyword' }), { target: { value: '' } });
+    const before = clickReads(calls).length;
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(clickReads(calls).length).toBeGreaterThan(before));
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
   });
 
   it('reads the first page again when Search is pressed with the filters that are already in force', async () => {

@@ -1,7 +1,8 @@
 import type { ConfigKeySpec } from './configSchema';
 
 // The settings the backend has that contract 17.5 does not list yet (checklist of the backend,
-// section 2(d), and the seven extra keys it names after it). `GET /config` returns them, so the
+// section 2(d), the seven extra keys it names after it, and the switch of the model check that the
+// version of the contract of 2026-11-02 lists). `GET /config` returns them, so the
 // page knows them and the check script lets them pass. When the contract adopts a key, delete its
 // entry here, run `npm run gen:config-keys` and put the entry into the entries of the table in
 // configSchema.ts in the order of the table; the check script says so ("is in the contract now").
@@ -76,4 +77,11 @@ export const EXTRA_ENTRIES: Extra[] = [
   manage('ratelimit.events_per_ip_per_minute', 'int', { min: 1 }),
   manage('chat.moderation_concurrency', 'int', { min: 1, max: 32 }),
   manage('chat.moderation_deadline_ms', 'int', { min: 100, max: 2500 }),
+  // the switch of the model check (contract 11.2, 17.5 of the version of 2026-11-02); edited with the moderation permission
+  {
+    key: 'moderation.model_check_enabled',
+    kind: 'bool',
+    editPermission: 'MODERATION:CONFIG',
+    group: 'moderation',
+  },
 ];

@@ -10,11 +10,22 @@ export type SavedConfig = {
   updatedByUsername: string;
 };
 
-type Holder = { __avatarAdminMockConfig?: Map<string, SavedConfig> };
+type Holder = {
+  __avatarAdminMockConfig?: Map<string, SavedConfig>;
+  __avatarAdminMockDeployEnv?: { production: boolean };
+};
 const holder = globalThis as Holder;
 holder.__avatarAdminMockConfig ??= new Map();
+holder.__avatarAdminMockDeployEnv ??= { production: true };
 
 export const saved: Map<string, SavedConfig> = holder.__avatarAdminMockConfig;
+
+/**
+ * Whether the fake backend plays a production deployment (`DEPLOY_ENV=PRODUCTION`, contract 1.5). It
+ * does by default, so that the checks that only production makes, such as refusing to save
+ * `admin.totp_required` as false, can be seen. A test turns it off with `deployEnv.production = false`.
+ */
+export const deployEnv: { production: boolean } = holder.__avatarAdminMockDeployEnv;
 
 // Defaults that the contract gives as the address of a third-party service, which the generated
 // file leaves empty: the fake backend answers with an address of the example domain instead, so that
@@ -41,4 +52,5 @@ export const currentValue = (key: string): unknown =>
 
 export function resetConfigStore(): void {
   saved.clear();
+  deployEnv.production = true;
 }

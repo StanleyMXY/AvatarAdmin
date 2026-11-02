@@ -6,6 +6,12 @@ const messages: Record<string, string> = {
   'stat.common.last7': '最近 7 天',
   'stat.common.last30': '最近 30 天',
   'stat.common.rangeTooLong': '一次最多查询 {days} 天',
+  'stat.common.range.line': '{field}：{reason}。{hint}',
+  'stat.common.range.from': '起始日期',
+  'stat.common.range.from.hint': '起始日期必须是有效的一天，并且不能晚于结束日期。',
+  'stat.common.range.to': '结束日期',
+  'stat.common.range.to.hint':
+    '结束日期必须是有效的一天，并且范围不能超过统计允许的最大天数（stats.max_range_days）。',
   'stat.common.platform': '平台',
   'stat.common.platform.ALL': '全部',
   'stat.common.platform.ANDROID': 'Android',

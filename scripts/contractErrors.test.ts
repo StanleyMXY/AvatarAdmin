@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { errorTable, reasonCodes } from './contractErrors';
+import {
+  DEFAULT_CONTRACT,
+  errorCodesJson,
+  errorTable,
+  NEXT_CONTRACT,
+  readContract,
+  reasonCodes,
+} from './contractErrors';
 
 const TABLE = `intro
 ### 1.4 通用错误码
@@ -66,5 +73,67 @@ describe('reasonCodes', () => {
     expect(real).toHaveLength(14);
     expect(real[0]).toBe('ACCOUNT_NOT_FOUND');
     expect(real[real.length - 1]).toBe('INVALID_PATTERN');
+  });
+});
+
+describe('reading a contract by its path', () => {
+  it('reads the snapshot when no path is given', () => {
+    expect(readContract()).toBe(readFileSync(DEFAULT_CONTRACT, 'utf8'));
+    expect(DEFAULT_CONTRACT).toBe('docs/shared-snapshots/backend-task-java-backend.md');
+  });
+
+  it('reads another version of the document from the path it is given', () => {
+    const next = readContract(NEXT_CONTRACT);
+    expect(next).not.toBe(readContract());
+    const { codes, unread } = errorTable(next);
+    expect(unread).toEqual([]);
+    // the two codes the new version adds to table 1.4, and nothing is dropped
+    expect(codes).toHaveLength(81);
+    const old = errorTable(readContract()).codes;
+    expect(codes.filter((code) => !old.includes(code))).toEqual(['PAYLOAD_TOO_LARGE', 'FORBIDDEN']);
+    expect(old.filter((code) => !codes.includes(code))).toEqual([]);
+  });
+
+  it('reads the 29 reason codes of the new version: the 14 of the snapshot, then the 8 and the 7 it adds', () => {
+    const next = reasonCodes(readContract(NEXT_CONTRACT));
+    expect(next).toHaveLength(29);
+    expect(next.slice(0, 14)).toEqual(reasonCodes(readContract()));
+    expect(next.slice(14)).toEqual([
+      'RESOURCE_NOT_FOUND',
+      'DUPLICATE',
+      'INVALID_CHARACTER',
+      'INVALID_FORMAT',
+      'PACKAGE_NAME_NOT_CONFIGURED',
+      'SOURCE_EXPIRED',
+      'TOO_SLOW',
+      'TOO_MANY_EVENTS',
+      'REQUIRED',
+      'INVALID_TYPE',
+      'CONTROL_CHARACTER',
+      'IMMUTABLE',
+      'NOT_FOUND',
+      'DISABLED',
+      'CURRENCY_MISMATCH',
+    ]);
+  });
+});
+
+describe('errorCodesJson', () => {
+  it('writes the codes of table 1.4 as the generated file has them, one per line', () => {
+    expect(errorCodesJson(TABLE)).toBe(
+      '[\n  "INVALID_TOKEN",\n  "INVALID_REQUEST",\n  "ROLE_IN_USE"\n]\n',
+    );
+  });
+
+  it('writes the file that is checked in when it reads the snapshot', () => {
+    expect(errorCodesJson(readContract())).toBe(
+      readFileSync('src/locales/errorCodes.generated.json', 'utf8'),
+    );
+  });
+
+  it('refuses a table with a row it cannot read, so a changed row format is not written down wrong', () => {
+    expect(() =>
+      errorCodesJson(TABLE.replace('| ROLE_IN_USE | 409 | y |', '| `ROLE_IN_USE` | 409 | y |')),
+    ).toThrow(/cannot be read/);
   });
 });

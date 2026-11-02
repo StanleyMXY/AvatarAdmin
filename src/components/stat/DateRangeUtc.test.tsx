@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderPage } from '../../../tests/renderPage';
 import { withTimeZone } from '../../../tests/withTimeZone';
+import { ApiError } from '../../request/errors';
 import { DateRangeUtc } from './DateRangeUtc';
 
 // Singapore, 22 October 01:30 local = 21 October 17:30 UTC.
@@ -212,5 +213,78 @@ describe('DateRangeUtc', () => {
     await waitFor(() =>
       expect(onChange).toHaveBeenCalledWith({ from: '2026-10-15', to: '2026-10-21' }),
     );
+  });
+
+  // Contract 17.6: every statistics endpoint refuses a range the same way, with the date it is
+  // about as `ref`. The picker shows the words of the code and of the field under it.
+  describe('a range the backend refused', () => {
+    const refusal = (...details: { ref: string; reason: string }[]) =>
+      new ApiError({
+        code: 'INVALID_REQUEST',
+        httpStatus: 400,
+        message: 'from is after to (the backend words)',
+        data: { details },
+      });
+    const draw = (refused: unknown, locale: 'en-US' | 'zh-CN' = 'en-US') =>
+      renderPage(
+        <DateRangeUtc
+          value={{ from: '2026-10-14', to: '2026-10-20' }}
+          onChange={() => {}}
+          refused={refused}
+        />,
+        locale,
+      );
+    const line = () => screen.queryByTestId('stat-range-error');
+
+    it('says under the picker that the start date is outside the allowed range when `from` is refused', () => {
+      draw(refusal({ ref: 'from', reason: 'OUT_OF_RANGE' }));
+      expect(line()?.textContent).toMatch(
+        /Start date: .*outside the allowed range.*not after the end date/,
+      );
+    });
+
+    it('says under the picker that the end date is wrong or the range too long when `to` is refused', () => {
+      draw(refusal({ ref: 'to', reason: 'OUT_OF_RANGE' }));
+      expect(line()?.textContent).toMatch(
+        /End date: .*outside the allowed range.*stats\.max_range_days/,
+      );
+    });
+
+    it('gives a line for each date the backend named, and none for another field', () => {
+      draw(
+        refusal(
+          { ref: 'from', reason: 'OUT_OF_RANGE' },
+          { ref: 'to', reason: 'OUT_OF_RANGE' },
+          { ref: 'platform', reason: 'OUT_OF_RANGE' },
+        ),
+      );
+      expect(line()?.textContent).toMatch(/Start date: .*End date: /);
+      expect(line()?.textContent).not.toMatch(/platform/i);
+    });
+
+    it('shows nothing for a refusal of another field, for an error that is not about a request, and for none', () => {
+      draw(refusal({ ref: 'platform', reason: 'OUT_OF_RANGE' }));
+      expect(line()).toBeNull();
+      document.body.innerHTML = '';
+      draw(new Error('boom'));
+      expect(line()).toBeNull();
+      document.body.innerHTML = '';
+      draw(null);
+      expect(line()).toBeNull();
+    });
+
+    it('never shows the words of the backend, and says it in Chinese', () => {
+      draw(refusal({ ref: 'from', reason: 'OUT_OF_RANGE' }), 'zh-CN');
+      expect(line()?.textContent).toMatch(/起始日期：.*超出允许的范围.*不能晚于结束日期/);
+      expect(document.body.textContent).not.toContain('backend words');
+    });
+
+    it('marks the picker as being in error, and not when nothing is refused', () => {
+      draw(refusal({ ref: 'to', reason: 'OUT_OF_RANGE' }));
+      expect(document.querySelector('.ant-picker-status-error')).not.toBeNull();
+      document.body.innerHTML = '';
+      draw(null);
+      expect(document.querySelector('.ant-picker-status-error')).toBeNull();
+    });
   });
 });

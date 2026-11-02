@@ -5,6 +5,7 @@ import notificationsMock from '../../../mock/notifications.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
+import { withTimeZone } from '../../../tests/withTimeZone';
 import type { NotificationDetail, NotificationRow } from '../../services/notifications';
 import NotificationsPage from './list';
 import { chooseOption, notificationsState, signIn } from './testSetup';
@@ -185,6 +186,49 @@ describe('the list', () => {
       expect(last.get('from')).toBe('2026-10-01T00:00:00Z');
       expect(last.get('to')).toBe('2026-10-04T00:00:00Z');
     });
+  });
+
+  // Contract 25.4: `from` and `to` are ISO-8601 instants with a time zone offset. The page writes the
+  // chosen days as UTC instants ending in Z, whatever the time zone of the browser is, and the
+  // fake backend (which refuses an instant without an offset) takes them.
+  it.each([
+    ['Pacific/Kiritimati'],
+    ['America/Los_Angeles'],
+    ['Pacific/Pago_Pago'],
+    ['Asia/Kolkata'],
+  ])(
+    'sends the same instants ending in Z when the browser is in %s, and the backend takes them',
+    async (zone) => {
+      const calls = useMockBackend({ default: notificationsMock });
+      const user = userEvent.setup();
+      await withTimeZone(zone, async () => {
+        renderPage(<NotificationsPage />);
+        await waitFor(() => expect(tableRows().length).toBe(20));
+        const [from, to] = screen.getAllByPlaceholderText(/date/i);
+        await user.click(from);
+        await user.type(from, '2026-10-01{enter}');
+        await user.type(to, '2026-10-03{enter}');
+        await user.click(screen.getByRole('button', { name: 'Search' }));
+        await waitFor(() => {
+          const last = listParams(calls).at(-1) as URLSearchParams;
+          expect(last.get('from')).toBe('2026-10-01T00:00:00Z');
+          expect(last.get('to')).toBe('2026-10-04T00:00:00Z');
+        });
+        expect(screen.queryByText(/Failed to load/)).toBeNull();
+      });
+    },
+  );
+
+  it('shows the words of the code when the backend refuses a filter (400), never its own words', async () => {
+    stubFetch(async () =>
+      jsonResponse(
+        400,
+        envelope('INVALID_REQUEST', null, 'a filter of the notification list is not valid'),
+      ),
+    );
+    renderPage(<NotificationsPage />);
+    expect(await screen.findByText(/Failed to load/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('a filter of the notification list');
   });
 
   it('says the range counts UTC days', async () => {

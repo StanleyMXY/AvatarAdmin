@@ -39,6 +39,19 @@ export type ActivityBody = {
 
 export type DisabledActivity = { id: string; name: string };
 
+/**
+ * The answer of `PUT /checkin/activities/{id}` and `PUT /checkin/activities/{id}/status` (contract
+ * 28.1). `applied` says whether the change was written: false is the overlap question (nothing was
+ * done, `disabledActivities` are the activities that confirming would stop, `activity` is null);
+ * true is a written change (`disabledActivities` are the activities it stopped, `activity` is the
+ * detail as now stored). Whether to ask is decided by `applied`, never by the list being empty.
+ */
+export type ActivityWriteReply = {
+  applied: boolean;
+  disabledActivities: DisabledActivity[];
+  activity: CheckinActivityDetail | null;
+};
+
 export type CheckinRecord = {
   id: string;
   accountId: string;

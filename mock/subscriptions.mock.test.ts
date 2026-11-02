@@ -161,6 +161,7 @@ describe('GET /subscriptions', () => {
         'firstActiveAt',
         'voidedAt',
         'lastEventSignedAt',
+        'periodOrderId',
         'lastSyncedAt',
         'createdAt',
         'updatedAt',

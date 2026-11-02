@@ -49,8 +49,13 @@ const messages: Record<string, string> = {
   'complaints.status.submit': 'Change state',
   'complaints.status.saved': 'The state was changed.',
   'complaints.note.length': 'The note can have at most {max} characters.',
+  'complaints.note.control': 'The note must not contain a line break or another control character.',
   'complaints.remove.intro':
-    'Remove the avatars you found, by their IDs (several allowed). The complaint then counts as closed.',
+    'Remove the avatars you found, by their IDs (UUIDs; up to 20 at a time). The complaint then counts as closed.',
+  'complaints.remove.count': '{n} of {max} IDs',
+  'complaints.remove.cut': 'Only the first {max} were kept.',
+  'complaints.remove.notUuid':
+    '{id} is not a UUID. An avatar ID has 36 characters: digits, letters a to f and hyphens, as 00000000-0000-4000-8000-000000000001.',
   'complaints.remove.ids': 'Avatar IDs',
   'complaints.remove.placeholder': 'Type or paste an ID and press Enter',
   'complaints.remove.button': 'Remove avatars',

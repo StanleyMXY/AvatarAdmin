@@ -64,7 +64,9 @@ const messages: Record<string, string> = {
     'The version active in this channel now: {code}. It comes from the list for your information; the server decides.',
   'appVersions.activeNone': 'No version is active in this channel.',
   'appVersions.activeUnknown':
-    'The active version of this channel could not be read, so the version number is not compared here; the server decides.',
+    'The versions of this channel could not be read, so the version number is not compared here; the server decides.',
+  'appVersions.floorHint':
+    'A new number must be higher than the highest number of the other versions of this channel (drafts and taken-down versions included): {max}. From the list, for your information.',
   'appVersions.minVersionCodeHelp':
     'Users whose version number is lower than this will be forced to update.',
   'appVersions.changelogHelp': 'One tab for each language. English is required.',
@@ -91,7 +93,7 @@ const messages: Record<string, string> = {
     'Write the version name as x.y.z, three numbers separated by dots, at most 32 characters',
   'appVersions.rule.versionCodeWhole': 'Enter a whole number from 1 to 2147483647',
   'appVersions.rule.versionCodeAbove':
-    'It must be higher than {active}, the version number active in this channel',
+    'It must be higher than {max}, the highest version number of the other versions of this channel (drafts and taken-down versions included)',
   'appVersions.rule.minWhole': 'Enter a whole number from 1 to 2147483647',
   'appVersions.rule.minAbove': 'It must not be higher than the version number {versionCode}',
   'appVersions.rule.changelogEn': 'The English update notes are required',
@@ -132,7 +134,7 @@ const messages: Record<string, string> = {
   'appVersions.activate.direct':
     'After activation, users of this channel will be prompted to download this APK.',
   'appVersions.activate.notAbove':
-    'The version number {code} is not higher than {active}, the version active now. The server will refuse it.',
+    'The version number {code} is not higher than {max}, the highest number of the versions of this channel that have been active (taken-down ones included). The server will refuse it.',
 };
 
 export default messages;

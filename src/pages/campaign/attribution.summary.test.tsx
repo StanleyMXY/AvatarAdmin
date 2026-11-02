@@ -5,6 +5,7 @@ import { campaignState } from '../../../mock/_core/campaignData';
 import campaignMock from '../../../mock/campaign.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
+import { setTestInitialState } from '../../../tests/stubs/umi-max';
 import { withTimeZone } from '../../../tests/withTimeZone';
 import AttributionPage from './attribution';
 import { jsonAnswer, NOW, overrideFetch, signIn } from './testSetup';
@@ -73,6 +74,16 @@ describe('the summary', { timeout: 30000 }, () => {
       expect(read.get('from')).toBe('2026-10-20');
       expect(read.get('to')).toBe('2026-10-26');
     });
+  });
+
+  it('starts with the longest range the backend allows when that is shorter than seven days, so the first ask is not refused', async () => {
+    vi.setSystemTime(new Date('2026-10-26T20:00:00Z'));
+    signIn('root');
+    setTestInitialState({ meta: { statsMaxRangeDays: 3 } });
+    const { calls } = await load();
+    const read = summaryReads(calls)[0];
+    expect(read.get('from')).toBe('2026-10-24');
+    expect(read.get('to')).toBe('2026-10-26');
   });
 
   it('has the source, the installs, the activations and the cost when grouped by source, and the key as well when grouped by anything else', async () => {
@@ -312,6 +323,34 @@ describe('the summary', { timeout: 30000 }, () => {
     await user.click(retries[retries.length - 1]);
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
   });
+
+  it.each([
+    ['EMPTY_NOT_ALLOWED', 'en-US', /Failed to load:.*Some input is not valid/],
+    ['OUT_OF_RANGE', 'en-US', /Failed to load:.*Some input is not valid/],
+    ['OUT_OF_RANGE', 'zh-CN', /加载失败：.*输入内容不合法/],
+  ] as const)(
+    'shows the words of the error code, in the language of the page, when the grouping is refused (400, groupBy, %s) and not the backend words (%s)',
+    async (reason, locale, words) => {
+      useMockBackend({ default: campaignMock });
+      overrideFetch(({ url }) =>
+        url.pathname === '/api/admin/attribution/summary'
+          ? jsonAnswer(
+              400,
+              'INVALID_REQUEST',
+              { details: [{ ref: 'groupBy', reason }] },
+              'raw backend words',
+            )
+          : undefined,
+      );
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderPage(<AttributionPage />, locale);
+      await user.click(
+        await screen.findByRole('tab', { name: locale === 'zh-CN' ? '汇总' : 'Summary' }),
+      );
+      expect(await screen.findByText(words)).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('raw backend words');
+    },
+  );
 
   it('never lets a slow answer to an older grouping replace the answer to the newer one', async () => {
     useMockBackend({ default: campaignMock });

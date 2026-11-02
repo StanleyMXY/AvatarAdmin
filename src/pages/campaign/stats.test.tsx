@@ -518,7 +518,7 @@ describe('the campaign results page: what goes wrong', () => {
           : undefined,
       );
       renderPage(<StatsPage />);
-      const line = await screen.findByTestId('campaign-stats-range-error');
+      const line = await screen.findByTestId('stat-range-error');
       expect(line.textContent).toMatch(expected);
       expect(document.body.textContent).not.toContain(raw);
       // the bar with the retry stays: nothing was read
@@ -541,12 +541,12 @@ describe('the campaign results page: what goes wrong', () => {
         : undefined,
     );
     renderPage(<StatsPage />, 'zh-CN');
-    const line = await screen.findByTestId('campaign-stats-range-error');
+    const line = await screen.findByTestId('stat-range-error');
     expect(line.textContent).toMatch(/起始日期：.*超出允许的范围.*不能晚于结束日期/);
     failing = false;
     fireEvent.click(screen.getByRole('button', { name: /重\s?试/ }));
     await ready();
-    expect(screen.queryByTestId('campaign-stats-range-error')).toBeNull();
+    expect(screen.queryByTestId('stat-range-error')).toBeNull();
   });
 
   it('shows no range line for a refusal that is not about the dates', async () => {
@@ -561,7 +561,7 @@ describe('the campaign results page: what goes wrong', () => {
     );
     renderPage(<StatsPage />);
     await screen.findByText(/Failed to load:/);
-    expect(screen.queryByTestId('campaign-stats-range-error')).toBeNull();
+    expect(screen.queryByTestId('stat-range-error')).toBeNull();
   });
 
   it('disables the campaign filter and says which permission is missing when the list is refused (403), and still shows the figures with the code and the name that the rows carry', async () => {

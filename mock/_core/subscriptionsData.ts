@@ -48,6 +48,7 @@ export type SubscriptionRow = {
   firstActiveAt: string | null;
   voidedAt: string | null;
   lastEventSignedAt: string | null;
+  periodOrderId: string | null;
   lastSyncedAt: string;
   createdAt: string;
   updatedAt: string;
@@ -258,6 +259,13 @@ const seedSubscriptions = (): SubscriptionRow[] =>
       firstActiveAt: state === 'PENDING' ? null : purchasedAt,
       voidedAt: state === 'REVOKED' ? daysAgoIso(1) : null,
       lastEventSignedAt: daysAgoIso(i),
+      // Apple's transactionId, or Google's latestSuccessfulOrderId; a row not yet through a period has none.
+      periodOrderId:
+        state === 'PENDING'
+          ? null
+          : store === 'APPLE'
+            ? `30000000${2000 + i}`
+            : `GPA.3300-${1000 + i}-${4000 + i}-${7000 + i}`,
       lastSyncedAt: daysAgoIso(0),
       createdAt: purchasedAt,
       updatedAt: daysAgoIso(i),

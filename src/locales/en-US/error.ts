@@ -28,6 +28,8 @@ const messages: Record<string, string> = {
   'error.CONTENT_REJECTED': 'The content was blocked by automatic moderation.',
   'error.REPORT_TARGET_NOT_FOUND': 'The reported item was not found.',
   'error.BATCH_TOO_LARGE': 'The batch exceeds the allowed size.',
+  'error.PAYLOAD_TOO_LARGE':
+    'The request is too large and was not processed. Reduce its size and try again.',
   'error.RATE_LIMITED': 'Too many requests. Please try again later.',
   'error.INVALID_REQUEST': 'Some input is not valid. Please check the fields and try again.',
   'error.INVALID_INVITE_CODE': 'The invite code does not exist or is malformed.',
@@ -36,6 +38,7 @@ const messages: Record<string, string> = {
   'error.EXPORT_NOT_READY': 'The export is not ready, has failed, or has expired.',
   'error.ADMIN_INVALID_CREDENTIALS': 'Incorrect username or password.',
   'error.ADMIN_FORBIDDEN': 'You do not have permission to do this.',
+  'error.FORBIDDEN': 'Access is not allowed.',
   'error.ADMIN_INVALID_TOKEN': 'Your session has expired. Please sign in again.',
   'error.ADMIN_TOTP_REQUIRED': 'Enter your verification code.',
   'error.ADMIN_TOTP_INVALID': 'The verification code is wrong, already used, or expired.',

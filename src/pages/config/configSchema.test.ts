@@ -39,6 +39,8 @@ const EXTRA_KEYS: [string, string, string, number?, number?][] = [
   ['ratelimit.events_per_ip_per_minute', 'int', 'CONFIG:MANAGE', 1],
   ['chat.moderation_concurrency', 'int', 'CONFIG:MANAGE', 1, 32],
   ['chat.moderation_deadline_ms', 'int', 'CONFIG:MANAGE', 100, 2500],
+  // the switch of the model check, 2026-11-02 (the backend's contract 11.2 and 17.5)
+  ['moderation.model_check_enabled', 'bool', 'MODERATION:CONFIG'],
 ];
 
 describe('CONFIG_SCHEMA', () => {
@@ -49,8 +51,8 @@ describe('CONFIG_SCHEMA', () => {
     expect(EXTRA_CONFIG_KEYS).toEqual(EXTRA_KEYS.map((e) => e[0]));
   });
 
-  it('has the 25 backend extras with the kind, edit permission and range of the checklist', () => {
-    expect(EXTRA_KEYS).toHaveLength(25);
+  it('has the 26 backend extras with the kind, edit permission and range of the checklist', () => {
+    expect(EXTRA_KEYS).toHaveLength(26);
     for (const [key, kind, permission, min, max] of EXTRA_KEYS) {
       const found = specOf(key);
       expect(found, key).toBeDefined();
@@ -120,9 +122,9 @@ describe('CONFIG_SCHEMA', () => {
     const perPermission = new Map<string, number>();
     for (const s of CONFIG_SCHEMA)
       perPermission.set(s.editPermission, (perPermission.get(s.editPermission) ?? 0) + 1);
-    // 161 of the contract table plus 20 extras; 225 of the table plus 25 extras
+    // 161 of the contract table plus 20 extras; 225 of the table plus 26 extras
     expect(perPermission.get('CONFIG:MANAGE')).toBe(181);
-    expect([...perPermission.values()].reduce((a, b) => a + b, 0)).toBe(250);
+    expect([...perPermission.values()].reduce((a, b) => a + b, 0)).toBe(251);
   });
 });
 
@@ -141,6 +143,23 @@ describe('validateValue', () => {
     expect(validateValue(spec('recall.local_send_hour'), 24)).toBe('OUT_OF_RANGE');
     expect(validateValue(spec('auth.password_max_length'), 7)).toBe('OUT_OF_RANGE');
     expect(validateValue(spec('invite.max_rewarded_per_inviter'), 0)).toBeNull();
+  });
+
+  it('takes the new maximums of the contract of 2026-11-02: 536870912 for the upload sizes, 10000 recipients', () => {
+    for (const key of [
+      'upload.max_bytes',
+      'upload.push_image_max_bytes',
+      'upload.ad_media_max_bytes',
+      'upload.render_asset_max_bytes',
+      'upload.apk_max_bytes',
+    ]) {
+      expect(validateValue(spec(key), 536870912), key).toBeNull();
+      expect(validateValue(spec(key), 536870913), key).toBe('OUT_OF_RANGE');
+      expect(validateValue(spec(key), 0), key).toBe('OUT_OF_RANGE');
+    }
+    expect(validateValue(spec('notification.max_recipients'), 10000)).toBeNull();
+    expect(validateValue(spec('notification.max_recipients'), 10001)).toBe('OUT_OF_RANGE');
+    expect(validateValue(spec('notification.max_recipients'), 0)).toBe('OUT_OF_RANGE');
   });
 
   it('checks the ranges of the extras: the retention keys take 0 or a minimum, the group B keys their new maximum', () => {

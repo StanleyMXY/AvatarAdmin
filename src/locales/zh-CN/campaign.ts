@@ -35,12 +35,6 @@ const messages: Record<string, string> = {
   'campaign.stats.col.registerRate': '注册转化率',
   'campaign.stats.col.registerRate.tip': '注册数 ÷ 安装数。',
   'campaign.stats.col.cost': '总花费',
-  'campaign.stats.range.line': '{field}：{reason}。{hint}',
-  'campaign.stats.range.from': '起始日期',
-  'campaign.stats.range.from.hint': '起始日期必须是有效的一天，并且不能晚于结束日期。',
-  'campaign.stats.range.to': '结束日期',
-  'campaign.stats.range.to.hint':
-    '结束日期必须是有效的一天，并且范围不能超过统计允许的最大天数（stats.max_range_days）。',
   'campaign.stats.col.cost.in': '总花费（{currency}）',
   'campaign.stats.col.cost.tip': '所选日期内为该投放账户录入的花费总和，系统只有一种币种。',
   'campaign.stats.col.cpa': 'CPA',
@@ -252,6 +246,8 @@ const messages: Record<string, string> = {
   'campaign.clicks.ip.masked':
     '客户端 IP 已掩码。拥有权限「{permission}」才显示完整地址，关键字也才能精确匹配整个 IP。',
   'campaign.clicks.ip.full': '关键字匹配 UTM 值和完整的 IP。',
+  'campaign.clicks.status.note':
+    '已被某条安装记录引用的点击算“已匹配”，所以选“待认领”时，列表里也可能出现这样的点击。',
   'campaign.clicks.time': '点击时间（UTC 日）',
   'campaign.clicks.status': '状态',
   'campaign.clicks.status.all': '全部',

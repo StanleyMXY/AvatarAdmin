@@ -25,7 +25,8 @@ import { useAdminMeta } from '../../session/useSession';
 import { plainText } from '../../utils/plainText';
 import { DASH, formatCount } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
-import { daysBetween, lastNDaysUtc } from '../../utils/utcDay';
+import { daysBetween } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import { CostChart } from './CostChart';
 import { type CostGroup, chartSeries, groupLines, NO_COST, summarize, toLine } from './costRows';
 import { labelOf, quantityText } from './labels';
@@ -69,7 +70,7 @@ export default function CostReportPage() {
   const intl = useIntl();
   const t: T = (id, values) => intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
-  const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [draftFilters, setDraftFilters] = useState<Filters>({ model: '' });
   const [applied, setApplied] = useState<{ range: DayRange; filters: Filters }>(() => ({
     range: draft,
@@ -92,7 +93,7 @@ export default function CostReportPage() {
   }, [applied]);
 
   const fetcher = useCallback(() => getUsageCost(params), [params]);
-  const { data, failure, reload } = useLatestRead(fetcher);
+  const { data, error: refusal, failure, reload } = useLatestRead(fetcher);
 
   // The registered models, for suggestions in the model box; a failure only means no suggestions.
   useEffect(() => {
@@ -224,6 +225,7 @@ export default function CostReportPage() {
       <UtcNotice />
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={draft}
           onChange={setDraft}
           maxDays={meta.statsMaxRangeDays ?? undefined}

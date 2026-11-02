@@ -16,21 +16,39 @@ export function validDay(value: string): boolean {
 
 export const text = (value: unknown): string => (typeof value === 'string' ? value : '');
 
-/** `from` and `to` of the query (last 7 days when missing); 400 INVALID_REQUEST when they are wrong or span too many days. */
+const FIRST_DAY = '0001-01-01';
+
+/**
+ * The range of a statistics query, the one rule of contract 17.6 for every statistics endpoint.
+ * Neither date given: the last 7 days to today. One given: the other is six days away from it and
+ * never later than today (so a `from` after today is "from is after to"). A date that is not a day
+ * (or a year below 1) is 400 `<ref> must be YYYY-MM-DD` with reason OUT_OF_RANGE, `from` checked
+ * before `to`; then `from` after `to` is 400 on `from`, and a range longer than
+ * `stats.max_range_days` is 400 on `to`. An empty value counts as not given.
+ */
 export function rangeOf(
   req: MockReq,
   now: Date = new Date(),
 ): { from: string; to: string; today: string } {
   const today = todayOf(now);
-  const to = text(req.query.to) || today;
-  const from = text(req.query.from) || addDays(to, -6);
+  let from = text(req.query.from);
+  let to = text(req.query.to);
   for (const [ref, value] of [
     ['from', from],
     ['to', to],
   ] as const) {
-    if (!validDay(value))
+    if (value !== '' && !validDay(value))
       throw invalidRequest(`${ref} must be YYYY-MM-DD`, [{ ref, reason: 'OUT_OF_RANGE' }]);
   }
+  // The day derived from the other one: inside the calendar, and never later than today.
+  const derived = (day: string, days: number): string => {
+    const moved = addDays(day, days);
+    if (!validDay(moved)) return days < 0 ? FIRST_DAY : today;
+    return [moved, today].sort()[0];
+  };
+  if (from === '' && to === '') to = today;
+  if (from === '') from = derived(to, -6);
+  else if (to === '') to = derived(from, 6);
   if (from > to)
     throw invalidRequest('from is after to', [{ ref: 'from', reason: 'OUT_OF_RANGE' }]);
   // The limit is the key `stats.max_range_days` as it is saved now (the contract's default until then).

@@ -23,6 +23,11 @@ const EVIDENCE = 'GET /api/admin/likeness-complaints/:id/evidence/:index';
 const STATUS = 'PUT /api/admin/likeness-complaints/:id/status';
 const REMOVE = 'POST /api/admin/likeness-complaints/:id/remove-avatars';
 
+/** The avatars that exist in the sample data (the account avatars of the user module). */
+const existing = () => [...avatarState.accountAvatars.values()].flat().map((a) => a.assetId);
+const AVATAR_A = existing()[0];
+const AVATAR_B = existing()[1];
+
 const byStatus = (status: string) => {
   const found = avatarState.complaints.find((c) => c.status === status);
   if (!found) throw new Error(`no complaint ${status}`);
@@ -36,7 +41,7 @@ describe('permissions', () => {
     expect((await get(LIST, 'support')).status).toBe(200);
     expect((await get(EVIDENCE, 'finance', {}, { id, index: '0' })).status).toBe(403);
     expect((await send(STATUS, { status: 'INVESTIGATING' }, { id }, 'support')).status).toBe(403);
-    expect((await send(REMOVE, { assetIds: ['a'] }, { id }, 'support')).status).toBe(403);
+    expect((await send(REMOVE, { assetIds: [AVATAR_A] }, { id }, 'support')).status).toBe(403);
   });
 
   it('answers 401 without a token on every endpoint', async () => {
@@ -231,6 +236,38 @@ describe('PUT /likeness-complaints/{id}/status', () => {
     ).toBe(200);
   });
 
+  it('answers 409 INVALID_STATE with the current state when the complaint is set to the state it has, and writes no event', async () => {
+    const open = byStatus('INVESTIGATING');
+    const events = open.events.length;
+    const same = await send(STATUS, { status: 'INVESTIGATING' }, { id: open.id });
+    expect(same.status).toBe(409);
+    expect(same.body.code).toBe('INVALID_STATE');
+    expect(same.body.data).toEqual({ status: 'INVESTIGATING' });
+    expect(open.events).toHaveLength(events);
+    expect(open.status).toBe('INVESTIGATING');
+  });
+
+  it('refuses a note with a control character, a new line included (400), before it looks at the state', async () => {
+    const open = byStatus('INVESTIGATING');
+    for (const note of ['two\nlines', 'tab\there', 'nul\u0000', 'bell\u0007', 'c1\u0085x']) {
+      const r = await send(STATUS, { status: 'REJECTED', note }, { id: open.id });
+      expect([r.status, r.body.code], JSON.stringify(note)).toEqual([400, 'INVALID_REQUEST']);
+    }
+    // the check of the body comes before the check of the state (404, then 400, then 409)
+    const same = await send(STATUS, { status: 'INVESTIGATING', note: 'a\nb' }, { id: open.id });
+    expect(same.status).toBe(400);
+    expect(open.status).toBe('INVESTIGATING');
+    expect(
+      (
+        await send(
+          STATUS,
+          { status: 'REJECTED', note: 'ข้อความ ไทย, العربية, 中文' },
+          { id: open.id },
+        )
+      ).status,
+    ).toBe(200);
+  });
+
   it('answers 409 INVALID_STATE with the current state for a closed complaint, and changes nothing', async () => {
     const closed = byStatus('REJECTED');
     const events = closed.events.length;
@@ -244,30 +281,97 @@ describe('PUT /likeness-complaints/{id}/status', () => {
 });
 
 describe('POST /likeness-complaints/{id}/remove-avatars', () => {
-  it('records the avatar ids, closes the complaint as RESOLVED_REMOVED and adds an event', async () => {
+  const ids = (n: number) =>
+    Array.from(
+      { length: n },
+      (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+    );
+  const detailsOf = (r: { body: { data: unknown } }) =>
+    (r.body.data as { details?: { ref: string; reason: string }[] } | null)?.details;
+
+  it('deletes the avatars, records their ids, closes the complaint as RESOLVED_REMOVED and adds an event', async () => {
     const { id } = byStatus('INVESTIGATING');
-    const r = await send(REMOVE, { assetIds: ['asset-1', 'asset-2', 'asset-1'] }, { id });
+    const r = await send(REMOVE, { assetIds: [AVATAR_A, AVATAR_B] }, { id });
     expect(r.status).toBe(200);
     expect(r.body.data).toBeNull();
     const after = await readOne(id);
     expect(after.status).toBe('RESOLVED_REMOVED');
-    expect(after.relatedAvatarAssetIds).toEqual(['asset-1', 'asset-2']);
+    expect(after.relatedAvatarAssetIds).toEqual([AVATAR_A, AVATAR_B]);
     expect(after.events.at(-1)).toMatchObject({
       fromStatus: 'INVESTIGATING',
       toStatus: 'RESOLVED_REMOVED',
     });
     expect(after.resolvedAt).not.toBeNull();
+    // the avatars are gone from the accounts that had them
+    expect(existing()).not.toContain(AVATAR_A);
+    expect(existing()).not.toContain(AVATAR_B);
   });
 
-  it('refuses an empty list or a blank id, and answers 409 for a closed complaint', async () => {
+  it('refuses assetIds that is not a list or is empty with EMPTY_NOT_ALLOWED', async () => {
     const { id } = byStatus('RECEIVED');
-    expect((await send(REMOVE, { assetIds: [] }, { id })).status).toBe(400);
-    expect((await send(REMOVE, { assetIds: [' '] }, { id })).status).toBe(400);
-    expect((await send(REMOVE, {}, { id })).body.data.details[0].ref).toBe('assetIds');
+    for (const body of [
+      {},
+      { assetIds: [] },
+      { assetIds: 'x' },
+      { assetIds: null },
+      { assetIds: {} },
+    ]) {
+      const r = await send(REMOVE, body, { id });
+      expect([r.status, r.body.code], JSON.stringify(body)).toEqual([400, 'INVALID_REQUEST']);
+      expect(detailsOf(r)).toEqual([{ ref: 'assetIds', reason: 'EMPTY_NOT_ALLOWED' }]);
+    }
+  });
+
+  it('refuses more than 20, a repeated id (a UUID in another case is the same), and an element that is not a UUID string, with OUT_OF_RANGE', async () => {
+    const { id } = byStatus('RECEIVED');
+    const bad: unknown[][] = [
+      ids(21),
+      [AVATAR_A, AVATAR_A],
+      [AVATAR_A, AVATAR_A.toUpperCase()],
+      ['asset-1'],
+      [' ', AVATAR_A],
+      [AVATAR_A, 7],
+      [AVATAR_A, null],
+      [`${AVATAR_A} `],
+      [AVATAR_A.replaceAll('-', '')],
+    ];
+    for (const assetIds of bad) {
+      const r = await send(REMOVE, { assetIds }, { id });
+      expect([r.status, r.body.code], JSON.stringify(assetIds)).toEqual([400, 'INVALID_REQUEST']);
+      expect(detailsOf(r), JSON.stringify(assetIds)).toEqual([
+        { ref: 'assetIds', reason: 'OUT_OF_RANGE' },
+      ]);
+    }
+    expect(byStatus('RECEIVED').status).toBe('RECEIVED');
+  });
+
+  it('takes exactly 20 ids when the avatars exist, and answers 404 when one of them does not', async () => {
+    const { id } = byStatus('RECEIVED');
+    const missing = ids(20);
+    const r = await send(REMOVE, { assetIds: missing }, { id });
+    expect([r.status, r.body.code]).toEqual([404, 'RESOURCE_NOT_FOUND']);
+    // every id that was not found is named, with the reason code of the list
+    expect(detailsOf(r)).toEqual(missing.map((ref) => ({ ref, reason: 'RESOURCE_NOT_FOUND' })));
+    const mixed = await send(REMOVE, { assetIds: [AVATAR_A, missing[0]] }, { id });
+    expect(detailsOf(mixed)).toEqual([{ ref: missing[0], reason: 'RESOURCE_NOT_FOUND' }]);
+    // nothing was deleted and the complaint is as it was
+    expect(existing()).toContain(AVATAR_A);
+    expect(byStatus('RECEIVED').status).toBe('RECEIVED');
+  });
+
+  it('answers 409 INVALID_STATE with the current state for a closed complaint, deletes nothing, and 404 for an unknown complaint', async () => {
     const closed = byStatus('RESOLVED_NOT_FOUND');
-    const r = await send(REMOVE, { assetIds: ['a'] }, { id: closed.id });
+    const r = await send(REMOVE, { assetIds: [AVATAR_A] }, { id: closed.id });
     expect(r.status).toBe(409);
     expect(r.body.data.status).toBe('RESOLVED_NOT_FOUND');
     expect(closed.relatedAvatarAssetIds).toEqual([]);
+    expect(existing()).toContain(AVATAR_A);
+    expect((await send(REMOVE, { assetIds: [AVATAR_A] }, { id: 'nope' })).status).toBe(404);
+  });
+
+  it('checks the list before the state of the complaint (404, then 400, then 409)', async () => {
+    const closed = byStatus('RESOLVED_NOT_FOUND');
+    const r = await send(REMOVE, { assetIds: [] }, { id: closed.id });
+    expect(r.status).toBe(400);
   });
 });

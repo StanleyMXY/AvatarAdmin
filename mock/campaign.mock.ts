@@ -41,6 +41,8 @@ const PLATFORM_PIXEL = {
   GOOGLE: 'googlePixelId',
   TIKTOK: 'tiktokPixelId',
 } as const;
+const KEYWORD_MAX = 100;
+const CLICK_KEYWORD_MAX = 200;
 const CLICK_STATUSES = ['PENDING', 'MATCHED', 'EXPIRED'];
 const SOURCES = ['APPSFLYER', 'SELF'];
 const MATCH_TYPES = ['APK_BLOCK', 'REFERRER', 'FINGERPRINT'];
@@ -348,15 +350,23 @@ export default {
   'GET /api/admin/attribution/campaigns': guard(
     ['ATTRIBUTION:MANAGE', 'ATTRIBUTION:VIEW'],
     (req) => {
-      const keyword = text(req.query.keyword).toLowerCase();
+      const raw = text(req.query.keyword);
       const enabled = text(req.query.enabled);
+      const details: Detail[] = [];
+      // at most 100 code points (contract 10.5); the contract names no reason, TOO_LONG is the one of a long text
+      if ([...raw].length > KEYWORD_MAX) details.push({ ref: 'keyword', reason: 'TOO_LONG' });
       if (enabled !== '' && enabled !== 'true' && enabled !== 'false') {
-        throw fail([{ ref: 'enabled', reason: 'NOT_BOOLEAN' }]);
+        details.push({ ref: 'enabled', reason: 'NOT_BOOLEAN' });
       }
+      if (details.length > 0) throw fail(details);
+      const keyword = raw.toLowerCase();
+      // the code and the name are matched each by itself: a word never spans the two
       const rows = campaignState.campaigns
         .filter(
           (c) =>
-            (keyword === '' || `${c.code} ${c.name}`.toLowerCase().includes(keyword)) &&
+            (keyword === '' ||
+              c.code.toLowerCase().includes(keyword) ||
+              c.name.toLowerCase().includes(keyword)) &&
             (enabled === '' || c.enabled === (enabled === 'true')),
         )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || Number(b.id) - Number(a.id));
@@ -683,6 +693,11 @@ export default {
     const { from, to } = dayRange(req);
     const campaignId = text(req.query.campaignId);
     const keyword = text(req.query.keyword);
+    // contract 10.3: at most 200 characters, and no U+0000 (400, ref keyword, INVALID_FORMAT)
+    if ([...keyword].length > CLICK_KEYWORD_MAX) {
+      throw fail([{ ref: 'keyword', reason: 'TOO_LONG' }]);
+    }
+    if (keyword.includes('\u0000')) throw fail([{ ref: 'keyword', reason: 'INVALID_FORMAT' }]);
     const lower = keyword.toLowerCase();
     const mayReadAddress = hasPermission(req.admin, 'ANALYTICS:IP_VIEW');
     const rows = campaignState.clicks
@@ -692,9 +707,12 @@ export default {
         if (campaignId !== '' && c.campaignId !== campaignId) return false;
         if (status !== null && c.status !== status) return false;
         if (keyword === '') return true;
-        const inUtm = `${c.utmSource} ${c.utmMedium} ${c.utmCampaign}`
-          .toLowerCase()
-          .includes(lower);
+        // each of the three by itself: a word never spans two of them
+        const inUtm = [c.utmSource, c.utmMedium, c.utmCampaign].some((v) =>
+          String(v ?? '')
+            .toLowerCase()
+            .includes(lower),
+        );
         // A whole address is matched only for an administrator who may see addresses.
         return inUtm || (mayReadAddress && c.ip === keyword);
       })

@@ -16,7 +16,7 @@ import { useAdminMeta } from '../../session/useSession';
 import { codeText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { safeRatio } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import { Checklist } from './Checklist';
 import { type DrillRow, DrillTable } from './DrillTable';
 import { ReportCards } from './ReportCards';
@@ -51,7 +51,7 @@ export default function AdReportPage() {
     intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
   const [draft, setDraft] = useState<Applied>(() => ({
-    range: lastNDaysUtc(7),
+    range: defaultRange(meta.statsMaxRangeDays, 7),
     platform: 'ALL',
     channel: 'ALL',
   }));
@@ -176,6 +176,7 @@ export default function AdReportPage() {
       <UtcNotice />
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={overview.error ?? drill.error ?? nofill.error}
           value={draft.range}
           onChange={(range) => setDraft((d) => ({ ...d, range }))}
           maxDays={meta.statsMaxRangeDays ?? undefined}

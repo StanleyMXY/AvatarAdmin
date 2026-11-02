@@ -41,11 +41,19 @@ describe('GET /monitor/pipeline', () => {
     expect(Date.now() - times[0]).toBeLessThanOrEqual(24 * HOUR + 1000);
   });
 
-  it('gives each point reportedAt, effectiveAt, source and the three figures, some of them null', async () => {
+  it('gives each point id, reportedAt, effectiveAt, source and the three figures, some of them null', async () => {
     const { body } = await pipeline(viewer());
     const items = body.data.items as Record<string, unknown>[];
     expect(Object.keys(items[0]).sort()).toEqual(
-      ['effectiveAt', 'errorCount', 'errorRate', 'gpuUtilization', 'reportedAt', 'source'].sort(),
+      [
+        'effectiveAt',
+        'errorCount',
+        'errorRate',
+        'gpuUtilization',
+        'id',
+        'reportedAt',
+        'source',
+      ].sort(),
     );
     expect(items.some((i) => i.gpuUtilization === null)).toBe(true);
     expect(items.some((i) => i.errorRate === null)).toBe(true);
@@ -68,14 +76,67 @@ describe('GET /monitor/pipeline', () => {
     expect([status, body.data]).toEqual([200, { items: [], truncated: false }]);
   });
 
-  it('refuses a range longer than 7 days and a range that is not instants, with the parameter as the ref', async () => {
+  it('refuses a range longer than 7 days, with the parameter as the ref', async () => {
     const to = new Date();
     const from = new Date(to.getTime() - 8 * 24 * HOUR);
     const long = await pipeline(viewer(), { from: from.toISOString(), to: to.toISOString() });
     expect(long.status).toBe(400);
+    expect(long.body.code).toBe('INVALID_REQUEST');
     expect(long.body.data.details).toEqual([{ ref: 'from', reason: 'OUT_OF_RANGE' }]);
-    const bad = await pipeline(viewer(), { from: 'yesterday' });
-    expect(bad.body.data.details).toEqual([{ ref: 'from', reason: 'INVALID_PATH' }]);
+  });
+
+  // Contract 14.1: `from` after `to`, or a value that is not ISO-8601, is 400 INVALID_REQUEST. The
+  // document gives no details for these two, so the fake gives none either.
+  it.each([
+    ['from after to', { from: '2026-10-26T12:00:00Z', to: '2026-10-26T11:00:00Z' }],
+    ['a from that is not ISO-8601', { from: 'yesterday' }],
+    ['a to that is not ISO-8601', { to: '2026-10-26' }],
+    ['a from of the wrong shape (no time zone)', { from: '2026-10-26T12:00:00' }],
+    ['a from that is a day that does not exist', { from: '2026-02-30T00:00:00Z' }],
+  ])('refuses %s with 400 INVALID_REQUEST', async (_name, query) => {
+    const refused = await pipeline(viewer(), query);
+    expect(refused.status).toBe(400);
+    expect(refused.body.code).toBe('INVALID_REQUEST');
+    expect(refused.body.data ?? null).toBeNull();
+  });
+
+  it('takes the 24 hours after a `from` given alone', async () => {
+    const from = Date.now() - 3 * 24 * HOUR;
+    const { status, body } = await pipeline(viewer(), { from: new Date(from).toISOString() });
+    expect(status).toBe(200);
+    const times = (body.data.items as { effectiveAt: string }[]).map((i) =>
+      Date.parse(i.effectiveAt),
+    );
+    expect(times.length).toBeGreaterThan(0);
+    expect(Math.min(...times)).toBeGreaterThanOrEqual(from);
+    expect(Math.max(...times)).toBeLessThanOrEqual(from + 24 * HOUR);
+    expect(Math.max(...times)).toBeGreaterThan(from + 23 * HOUR);
+  });
+
+  it('takes the 24 hours before a `to` given alone', async () => {
+    const to = Date.now() - 3 * 24 * HOUR;
+    const { status, body } = await pipeline(viewer(), { to: new Date(to).toISOString() });
+    expect(status).toBe(200);
+    const times = (body.data.items as { effectiveAt: string }[]).map((i) =>
+      Date.parse(i.effectiveAt),
+    );
+    expect(Math.max(...times)).toBeLessThanOrEqual(to);
+    expect(Math.min(...times)).toBeGreaterThanOrEqual(to - 24 * HOUR);
+    expect(Math.min(...times)).toBeLessThan(to - 23 * HOUR);
+  });
+
+  it('accepts an instant with an offset and one with fractions of a second', async () => {
+    const to = new Date(Date.now() - HOUR);
+    const offset = `${to.toISOString().slice(0, 19)}+00:00`;
+    expect((await pipeline(viewer(), { to: offset })).status).toBe(200);
+    expect((await pipeline(viewer(), { to: to.toISOString() })).status).toBe(200);
+  });
+
+  it('gives every point an id, different for every point', async () => {
+    const { body } = await pipeline(viewer());
+    const ids = (body.data.items as { id: unknown }[]).map((i) => i.id);
+    expect(ids.every((id) => typeof id === 'number' || typeof id === 'string')).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('cuts at 5000 points, keeps the latest ones and says truncated', async () => {

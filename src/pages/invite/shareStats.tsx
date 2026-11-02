@@ -9,7 +9,7 @@ import { UtcNotice } from '../../components/stat/UtcNotice';
 import { useLatestRead } from '../../hooks/useLatestRead';
 import { getShareChannels, getShareFunnel } from '../../services/invite';
 import { useAdminMeta } from '../../session/useSession';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import { ShareChannelsTab } from './ShareChannelsTab';
 import { ShareFunnelTab } from './ShareFunnelTab';
 import { ShareOverview } from './ShareOverview';
@@ -23,7 +23,7 @@ export default function ShareStatsPage() {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
   const meta = useAdminMeta();
-  const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [range, setRange] = useState<DayRange>(draft);
   const [tab, setTab] = useState('overview');
   const [channel, setChannel] = useState('');
@@ -58,6 +58,7 @@ export default function ShareStatsPage() {
       <UtcNotice />
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={funnel.error ?? channels.error}
           value={draft}
           onChange={setDraft}
           maxDays={meta.statsMaxRangeDays ?? undefined}

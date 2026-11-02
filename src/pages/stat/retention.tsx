@@ -55,7 +55,7 @@ export default function RetentionReportPage() {
   const [silenceDays, setSilenceDays] = useState<Silence>(7);
   const [retention, setRetention] = useState<RetentionRow[] | null>(null);
   const [reactivation, setReactivation] = useState<ReactivationRow[] | null>(null);
-  const { text: failure, fail, clear } = useFailure();
+  const { text: failure, error: refusal, fail, clear } = useFailure();
   const begin = useLatestCall();
 
   const load = useCallback(async () => {
@@ -162,6 +162,7 @@ export default function RetentionReportPage() {
       />
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={draft.range}
           onChange={(range) => setDraft((d) => ({ ...d, range }))}
           maxDays={meta.statsMaxRangeDays ?? undefined}
