@@ -29,7 +29,8 @@ const MATCH_MODES = ['SUBSTRING', 'WORD', 'REGEX'];
 const LEVELS = ['REVIEW', 'BLOCK'];
 const PATTERN_MAX = 200;
 const NOTE_MAX = 200;
-const DECISION_NOTE_MAX = 500;
+/** The note of a decision: at most 1000 code points once the ends are trimmed. */
+const DECISION_NOTE_MAX = 1000;
 const RULES_MAX_DEFAULT = 200;
 
 const usernameOf = (adminId: string | null): string | null =>
@@ -216,17 +217,19 @@ export default {
 
   'POST /api/admin/moderation/records/:id/decision': guard('MODERATION:REVIEW', (req) => {
     const body = bodyOf(req);
-    const details: Detail[] = [];
-    if (body.decision !== 'APPROVE' && body.decision !== 'REJECT') {
-      details.push({ ref: 'decision', reason: 'OUT_OF_RANGE' });
-    }
+    // The backend reports the first error only, in this order: the decision (missing or empty is
+    // EMPTY_NOT_ALLOWED, anything but APPROVE or REJECT, case included, is OUT_OF_RANGE), then the
+    // note (a rejection needs one; the limit is on the trimmed text), all before the record is read.
     const note = typeof body.note === 'string' ? trimSpec(body.note) : '';
-    if (body.decision === 'REJECT' && note === '') {
-      details.push({ ref: 'note', reason: 'EMPTY_NOT_ALLOWED' });
-    } else if (countCodePoints(note) > DECISION_NOTE_MAX) {
-      details.push({ ref: 'note', reason: 'TOO_LONG' });
-    }
-    if (details.length > 0) throw invalidRequest('invalid decision', details);
+    const refuse = (ref: string, reason: string) => {
+      throw invalidRequest('invalid decision', [{ ref, reason }]);
+    };
+    if (body.decision === undefined || body.decision === null || body.decision === '')
+      refuse('decision', 'EMPTY_NOT_ALLOWED');
+    if (body.decision !== 'APPROVE' && body.decision !== 'REJECT')
+      refuse('decision', 'OUT_OF_RANGE');
+    if (body.decision === 'REJECT' && note === '') refuse('note', 'EMPTY_NOT_ALLOWED');
+    if (countCodePoints(note) > DECISION_NOTE_MAX) refuse('note', 'TOO_LONG');
 
     const found = findRecord(req.params.id);
     if (!found) throw notFound();

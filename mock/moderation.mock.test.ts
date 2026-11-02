@@ -326,16 +326,65 @@ describe('POST /moderation/records/{id}/decision', () => {
     expect(findRecord(RECORD_ID.persona)?.status).toBe('PENDING_REVIEW');
   });
 
-  it('refuses a decision that is neither APPROVE nor REJECT, and a note that is too long', async () => {
-    const bad = await send(DECISION, 'reviewer', { decision: 'MAYBE' }, { id: RECORD_ID.persona });
-    expect(bad.body.data.details).toEqual([{ ref: 'decision', reason: 'OUT_OF_RANGE' }]);
-    const long = await send(
+  it('refuses a decision that is neither APPROVE nor REJECT (case matters) or missing, on the ref decision', async () => {
+    const refused = async (body: Record<string, unknown>) =>
+      (await send(DECISION, 'reviewer', body, { id: RECORD_ID.persona })).body.data.details;
+    expect(await refused({ decision: 'MAYBE' })).toEqual([
+      { ref: 'decision', reason: 'OUT_OF_RANGE' },
+    ]);
+    expect(await refused({ decision: 'approve' })).toEqual([
+      { ref: 'decision', reason: 'OUT_OF_RANGE' },
+    ]);
+    expect(await refused({})).toEqual([{ ref: 'decision', reason: 'EMPTY_NOT_ALLOWED' }]);
+    expect(await refused({ decision: '' })).toEqual([
+      { ref: 'decision', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+  });
+
+  it('takes a note of up to 1000 code points (an emoji counts one), for approving as for rejecting, and refuses 1001 on the ref note', async () => {
+    for (const decision of ['APPROVE', 'REJECT']) {
+      const long = await send(
+        DECISION,
+        'reviewer',
+        { decision, note: '😀'.repeat(1001) },
+        { id: RECORD_ID.persona },
+      );
+      expect(long.status).toBe(400);
+      expect(long.body.data.details).toEqual([{ ref: 'note', reason: 'TOO_LONG' }]);
+    }
+    expect(findRecord(RECORD_ID.persona)?.status).toBe('PENDING_REVIEW');
+    const fine = await send(
       DECISION,
       'reviewer',
-      { decision: 'APPROVE', note: 'x'.repeat(501) },
+      { decision: 'REJECT', note: `${WIDE_SPACE}${'😀'.repeat(1000)} ` },
       { id: RECORD_ID.persona },
     );
-    expect(long.body.data.details).toEqual([{ ref: 'note', reason: 'TOO_LONG' }]);
+    expect(fine.status).toBe(200);
+    expect(findRecord(RECORD_ID.persona)?.note).toBe('😀'.repeat(1000));
+  });
+
+  it('keeps an approval without a note, and with a note that is only white space, as no note', async () => {
+    const answer = await send(
+      DECISION,
+      'reviewer',
+      { decision: 'APPROVE', note: `  ${WIDE_SPACE}` },
+      { id: RECORD_ID.persona },
+    );
+    expect(answer.status).toBe(200);
+    expect(findRecord(RECORD_ID.persona)).toMatchObject({ status: 'APPROVED', note: null });
+  });
+
+  it('reports the first error only, the decision before the note, and checks the parameters before the record exists', async () => {
+    const both = await send(
+      DECISION,
+      'reviewer',
+      { decision: 'MAYBE', note: 'x'.repeat(1001) },
+      { id: RECORD_ID.persona },
+    );
+    expect(both.body.data.details).toEqual([{ ref: 'decision', reason: 'OUT_OF_RANGE' }]);
+    const beforeRecord = await send(DECISION, 'reviewer', { decision: 'REJECT' }, { id: 'nope' });
+    expect(beforeRecord.status).toBe(400);
+    expect(beforeRecord.body.data.details).toEqual([{ ref: 'note', reason: 'EMPTY_NOT_ALLOWED' }]);
   });
 
   it('answers 409 INVALID_STATE with the current status for a record that is not waiting, and 404 for a missing one', async () => {

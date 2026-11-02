@@ -431,17 +431,67 @@ describe('deciding', { timeout: 30000 }, () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull());
   });
 
-  it('refuses a note of more than 500 code points and counts an emoji as one', async () => {
+  it('refuses a note of more than 1000 code points and counts an emoji as one', async () => {
     const user = userEvent.setup();
     const calls = await open(RECORD_ID.persona);
     const dialog = await openDialog(user, 'Reject');
-    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '😀'.repeat(501) } });
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '😀'.repeat(1001) } });
     await user.click(within(dialog).getByRole('button', { name: 'Confirm rejection' }));
-    expect(await within(dialog).findByText(/at most 500 characters/)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/at most 1000 characters/)).toBeInTheDocument();
     expect(writes(calls)).toHaveLength(0);
-    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '😀'.repeat(500) } });
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: '😀'.repeat(1000) } });
     await user.click(within(dialog).getByRole('button', { name: 'Confirm rejection' }));
     await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0].body).toEqual({ decision: 'REJECT', note: '😀'.repeat(1000) });
+  });
+
+  it('takes a note between 501 and 1000 code points for an approval, which needs none', async () => {
+    const user = userEvent.setup();
+    const calls = await open(RECORD_ID.persona);
+    const dialog = await openDialog(user, 'Approve');
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'ก'.repeat(800) } });
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm approval' }));
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0].body).toEqual({ decision: 'APPROVE', note: 'ก'.repeat(800) });
+  });
+
+  it('puts a refusal of the note by the backend under the note field, not in the bar, and keeps the dialog', async () => {
+    const user = userEvent.setup();
+    await open(RECORD_ID.persona, () =>
+      interceptFetch((_, init) =>
+        (init.method ?? 'GET') === 'POST'
+          ? jsonResponse(
+              400,
+              envelope('INVALID_REQUEST', { details: [{ ref: 'note', reason: 'TOO_LONG' }] }),
+            )
+          : undefined,
+      ),
+    );
+    const dialog = await openDialog(user, 'Reject');
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'เหตุผล' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm rejection' }));
+    expect(await within(dialog).findByText('The value is too long.')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Some input is not valid/)).toBeNull();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('says the general words in the bar for a refusal of the decision itself', async () => {
+    const user = userEvent.setup();
+    await open(RECORD_ID.persona, () =>
+      interceptFetch((_, init) =>
+        (init.method ?? 'GET') === 'POST'
+          ? jsonResponse(
+              400,
+              envelope('INVALID_REQUEST', {
+                details: [{ ref: 'decision', reason: 'OUT_OF_RANGE' }],
+              }),
+            )
+          : undefined,
+      ),
+    );
+    const dialog = await openDialog(user, 'Approve');
+    await user.click(within(dialog).getByRole('button', { name: 'Confirm approval' }));
+    expect(await within(dialog).findByText(/Some input is not valid/)).toBeInTheDocument();
   });
 
   it('sends one request for a double press', async () => {
