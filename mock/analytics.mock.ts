@@ -12,36 +12,63 @@ import { currentValue } from './_core/configStore';
 import { type AdminReq, fail, invalidRequest, MockHttpError, type MockReq, ok } from './_core/http';
 import { META_DEFAULTS } from './_core/meta';
 import { paginateQuery } from './_core/paginate';
-import { daysIn, text, validDay } from './_core/statRange';
+import { text } from './_core/statRange';
 import { store } from './_core/store';
 
-// Contract 17.4, "埋点管理": the four live endpoints read the event log and refuse a range longer
-// than analytics.live_max_range_days; the saved funnels are read with ANALYTICS:VIEW and written
-// with ANALYTICS:FUNNEL_MANAGE. A range is two UTC days, both included, as for the statistics
-// (the contract does not say; see docs/contract-requests/2026-10-26-admin-frontend-analytics.md).
+// Contract 17.4, "埋点管理", with the backend's answers 26 and 56 (docs/backend-inputs, 2026-11-02): the
+// four live endpoints read the event log over a range of two ISO-8601 instants `[from, to)` (both
+// required, no default range) and refuse a range longer than analytics.live_max_range_days as a
+// length of time; the saved funnels are read with ANALYTICS:VIEW and written with
+// ANALYTICS:FUNNEL_MANAGE.
 
 type Detail = { ref: string; reason: string };
 
-/** `from` and `to`, both required; 400 INVALID_REQUEST naming the parameter that is wrong. */
-function liveRange(req: MockReq): { from: string; to: string; start: number; end: number } {
-  const from = text(req.query.from);
-  const to = text(req.query.to);
-  const details: Detail[] = [];
-  if (!validDay(from)) details.push({ ref: 'from', reason: 'OUT_OF_RANGE' });
-  if (!validDay(to)) details.push({ ref: 'to', reason: 'OUT_OF_RANGE' });
-  if (details.length === 0 && from > to) details.push({ ref: 'from', reason: 'OUT_OF_RANGE' });
-  if (details.length === 0 && daysIn(from, to).length > META_DEFAULTS.analyticsLiveMaxRangeDays) {
-    details.push({ ref: 'to', reason: 'OUT_OF_RANGE' });
+const EVENT_NAME = /^[a-z0-9_]{1,64}$/;
+
+// Only the form ending in `Z` is accepted: the backend parses with `Instant.parse`, and whether an
+// offset such as `+08:00` is accepted too was not checked (answer 54, item 4), so the page must not send one.
+const INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,9})?Z$/;
+
+/** An instant of the query: a 400 on that parameter when it is missing (MISSING) or not an instant (INVALID_FORMAT). */
+function instantParam(req: MockReq, ref: 'from' | 'to'): number {
+  const raw = text(req.query[ref]);
+  if (raw === '') throw invalidRequest(`${ref} is required`, [{ ref, reason: 'MISSING' }]);
+  const match = INSTANT.exec(raw);
+  const ms = match ? Date.parse(raw) : Number.NaN;
+  const real =
+    match !== null &&
+    Number.isFinite(ms) &&
+    new Date(ms).toISOString().slice(0, 10) === `${match[1]}-${match[2]}-${match[3]}` &&
+    Number(match[4]) < 24 &&
+    Number(match[5]) < 60 &&
+    Number(match[6]) < 60;
+  if (!real) throw invalidRequest(`${ref} is not an instant`, [{ ref, reason: 'INVALID_FORMAT' }]);
+  return ms;
+}
+
+/**
+ * `from` and `to`, both required (`from` is named first when both are missing); `to` not after
+ * `from`, or a range longer than the limit in days, is OUT_OF_RANGE on `to`; a read that could not
+ * be finished is on `from`.
+ */
+function liveRange(
+  req: MockReq,
+  kind: 'events' | 'funnel' = 'events',
+): { start: number; end: number } {
+  const start = instantParam(req, 'from');
+  const end = instantParam(req, 'to');
+  const limit = currentValue('analytics.live_max_range_days');
+  const maxDays = typeof limit === 'number' ? limit : META_DEFAULTS.analyticsLiveMaxRangeDays;
+  const outOfRange = (message: string) =>
+    invalidRequest(message, [{ ref: 'to', reason: 'OUT_OF_RANGE' }] satisfies Detail[]);
+  if (end <= start) throw outOfRange('to must be after from');
+  if (end - start > maxDays * 86400000)
+    throw outOfRange(`The range is longer than ${maxDays} days`);
+  const slow = analyticsStore.readFailure;
+  if (slow === 'TOO_SLOW' || (slow === 'TOO_MANY_EVENTS' && kind === 'funnel')) {
+    throw invalidRequest('The events could not be read', [{ ref: 'from', reason: slow }]);
   }
-  if (details.length > 0) {
-    throw invalidRequest('from and to must be days, at most 31 days apart', details);
-  }
-  return {
-    from,
-    to,
-    start: Date.parse(`${from}T00:00:00.000Z`),
-    end: Date.parse(`${to}T00:00:00.000Z`) + 86400000,
-  };
+  return { start, end };
 }
 
 const inRange = (events: AnalyticsEventRow[], range: { start: number; end: number }) =>
@@ -53,30 +80,37 @@ const inRange = (events: AnalyticsEventRow[], range: { start: number; end: numbe
 const byTime = (a: AnalyticsEventRow, b: AnalyticsEventRow) =>
   a.receivedAt < b.receivedAt ? -1 : a.receivedAt > b.receivedAt ? 1 : a.seq - b.seq;
 
+// The row of the event list: the name is `name` here (the summary and the funnel say `eventName`).
 const present = (e: AnalyticsEventRow, withIp: boolean) => ({
   id: e.id,
-  eventName: e.eventName,
   accountId: e.accountId,
   deviceId: e.deviceId,
-  receivedAt: e.receivedAt,
-  clientTime: e.clientTime,
-  country: e.country,
-  ip: e.ip === null ? null : withIp ? e.ip : maskIp(e.ip),
+  name: e.eventName,
+  source: e.source,
   params: e.params,
   context: e.context,
+  clientTime: e.clientTime,
+  receivedAt: e.receivedAt,
+  seq: e.seq,
+  ip: e.ip === null ? null : withIp ? e.ip : maskIp(e.ip),
+  country: e.country,
 });
 
 /** The subject of an event: the account, else the account the same device signed in with, else the device. */
 function subjectsOf(events: AnalyticsEventRow[]): Map<string, AnalyticsEventRow[]> {
   const accountOfDevice = new Map<string, string>();
   for (const e of [...events].sort(byTime)) {
-    if (e.accountId !== null && !accountOfDevice.has(e.deviceId)) {
+    if (e.accountId !== null && e.deviceId !== null && !accountOfDevice.has(e.deviceId)) {
       accountOfDevice.set(e.deviceId, e.accountId);
     }
   }
   const subjects = new Map<string, AnalyticsEventRow[]>();
   for (const e of [...events].sort(byTime)) {
-    const key = e.accountId ?? accountOfDevice.get(e.deviceId) ?? `device:${e.deviceId}`;
+    // an event of the backend itself has no device: it is the subject's only if it has an account
+    const key =
+      e.accountId ??
+      (e.deviceId === null ? null : (accountOfDevice.get(e.deviceId) ?? `device:${e.deviceId}`));
+    if (key === null) continue;
     subjects.set(key, [...(subjects.get(key) ?? []), e]);
   }
   return subjects;
@@ -186,12 +220,18 @@ const presentFunnel = (f: SavedFunnelRow) => ({
 
 export default {
   'GET /api/admin/analytics/events': guard('ANALYTICS:VIEW', (req: AdminReq) => {
+    // the range first, then the name (answer 56)
     const range = liveRange(req);
     const { accountId, deviceId, eventName } = {
       accountId: text(req.query.accountId),
       deviceId: text(req.query.deviceId),
-      eventName: text(req.query.eventName),
+      eventName: text(req.query.name),
     };
+    if (eventName !== '' && !EVENT_NAME.test(eventName)) {
+      throw invalidRequest('name must be 1 to 64 characters of a-z, 0-9 and _', [
+        { ref: 'name', reason: 'INVALID_FORMAT' },
+      ]);
+    }
     const rows = inRange(analyticsStore.events, range)
       .filter(
         (e) =>
@@ -235,7 +275,7 @@ export default {
     const hours = checkWindow(
       req.query.windowHours === undefined ? 24 : integerParam(req.query.windowHours),
     );
-    const range = liveRange(req);
+    const range = liveRange(req, 'funnel');
     const limit = currentValue('analytics.funnel_max_concurrency');
     if (
       steps.includes(FUNNEL_RATE_LIMIT_STEP) ||

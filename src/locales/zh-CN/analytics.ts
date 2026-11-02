@@ -69,6 +69,9 @@ const messages: Record<string, string> = {
     '去重人数不跨日聚合：选多日范围时，结果就是整个范围内的去重账号数。',
   'analytics.funnel.help.anonymous':
     '按谁来数：事件的账号；事件没有账号时，取同一台设备在窗口内带账号的事件的账号；仍没有就用设备本身。',
+  'analytics.range.reason.TOO_SLOW': '这段时间的数据太多，查询超时，请缩小时间范围后再试',
+  'analytics.range.reason.TOO_MANY_EVENTS':
+    '这段时间的事件太多，无法计算漏斗，请缩小时间范围后再试',
 };
 
 export default messages;

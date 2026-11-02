@@ -20,18 +20,20 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-const range = { from: '2026-10-20', to: '2026-10-26' };
+// The four live endpoints take instants, [from, to): the last day of 20 to 26 October is included
+// by sending the start of the 27th (docs/backend-inputs answers 26 and 56).
+const range = { from: '2026-10-20T00:00:00Z', to: '2026-10-27T00:00:00Z' };
 
 describe('analytics services', () => {
   it('reads the event list with the filters, the range and the paging, leaving out empty filters', async () => {
     const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: [], total: 0 })));
-    await listEvents({ ...range, page: 2, pageSize: 50, accountId: '2001', eventName: 'app_open' });
+    await listEvents({ ...range, page: 2, pageSize: 50, accountId: '2001', name: 'app_open' });
     await listEvents({ ...range, page: 1, pageSize: 20, accountId: '', deviceId: '' });
     expect(calls[0].url).toBe(
-      '/api/admin/analytics/events?from=2026-10-20&to=2026-10-26&page=2&pageSize=50&accountId=2001&eventName=app_open',
+      '/api/admin/analytics/events?from=2026-10-20T00%3A00%3A00Z&to=2026-10-27T00%3A00%3A00Z&page=2&pageSize=50&accountId=2001&name=app_open',
     );
     expect(calls[1].url).toBe(
-      '/api/admin/analytics/events?from=2026-10-20&to=2026-10-26&page=1&pageSize=20',
+      '/api/admin/analytics/events?from=2026-10-20T00%3A00%3A00Z&to=2026-10-27T00%3A00%3A00Z&page=1&pageSize=20',
     );
     expect(calls[0].init.method).toBe('GET');
   });
@@ -50,8 +52,12 @@ describe('analytics services', () => {
     );
     const summary = await getEventSummary(range);
     const names = await getEventNames(range);
-    expect(calls[0].url).toBe('/api/admin/analytics/event-summary?from=2026-10-20&to=2026-10-26');
-    expect(calls[1].url).toBe('/api/admin/analytics/event-names?from=2026-10-20&to=2026-10-26');
+    expect(calls[0].url).toBe(
+      '/api/admin/analytics/event-summary?from=2026-10-20T00%3A00%3A00Z&to=2026-10-27T00%3A00%3A00Z',
+    );
+    expect(calls[1].url).toBe(
+      '/api/admin/analytics/event-names?from=2026-10-20T00%3A00%3A00Z&to=2026-10-27T00%3A00%3A00Z',
+    );
     expect(summary.items).toEqual([{ eventName: 'app_open', pv: 9, uv: 3 }]);
     expect(names.items).toEqual(['app_open', 'session_started']);
   });
@@ -73,7 +79,8 @@ describe('analytics services', () => {
     expect(url.pathname).toBe('/api/admin/analytics/funnel');
     expect(url.searchParams.get('steps')).toBe('a,b');
     expect(url.searchParams.get('windowHours')).toBe('24');
-    expect(url.searchParams.get('from')).toBe('2026-10-20');
+    expect(url.searchParams.get('from')).toBe('2026-10-20T00:00:00Z');
+    expect(url.searchParams.get('to')).toBe('2026-10-27T00:00:00Z');
     expect(answer.steps[1]).toEqual({ eventName: 'b', count: 0, conversionFromPrevious: 0 });
   });
 

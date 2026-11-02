@@ -37,11 +37,13 @@ describe('the event summary page', { timeout: 30000 }, () => {
     renderPage(<SummaryPage />);
     await waitFor(() => expect(summaryCalls(calls)).toHaveLength(1));
     const url = lastUrl(calls);
-    const today = new Date().toISOString().slice(0, 10);
-    expect(url.searchParams.get('to')).toBe(today);
-    expect(
-      Date.parse(`${today}T00:00:00Z`) - Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
-    ).toBe(6 * 86400000);
+    // 7 UTC days, today included: [start of the 7th day back, start of tomorrow) as instants ending in Z
+    const tomorrow = `${new Date(Date.now() + 86400000).toISOString().slice(0, 10)}T00:00:00Z`;
+    expect(url.searchParams.get('to')).toBe(tomorrow);
+    expect(url.searchParams.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00Z$/);
+    expect(Date.parse(tomorrow) - Date.parse(url.searchParams.get('from') as string)).toBe(
+      7 * 86400000,
+    );
     expect(screen.getByText(/UTC days/)).toBeInTheDocument();
   });
 
@@ -52,9 +54,9 @@ describe('the event summary page', { timeout: 30000 }, () => {
     await waitFor(() => expect(summaryCalls(calls)).toHaveLength(1));
     const url = lastUrl(calls);
     expect(
-      Date.parse(`${url.searchParams.get('to')}T00:00:00Z`) -
-        Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
-    ).toBe(2 * 86400000);
+      Date.parse(url.searchParams.get('to') as string) -
+        Date.parse(url.searchParams.get('from') as string),
+    ).toBe(3 * 86400000);
   });
 
   it('says nothing about signed-in accounts in the hint: the backend counts distinct accounts, and the page does not say who they are', async () => {
@@ -70,8 +72,8 @@ describe('the event summary page', { timeout: 30000 }, () => {
       const calls = useMockBackend(analyticsMock);
       renderPage(<SummaryPage />);
       await waitFor(() => expect(summaryCalls(calls)).toHaveLength(1));
-      expect(lastUrl(calls).searchParams.get('to')).toBe('2026-10-26');
-      expect(lastUrl(calls).searchParams.get('from')).toBe('2026-10-20');
+      expect(lastUrl(calls).searchParams.get('to')).toBe('2026-10-27T00:00:00Z');
+      expect(lastUrl(calls).searchParams.get('from')).toBe('2026-10-20T00:00:00Z');
     });
   });
 
@@ -154,9 +156,9 @@ describe('the event summary page', { timeout: 30000 }, () => {
     await waitFor(() => expect(summaryCalls(calls)).toHaveLength(2));
     const url = lastUrl(calls);
     expect(
-      Date.parse(`${url.searchParams.get('to')}T00:00:00Z`) -
-        Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
-    ).toBe(29 * 86400000);
+      Date.parse(url.searchParams.get('to') as string) -
+        Date.parse(url.searchParams.get('from') as string),
+    ).toBe(30 * 86400000);
   });
 
   it('refuses a range longer than analyticsLiveMaxRangeDays before asking, and says so', async () => {
@@ -174,9 +176,9 @@ describe('the event summary page', { timeout: 30000 }, () => {
     await waitFor(() => expect(summaryCalls(calls)).toHaveLength(2));
     const url = lastUrl(calls);
     expect(
-      Date.parse(`${url.searchParams.get('to')}T00:00:00Z`) -
-        Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
-    ).toBe(6 * 86400000);
+      Date.parse(url.searchParams.get('to') as string) -
+        Date.parse(url.searchParams.get('from') as string),
+    ).toBe(7 * 86400000);
   });
 
   it('shows only the translated words of the code when the backend refuses the range (no limit known here)', async () => {
@@ -195,6 +197,24 @@ describe('the event summary page', { timeout: 30000 }, () => {
     expect(alert.textContent).toContain(enUS['error.INVALID_REQUEST']);
     expect(alert.textContent).not.toContain('range is longer than 31 days');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('adds the reason of a read that took too long, in the words of the language, and not the backend message', async () => {
+    stubFetch(() =>
+      jsonResponse(
+        400,
+        envelope(
+          'INVALID_REQUEST',
+          { details: [{ ref: 'from', reason: 'TOO_SLOW' }] },
+          'raw backend words',
+        ),
+      ),
+    );
+    renderPage(<SummaryPage />);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(enUS['error.INVALID_REQUEST']);
+    expect(alert.textContent).toContain(enUS['analytics.range.reason.TOO_SLOW']);
+    expect(alert.textContent).not.toContain('raw backend words');
   });
 
   it('shows an empty table, not a failure, when there are no events in the range', async () => {

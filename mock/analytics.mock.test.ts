@@ -32,8 +32,12 @@ type Over = {
 const act = (name: string, user: string, over: Over = {}, codes?: string[]) =>
   call(h(name), { headers: { authorization: tokenOf(user, codes) }, ...over });
 
+// The live endpoints take instants [from, to) (answers 26 and 56): the start of a UTC day is
+// `day(n)T00:00:00Z`, and the end of today is the start of tomorrow, `day(-1)`.
 const day = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
-const wide = { from: day(30), to: day(0) };
+const dayStart = (n: number) => `${day(n)}T00:00:00Z`;
+/** Exactly 31 days: the longest range the default setting allows. */
+const wide = { from: dayStart(30), to: dayStart(-1) };
 
 const row = (over: Partial<AnalyticsEventRow>): AnalyticsEventRow => ({
   id: String(Math.random()),
@@ -77,36 +81,157 @@ describe('the time range of the four live endpoints', () => {
     'GET /api/admin/analytics/events',
     'GET /api/admin/analytics/event-summary',
     'GET /api/admin/analytics/event-names',
+    'GET /api/admin/analytics/funnel',
   ];
-  it('is required: no from or to is 400 INVALID_REQUEST naming the parameter', async () => {
+  const ask = (name: string, query: Record<string, string>) =>
+    act(name, 'root', { query: { steps: 'a,b', windowHours: '24', ...query } });
+  const details = async (name: string, query: Record<string, string>) => {
+    const { status, body } = await ask(name, query);
+    return [name, status, body.code, body.data?.details];
+  };
+
+  it('is required, with no default range: a missing from or to is 400 MISSING on that parameter, and with both missing only from is named', async () => {
     for (const name of names) {
-      const { status, body } = await act(name, 'root', { query: { to: day(0) } });
-      expect([name, status, body.code]).toEqual([name, 400, 'INVALID_REQUEST']);
-      expect(body.data.details).toEqual([{ ref: 'from', reason: 'OUT_OF_RANGE' }]);
+      expect(await details(name, { to: dayStart(0) })).toEqual([
+        name,
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'from', reason: 'MISSING' }],
+      ]);
+      expect(await details(name, { from: dayStart(1) })).toEqual([
+        name,
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'to', reason: 'MISSING' }],
+      ]);
+      expect(await details(name, {})).toEqual([
+        name,
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'from', reason: 'MISSING' }],
+      ]);
     }
   });
 
-  it('is at most 31 days including both ends (analytics.live_max_range_days)', async () => {
-    const edge = await act('GET /api/admin/analytics/event-summary', 'root', {
-      query: { from: day(30), to: day(0) },
-    });
-    expect(edge.status).toBe(200);
-    const over = await act('GET /api/admin/analytics/event-summary', 'root', {
-      query: { from: day(31), to: day(0) },
-    });
-    expect(over.status).toBe(400);
-    expect(over.body.code).toBe('INVALID_REQUEST');
+  it('refuses a day without a time, a calendar day that is not real and an offset, each as INVALID_FORMAT on its own parameter', async () => {
+    for (const name of names) {
+      expect(await details(name, { from: day(2), to: dayStart(0) })).toEqual([
+        name,
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'from', reason: 'INVALID_FORMAT' }],
+      ]);
+      expect(await details(name, { from: dayStart(2), to: day(0) })).toEqual([
+        name,
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'to', reason: 'INVALID_FORMAT' }],
+      ]);
+      expect((await details(name, { from: '2026-02-30T00:00:00Z', to: dayStart(0) }))[3]).toEqual([
+        { ref: 'from', reason: 'INVALID_FORMAT' },
+      ]);
+      // an offset is not known to be accepted (answer 54, item 4): only the Z form is
+      expect(
+        (await details(name, { from: '2026-10-01T08:00:00+08:00', to: dayStart(0) }))[3],
+      ).toEqual([{ ref: 'from', reason: 'INVALID_FORMAT' }]);
+    }
   });
 
-  it('refuses a day that is not a calendar day and a range that runs backwards', async () => {
-    const bad = await act('GET /api/admin/analytics/event-summary', 'root', {
-      query: { from: '2026-02-30', to: day(0) },
+  it('refuses a range that is empty or runs backwards as OUT_OF_RANGE on to', async () => {
+    for (const name of names) {
+      const expected = [name, 400, 'INVALID_REQUEST', [{ ref: 'to', reason: 'OUT_OF_RANGE' }]];
+      expect(await details(name, { from: dayStart(0), to: dayStart(3) })).toEqual(expected);
+      expect(await details(name, { from: dayStart(1), to: dayStart(1) })).toEqual(expected);
+    }
+  });
+
+  it('is at most 31 days long as a length of time, not as a count of days: exactly 31 x 24 hours passes, one second more is OUT_OF_RANGE on to', async () => {
+    const from = '2026-10-01T00:00:00Z';
+    const edge = await ask('GET /api/admin/analytics/event-summary', {
+      from,
+      to: '2026-11-01T00:00:00Z',
     });
-    expect(bad.status).toBe(400);
-    const back = await act('GET /api/admin/analytics/event-summary', 'root', {
-      query: { from: day(0), to: day(3) },
+    expect(edge.status).toBe(200);
+    for (const name of names) {
+      const over = await ask(name, { from, to: '2026-11-01T00:00:01Z' });
+      expect([name, over.status, over.body.data.details]).toEqual([
+        name,
+        400,
+        [{ ref: 'to', reason: 'OUT_OF_RANGE' }],
+      ]);
+    }
+    // 31 calendar days that start at noon are 31 days long too; one that reaches the next noon is over
+    expect(
+      (
+        await ask('GET /api/admin/analytics/event-names', {
+          from: '2026-10-01T12:00:00Z',
+          to: '2026-11-01T12:00:00Z',
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await ask('GET /api/admin/analytics/event-names', {
+          from: '2026-10-01T12:00:00Z',
+          to: '2026-11-01T12:00:01Z',
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it('reads the limit from analytics.live_max_range_days', async () => {
+    saved.set('analytics.live_max_range_days', {
+      value: 2,
+      updatedAt: '',
+      updatedBy: '',
+      updatedByUsername: '',
     });
-    expect(back.status).toBe(400);
+    const range = (hours: number) => ({
+      from: '2026-10-01T00:00:00Z',
+      to: new Date(Date.parse('2026-10-01T00:00:00Z') + hours * 3600000)
+        .toISOString()
+        .replace('.000Z', 'Z'),
+    });
+    expect((await ask('GET /api/admin/analytics/event-names', range(48))).status).toBe(200);
+    expect((await ask('GET /api/admin/analytics/event-names', range(49))).status).toBe(400);
+  });
+
+  it('answers a read that took too long as TOO_SLOW on from (all four), and a funnel that read too many events as TOO_MANY_EVENTS on from', async () => {
+    analyticsStore.readFailure = 'TOO_SLOW';
+    for (const name of names) {
+      expect(await details(name, wide)).toEqual([
+        name,
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'from', reason: 'TOO_SLOW' }],
+      ]);
+    }
+    analyticsStore.readFailure = 'TOO_MANY_EVENTS';
+    expect(await details('GET /api/admin/analytics/funnel', wide)).toEqual([
+      'GET /api/admin/analytics/funnel',
+      400,
+      'INVALID_REQUEST',
+      [{ ref: 'from', reason: 'TOO_MANY_EVENTS' }],
+    ]);
+    // only a funnel reads events one by one up to the limit
+    expect((await ask('GET /api/admin/analytics/event-summary', wide)).status).toBe(200);
+  });
+
+  it('includes the instant from and leaves out the instant to, to the second', async () => {
+    const t = Date.parse('2026-10-05T10:15:00Z');
+    analyticsStore.events = [
+      row({ id: '1', receivedAt: new Date(t - 1000).toISOString() }),
+      row({ id: '2', receivedAt: new Date(t).toISOString() }),
+      row({ id: '3', receivedAt: new Date(t + 29 * 60000).toISOString() }),
+      row({ id: '4', receivedAt: new Date(t + 30 * 60000).toISOString() }),
+    ];
+    const { body } = await ask('GET /api/admin/analytics/events', {
+      from: '2026-10-05T10:15:00Z',
+      to: '2026-10-05T10:45:00Z',
+      pageSize: '100',
+    });
+    // newest first
+    expect(body.data.items.map((i: { id: string }) => i.id)).toEqual(['3', '2']);
   });
 });
 
@@ -128,11 +253,13 @@ describe('GET /analytics/events', () => {
         'context',
         'country',
         'deviceId',
-        'eventName',
         'id',
         'ip',
+        'name',
         'params',
         'receivedAt',
+        'seq',
+        'source',
       ].sort(),
     );
   });
@@ -178,9 +305,11 @@ describe('GET /analytics/events', () => {
       ).body.data.items.map((i: { id: string }) => i.id);
     expect(await ids({ accountId: '5' })).toEqual(['1', '2', '4']);
     expect(await ids({ deviceId: 'dB' })).toEqual(['3']);
-    expect(await ids({ eventName: 'app_open' })).toEqual(['1', '3', '4']);
-    expect(await ids({ accountId: '5', eventName: 'app_open' })).toEqual(['1', '4']);
-    expect(await ids({ from: day(1), to: day(0) })).toEqual(['1', '2', '3']);
+    expect(await ids({ name: 'app_open' })).toEqual(['1', '3', '4']);
+    expect(await ids({ accountId: '5', name: 'app_open' })).toEqual(['1', '4']);
+    // the parameter is `name`: the old name is not known to the backend and filters nothing
+    expect(await ids({ eventName: 'app_open' })).toEqual(['1', '2', '3', '4']);
+    expect(await ids({ from: dayStart(1), to: dayStart(-1) })).toEqual(['1', '2', '3']);
   });
 
   it('masks the IP without ANALYTICS:IP_VIEW and gives it whole with it (IPv4 and IPv6)', async () => {
@@ -216,6 +345,74 @@ describe('GET /analytics/events', () => {
   });
 });
 
+describe('GET /analytics/events: the name, the row key and the events of the backend itself', () => {
+  const events = (query: Record<string, string>) =>
+    act('GET /api/admin/analytics/events', 'root', { query: { ...wide, ...query } });
+
+  it('calls the name of the event `name` (not `eventName`) and gives every row a stable id', async () => {
+    analyticsStore.events = [row({ id: 'a1b2c3d4e5f60718293a4b5c', eventName: 'app_open' })];
+    const { body } = await events({});
+    expect(body.data.items[0]).toMatchObject({ id: 'a1b2c3d4e5f60718293a4b5c', name: 'app_open' });
+    expect('eventName' in body.data.items[0]).toBe(false);
+    const ids = (await events({ pageSize: '200' })).body.data.items.map(
+      (i: { id: string }) => i.id,
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('refuses a name that is not [a-z0-9_]{1,64} as INVALID_FORMAT on name, after the range', async () => {
+    for (const name of ['App Open', 'app-open', 'x'.repeat(65), 'ก็']) {
+      const { status, body } = await events({ name });
+      expect([name, status, body.data.details]).toEqual([
+        name,
+        400,
+        [{ ref: 'name', reason: 'INVALID_FORMAT' }],
+      ]);
+    }
+    expect((await events({ name: 'x'.repeat(64) })).status).toBe(200);
+    const both = await events({ name: 'App Open', from: dayStart(0), to: dayStart(5) });
+    expect(both.body.data.details).toEqual([{ ref: 'to', reason: 'OUT_OF_RANGE' }]);
+  });
+
+  it('gives an event of the backend itself (source SERVER) no context, device, client time, IP or country', async () => {
+    analyticsStore.events = [
+      row({
+        id: '1',
+        source: 'SERVER',
+        deviceId: null,
+        context: null,
+        clientTime: null,
+        ip: null,
+        country: null,
+        accountId: '7',
+        receivedAt: at(1),
+      }),
+      row({ id: '2', receivedAt: at(2) }),
+    ];
+    const items = (await events({ pageSize: '10' })).body.data.items;
+    expect(items[0]).toMatchObject({
+      source: 'SERVER',
+      deviceId: null,
+      context: null,
+      clientTime: null,
+      ip: null,
+      country: null,
+    });
+    expect(items[1]).toMatchObject({ source: 'CLIENT', deviceId: 'd1' });
+  });
+
+  it('has events of the backend itself in the sample data, with no device', async () => {
+    const items = (await events({ pageSize: '200' })).body.data.items as {
+      source: string;
+      deviceId: string | null;
+      context: unknown;
+    }[];
+    const server = items.filter((i) => i.source === 'SERVER');
+    expect(server.length).toBeGreaterThan(0);
+    expect(server.every((i) => i.deviceId === null && i.context === null)).toBe(true);
+  });
+});
+
 describe('GET /analytics/event-summary and /event-names', () => {
   it('counts triggers (pv) and distinct accounts (uv) per event name, most triggers first, ties by name', async () => {
     analyticsStore.events = [
@@ -229,7 +426,7 @@ describe('GET /analytics/event-summary and /event-names', () => {
       row({ eventName: 'old_evt', accountId: '3', receivedAt: at(24 * 20) }),
     ];
     const { body } = await act('GET /api/admin/analytics/event-summary', 'root', {
-      query: { from: day(2), to: day(0) },
+      query: { from: dayStart(2), to: dayStart(-1) },
     });
     expect(body.data).toEqual({
       items: [
@@ -249,7 +446,7 @@ describe('GET /analytics/event-summary and /event-names', () => {
       row({ eventName: 'old', receivedAt: at(24 * 20) }),
     ];
     const { body } = await act('GET /api/admin/analytics/event-names', 'root', {
-      query: { from: day(2), to: day(0) },
+      query: { from: dayStart(2), to: dayStart(-1) },
     });
     expect(body.data).toEqual({ items: ['alpha', 'zeta'] });
   });
@@ -401,7 +598,7 @@ describe('GET /analytics/funnel: the limit of funnels being computed', () => {
     expect(await code({ steps: 'a' })).toBe(400);
     expect(await code({ windowHours: '0' })).toBe(400);
     expect(await code({ from: 'x' })).toBe(400);
-    expect(await code({ from: day(0), to: day(40) })).toBe(400);
+    expect(await code({ from: dayStart(0), to: dayStart(40) })).toBe(400);
     expect(await code({})).toBe(429);
   });
 

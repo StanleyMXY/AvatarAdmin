@@ -14,7 +14,9 @@ import { useAdminMeta } from '../../session/useSession';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
+import { utcDayRangeToInstants } from '../../utils/utcDay';
 import { defaultRange } from './defaultRange';
+import { rangeFailureText } from './rangeFailure';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -82,18 +84,22 @@ export default function EventDetailPage() {
   const fetcher = useCallback(
     () =>
       listEvents({
-        ...asked.range,
+        ...utcDayRangeToInstants(asked.range.from, asked.range.to),
         ...paging,
         accountId: asked.filters.accountId,
         deviceId: asked.filters.deviceId,
-        eventName: asked.filters.eventName,
+        name: asked.filters.eventName,
       }),
     [asked, paging],
   );
-  const { data, failure, loading, reload } = useLatestRead(fetcher, { keepWhileReading: true });
+  const { data, error, loading, reload } = useLatestRead(fetcher, { keepWhileReading: true });
+  const failure = error === null ? null : rangeFailureText(intl, error);
 
   // The names the range has, for the suggestions. When they cannot be read the box is just a text box.
-  const namesFetcher = useCallback(() => getEventNames(asked.range), [asked.range]);
+  const namesFetcher = useCallback(
+    () => getEventNames(utcDayRangeToInstants(asked.range.from, asked.range.to)),
+    [asked.range],
+  );
   const names = useLatestRead(namesFetcher, { keepWhileReading: true }).data?.items ?? [];
   const nameOptions = useMemo(() => names.map((value) => ({ value })), [names]);
 
@@ -180,7 +186,7 @@ export default function EventDetailPage() {
         columns={[
           {
             title: t('analytics.common.eventName'),
-            dataIndex: 'eventName',
+            dataIndex: 'name',
             render: (value: string) => <EllipsisPopoverText text={value} width={220} />,
           },
           {
@@ -191,7 +197,9 @@ export default function EventDetailPage() {
           {
             title: t('analytics.detail.col.device'),
             dataIndex: 'deviceId',
-            render: (value: string) => <EllipsisPopoverText text={value} lines={1} width={200} />,
+            // an event of the backend itself (`source` SERVER) has no device
+            render: (value: string | null) =>
+              value ? <EllipsisPopoverText text={value} lines={1} width={200} /> : DASH,
           },
           {
             title: (

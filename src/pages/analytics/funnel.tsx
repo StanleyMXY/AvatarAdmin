@@ -25,6 +25,7 @@ import { useAdminMeta } from '../../session/useSession';
 import { getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
 import { formatCount, formatPercent } from '../../utils/ratio';
+import { utcDayRangeToInstants } from '../../utils/utcDay';
 import { defaultRange } from './defaultRange';
 import { FunnelNameModal } from './FunnelNameModal';
 import {
@@ -33,6 +34,7 @@ import {
   funnelProblems,
   normalizeSteps,
 } from './funnelRules';
+import { rangeFailureText } from './rangeFailure';
 
 const PROBLEM_TEXT: Record<FunnelProblem, string> = {
   tooFewSteps: 'analytics.funnel.problem.stepCount',
@@ -73,7 +75,10 @@ export default function FunnelPage() {
   const savedList = saved.data ?? [];
   const selected = savedList.find((f) => f.id === selectedId);
 
-  const namesFetcher = useCallback(() => getEventNames(range), [range]);
+  const namesFetcher = useCallback(
+    () => getEventNames(utcDayRangeToInstants(range.from, range.to)),
+    [range],
+  );
   const names = useLatestRead(namesFetcher, { keepWhileReading: true }).data?.items ?? [];
   const stepOptions = useMemo(() => names.map((value) => ({ value, label: value })), [names]);
 
@@ -86,7 +91,7 @@ export default function FunnelPage() {
 
   // The query: the newest one is what is shown, whichever answer arrives first.
   const [result, setResult] = useState<FunnelStepResult[] | null>(null);
-  const { text: queryFailure, fail, clear } = useFailure();
+  const { text: queryFailure, failWith, clear } = useFailure();
   const [querying, setQuerying] = useState(false);
   const begin = useLatestCall();
   /** Asks for `asked` (the form as it is by default). */
@@ -95,12 +100,15 @@ export default function FunnelPage() {
     setQuerying(true);
     clear();
     try {
-      const answer = await getFunnel({ ...asked, ...range });
+      const answer = await getFunnel({
+        ...asked,
+        ...utcDayRangeToInstants(range.from, range.to),
+      });
       if (isCurrent()) setResult(answer.steps);
     } catch (error) {
       if (isCurrent()) {
         setResult(null);
-        fail(error);
+        failWith((words) => rangeFailureText(words, error));
       }
     } finally {
       if (isCurrent()) setQuerying(false);
