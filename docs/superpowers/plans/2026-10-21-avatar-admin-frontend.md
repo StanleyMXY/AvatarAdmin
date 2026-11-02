@@ -438,7 +438,8 @@ AvatarAdmin/
   - `RetentionMatrix` 属性 `{ rows: RetentionRow[]; days: number[] }`；单元格空值显示 `DASH` 而不是 `0%`
   - `LandBar` 属性 `{ name: LandName | LandName[]; onLanded: () => void }`：只对持有 `STATS:LAND` 的管理员渲染；日期默认 `yesterdayUtc()`；多个名字时依次调用
   - `ReportHelper` 属性 `{ pageKey: string }`，文字键 `stat.<pageKey>.helper.title` / `.content`；关闭状态存 `localStorage` 的 `reportHelper:<pageKey>`，读写 try/catch
-  - `DateRangeUtc` 属性 `{ value: { from: string; to: string }; onChange: (v: { from: string; to: string }) => void; maxDays?: number }`：选中的日历日经 `pickedDay` 原样当作 UTC 日；`maxDays` 来自 `useAdminMeta()`（统计页用 `statsMaxRangeDays`，埋点现查页用 `analyticsLiveMaxRangeDays`），选出的范围超过它时给出提示且不触发查询，没有 `maxDays` 时不限制、交给后端
+  - `DateRangeUtc` 属性 `{ value: { from: string; to: string }; onChange: (v: { from: string; to: string }) => void; maxDays?: number; refused?: unknown }`：选中的日历日经 `pickedDay` 原样当作 UTC 日；`maxDays` 来自 `useAdminMeta()`（统计页用 `statsMaxRangeDays`，埋点现查页用 `analyticsLiveMaxRangeDays`），选出的范围超过它时给出提示且不触发查询，没有 `maxDays` 时不限制、交给后端
+  - `DateRangeUtc` 的 `refused`（新版 17.6）：页面把读取失败时的错误对象传进来；错误是 400 `INVALID_REQUEST`、`details` 里有 `ref` 为 `from` 或 `to` 的项时，控件下面写一行红字（按原因和日期翻译，不附后端的 `message`，`data-testid="stat-range-error"`），控件标成错误状态；别的 `ref` 不在这里写，仍由页面的失败条显示。所有统计页（日报、留存、游客四个页签、通话质量、通话分析、推送、额度、订阅、审核、邀请两页、广告报表、成本报表、投放效果、归因汇总、签到和任务统计）都传 `refused`。`useFailure()` 另返回 `error`（交给 `fail` 的那个错误）供页面传入。文字键 `stat.common.range.*`。
   - `PlatformChannelFilter` 属性 `{ value: { platform: string; channel: string }; onChange; withPlatform?: boolean }`（平台 `ALL`/`ANDROID`/`IOS`，渠道包取自 `getChannels`）；`UtcNotice`：无属性，显示"统计日按 UTC 计算"
 
 **Tests:**
@@ -450,6 +451,7 @@ AvatarAdmin/
 - `ReportHelper`：关闭后刷新仍关闭；`localStorage` 抛异常时照常显示且不崩溃。
 - `TrendChart`：随主题模式切换用新主题重绘（断言传给图表的配置变化）。
 - `mock/stats.mock.ts`：`/stats/daily` 在 `platform≠ALL` 时业务列为 `null`；`activeSubscriptions` 当天为 `null`；`/stats/retention` 未到期的 `dN` 为 `null`；`from/to` 跨度超过 `stats.max_range_days` 返回 400 `INVALID_REQUEST`（后端已确认：分页参数和日期范围越界都是 400 `INVALID_REQUEST`）；缺 `STATS:VIEW` 返回 403；`POST /stats/land/*` 缺 `STATS:LAND` 返回 403。
+- 所有统计接口的日期范围（新版 17.6；假后端共用 `mock/_core/statRange.ts` 的 `rangeOf`，导出也共用）：两个日期都不给取到今天为止的最近 7 天；只给一个时另一个取相隔 6 天，最晚到今天（所以只给的 `from` 晚于今天时终点早于起点，按 `from` 晚于 `to` 处理）；先检查格式（`from` 在前）：不是真实的日历日或年份小于 1 → 400 `INVALID_REQUEST`，`ref` 是该参数，原因 `OUT_OF_RANGE`（message `<ref> must be YYYY-MM-DD`）；然后 `from` 晚于 `to` → `ref` 为 `from`（"from is after to"）；然后跨度超过 `stats.max_range_days` → `ref` 为 `to`（"The range exceeds stats.max_range_days"）。页面总是同时发两个日期，默认范围取 7 天（游客队列、留存 30 天）和 `useAdminMeta().statsMaxRangeDays` 中较小的，所以首次读取不会被上限拒绝（归因汇总页的选择器没有上限提示，仍是 7 天）；当天未过完的日子照旧标"临时值"，与范围规则无关。测试：`mock/_core/statRange.test.ts`（一个日期、无日期、空值、年份边界、检查顺序、上限为 5 时默认范围被拒）和 `src/pages/statRangeRefusal.test.tsx`（上限设为 3 天而页面不知道时，二十个统计页都把 `to` 的拒绝写在日期控件下，英文和中文；页面被告知上限为 3 天时，首次读取不超过 3 天且不被拒）。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
 
@@ -580,6 +582,7 @@ AvatarAdmin/
 - 告警页："关闭"按钮只对 `MONITOR:MANAGE` 渲染；关联账号点击跳 `/users/:id`；关闭调用 `POST /alerts/{id}/resolve`；`LOOK_PACKAGE_PREPARE_FAILED` 类型的关闭确认写明"会把这个驱动资源包的失败次数清零并重新排准备任务"（契约 §3.9）。
 - 记忆档位：修改表单顶部有"会立即影响该档位下所有账号"；档位名不在列表里时先确认"将新建档位 X"；embedding 模型注册返回 409 `MEMORY_MODEL_CONFLICT` 时显示按码翻译的文字（`error.MEMORY_MODEL_CONFLICT`：同名模型已注册但维度不同），不显示记忆服务那句只有一种语言的 `detail`（它写明原来登记的维度；要显示维度，请后端给结构化字段，见 `docs/contract-requests/2026-11-01-admin-frontend-translated-error-texts.md`；后端的回答第 137 条建议加整数 `registeredDimensions`，还没做；记忆服务返回的 422、409 的 `detail` 文字由外部服务产生，后端的回答第 101、137 条没有核实它的内容（未完全核实），页面不解析也不显示它，422 没有 `ref`，只显示整体错误）；指派模型的警告文字存在，账号处于待删除 / 删除中时按钮禁用。
 - 系统监控：没有数据的序列显示"暂无数据"而不是错误；空值点不画；页面有跳转成本报表的链接；没有成本图。
+- 管线查询的时间参数（新版 14.1）：`from`、`to` 都不给取最近 24 小时；只给 `from` 取其后 24 小时，只给 `to` 取其前 24 小时；`from` 晚于 `to` 或不是带时区的 ISO-8601 时刻 → 400 `INVALID_REQUEST`（假后端不给 `details`，新版没写）；每个点多一个 `id`（`PipelinePoint.id: string | number`，假后端给不重复的数字）；页面总是同时发两个以 `Z` 结尾的时刻，页面只画图所以不用 `id`。
 - 客服：`FAILED` 行的"重试"只对 `SUPPORT:MANAGE` 渲染；详情抽屉显示 `context` 的各字段；长反馈（阿拉伯语、泰语长串）不撑破列表。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
@@ -845,7 +848,7 @@ AvatarAdmin/
   - 汇总：`GET /attribution/summary?groupBy=source|media_source|campaign&from=&to=`，`groupBy` 必填；`from`、`to` 是 `YYYY-MM-DD`（UTC 日，含两端），不传取最近 7 天；响应 `{items:[{source, key, installs, activations, costs:[{currency, amount}]}]}`，不分页；两个来源分列、不相加；`costs` 按币种分别显示（"USD 12.30 / EUR 4.00"），不跨币种求和，没有成本时为空；表格旁说明"早于事件保留期的安装，激活数会偏低"；没有收入数据，所以没有 ROI 列。
 - 成本币种锁（`attribution.cost_currency`）：投放成本页和归因参数页都写明"只要有任何一条投放成本，成本币种就不能修改；要换币种，先逐行删除全部成本，再改归因参数里的成本币种；批量和单条录入的币种必须等于这个设置"；成本币种设置被后端拒绝（400，`details` 的 `ref` 是 `attribution.cost_currency`）时，归因参数页该行显示锁定说明（文字见任务 10），不显示后端 `message`；假后端有成本行时拒绝改成不同的币种（含恢复默认到不同的值），保存相同的值永远通过，删光成本行之后可以改；同一瞬间写入的成本行可能带旧币种，这只是防误操作，不是事务保证，页面不承诺。
 - 投放账户的转化回传告警（任务 13 的 `POSTBACK_CREDENTIAL_FAILED`）：在投放账户页保存（`PUT /attribution/campaigns/{id}`）时，只要下面任一成立，假后端就重置待发送的回传并把该账户那条 `OPEN` 告警置 `RESOLVED`（后端的回答第 82 条；测试：保存前告警列表里有，保存后没有）：令牌字段是"设置新值"（非空字符串，即使内容与原来相同）；令牌被清除（显式 `null` 且原来有令牌）；像素编号与原来不同（含被清空）。只改名字且像素编号不变、没带令牌字段的保存不关闭告警，也不重置回传。`PUT` 是整体替换：不带 `facebookPixelId` 就等于把像素编号清成 `null`，那既关闭告警又清掉像素，所以页面"只改名字"等不涉及凭据的保存，请求里必须把原来的像素编号一起带回（令牌字段仍然留空时不带）。
-- 投放效果（`GET /attribution/performance` 和它的导出）的范围错误现在和别的统计页相同：`from` 晚于 `to` → `details[0].ref` 是 `from`；范围超过 `stats.max_range_days` → `ref` 是 `to`；日期格式不对或年份小于 1 → 原因 `OUT_OF_RANGE`（以前是 `INVALID_FORMAT`）；页面按 `ref` 把错误显示在日期范围控件上，文字按原因翻译，假后端的三种情形按此返回。
+- 投放效果（`GET /attribution/performance` 和它的导出）的范围错误现在和别的统计页相同：`from` 晚于 `to` → `details[0].ref` 是 `from`；范围超过 `stats.max_range_days` → `ref` 是 `to`；日期格式不对或年份小于 1 → 原因 `OUT_OF_RANGE`（以前是 `INVALID_FORMAT`）；页面按 `ref` 把错误显示在日期范围控件上，文字按原因翻译，假后端的三种情形按此返回。这个做法现在是所有统计页共用的（任务 9 的 `DateRangeUtc` 的 `refused`），不再是这一页自己的。
 - 投放效果的"今天"是临时值：归因日汇总随当天刷新（每 15 分钟），不是一天一次，页面说明与总览一致。
 - 没有 `ATTRIBUTION:MANAGE` 看不到账户与成本、归因参数页。
 
@@ -943,6 +946,7 @@ AvatarAdmin/
 **Tests:**
 - 发送：收件账号每行一个 ID、去重；超过 `useAdminMeta().maxRecipients` 时提示（缺失时交给后端）；后端 400 的 `data.details` 逐个账号列出且整批不发；标题 ≤100、正文 ≤500（码点，实时计数）；`en` 必填；链接用 `LinkTargetField`（无、页面、网址；"页面"的下拉就是 `SCREEN_TARGETS`，"网址"走 `LinkInput`）；"同时推送"勾选旁写明"推送遵守用户的公告类通知偏好，偏好关闭的用户只收到收件箱消息"；页面注明"全体用户请用手动推送任务"；发送按钮和弹窗只对 `NOTIFICATION:SEND` 渲染。
 - 列表点开抽屉看到全部语言的标题与正文、模板键和参数。
+- 列表筛选的格式（新版 25.4）：`from`（含）、`to`（不含）是带时区偏移的 ISO-8601 时刻，页面把所选的 UTC 日写成 `[第一天 00:00:00Z, 最后一天的后一天 00:00:00Z)`，不随浏览器时区变（测试在四个相差很远的时区里断言发出的时刻相同）；`category` 只发 `ADMIN` 或 `SYSTEM_EVENT`，`isRead` 只发 `true`/`false`；假后端对不合法的 `from`、`to`（没有时区、只有日期等）、`category`、`isRead`、不是 UUID 的 `accountId` 一律答 400 `INVALID_REQUEST`，页面显示按码翻译的文字。
 - 客户端配置：列表列出键、说明、类型、是否按语言区分、是否已配置、客户端使用点；`URL` 类型填 `http://` 或空值不能保存；`STRING_LIST` 只读；一个语言校验失败整个键不保存；"重置"删除该键全部语言值（行内确认）；预览按所选语言显示实际取值并标出来源（该语言 / 默认值 / 未配置）；`readOnly` 为真的键（规划时就是那六个，由接口的 `readOnly` 决定，前端不写死）各自显示"由 X 配置决定，在系统配置里改"，没有 `inviteShareSubtitle`；没有 `CLIENTCONFIG:MANAGE` 看不到保存和重置。 预览的排序（后端的回答第 130 条）：同一主语言、前缀与文字变体都比不出先后时"取列表里靠前的第一个"，这个列表是该键已存的语言标签（不含默认值那一行）按 Java 字符串自然顺序（按 UTF-16 码元逐个比较）排序的结果：区分大小写，大写字母排在小写字母之前（`Zh` 在 `en` 之前），连字符 `-` 排在字母和数字之前（`zh` 在 `zh-Hans` 之前），标签原样存、不转小写；所以预览排序不能用 `localeCompare` 之类的本地化比较，也不能忽略大小写，要用按码元的原始字符串比较，并先排除默认值那一行；完整匹配、同主语言前缀匹配、`zh` 的文字变体筛选仍按契约 §1.2 先做，排序只在最后一步决定；契约两处都没写这个顺序（建议由改契约的人补写）。测试：`Zh` 与 `en`、`zh` 与 `zh-Hans` 各一例，断言用的是码元比较。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
