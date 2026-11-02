@@ -690,11 +690,8 @@ export default {
     const item = avatarState.cosmetics.find((c) => c.id === body.itemId);
     if (!item) throw notFound('cosmetic');
     const owned = avatarState.accountCosmetics.get(req.params.id) ?? [];
-    if (owned.some((o) => o.itemId === item.id)) {
-      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The account owns the item already', {
-        field: 'itemId',
-      });
-    }
+    // An item the account owns already is a success that changes nothing.
+    if (owned.some((o) => o.itemId === item.id)) return ok(null);
     const row = {
       itemId: item.id,
       itemKey: item.key,
@@ -703,7 +700,7 @@ export default {
       grantedAt: new Date().toISOString(),
     };
     avatarState.accountCosmetics.set(req.params.id, [...owned, row]);
-    return ok(row);
+    return ok(null);
   }),
 };
 

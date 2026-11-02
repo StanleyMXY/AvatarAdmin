@@ -173,6 +173,21 @@ describe('the evidence', () => {
   });
 });
 
+type Detail = {
+  status: string;
+  handledByUsername: string | null;
+  resolvedAt: string | null;
+  overdue: boolean;
+  relatedAvatarAssetIds: string[];
+  events: {
+    fromStatus: string | null;
+    toStatus: string;
+    note: string | null;
+    adminUsername: string;
+  }[];
+};
+const readOne = async (id: string) => (await get(ONE, 'reviewer', {}, { id })).body.data as Detail;
+
 describe('PUT /likeness-complaints/{id}/status', () => {
   it('moves an open complaint, records an event with the administrator and the note, and closes it for REJECTED', async () => {
     const complaint = byStatus('RECEIVED');
@@ -182,19 +197,24 @@ describe('PUT /likeness-complaints/{id}/status', () => {
       { id: complaint.id },
     );
     expect(moved.status).toBe(200);
-    expect(moved.body.data.status).toBe('INVESTIGATING');
-    expect(moved.body.data.handledByUsername).toBe('reviewer');
-    expect(moved.body.data.events.at(-1)).toMatchObject({
+    // the success answer carries nothing: the detail is read again
+    expect(moved.body.data).toBeNull();
+    const after = await readOne(complaint.id);
+    expect(after.status).toBe('INVESTIGATING');
+    expect(after.handledByUsername).toBe('reviewer');
+    expect(after.events.at(-1)).toMatchObject({
       fromStatus: 'RECEIVED',
       toStatus: 'INVESTIGATING',
       note: 'Asked for the photo',
       adminUsername: 'reviewer',
     });
     const closed = await send(STATUS, { status: 'REJECTED' }, { id: complaint.id });
-    expect(closed.body.data.status).toBe('REJECTED');
-    expect(closed.body.data.resolvedAt).not.toBeNull();
-    expect(closed.body.data.overdue).toBe(false);
-    expect(closed.body.data.events.at(-1).note).toBeNull();
+    expect(closed.body.data).toBeNull();
+    const done = await readOne(complaint.id);
+    expect(done.status).toBe('REJECTED');
+    expect(done.resolvedAt).not.toBeNull();
+    expect(done.overdue).toBe(false);
+    expect(done.events.at(-1)?.note).toBeNull();
   });
 
   it('refuses RESOLVED_REMOVED and RECEIVED as a target, and a note over 1000 code points (Arabic and emoji count one each)', async () => {
@@ -228,13 +248,15 @@ describe('POST /likeness-complaints/{id}/remove-avatars', () => {
     const { id } = byStatus('INVESTIGATING');
     const r = await send(REMOVE, { assetIds: ['asset-1', 'asset-2', 'asset-1'] }, { id });
     expect(r.status).toBe(200);
-    expect(r.body.data.status).toBe('RESOLVED_REMOVED');
-    expect(r.body.data.relatedAvatarAssetIds).toEqual(['asset-1', 'asset-2']);
-    expect(r.body.data.events.at(-1)).toMatchObject({
+    expect(r.body.data).toBeNull();
+    const after = await readOne(id);
+    expect(after.status).toBe('RESOLVED_REMOVED');
+    expect(after.relatedAvatarAssetIds).toEqual(['asset-1', 'asset-2']);
+    expect(after.events.at(-1)).toMatchObject({
       fromStatus: 'INVESTIGATING',
       toStatus: 'RESOLVED_REMOVED',
     });
-    expect(r.body.data.resolvedAt).not.toBeNull();
+    expect(after.resolvedAt).not.toBeNull();
   });
 
   it('refuses an empty list or a blank id, and answers 409 for a closed complaint', async () => {

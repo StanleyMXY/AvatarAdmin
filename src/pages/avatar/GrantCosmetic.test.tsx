@@ -174,8 +174,8 @@ describe('giving a cosmetic to an account', { timeout: 60000 }, () => {
     expect(writesOf(calls)).toHaveLength(1);
   });
 
-  it('shows the backend text and keeps the dialog open when the account owns the item already', async () => {
-    backend();
+  it('counts a gift of an item the account owns already as done: the backend answers a success, so the dialog closes', async () => {
+    const calls = backend();
     avatarState.accountCosmetics.set(ACCOUNT.empty, [
       {
         itemId: '4',
@@ -187,16 +187,16 @@ describe('giving a cosmetic to an account', { timeout: 60000 }, () => {
     ]);
     const user = userEvent.setup();
     const onGranted = vi.fn();
+    // the page was opened before the account got the item, so the list does not mark it
     mount({ onGranted });
     const dialog = await openDialog(user);
     await chooseItem(user, dialog, 'outfit_blue_suit');
     fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Gift' } });
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
-    expect(
-      await within(dialog).findAllByText('An item with the same unique value already exists.'),
-    ).not.toHaveLength(0);
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(onGranted).not.toHaveBeenCalled();
+    await waitFor(() => expect(onGranted).toHaveBeenCalledTimes(1));
+    expect(writesOf(calls)).toHaveLength(1);
+    expect(avatarState.accountCosmetics.get(ACCOUNT.empty)).toHaveLength(1);
+    await dialogsClosed();
   });
 
   it('with a 403 on the list, disables the choice, says which permission lists the items, and does not break', async () => {

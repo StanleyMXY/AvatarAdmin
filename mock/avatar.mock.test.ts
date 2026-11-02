@@ -880,18 +880,23 @@ describe("an account's avatars and the grant of a cosmetic", () => {
     expect(systemState.audit.length).toBe(sizeAfterRead);
   });
 
-  it('grants a cosmetic with a reason, once, and then the account owns it with source ADMIN_GRANT', async () => {
+  it('grants a cosmetic with a reason, answers null, and then the account owns it with source ADMIN_GRANT; granting it again succeeds and changes nothing', async () => {
     const granted = await send(
       GRANT,
       { itemId: '4', reason: ' Compensation ' },
       { id: ACCOUNT.empty },
     );
     expect(granted.status).toBe(200);
+    expect(granted.body.data).toBeNull();
     const read = await get(ACCOUNT_AVATARS, 'root', {}, { id: ACCOUNT.empty });
     expect(read.body.data.cosmetics).toMatchObject([{ itemId: '4', source: 'ADMIN_GRANT' }]);
+    // the same item again is a success that changes nothing: no second row, no 409
     const twice = await send(GRANT, { itemId: '4', reason: 'again' }, { id: ACCOUNT.empty });
-    expect(twice.status).toBe(409);
-    expect(twice.body.code).toBe('DUPLICATE_RESOURCE');
+    expect(twice.status).toBe(200);
+    expect(twice.body.data).toBeNull();
+    const again = await get(ACCOUNT_AVATARS, 'root', {}, { id: ACCOUNT.empty });
+    expect(again.body.data.cosmetics).toHaveLength(1);
+    expect(again.body.data.cosmetics[0].grantedAt).toBe(read.body.data.cosmetics[0].grantedAt);
     expect((await send(GRANT, { itemId: '999', reason: 'x' }, { id: ACCOUNT.empty })).status).toBe(
       404,
     );

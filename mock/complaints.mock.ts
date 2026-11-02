@@ -147,7 +147,7 @@ export default {
     }
     if (CLOSED.includes(complaint.status)) throw closedError(complaint);
     record(complaint, body.status as MockComplaintStatus, note, req.admin.id);
-    return ok(detail(complaint));
+    return ok(null);
   }),
 
   'POST /api/admin/likeness-complaints/:id/remove-avatars': guard('COMPLAINT:MANAGE', (req) => {
@@ -167,6 +167,7 @@ export default {
       ...new Set([...complaint.relatedAvatarAssetIds, ...(ids as string[])]),
     ];
     record(complaint, 'RESOLVED_REMOVED', null, req.admin.id);
-    return ok(detail(complaint));
+    // The backend answers nothing; the page reads the complaint again.
+    return ok(null);
   }),
 };
