@@ -42,8 +42,10 @@ const batchRow = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const refs = (body: { data: { details?: { ref: string; reason: string }[] } }) =>
-  (body.data.details ?? []).map((d) => `${d.ref}:${d.reason}`);
+const refs = (body: { data: { details?: { ref: string; reason: string; index?: number }[] } }) =>
+  (body.data.details ?? []).map(
+    (d) => `${d.index === undefined ? '' : `${d.index}:`}${d.ref}:${d.reason}`,
+  );
 
 describe('the currency of the costs is locked while a cost row exists', () => {
   const CONFIG_SAVE = 'PUT /api/admin/config/:key';
@@ -105,7 +107,9 @@ describe('the currency of the costs is locked while a cost row exists', () => {
     expect((await save('EUR')).status).toBe(200);
     const wrong = await send(BATCH, [batchRow({ currency: 'USD' })]);
     expect(wrong.status).toBe(400);
-    expect(refs(wrong.body as never)).toEqual(['0.currency:OUT_OF_RANGE']);
+    // The backend names the field and keeps the position apart (answer 75.4): a row in another
+    // currency than the setting is CURRENCY_MISMATCH on `currency` (answer 75.3).
+    expect(refs(wrong.body as never)).toEqual(['0:currency:CURRENCY_MISMATCH']);
     expect((await send(BATCH, [batchRow({ currency: 'EUR' })])).status).toBe(200);
   });
 });
