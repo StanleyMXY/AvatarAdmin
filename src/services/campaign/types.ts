@@ -67,6 +67,9 @@ export type LinkQuery = {
 export type AttributionCost = {
   id: string;
   campaignId: string;
+  /** The campaign's code and name, in the row (backend reply 75); null if the backend could not read them. */
+  campaignCode?: string | null;
+  campaignName?: string | null;
   /** A UTC day, `YYYY-MM-DD`. */
   statDate: string;
   /** A number; a decimal written as text is read as well. */
@@ -99,8 +102,11 @@ export type CostQuery = {
 
 export type { CostRow } from './parseCostBatch';
 
-/** What a batch import did: the rows written, and how many of them overwrote a cost (the others were added). */
-export type BatchCostsResult = { imported: number; overwritten: number };
+/**
+ * What a batch import did: `count`, the rows written (added and overwritten together; the backend
+ * does not say how many of each, `overwritten` is a request to it and not read).
+ */
+export type BatchCostsResult = { count: number };
 
 // ---- performance (投放效果, ATTRIBUTION:VIEW) ----
 

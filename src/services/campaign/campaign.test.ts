@@ -157,23 +157,22 @@ describe('the costs', () => {
     expect(body(calls[0])).toEqual(rows);
   });
 
-  it('hands back how many rows were written and how many of them overwrote a cost, when the answer says so', async () => {
-    answer({ imported: 5, overwritten: 2 });
-    expect(await batchCosts([])).toEqual({ imported: 5, overwritten: 2 });
-    answer({ imported: 0, overwritten: 0 });
-    expect(await batchCosts([])).toEqual({ imported: 0, overwritten: 0 });
+  it('hands back how many rows were written, from the count of the answer', async () => {
+    answer({ count: 5 });
+    expect(await batchCosts([])).toEqual({ count: 5 });
+    answer({ count: 0 });
+    expect(await batchCosts([])).toEqual({ count: 0 });
   });
 
-  it('hands back nothing when the answer has no counts, or counts that cannot be right', async () => {
+  it('hands back nothing when the answer has no count, or a count that cannot be right (it does not wait for { imported, overwritten })', async () => {
     for (const data of [
       null,
       {},
-      { imported: 5 },
-      { imported: '5', overwritten: '2' },
-      { imported: 3, overwritten: 4 },
-      { imported: -1, overwritten: 0 },
-      { imported: 2.5, overwritten: 1 },
-      { imported: 3, overwritten: null },
+      { imported: 5, overwritten: 2 },
+      { count: '5' },
+      { count: -1 },
+      { count: 2.5 },
+      { count: null },
     ]) {
       answer(data);
       expect(await batchCosts([]), JSON.stringify(data)).toBeNull();

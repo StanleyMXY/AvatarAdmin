@@ -298,11 +298,42 @@ describe('the campaigns', () => {
       return rest;
     };
 
+    // Answers 82. The alert is closed when the token is set (even to the same text), when the token
+    // is cleared (null) and there was one, or when the pixel id is not what it was (also emptied).
     it('is closed when the administrator fills in the token again', async () => {
       const { id, found } = withAlert('token_unreadable');
       expect(open(id)).toHaveLength(1);
       await send(CAMPAIGN_UPDATE, body(found, { facebookAccessToken: 'a-new-secret' }), { id });
       expect(open(id)).toHaveLength(0);
+    });
+
+    it('is closed also when the token is the same text as the one stored', async () => {
+      const { id, found } = withAlert('token_unreadable');
+      found.facebookAccessToken = 'same-secret-1';
+      await send(CAMPAIGN_UPDATE, body(found, { facebookAccessToken: 'same-secret-1' }), { id });
+      expect(open(id)).toHaveLength(0);
+      expect(found.facebookAccessToken).toBe('same-secret-1');
+    });
+
+    it('is closed when the token is cleared with null and there was one; not when there was none', async () => {
+      const { id, found } = withAlert('190');
+      found.facebookAccessToken = 'stored-secret';
+      await send(CAMPAIGN_UPDATE, body(found, { facebookAccessToken: null }), { id });
+      expect(open(id)).toHaveLength(0);
+      expect(found.facebookAccessToken).toBeNull();
+      raiseAlert({
+        type: 'POSTBACK_CREDENTIAL_FAILED',
+        refType: 'ATTRIBUTION_CAMPAIGN',
+        refId: id,
+        accountId: null,
+        detail: '190',
+      });
+      expect(open(id)).toHaveLength(1);
+      const cleared = await send(CAMPAIGN_UPDATE, body(found, { facebookAccessToken: null }), {
+        id,
+      });
+      expect(cleared.status).toBe(200);
+      expect(open(id)).toHaveLength(1);
     });
 
     it('is closed when the pixel id is changed, and is kept when neither it nor the token is', async () => {
@@ -311,6 +342,27 @@ describe('the campaigns', () => {
       expect(open(id)).toHaveLength(1);
       await send(CAMPAIGN_UPDATE, body(found, { facebookPixelId: 'FB-OK-9' }), { id });
       expect(open(id)).toHaveLength(0);
+    });
+
+    it('is closed when the pixel id is emptied, and an update that only renames but leaves the pixel id out empties it', async () => {
+      const { id, found } = withAlert('pixel_id_malformed');
+      const { facebookPixelId: _pixel, ...withoutPixel } = body(found, { name: 'Just the name' });
+      const renamed = await send(CAMPAIGN_UPDATE, withoutPixel, { id });
+      expect(renamed.status).toBe(200);
+      expect(renamed.body.data.facebookPixelId).toBeNull();
+      expect(open(id)).toHaveLength(0);
+      expect(found.name).toBe('Just the name');
+    });
+
+    it('is kept when only the name changes and the pixel id is sent as it was', async () => {
+      const { id, found } = withAlert('token_unreadable');
+      const sent = await send(
+        CAMPAIGN_UPDATE,
+        body(found, { name: 'Renamed ก ع 中', facebookPixelId: found.facebookPixelId }),
+        { id },
+      );
+      expect(sent.status).toBe(200);
+      expect(open(id)).toHaveLength(1);
     });
 
     it('is kept when the update is refused', async () => {
@@ -425,7 +477,9 @@ describe('the costs', () => {
     expect(Object.keys(first).sort()).toEqual(
       [
         'amount',
+        'campaignCode',
         'campaignId',
+        'campaignName',
         'createdAt',
         'createdBy',
         'createdByUsername',
@@ -453,6 +507,16 @@ describe('the costs', () => {
     expect(sameDay.every((c: { statDate: string }) => c.statDate === day)).toBe(true);
   });
 
+  it('names the campaign in each row: campaignCode and campaignName, with the amount as a number', async () => {
+    const rows = (await get(COSTS, { pageSize: '200' })).body.data.items;
+    for (const row of rows) {
+      const campaign = campaignState.campaigns.find((c) => c.id === row.campaignId);
+      expect(row.campaignCode).toBe(campaign?.code);
+      expect(row.campaignName).toBe(campaign?.name);
+      expect(typeof row.amount).toBe('number');
+    }
+  });
+
   it('makes a cost with two decimals, and says COST_EXISTS for a campaign and day that has one already', async () => {
     const made = await send(COST_CREATE, costBody({ remark: 'ก 🎉' }));
     expect(made.status).toBe(200);
@@ -473,7 +537,7 @@ describe('the costs', () => {
     expect(stored?.amount).toBe(10.5);
   });
 
-  it('checks the campaign, the day, the amount (not below 0, two decimals) and the currency', async () => {
+  it('checks the campaign (NOT_FOUND), the day, the amount (NEGATIVE, TOO_MANY_DECIMALS) and the currency (CURRENCY_MISMATCH) with the reasons of the backend', async () => {
     const refused = await send(
       COST_CREATE,
       costBody({ campaignId: '9999', statDate: '2026-02-30', amount: -1, currency: 'EUR' }),
@@ -481,19 +545,35 @@ describe('the costs', () => {
     expect(refused.status).toBe(400);
     expect(refs(refused.body as never).sort()).toEqual(
       [
-        'amount:OUT_OF_RANGE',
-        'campaignId:OUT_OF_RANGE',
-        'currency:OUT_OF_RANGE',
-        'statDate:OUT_OF_RANGE',
+        'amount:NEGATIVE',
+        'campaignId:NOT_FOUND',
+        'currency:CURRENCY_MISMATCH',
+        'statDate:INVALID_FORMAT',
       ].sort(),
     );
     expect(refs((await send(COST_CREATE, costBody({ amount: 1.234 }))).body as never)).toEqual([
+      'amount:TOO_MANY_DECIMALS',
+    ]);
+    expect(refs((await send(COST_CREATE, costBody({ amount: 1e16 }))).body as never)).toEqual([
       'amount:OUT_OF_RANGE',
     ]);
-    expect(refs((await send(COST_CREATE, costBody({ amount: '5' }))).body as never)).toEqual([
-      'amount:OUT_OF_RANGE',
+    expect(refs((await send(COST_CREATE, costBody({ amount: undefined }))).body as never)).toEqual([
+      'amount:REQUIRED',
+    ]);
+    expect(refs((await send(COST_CREATE, costBody({ amount: 'abc' }))).body as never)).toEqual([
+      'amount:INVALID_FORMAT',
+    ]);
+    expect(refs((await send(COST_CREATE, costBody({ amount: true }))).body as never)).toEqual([
+      'amount:INVALID_TYPE',
     ]);
     expect((await send(COST_CREATE, costBody({ amount: 0 }))).status).toBe(200);
+  });
+
+  it('takes the amount as a JSON number or as a decimal written as text, and the currency may be left out', async () => {
+    const asText = await send(COST_CREATE, costBody({ amount: '5.25', currency: undefined }));
+    expect(asText.status).toBe(200);
+    expect(asText.body.data).toMatchObject({ amount: 5.25, currency: 'USD' });
+    expect(typeof asText.body.data.amount).toBe('number');
   });
 
   it('takes the currency from attribution.cost_currency', async () => {
@@ -520,7 +600,7 @@ describe('the costs', () => {
     });
     const moved = await send(COST_UPDATE, costBody({ statDate: '2026-10-02' }), { id: made.id });
     expect(moved.status).toBe(400);
-    expect(refs(moved.body as never)).toEqual(['statDate:OUT_OF_RANGE']);
+    expect(refs(moved.body as never)).toEqual(['statDate:IMMUTABLE']);
     expect((await send(COST_UPDATE, costBody(), { id: '9999' })).status).toBe(404);
   });
 
@@ -533,7 +613,15 @@ describe('the costs', () => {
 });
 
 describe('the batch of costs', () => {
-  it('makes new rows and overwrites the rows of a campaign and day that have one, in one answer', async () => {
+  /** `index:ref:reason`, or `ref:reason` for a problem of the whole batch (it has no index). */
+  const places = (body: {
+    data: { details?: { index?: number; ref: string; reason: string }[] };
+  }) =>
+    (body.data.details ?? []).map((d) =>
+      d.index === undefined ? `${d.ref}:${d.reason}` : `${d.index}:${d.ref}:${d.reason}`,
+    );
+
+  it('makes new rows and overwrites the rows of a campaign and day that have one, and answers only { count } (the rows written, added and overwritten together)', async () => {
     const existing = campaignState.costs[0];
     const code = campaignState.campaigns.find((c) => c.id === existing.campaignId)?.code as string;
     const count = campaignState.costs.length;
@@ -543,37 +631,87 @@ describe('the batch of costs', () => {
     ]);
     expect(result.status).toBe(200);
     expect(campaignState.costs).toHaveLength(count + 1);
-    // the rows written, and how many of them overwrote a cost (the page writes the others as added)
-    expect(result.body.data).toEqual({ imported: 2, overwritten: 1 });
+    // no split of added and overwritten: the backend has none yet (a request to it)
+    expect(result.body.data).toEqual({ count: 2 });
     const overwritten = campaignState.costs.find((c) => c.id === existing.id);
     expect(overwritten).toMatchObject({ amount: 777.77, remark: 'over' });
   });
 
-  it('refuses the whole batch when one row is bad, and changes nothing, naming the row of each problem', async () => {
+  it('takes the amount as a number or as text, and the currency may be left out', async () => {
+    const result = await send(BATCH, [
+      batchRow({ statDate: '2026-01-01', amount: '12.50', currency: undefined }),
+      batchRow({ statDate: '2026-01-02', amount: 3, currency: '' }),
+    ]);
+    expect(result.status).toBe(200);
+    const stored = campaignState.costs.find((c) => c.statDate === '2026-01-01');
+    expect(stored).toMatchObject({ amount: 12.5, currency: 'USD' });
+  });
+
+  it('refuses the whole batch when one row is bad, and changes nothing, with { index (from 0), ref (the field), reason } for each problem, all of them at once', async () => {
     const count = campaignState.costs.length;
     const result = await send(BATCH, [
       batchRow(),
       batchRow({ statDate: '2026-09-02', amount: -3 }),
       batchRow({ statDate: '2026-09-03', campaignCode: 'no_such_code' }),
       batchRow({ statDate: '2026-09-04', currency: 'EUR' }),
+      batchRow({ statDate: '2026-09-05', amount: 1.234 }),
+      batchRow({ statDate: '2026-09-06', amount: 1e16 }),
+      batchRow({ statDate: '2026-09-07', amount: undefined }),
     ]);
     expect(result.status).toBe(400);
     expect(result.body.code).toBe('INVALID_REQUEST');
-    expect(refs(result.body as never).sort()).toEqual(
-      ['1.amount:OUT_OF_RANGE', '2.campaignCode:OUT_OF_RANGE', '3.currency:OUT_OF_RANGE'].sort(),
+    expect(places(result.body as never).sort()).toEqual(
+      [
+        '1:amount:NEGATIVE',
+        '2:campaignCode:NOT_FOUND',
+        '3:currency:CURRENCY_MISMATCH',
+        '4:amount:TOO_MANY_DECIMALS',
+        '5:amount:OUT_OF_RANGE',
+        '6:amount:REQUIRED',
+      ].sort(),
+    );
+    // index is a number of its own, ref is not "<index>.<field>"
+    const first = (result.body.data as { details: { index: unknown; ref: string }[] }).details[0];
+    expect(typeof first.index).toBe('number');
+    expect(first.ref).not.toMatch(/\d/);
+    expect(campaignState.costs).toHaveLength(count);
+  });
+
+  it('gives every row of a campaign and day that comes twice its own DUPLICATE entry', async () => {
+    const count = campaignState.costs.length;
+    const result = await send(BATCH, [
+      batchRow(),
+      batchRow({ statDate: '2026-09-02' }),
+      batchRow({ amount: 9 }),
+      batchRow({ amount: 10 }),
+    ]);
+    expect(result.status).toBe(400);
+    expect(places(result.body as never).sort()).toEqual(
+      ['0:campaignCode:DUPLICATE', '2:campaignCode:DUPLICATE', '3:campaignCode:DUPLICATE'].sort(),
     );
     expect(campaignState.costs).toHaveLength(count);
   });
 
-  it('refuses the same campaign and day twice in one batch', async () => {
-    const count = campaignState.costs.length;
-    const result = await send(BATCH, [batchRow(), batchRow({ amount: 9 })]);
-    expect(result.status).toBe(400);
-    expect(refs(result.body as never)).toEqual(['1:OUT_OF_RANGE']);
-    expect(campaignState.costs).toHaveLength(count);
+  it('names a remark that is too long or has a control character, a row that is not an object, and a missing code or day', async () => {
+    const result = await send(BATCH, [
+      batchRow({ remark: 'ก'.repeat(501) }),
+      batchRow({ statDate: '2026-09-02', remark: 'a\u0001b' }),
+      'not an object',
+      batchRow({ statDate: '2026-09-03', campaignCode: undefined }),
+      batchRow({ statDate: undefined }),
+    ]);
+    expect(places(result.body as never).sort()).toEqual(
+      [
+        '0:remark:TOO_LONG',
+        '1:remark:CONTROL_CHARACTER',
+        '2:line:INVALID_TYPE',
+        '3:campaignCode:REQUIRED',
+        '4:statDate:REQUIRED',
+      ].sort(),
+    );
   });
 
-  it('refuses more rows than attribution.cost_batch_max, and anything that is not a non-empty list', async () => {
+  it('refuses more rows than attribution.cost_batch_max before it reads any row, and anything that is not a non-empty list, with no index', async () => {
     saved.set('attribution.cost_batch_max', {
       value: 2,
       updatedAt: '',
@@ -582,13 +720,15 @@ describe('the batch of costs', () => {
     });
     const three = await send(BATCH, [
       batchRow(),
-      batchRow({ statDate: '2026-09-02' }),
+      batchRow({ statDate: '2026-09-02', amount: -1 }),
       batchRow({ statDate: '2026-09-03' }),
     ]);
     expect(three.status).toBe(400);
-    expect(refs(three.body as never)).toEqual(['body:OUT_OF_RANGE']);
-    expect((await send(BATCH, { not: 'a list' })).status).toBe(400);
-    expect((await send(BATCH, [])).status).toBe(400);
+    expect(places(three.body as never)).toEqual(['body:OUT_OF_RANGE']);
+    expect(places((await send(BATCH, { not: 'a list' })).body as never)).toEqual([
+      'body:INVALID_TYPE',
+    ]);
+    expect(places((await send(BATCH, [])).body as never)).toEqual(['body:REQUIRED']);
   });
 });
 

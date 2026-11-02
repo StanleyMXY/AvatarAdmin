@@ -46,7 +46,7 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
   );
   const { text: failure, fail, clear } = useFailure();
   // What the backend said about each row, by reason code: the words are made when drawn.
-  const [refused, setRefused] = useState<{ ref: string; reason: string }[]>([]);
+  const [refused, setRefused] = useState<{ index?: number; ref: string; reason: string }[]>([]);
   const input = useRef<HTMLInputElement>(null);
 
   const limits = useMemo(
@@ -70,6 +70,21 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
     return error.line === 0
       ? words
       : t(`campaign.batch.errors.${unit}`, { line: error.line, reason: words });
+  };
+
+  // What the backend said about one row: the row (`index` counts from 0, the person counts from 1),
+  // the field in words, and the reason in words; a field or a reason the page has no words for is
+  // shown as it came, never as the backend's own message.
+  const refusedText = (entry: { index?: number; ref: string; reason: string }): string => {
+    const known = (id: string) => (intl.messages[id] ? t(id) : null);
+    const field = known(`campaign.batch.refusedField.${entry.ref}`) ?? entry.ref;
+    const reason =
+      known(`campaign.batch.refusedReason.${entry.reason}`) ??
+      known(`reason.${entry.reason}`) ??
+      entry.reason;
+    return entry.index === undefined
+      ? t('campaign.batch.refused.ref', { field, reason })
+      : t('campaign.batch.refused.row', { row: entry.index + 1, field, reason });
   };
 
   const readFile = async (chosen: File) => {
@@ -124,18 +139,13 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
       fail(error);
       // What the backend says about each row: its reason (in words when drawn, or the code), never its own message.
       if (error instanceof ApiError) {
-        setRefused(error.details.map((d) => ({ ref: d.ref, reason: d.reason })));
+        setRefused(error.details.map((d) => ({ index: d.index, ref: d.ref, reason: d.reason })));
       }
       return;
     }
+    // The backend counts the rows written and cannot say how many of them overwrote a cost.
     message.success(
-      done
-        ? t('campaign.batch.importedSplit', {
-            count: done.imported,
-            added: done.imported - done.overwritten,
-            overwritten: done.overwritten,
-          })
-        : t('campaign.batch.imported', { count: result.rows.length }),
+      t('campaign.batch.imported', { count: done ? done.count : result.rows.length }),
     );
     onSaved();
     onClose();
@@ -303,13 +313,11 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
               refused.length > 0 ? (
                 <ul style={{ margin: 0, paddingInlineStart: 20, maxHeight: 160, overflow: 'auto' }}>
                   {refused.slice(0, MAX_SHOWN).map((entry) => (
-                    <li key={`${entry.ref}|${entry.reason}`} style={{ overflowWrap: 'anywhere' }}>
-                      {t('campaign.batch.refused.ref', {
-                        ref: entry.ref,
-                        reason: intl.messages[`reason.${entry.reason}`]
-                          ? t(`reason.${entry.reason}`)
-                          : entry.reason,
-                      })}
+                    <li
+                      key={`${entry.index ?? ''}|${entry.ref}|${entry.reason}`}
+                      style={{ overflowWrap: 'anywhere' }}
+                    >
+                      {refusedText(entry)}
                     </li>
                   ))}
                 </ul>

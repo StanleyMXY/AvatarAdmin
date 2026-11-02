@@ -22,10 +22,18 @@ import { paginateQuery } from './_core/paginate';
 import { between, unit } from './_core/statData';
 import { daysIn, oneOf, rangeOf, text, validDay } from './_core/statRange';
 
-type Detail = { ref: string; reason: string };
+/** `index` is the place of the row in a list that was sent (a batch), counted from 0; it is a field of its own. */
+type Detail = { ref: string; reason: string; index?: number };
 
 const CODE = /^[a-z0-9_-]{3,32}$/;
-const AMOUNT = /^\d+(\.\d{1,2})?$/;
+const AMOUNT_TEXT = /^(-)?(\d+)(?:\.(\d+))?$/;
+/** A control character other than tab, line feed and carriage return. */
+const hasControlCharacter = (value: string): boolean =>
+  [...value].some((ch) => {
+    const code = ch.charCodeAt(0);
+    return (code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127;
+  });
+const REMARK_MAX = 500;
 const UTM_VALUE = /^[A-Za-z0-9._-]{1,64}$/;
 const KNOWN_CHANNELS = ['play', 'direct', 'appstore'];
 const PLATFORM_PIXEL = {
@@ -60,7 +68,15 @@ const campaignRow = (c: MockCampaign) => {
   };
 };
 
-const costRow = (c: MockCost) => ({ ...c, createdByUsername: usernameOf(c.createdBy) });
+const costRow = (c: MockCost) => {
+  const campaign = campaignState.campaigns.find((x) => x.id === c.campaignId);
+  return {
+    ...c,
+    campaignCode: campaign?.code ?? null,
+    campaignName: campaign?.name ?? null,
+    createdByUsername: usernameOf(c.createdBy),
+  };
+};
 
 // ---- the checks of a campaign ----
 
@@ -105,9 +121,12 @@ function campaignFields(body: Record<string, unknown>, details: Detail[]) {
       channelCodes = [...new Set(list as string[])];
     }
   }
-  // The token is only ever written: absent means "keep what is there".
-  let token: string | undefined;
-  if (body.facebookAccessToken !== undefined) {
+  // The token is only ever written: absent means "keep what is there", a text sets it, and an
+  // explicit null clears it (answers 82; this page has no way to send null).
+  let token: string | null | undefined;
+  if (body.facebookAccessToken === null) {
+    token = null;
+  } else if (body.facebookAccessToken !== undefined) {
     const typed = isText(body.facebookAccessToken) ? trimSpec(body.facebookAccessToken) : '';
     if (typed === '') details.push({ ref: 'facebookAccessToken', reason: 'EMPTY_NOT_ALLOWED' });
     else token = typed;
@@ -135,25 +154,83 @@ function campaignFields(body: Record<string, unknown>, details: Detail[]) {
 
 type CostFields = { campaignId: string; statDate: string; amount: number; remark: string | null };
 
-/** The campaign, the day, the amount (a number, not below 0, at most two decimals) and the currency. */
+/**
+ * The amount as the backend reads it (backend reply 75): a JSON number or a number written as text,
+ * read as a decimal; not below 0 (NEGATIVE), at most two decimals (TOO_MANY_DECIMALS, never
+ * rounded), below 10^16 (OUT_OF_RANGE).
+ */
+function readAmount(value: unknown, details: Detail[]): number {
+  const refuse = (reason: string) => {
+    details.push({ ref: 'amount', reason });
+    return 0;
+  };
+  if (value === undefined || value === null) return refuse('REQUIRED');
+  let written: string;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return refuse('INVALID_FORMAT');
+    written = String(value);
+    // a number that JavaScript writes with an exponent is huge or tiny
+    if (/e/i.test(written))
+      return refuse(Math.abs(value) >= 1 ? 'OUT_OF_RANGE' : 'TOO_MANY_DECIMALS');
+  } else if (typeof value === 'string') {
+    written = trimSpec(value);
+  } else {
+    return refuse('INVALID_TYPE');
+  }
+  const match = AMOUNT_TEXT.exec(written);
+  if (!match) return refuse('INVALID_FORMAT');
+  const [, minus, whole, decimals = ''] = match;
+  if (minus && /[1-9]/.test(whole + decimals)) return refuse('NEGATIVE');
+  if (decimals.replace(/0+$/, '').length > 2) return refuse('TOO_MANY_DECIMALS');
+  if (whole.replace(/^0+/, '').length > 16) return refuse('OUT_OF_RANGE');
+  return Number(written);
+}
+
+/** The remark: text of at most 500 code points without control characters, or nothing. */
+function readRemark(value: unknown, details: Detail[]): string | null {
+  if (value === undefined || value === null) return null;
+  if (!isText(value)) {
+    details.push({ ref: 'remark', reason: 'INVALID_TYPE' });
+    return null;
+  }
+  const trimmed = trimSpec(value);
+  if (hasControlCharacter(trimmed)) details.push({ ref: 'remark', reason: 'CONTROL_CHARACTER' });
+  else if ([...trimmed].length > REMARK_MAX) details.push({ ref: 'remark', reason: 'TOO_LONG' });
+  return trimmed === '' ? null : trimmed;
+}
+
+/** The currency may be left out (it is the one of the system); if it is there it has to be that one. */
+function checkCurrency(value: unknown, details: Detail[]): void {
+  if (value === undefined || value === null || value === '') return;
+  if (value !== costCurrency()) details.push({ ref: 'currency', reason: 'CURRENCY_MISMATCH' });
+}
+
+/** The day: `YYYY-MM-DD`, a day that exists. */
+function readDay(value: unknown, details: Detail[]): string {
+  if (value === undefined || value === null || value === '') {
+    details.push({ ref: 'statDate', reason: 'REQUIRED' });
+    return '';
+  }
+  if (!isText(value) || !validDay(value)) {
+    details.push({ ref: 'statDate', reason: 'INVALID_FORMAT' });
+    return '';
+  }
+  return value;
+}
+
+/** The campaign, the day, the amount and the currency of one cost, with the reasons of the backend. */
 function costFields(body: Record<string, unknown>, details: Detail[]): CostFields {
   const campaignId = isText(body.campaignId) ? body.campaignId : '';
-  if (!campaignState.campaigns.some((c) => c.id === campaignId)) {
-    details.push({ ref: 'campaignId', reason: 'OUT_OF_RANGE' });
+  if (body.campaignId === undefined || body.campaignId === null) {
+    details.push({ ref: 'campaignId', reason: 'REQUIRED' });
+  } else if (!campaignState.campaigns.some((c) => c.id === campaignId)) {
+    details.push({ ref: 'campaignId', reason: 'NOT_FOUND' });
   }
-  const statDate = isText(body.statDate) ? body.statDate : '';
-  if (!validDay(statDate)) details.push({ ref: 'statDate', reason: 'OUT_OF_RANGE' });
-  const amount = body.amount;
-  if (amount === undefined || amount === null) {
-    details.push({ ref: 'amount', reason: 'EMPTY_NOT_ALLOWED' });
-  } else if (typeof amount !== 'number' || !AMOUNT.test(String(amount))) {
-    details.push({ ref: 'amount', reason: 'OUT_OF_RANGE' });
-  }
-  if (body.currency !== undefined && body.currency !== costCurrency()) {
-    details.push({ ref: 'currency', reason: 'OUT_OF_RANGE' });
-  }
-  const remark = optionalText(body.remark, 'remark', details);
-  return { campaignId, statDate, amount: typeof amount === 'number' ? amount : 0, remark };
+  const statDate = readDay(body.statDate, details);
+  const amount = readAmount(body.amount, details);
+  checkCurrency(body.currency, details);
+  const remark = readRemark(body.remark, details);
+  return { campaignId, statDate, amount, remark };
 }
 
 const costExists = () =>
@@ -305,15 +382,18 @@ export default {
     }
     const { fields, token } = campaignFields(body, details);
     if (details.length > 0) throw fail(details);
-    // The backend closes the open postback credential alert of the campaign when the token is filled
-    // in again or a pixel id is changed (a guess for the second: docs/contract-requests/2026-10-31-admin-frontend-alerts-new-types.md).
-    const pixelChanged =
-      fields.facebookPixelId !== found.facebookPixelId ||
-      fields.googlePixelId !== found.googlePixelId ||
-      fields.tiktokPixelId !== found.tiktokPixelId;
+    // The backend closes the open postback credential alert of the campaign when the token changed
+    // (a token is set, even the same text, or cleared while there was one) or the pixel id is not
+    // what it was, also when it is emptied (answers 82). The PUT replaces every field: an update that
+    // leaves the pixel id out empties it, so a rename must send the pixel id it read. Only the Meta
+    // pixel id is compared: the alert is about the Meta token and pixel, and the answer says nothing
+    // of the others.
+    const tokenChanged =
+      token !== undefined && (token !== null || found.facebookAccessToken !== null);
+    const pixelChanged = fields.facebookPixelId !== found.facebookPixelId;
     Object.assign(found, fields, { updatedAt: new Date().toISOString() });
     if (token !== undefined) found.facebookAccessToken = token;
-    if (token !== undefined || pixelChanged) resolveAlertsOf('ATTRIBUTION_CAMPAIGN', found.id);
+    if (tokenChanged || pixelChanged) resolveAlertsOf('ATTRIBUTION_CAMPAIGN', found.id);
     return ok(campaignRow(found));
   }),
 
@@ -411,10 +491,10 @@ export default {
     const fields = costFields(body, details);
     // The campaign and the day are the key of a cost: they can be sent again, not changed.
     if (fields.campaignId !== found.campaignId && !details.some((d) => d.ref === 'campaignId')) {
-      details.push({ ref: 'campaignId', reason: 'OUT_OF_RANGE' });
+      details.push({ ref: 'campaignId', reason: 'IMMUTABLE' });
     }
     if (fields.statDate !== found.statDate && !details.some((d) => d.ref === 'statDate')) {
-      details.push({ ref: 'statDate', reason: 'OUT_OF_RANGE' });
+      details.push({ ref: 'statDate', reason: 'IMMUTABLE' });
     }
     if (details.length > 0) throw fail(details);
     Object.assign(found, {
@@ -432,55 +512,68 @@ export default {
     return ok(null);
   }),
 
-  // All or nothing; a (campaign, day) that has a cost is overwritten.
+  // All or nothing; a (campaign, day) that has a cost is overwritten. The answer is { count } (rows
+  // written, added and overwritten together). A refusal lists every problem at once as
+  // { index (from 0), ref (the field), reason }; a problem of the whole batch has no index.
   'POST /api/admin/attribution/costs/batch': guard('ATTRIBUTION:MANAGE', (req) => {
     const body = req.body;
-    if (!Array.isArray(body)) throw fail([{ ref: 'body', reason: 'OUT_OF_RANGE' }]);
-    if (body.length === 0) throw fail([{ ref: 'body', reason: 'EMPTY_NOT_ALLOWED' }]);
+    if (!Array.isArray(body)) throw fail([{ ref: 'body', reason: 'INVALID_TYPE' }]);
     const max = currentValue('attribution.cost_batch_max');
     if (typeof max === 'number' && body.length > max) {
       throw fail([{ ref: 'body', reason: 'OUT_OF_RANGE' }], `a batch has at most ${max} rows`);
     }
+    if (body.length === 0) throw fail([{ ref: 'body', reason: 'REQUIRED' }]);
     const details: Detail[] = [];
     const wanted: {
+      index: number;
       campaignId: string;
       statDate: string;
       amount: number;
       remark: string | null;
     }[] = [];
-    const seen = new Set<string>();
     body.forEach((element, index) => {
-      const one = (typeof element === 'object' && element !== null ? element : {}) as Record<
-        string,
-        unknown
-      >;
+      if (typeof element !== 'object' || element === null || Array.isArray(element)) {
+        details.push({ index, ref: 'line', reason: 'INVALID_TYPE' });
+        return;
+      }
+      const one = element as Record<string, unknown>;
+      const own: Detail[] = [];
       const code = isText(one.campaignCode) ? one.campaignCode : '';
       const campaign = campaignState.campaigns.find((c) => c.code === code);
-      const own: Detail[] = [];
-      if (!campaign) own.push({ ref: 'campaignCode', reason: 'OUT_OF_RANGE' });
-      // costFields reports an unknown campaign id itself; here the code is what was unknown.
-      const problems: Detail[] = [];
-      const fields = costFields({ ...one, campaignId: campaign?.id ?? '' }, problems);
-      for (const detail of problems) {
-        if (detail.ref === 'campaignId') continue;
-        own.push(detail);
+      if (one.campaignCode === undefined || one.campaignCode === null || code === '') {
+        own.push({ ref: 'campaignCode', reason: 'REQUIRED' });
+      } else if (!campaign) {
+        own.push({ ref: 'campaignCode', reason: 'NOT_FOUND' });
       }
+      const statDate = readDay(one.statDate, own);
+      const amount = readAmount(one.amount, own);
+      checkCurrency(one.currency, own);
+      const remark = readRemark(one.remark, own);
       if (own.length > 0) {
-        for (const detail of own)
-          details.push({ ref: `${index}.${detail.ref}`, reason: detail.reason });
+        for (const detail of own) details.push({ index, ...detail });
         return;
       }
-      const key = `${fields.campaignId}|${fields.statDate}`;
-      if (seen.has(key)) {
-        details.push({ ref: String(index), reason: 'OUT_OF_RANGE' });
-        return;
-      }
-      seen.add(key);
-      wanted.push(fields);
+      wanted.push({ index, campaignId: (campaign as MockCampaign).id, statDate, amount, remark });
     });
-    if (details.length > 0) throw fail(details, 'some rows are not valid');
+    // A campaign and day that comes more than once: every row of the group gets an entry.
+    const groups = new Map<string, number[]>();
+    for (const row of wanted) {
+      const key = `${row.campaignId}|${row.statDate}`;
+      groups.set(key, [...(groups.get(key) ?? []), row.index]);
+    }
+    for (const indexes of groups.values()) {
+      if (indexes.length > 1) {
+        for (const index of indexes)
+          details.push({ index, ref: 'campaignCode', reason: 'DUPLICATE' });
+      }
+    }
+    if (details.length > 0) {
+      throw fail(
+        details.sort((a, b) => (a.index ?? -1) - (b.index ?? -1)),
+        'some rows are not valid',
+      );
+    }
     const now = new Date().toISOString();
-    let overwritten = 0;
     for (const row of wanted) {
       const old = campaignState.costs.find(
         (c) => c.campaignId === row.campaignId && c.statDate === row.statDate,
@@ -492,11 +585,13 @@ export default {
           currency: costCurrency(),
           updatedAt: now,
         });
-        overwritten += 1;
       } else {
         campaignState.costs.push({
           id: String(campaignState.next.cost++),
-          ...row,
+          campaignId: row.campaignId,
+          statDate: row.statDate,
+          amount: row.amount,
+          remark: row.remark,
           currency: costCurrency(),
           createdBy: req.admin.id,
           createdAt: now,
@@ -504,7 +599,7 @@ export default {
         });
       }
     }
-    return ok({ imported: wanted.length, overwritten });
+    return ok({ count: wanted.length });
   }),
 
   // ---- the reports ----

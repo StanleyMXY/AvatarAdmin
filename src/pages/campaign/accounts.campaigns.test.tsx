@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { campaignState } from '../../../mock/_core/campaignData';
 import { saved } from '../../../mock/_core/configStore';
+import { monitorStore, raiseAlert } from '../../../mock/_core/monitorData';
 import campaignMock from '../../../mock/campaign.mock';
 import channelsMock from '../../../mock/channels.mock';
 import configMock from '../../../mock/config.mock';
@@ -580,6 +581,35 @@ describe('changing a campaign', { timeout: 30000 }, () => {
     await dialogsClosed();
     expect(await screen.findByText('Renamed ก ع 中')).toBeInTheDocument();
     expect(campaignOf('spring_th').facebookAccessToken).toBe('mock-token-1');
+  });
+
+  // Answers 82: the PUT replaces every field, so a rename must carry the pixel ids it read; without them the
+  // pixel would be emptied and the open alert about the postback credential closed by mistake.
+  it('sends the pixel ids it read with a rename, and the open postback alert of the campaign stays open', async () => {
+    const found = campaignOf('spring_th');
+    raiseAlert({
+      type: 'POSTBACK_CREDENTIAL_FAILED',
+      refType: 'ATTRIBUTION_CAMPAIGN',
+      refId: found.id,
+      accountId: null,
+      detail: 'token_unreadable',
+    });
+    const openAlerts = () =>
+      monitorStore.alerts.filter(
+        (a) =>
+          a.refId === found.id && a.type === 'POSTBACK_CREDENTIAL_FAILED' && a.status === 'OPEN',
+      );
+    expect(openAlerts()).toHaveLength(1);
+    const { calls, user } = await open();
+    await fill(user, { 'Display name': 'Only a new name' });
+    await submit(user);
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    const body = writesOf(calls)[0].body as Record<string, unknown>;
+    expect(body.facebookPixelId).toBe('FB-1000');
+    expect(body).not.toHaveProperty('facebookAccessToken');
+    await dialogsClosed();
+    expect(campaignOf('spring_th').facebookPixelId).toBe('FB-1000');
+    expect(openAlerts()).toHaveLength(1);
   });
 
   it('sends a new token when one was typed, and keeps the box empty when the dialog is opened again', async () => {

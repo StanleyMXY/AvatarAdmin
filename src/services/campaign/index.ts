@@ -96,9 +96,8 @@ export const deleteCost = (id: string): Promise<unknown> =>
 
 /**
  * All or nothing. A (campaign, day) that has a cost already is overwritten (contract 10.5); a bad
- * row refuses the whole batch with the reason of each row in `data.details`. The contract does not
- * describe the answer; the tentative one is `{ imported, overwritten }`: the rows written, and how
- * many of them overwrote a cost that was there (the rest were added). Anything else is null.
+ * row refuses the whole batch with every problem in `data.details` as `{ index, ref, reason }`.
+ * The answer is `{ count }`: the rows written, added and overwritten together. Anything else is null.
  */
 export const batchCosts = async (rows: CostRow[]): Promise<BatchCostsResult | null> => {
   const data = await apiRequest<unknown>({
@@ -107,18 +106,9 @@ export const batchCosts = async (rows: CostRow[]): Promise<BatchCostsResult | nu
     body: rows,
   });
   if (typeof data !== 'object' || data === null) return null;
-  const { imported, overwritten } = data as Record<string, unknown>;
-  if (
-    typeof imported !== 'number' ||
-    typeof overwritten !== 'number' ||
-    !Number.isInteger(imported) ||
-    !Number.isInteger(overwritten) ||
-    overwritten < 0 ||
-    overwritten > imported
-  ) {
-    return null;
-  }
-  return { imported, overwritten };
+  const { count } = data as Record<string, unknown>;
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) return null;
+  return { count };
 };
 
 // ---- reports (ATTRIBUTION:VIEW) ----

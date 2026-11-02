@@ -1,4 +1,8 @@
-export type ErrorDetail = { ref: string; reason: string };
+/**
+ * One entry of `data.details`. `index` is there when the entry is about one row of a list that was
+ * sent (a batch): the place in the list, counted from 0, a field of its own and not part of `ref`.
+ */
+export type ErrorDetail = { index?: number; ref: string; reason: string };
 
 export type Page<T> = { items: T[]; total: number };
 
@@ -16,8 +20,13 @@ function readDetails(data: unknown): ErrorDetail[] {
   const details: ErrorDetail[] = [];
   for (const entry of raw) {
     if (typeof entry !== 'object' || entry === null) continue;
-    const { ref, reason } = entry as { ref?: unknown; reason?: unknown };
-    if (typeof ref === 'string' && typeof reason === 'string') details.push({ ref, reason });
+    const { index, ref, reason } = entry as { index?: unknown; ref?: unknown; reason?: unknown };
+    if (typeof ref !== 'string' || typeof reason !== 'string') continue;
+    details.push(
+      typeof index === 'number' && Number.isInteger(index) && index >= 0
+        ? { index, ref, reason }
+        : { ref, reason },
+    );
   }
   return details;
 }

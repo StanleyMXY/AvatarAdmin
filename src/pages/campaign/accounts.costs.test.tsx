@@ -95,6 +95,57 @@ describe('the cost list', { timeout: 30000 }, () => {
     expect(within(costRows()[0]).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
 
+  it('takes the name of the campaign from the cost row itself, also when the list of campaigns cannot be read', async () => {
+    backend();
+    overrideFetch(({ url }) =>
+      url.pathname === '/api/admin/attribution/campaigns'
+        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', null, 'raw words')
+        : undefined,
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage(<AccountsPage />);
+    await user.click(await screen.findByRole('tab', { name: 'Costs' }));
+    await waitFor(() => expect(costRows().length).toBeGreaterThan(0));
+    const cost = campaignState.costs
+      .slice()
+      .sort((a, b) => b.statDate.localeCompare(a.statDate) || Number(b.id) - Number(a.id))[0];
+    const campaign = campaignState.campaigns.find((c) => c.id === cost.campaignId);
+    expect(cellsOf(costRows()[0])[0]).toBe(campaign?.name);
+  });
+
+  it('shows the name that the row carries, and falls back to the list of campaigns and then to the id only when the row has none', async () => {
+    backend();
+    const base = {
+      id: '1',
+      campaignId: '41',
+      statDate: '2026-10-20',
+      amount: 12.5,
+      currency: 'USD',
+      remark: null,
+      createdBy: null,
+      createdByUsername: null,
+      createdAt: '2026-10-20T00:00:00Z',
+      updatedAt: '2026-10-20T00:00:00Z',
+    };
+    overrideFetch(({ url }) =>
+      url.pathname === '/api/admin/attribution/costs'
+        ? jsonAnswer(200, '200', {
+            items: [
+              { ...base, id: '1', campaignCode: 'ก_th', campaignName: 'แคมเปญ ع 中' },
+              { ...base, id: '2', campaignCode: null, campaignName: null },
+            ],
+            total: 2,
+          })
+        : undefined,
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage(<AccountsPage />);
+    await user.click(await screen.findByRole('tab', { name: 'Costs' }));
+    await waitFor(() => expect(costRows()).toHaveLength(2));
+    expect(cellsOf(costRows()[0])[0]).toBe('แคมเปญ ع 中');
+    expect(cellsOf(costRows()[1])[0]).toBe('41');
+  });
+
   it('shows 0 as 0.00, and a dash for who entered it once that administrator has been deleted', async () => {
     backend();
     // the newest rows (the highest ids) are on the first page
