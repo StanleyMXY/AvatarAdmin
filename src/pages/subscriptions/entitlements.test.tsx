@@ -52,6 +52,10 @@ const picked = (row: HTMLElement) =>
     .filter((r) => (r as HTMLInputElement).checked)
     .map((r) => r.closest('label')?.textContent);
 
+const KEY_RULE =
+  'Use 1 to 64 letters, digits, dots, underscores or hyphens, starting with a letter or a digit.';
+const KEY_HINT = `${KEY_RULE} It cannot be changed after the entitlement is created.`;
+
 describe('the list of entitlements', { timeout: 30000 }, () => {
   it('shows key, name and priority by priority, with names in any language', async () => {
     useMockBackend(subscriptionsMock);
@@ -409,6 +413,77 @@ describe('creating and editing an entitlement', { timeout: 30000 }, () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('puts a taken key on the key field when its priority is free, and the priority when the priority is held by another entitlement too', async () => {
+    useMockBackend(subscriptionsMock);
+    const user = userEvent.setup();
+    renderPage(<EntitlementsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New entitlement' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Key'), { target: { value: 'basic' } });
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Basic 2' } });
+    fireEvent.change(within(dialog).getByLabelText('Priority'), { target: { value: '9999' } });
+    await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+    const message = 'An item with the same unique value already exists.';
+    const item = (await within(dialog).findByText(message)).closest(
+      '.ant-form-item',
+    ) as HTMLElement;
+    expect(within(item).getByLabelText('Key')).toBeInTheDocument();
+    expect(within(dialog).queryByText('It must not be empty.')).toBeNull();
+  });
+
+  it('says what a key may be, and that it cannot be changed, when a new entitlement is made', async () => {
+    useMockBackend(subscriptionsMock);
+    const user = userEvent.setup();
+    renderPage(<EntitlementsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New entitlement' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(KEY_HINT)).toBeInTheDocument();
+  });
+
+  it('refuses a key outside [A-Za-z0-9][A-Za-z0-9._-]{0,63} before sending, in the dialog beside the key', async () => {
+    const calls = useMockBackend(subscriptionsMock);
+    const user = userEvent.setup();
+    renderPage(<EntitlementsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New entitlement' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Gold' } });
+    fireEvent.change(within(dialog).getByLabelText('Priority'), { target: { value: '50' } });
+    for (const key of ['-gold', 'gold vip', 'ทอง', 'a'.repeat(65), 'gold/vip']) {
+      fireEvent.change(within(dialog).getByLabelText('Key'), { target: { value: key } });
+      await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+      expect(await within(dialog).findByText(KEY_RULE), key).toBeInTheDocument();
+      expect(writes(calls), key).toHaveLength(0);
+    }
+    // the longest and the shortest keys that the rule allows go through
+    fireEvent.change(within(dialog).getByLabelText('Key'), {
+      target: { value: `9${'x'.repeat(63)}` },
+    });
+    await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+  });
+
+  it('refuses a name of more than 100 code points after trimming (an emoji counts as one) before sending, and sends the trimmed name', async () => {
+    const calls = useMockBackend(subscriptionsMock);
+    const user = userEvent.setup();
+    renderPage(<EntitlementsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New entitlement' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Key'), { target: { value: 'gold' } });
+    fireEvent.change(within(dialog).getByLabelText('Priority'), { target: { value: '50' } });
+    fireEvent.change(within(dialog).getByLabelText('Name'), {
+      target: { value: '😀'.repeat(101) },
+    });
+    await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+    expect(await within(dialog).findByText('The value is too long.')).toBeInTheDocument();
+    expect(writes(calls)).toHaveLength(0);
+    fireEvent.change(within(dialog).getByLabelText('Name'), {
+      target: { value: `   ${'😀'.repeat(100)}   ` },
+    });
+    await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect((writes(calls)[0].body as { name: string }).name).toBe('😀'.repeat(100));
+  });
+
   it('sends one request while the save of the dialog is under way, however often Save is clicked then', async () => {
     useMockBackend(subscriptionsMock);
     const held = holdRequests((_, method) => method === 'POST');
@@ -522,6 +597,8 @@ describe('creating and editing an entitlement', { timeout: 30000 }, () => {
     await user.click(within(row).getByRole('button', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByLabelText('Key')).toBeDisabled();
+    // the rule of a key is for a new one: an existing key is not checked and not explained
+    expect(within(dialog).queryByText(KEY_HINT)).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Priority'), { target: { value: '35' } });
     await user.click(within(dialog).getByRole('button', { name: /Save/ }));
     await waitFor(() => expect(writes(calls)).toHaveLength(1));

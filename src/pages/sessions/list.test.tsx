@@ -272,7 +272,7 @@ describe('the session list: filters', { timeout: 30000 }, () => {
     const q = lastQuery(calls);
     expect(q.get('page')).toBe('1');
     expect(q.get('pageSize')).toBe('20');
-    for (const name of ['accountId', 'guest', 'from', 'to', 'ongoing', 'endReason']) {
+    for (const name of ['accountId', 'guest', 'from', 'to', 'inProgress', 'endReason']) {
       expect(q.has(name), name).toBe(false);
     }
   });
@@ -332,7 +332,9 @@ describe('the session list: filters', { timeout: 30000 }, () => {
     await expand(user);
     await choose(user, 'In progress', 'Yes');
     await search(user);
-    await waitFor(() => expect(lastQuery(calls).get('ongoing')).toBe('true'));
+    await waitFor(() => expect(lastQuery(calls).get('inProgress')).toBe('true'));
+    // the parameter is `inProgress`; `ongoing` is unknown to the backend, which would ignore it
+    expect(lastQuery(calls).has('ongoing')).toBe(false);
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: SESSION.registered })).toBeNull(),
     );
@@ -368,6 +370,9 @@ describe('the session list: filters', { timeout: 30000 }, () => {
     await search(user);
     await waitFor(() => expect(lastQuery(calls).get('from')).toBe('2026-10-05T00:00:00Z'));
     expect(lastQuery(calls).get('to')).toBe('2026-10-07T00:00:00Z');
+    // only the UTC form with a Z is sent: an offset such as +08:00 was not checked with the backend
+    expect(lastQuery(calls).get('from')).toMatch(/Z$/);
+    expect(lastQuery(calls).get('to')).toMatch(/Z$/);
     expect(screen.getAllByText(/UTC/).length).toBeGreaterThan(0);
   });
 

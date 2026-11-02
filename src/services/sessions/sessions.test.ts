@@ -25,12 +25,12 @@ describe('the session functions', () => {
       guest: false,
       from: '2026-10-01T00:00:00Z',
       to: '2026-10-02T00:00:00Z',
-      ongoing: true,
+      inProgress: true,
       endReason: 'DEADLINE',
     });
     expect(calls[0].url).toBe('/api/admin/sessions?page=2&pageSize=50');
     expect(calls[1].url).toBe(
-      '/api/admin/sessions?page=1&pageSize=20&accountId=acc+1%2F2&guest=false&from=2026-10-01T00%3A00%3A00Z&to=2026-10-02T00%3A00%3A00Z&ongoing=true&endReason=DEADLINE',
+      '/api/admin/sessions?page=1&pageSize=20&accountId=acc+1%2F2&guest=false&from=2026-10-01T00%3A00%3A00Z&to=2026-10-02T00%3A00%3A00Z&inProgress=true&endReason=DEADLINE',
     );
     expect(calls[0].init.method).toBe('GET');
   });
