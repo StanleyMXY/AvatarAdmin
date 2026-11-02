@@ -289,26 +289,77 @@ describe('validateValue', () => {
   });
 });
 
-describe('the words of a setting say no more than the contract does', () => {
-  // Contract 17.5: the two moderation scores map the score of the service to a level and the review
-  // score is the lower one; a likeness complaint must be handled within the hours, else an alert is
-  // written. Which side of the threshold a score falls on, and what a longer deadline means for
-  // noticing complaints, are not in the contract.
-  it('does not say that a score "reaches" a threshold, in either language', () => {
-    for (const messages of [enUS, zhCN] as Record<string, string>[]) {
-      for (const key of [
-        'config.moderation.block_score.desc',
-        'config.moderation.review_score.desc',
-      ]) {
-        expect(messages[key], key).not.toMatch(/reach|达到|manual review|人工复核/i);
-      }
-    }
-    expect(enUS['config.moderation.block_score.desc']).toMatch(/block level/);
-    expect(enUS['config.moderation.review_score.desc']).toMatch(/review level/);
-    expect(enUS['config.moderation.review_score.desc']).toMatch(/lower than the block score/);
+describe('the words of a setting say what the backend does (its answers of 2026-11-02, question 139)', () => {
+  const both = [
+    ['en-US', enUS],
+    ['zh-CN', zhCN],
+  ] as [string, Record<string, string>][];
+  const desc = (messages: Record<string, string>, key: string) => messages[`config.${key}.desc`];
+
+  it('says that generation.poll_interval_seconds is the backend checking unfinished generation jobs, not a client polling', () => {
+    expect(desc(enUS, 'generation.poll_interval_seconds')).toBe(
+      'How often the backend checks unfinished generation jobs, in seconds.',
+    );
+    expect(desc(zhCN, 'generation.poll_interval_seconds')).toBe(
+      '后端检查未完成生成任务的间隔，单位秒。',
+    );
   });
 
-  it('gives the likeness deadline the contract sentence and does not guess what a longer one does', () => {
+  it('says what happens above the limit of the chat history limit, the event batch and the event body', () => {
+    expect(desc(enUS, 'chat.history_max_limit')).toMatch(/above it .*rejected.*not cut/i);
+    expect(desc(enUS, 'chat.history_max_limit')).toMatch(/50/);
+    expect(desc(enUS, 'events.max_batch')).toMatch(/rejected as a whole/);
+    expect(desc(enUS, 'events.max_batch')).toMatch(/BATCH_TOO_LARGE/);
+    expect(desc(enUS, 'events.max_body_kb')).toMatch(/1 KB = 1024 bytes/);
+    expect(desc(enUS, 'events.max_body_kb')).toMatch(/rejected as a whole/);
+    expect(desc(zhCN, 'chat.history_max_limit')).toMatch(/超过.*被拒.*不会被截/);
+    expect(desc(zhCN, 'chat.history_max_limit')).toMatch(/50/);
+    expect(desc(zhCN, 'events.max_batch')).toMatch(/整个请求被拒/);
+    expect(desc(zhCN, 'events.max_body_kb')).toMatch(/1024 字节/);
+    expect(desc(zhCN, 'events.max_body_kb')).toMatch(/整个请求被拒/);
+  });
+
+  it('says from when, in which direction and for whom the recall, support and export settings count', () => {
+    expect(desc(enUS, 'recall.inactive_hours')).toMatch(/last interaction/);
+    expect(desc(enUS, 'recall.inactive_hours')).toMatch(/account creation|account was created/);
+    expect(desc(enUS, 'recall.inactive_hours')).toMatch(/more than/);
+    expect(desc(zhCN, 'recall.inactive_hours')).toMatch(/最后一次互动/);
+    expect(desc(zhCN, 'recall.inactive_hours')).toMatch(/创建/);
+    expect(desc(zhCN, 'recall.inactive_hours')).toMatch(/超过/);
+    expect(desc(enUS, 'recall.streak_min_days')).toMatch(/at least this many days/);
+    expect(desc(enUS, 'recall.streak_min_days')).toMatch(/yesterday/);
+    expect(desc(zhCN, 'recall.streak_min_days')).toMatch(/大于或等于/);
+    expect(desc(zhCN, 'recall.streak_min_days')).toMatch(/昨天/);
+    expect(desc(enUS, 'support.rate_limit_per_hour')).toMatch(/per account/);
+    expect(desc(enUS, 'support.rate_limit_per_hour')).toMatch(/not per IP/);
+    expect(desc(enUS, 'support.rate_limit_per_hour')).toMatch(/429/);
+    expect(desc(zhCN, 'support.rate_limit_per_hour')).toMatch(/每个账号/);
+    expect(desc(zhCN, 'support.rate_limit_per_hour')).toMatch(/不是按 IP/);
+    expect(desc(enUS, 'export.min_interval_hours')).toMatch(/user account/);
+    expect(desc(enUS, 'export.min_interval_hours')).toMatch(/last successful export/);
+    expect(desc(enUS, 'export.min_interval_hours')).toMatch(/429/);
+    expect(desc(zhCN, 'export.min_interval_hours')).toMatch(/用户账号/);
+    expect(desc(zhCN, 'export.min_interval_hours')).toMatch(/成功导出/);
+  });
+
+  it('writes the direction of the two moderation scores back, in both languages', () => {
+    expect(desc(enUS, 'moderation.block_score')).toMatch(/at or above it is blocked/);
+    expect(desc(enUS, 'moderation.block_score')).toMatch(/higher than the review score/);
+    expect(desc(enUS, 'moderation.review_score')).toMatch(
+      /at or above this threshold but below the block score goes to manual review/,
+    );
+    expect(desc(enUS, 'moderation.review_score')).toMatch(/lower than the block score/);
+    expect(desc(zhCN, 'moderation.block_score')).toMatch(/大于或等于这个阈值.*拦截/);
+    expect(desc(zhCN, 'moderation.review_score')).toMatch(/大于或等于这个阈值.*低于拦截分数.*复核/);
+    for (const [locale, messages] of both) {
+      for (const key of ['moderation.block_score', 'moderation.review_score']) {
+        expect(desc(messages, key), `${locale} ${key}`).toMatch(/0/);
+        expect(desc(messages, key), `${locale} ${key}`).toMatch(/1/);
+      }
+    }
+  });
+
+  it('keeps the likeness deadline to the contract sentence and does not guess what a longer one does', () => {
     for (const messages of [enUS, zhCN] as Record<string, string>[]) {
       expect(messages['config.complaint.likeness_due_hours.risk']).not.toMatch(
         /later|noticed|更晚|发现/,
