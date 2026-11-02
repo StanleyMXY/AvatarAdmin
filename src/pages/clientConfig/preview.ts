@@ -33,7 +33,8 @@ function script(tag: string): 'hans' | 'hant' | null {
 /**
  * The row of the key that the language negotiation of the contract (1.2) picks for one requested
  * language: a full match, else the rows of the same main language, narrowed to those that are a
- * prefix of the request, then to the same script, then the first. Tags are compared in lower case.
+ * prefix of the request, then to the same script, then the first. Tags are compared in lower case
+ * up to that point; the last step puts them in the order of the tags as written.
  */
 function matchLanguage(tags: string[], requested: string): string | null {
   const wanted = requested.toLowerCase();
@@ -49,7 +50,10 @@ function matchLanguage(tags: string[], requested: string): string | null {
     const sameScript = candidates.filter(([, tag]) => script(tag) === wantedScript);
     if (sameScript.length > 0) candidates = sameScript;
   }
-  return [...candidates].sort((a, b) => (a[1] < b[1] ? -1 : 1))[0][0];
+  // What decides last is the order of the saved tags as the backend sorts them (Java's natural
+  // order of strings): the tags as written, by UTF-16 code unit, so a capital comes before a small
+  // letter. Not a comparison that ignores case and not a locale-aware one.
+  return [...candidates].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))[0][0];
 }
 
 /**
