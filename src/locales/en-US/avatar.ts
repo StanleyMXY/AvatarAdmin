@@ -81,7 +81,10 @@ const messages: Record<string, string> = {
   'avatar.cosmetics.saved': 'Saved.',
   'avatar.cosmetics.priceWhole': 'The price must be a whole number, 0 or more.',
   'avatar.creditPrice.hint': 'Leave empty if the item cannot be bought with credits.',
-  'avatar.isDefault.hint': 'The one free default item of its type.',
+  'avatar.isDefault.hint':
+    'Saving makes this the default of its type; any other default item of the type is cancelled automatically.',
+  'avatar.cosmetics.defaultKept':
+    'The type must keep one default item that is on sale, free and fits both styles.',
   'avatar.preview.required': 'Upload a preview picture first.',
   'avatar.preview.rejected': 'The server did not accept the uploaded picture. Upload it again.',
 

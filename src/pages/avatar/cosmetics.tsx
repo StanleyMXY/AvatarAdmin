@@ -19,6 +19,7 @@ import {
 import { codeText } from '../../utils/displayText';
 import { DASH, formatCount } from '../../utils/ratio';
 import { CosmeticModal } from './CosmeticModal';
+import { catalogFailureText } from './catalogFailure';
 import { pickText } from './localized';
 import { Thumb } from './Thumb';
 import { describeSurfaces } from './texts';
@@ -139,6 +140,7 @@ export default function CosmeticsPage() {
           disabled={!canWrite}
           label={t('avatar.enabledOf', { key: row.key })}
           onToggle={(next) => setCosmeticEnabled(row.id, next)}
+          failureText={(error) => catalogFailureText(intl, error)}
           onDone={reload}
         />
       ),

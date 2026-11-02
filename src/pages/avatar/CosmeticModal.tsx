@@ -20,6 +20,7 @@ import { countCodePoints } from '../../utils/codePoints';
 import { codeText } from '../../utils/displayText';
 import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
+import { catalogFailureText } from './catalogFailure';
 import { LocalizedTextsField } from './LocalizedTextsField';
 import { cleanTexts, type Texts, tagAliases, textOf } from './localized';
 import { SurfacesPicker } from './SurfacesPicker';
@@ -78,7 +79,7 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const { text: failure, fail, clear } = useFailure();
+  const { text: failure, failWith, clear } = useFailure();
   // The language-file key of the problem, not its words: the words are made when drawn.
   const [pictureProblem, setPictureProblem] = useState<string | null>(null);
   const picture = useUploadSlot();
@@ -121,7 +122,7 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
         picture.reset();
         setPictureProblem('avatar.preview.rejected');
       }
-      fail(error);
+      failWith((intl) => catalogFailureText(intl, error));
       return;
     }
     message.success(t('avatar.cosmetics.saved'));

@@ -372,21 +372,17 @@ describe('uploads and the cosmetic catalog', () => {
     expect(fine.status).toBe(200);
   });
 
-  it('switches an item on and off, and the default of a kind moves to the item that is made the default', async () => {
+  it('switches an item on and off', async () => {
     const off = await send(COSMETIC_ENABLED, { enabled: false }, { id: '3' });
     expect(off.body.data.enabled).toBe(false);
     expect((await send(COSMETIC_ENABLED, { enabled: 'yes' }, { id: '3' })).status).toBe(400);
-    await send(COSMETIC_UPDATE, putBody({ isFree: true, isDefault: true }), { id: '3' });
-    const defaults = avatarState.cosmetics.filter((c) => c.kind === 'OUTFIT' && c.isDefault);
-    expect(defaults.map((c) => c.id)).toEqual(['3']);
   });
 
-  it('refuses a default that is not free, a surface of a platform that does not exist, and a price that is not whole', async () => {
+  it('refuses a surface of a platform that does not exist and a price that is not whole', async () => {
     const bad = await send(
       COSMETIC_UPDATE,
       putBody({
-        isDefault: true,
-        isFree: false,
+        enabled: true,
         surfaces: [{ platform: 'WEB', channel: null }],
         creditPrice: 1.5,
       }),
@@ -394,8 +390,110 @@ describe('uploads and the cosmetic catalog', () => {
     );
     expect(bad.status).toBe(400);
     expect(bad.body.data.details.map((d: { ref: string }) => d.ref).sort()).toEqual(
-      ['creditPrice', 'isDefault', 'surfaces'].sort(),
+      ['creditPrice', 'surfaces'].sort(),
     );
+  });
+
+  it('cancels the default of the kind by itself when another item that qualifies is made the default', async () => {
+    // an item that qualifies: free, on sale, fits both styles
+    const answer = await send(
+      COSMETIC_UPDATE,
+      putBody({
+        isFree: true,
+        isDefault: true,
+        enabled: true,
+        compatibleStyles: ['STYLIZED_3D', 'REALISTIC'],
+      }),
+      { id: '3' },
+    );
+    expect(answer.status).toBe(200);
+    const defaults = avatarState.cosmetics.filter((c) => c.kind === 'OUTFIT' && c.isDefault);
+    expect(defaults.map((c) => c.id)).toEqual(['3']);
+    // the default of the other kind is not touched
+    expect(avatarState.cosmetics.find((c) => c.id === '2')?.isDefault).toBe(true);
+  });
+
+  describe('a kind keeps one default item that is on sale, free and fits both styles', () => {
+    const snapshot = () => JSON.stringify(avatarState.cosmetics);
+    const keptOnly = (answer: { status: number; body: { code: string; data: unknown } }): void => {
+      expect(answer.status).toBe(409);
+      expect(answer.body.code).toBe('INVALID_STATE');
+      expect(answer.body.data).toEqual({ kind: 'OUTFIT' });
+    };
+
+    it('does not take an item as the default that does not qualify, when the kind had a default that did: 409 with data.kind, and nothing changed', async () => {
+      const before = snapshot();
+      keptOnly(
+        await send(
+          COSMETIC_UPDATE,
+          putBody({ isFree: false, isDefault: true, enabled: true, creditPrice: 10 }),
+          { id: '3' },
+        ),
+      );
+      keptOnly(
+        await send(COSMETIC_UPDATE, putBody({ isFree: true, isDefault: true, enabled: true }), {
+          id: '3',
+        }),
+      ); // fits one style only
+      expect(snapshot()).toBe(before);
+    });
+
+    it('refuses to cancel, switch off, make paid or narrow the only default that qualifies', async () => {
+      const before = snapshot();
+      const base = {
+        names: { en: 'Everyday outfit' },
+        generationSpec: 'a plain white t-shirt',
+        compatibleStyles: ['STYLIZED_3D', 'REALISTIC'],
+        isFree: true,
+        isDefault: true,
+        enabled: true,
+        sortOrder: 0,
+      };
+      const put = (over: Record<string, unknown>) =>
+        send(
+          COSMETIC_UPDATE,
+          { kind: 'OUTFIT', surfaces: [], creditPrice: null, ...base, ...over },
+          {
+            id: '1',
+          },
+        );
+      keptOnly(await put({ isDefault: false }));
+      keptOnly(await put({ enabled: false }));
+      keptOnly(await put({ isFree: false, creditPrice: 5 }));
+      keptOnly(await put({ compatibleStyles: ['REALISTIC'] }));
+      keptOnly(await send(COSMETIC_ENABLED, { enabled: false }, { id: '1' }));
+      expect(snapshot()).toBe(before);
+      expect((await put({ names: { en: 'Renamed' } })).status).toBe(200);
+    });
+
+    it('accepts a default that does not qualify when the kind had none that did, and a new item taken as the default the same way', async () => {
+      const first = avatarState.cosmetics.find((c) => c.id === '1');
+      if (first) first.enabled = false;
+      const answer = await send(
+        COSMETIC_UPDATE,
+        putBody({ isFree: false, isDefault: true, enabled: true, creditPrice: 10 }),
+        { id: '3' },
+      );
+      expect(answer.status).toBe(200);
+      expect(
+        avatarState.cosmetics.filter((c) => c.kind === 'OUTFIT' && c.isDefault).map((c) => c.id),
+      ).toEqual(['3']);
+    });
+
+    it('also stops the creation of an item that is taken as the default without qualifying', async () => {
+      const before = snapshot();
+      const created = await send(
+        COSMETIC_CREATE,
+        cosmeticBody({
+          previewUploadId: await upload(UPLOAD_IMAGE),
+          isFree: false,
+          isDefault: true,
+          creditPrice: 5,
+        }),
+      );
+      keptOnly(created);
+      expect(snapshot()).toBe(before);
+    });
   });
 });
 

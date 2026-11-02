@@ -313,7 +313,6 @@ export default {
       });
     }
     const picture = uploadOf(body.previewUploadId, 'CATALOG_IMAGE', 'previewUploadId');
-    picture.used = true;
     const created: MockCosmetic = {
       id: nextId(),
       key,
@@ -322,8 +321,11 @@ export default {
       previewFile: `${key}.svg`,
       enabled: body.enabled === true,
     };
-    avatarState.cosmetics.push(created);
-    clearOtherDefaults(created);
+    keepingDefaults(() => {
+      avatarState.cosmetics.push(created);
+      clearOtherDefaults(created);
+    });
+    picture.used = true;
     return ok(cosmeticRow(created));
   }),
 
@@ -342,13 +344,16 @@ export default {
     const enabled = requiredFlag(body.enabled, 'enabled', details);
     const item = readCosmeticFields(body, details);
     if (details.length > 0) throw fail(details);
-    if (body.previewUploadId !== undefined) {
-      const picture = uploadOf(body.previewUploadId, 'CATALOG_IMAGE', 'previewUploadId');
-      picture.used = true;
-      found.previewFile = `${found.key}-${picture.id}.svg`;
-    }
-    Object.assign(found, item, { kind: kind as MockCosmetic['kind'], enabled });
-    clearOtherDefaults(found);
+    const picture =
+      body.previewUploadId !== undefined
+        ? uploadOf(body.previewUploadId, 'CATALOG_IMAGE', 'previewUploadId')
+        : null;
+    keepingDefaults(() => {
+      Object.assign(found, item, { kind: kind as MockCosmetic['kind'], enabled });
+      if (picture) found.previewFile = `${found.key}-${picture.id}.svg`;
+      clearOtherDefaults(found);
+    });
+    if (picture) picture.used = true;
     return ok(cosmeticRow(found));
   }),
 
@@ -356,8 +361,11 @@ export default {
     const found = avatarState.cosmetics.find((c) => c.id === req.params.id);
     if (!found) throw notFound('cosmetic');
     const details: Detail[] = [];
-    found.enabled = flag(bodyOf(req).enabled, 'enabled', details);
+    const enabled = flag(bodyOf(req).enabled, 'enabled', details);
     if (details.length > 0) throw fail(details);
+    keepingDefaults(() => {
+      found.enabled = enabled;
+    });
     return ok(cosmeticRow(found));
   }),
 
@@ -706,6 +714,43 @@ function defaultAvatarOf(req: MockReq): MockDefaultAvatar {
 }
 
 /** There is one default item of each kind: making this one the default takes it from the others. */
+/** The kinds that have a default item that qualifies: the default, on sale, free and fitting both styles. */
+function kindsWithDefault(items: MockCosmetic[]): Set<string> {
+  return new Set(
+    items
+      .filter(
+        (c) =>
+          c.isDefault &&
+          c.enabled &&
+          c.isFree &&
+          STYLES.every((style) => c.compatibleStyles.includes(style as 'REALISTIC')),
+      )
+      .map((c) => c.kind),
+  );
+}
+
+/**
+ * Runs a change of the catalog and keeps it only when every kind that had a default item that
+ * qualifies still has one; otherwise it is all undone and the answer is 409 INVALID_STATE with
+ * `data.kind` (a kind that had none is not judged, so an item that does not qualify can be made the
+ * default of it). The backend does this in one transaction after the other checks.
+ */
+function keepingDefaults(change: () => void): void {
+  const before = avatarState.cosmetics.map((c) => ({ ...c }));
+  const had = kindsWithDefault(before);
+  change();
+  const has = kindsWithDefault(avatarState.cosmetics);
+  const lost = [...had].find((kind) => !has.has(kind));
+  if (lost === undefined) return;
+  avatarState.cosmetics.splice(0, avatarState.cosmetics.length, ...before);
+  throw new MockHttpError(
+    409,
+    'INVALID_STATE',
+    'The change leaves the kind without its default item',
+    { kind: lost },
+  );
+}
+
 function clearOtherDefaults(item: MockCosmetic): void {
   if (!item.isDefault) return;
   for (const other of avatarState.cosmetics) {
@@ -729,7 +774,6 @@ function readCosmeticFields(body: Record<string, unknown>, details: Detail[]) {
     }
   }
   const isDefault = flag(body.isDefault, 'isDefault', details);
-  if (isDefault && !isFree) details.push({ ref: 'isDefault', reason: 'OUT_OF_RANGE' });
   const sortOrder = whole(body.sortOrder, 'sortOrder', details);
   return {
     names,

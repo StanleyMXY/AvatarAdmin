@@ -81,7 +81,8 @@ const messages: Record<string, string> = {
   'avatar.cosmetics.saved': '已保存。',
   'avatar.cosmetics.priceWhole': '价格必须是 0 或更大的整数。',
   'avatar.creditPrice.hint': '留空表示不能用额度兑换。',
-  'avatar.isDefault.hint': '该类型唯一的免费默认条目。',
+  'avatar.isDefault.hint': '保存后，同一种类的其他默认条目会自动取消。',
+  'avatar.cosmetics.defaultKept': '该种类必须保留一个启用、免费、两种风格都适用的默认条目。',
   'avatar.preview.required': '请先上传预览图。',
   'avatar.preview.rejected': '服务器没有接受上传的图片，请重新上传。',
 

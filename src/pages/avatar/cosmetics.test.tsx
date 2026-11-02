@@ -589,18 +589,93 @@ describe('the cosmetic catalog page: edit', { timeout: 60000 }, () => {
     expect(String(body.previewUploadId)).toMatch(/^upl-/);
   });
 
-  it('shows the backend text for a field when it refuses: a default item must be free', async () => {
+  const DEFAULT_KEPT_EN =
+    'The type must keep one default item that is on sale, free and fits both styles.';
+
+  it('says in the hint of the Default switch that saving cancels the other default items of the type', async () => {
     backend();
     const user = userEvent.setup();
     renderPage(<CosmeticsPage />);
     const row = await rowOf('outfit_red_dress');
     await user.click(within(row).getByRole('button', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(
+        'Saving makes this the default of its type; any other default item of the type is cancelled automatically.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/must be free/i)).toBeNull();
+  });
+
+  it('says the type must keep a default item when the backend answers 409 with data.kind, keeps the dialog open and sends nothing twice', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    const row = await rowOf('outfit_red_dress');
+    await user.click(within(row).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    // a paid item taken as the default: the backend refuses and says the kind
     await user.click(within(dialog).getByRole('switch', { name: 'Default' }));
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
-    expect(
-      await within(dialog).findAllByText('The value is outside the allowed range.'),
-    ).not.toHaveLength(0);
+    expect(await within(dialog).findByText(DEFAULT_KEPT_EN)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/outside the allowed range/)).toBeNull();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(1);
+    expect(avatarState.cosmetics.find((c) => c.id === '3')?.isDefault).toBe(false);
+  });
+
+  it('says it in Chinese', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />, 'zh-CN');
+    const row = await rowOf('outfit_red_dress');
+    await user.click(within(row).getByRole('button', { name: /编\s?辑/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText('保存后，同一种类的其他默认条目会自动取消。'),
+    ).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('switch', { name: '默认' }));
+    await user.click(within(dialog).getByRole('button', { name: /提\s?交/ }));
+    expect(
+      await within(dialog).findByText('该种类必须保留一个启用、免费、两种风格都适用的默认条目。'),
+    ).toBeInTheDocument();
+  });
+
+  it('says the same when the switch of the list would leave the type without its default, and reads the list again', async () => {
+    backend();
+    renderPage(<CosmeticsPage />);
+    const row = await rowOf('outfit_default');
+    fireEvent.click(within(row).getByRole('switch'));
+    expect(await screen.findByText(DEFAULT_KEPT_EN)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        within(screen.getByText('outfit_default').closest('tr') as HTMLElement)
+          .getByRole('switch')
+          .getAttribute('aria-checked'),
+      ).toBe('true'),
+    );
+  });
+
+  it('falls back to the words of the code for a 409 that does not say the kind', async () => {
+    backend();
+    const real = globalThis.fetch;
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    const row = await rowOf('outfit_red_dress');
+    await user.click(within(row).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) =>
+      init?.method === 'PUT'
+        ? new Response(
+            JSON.stringify({ code: 'INVALID_STATE', message: 'm', data: { status: 'X' } }),
+            { status: 409, headers: { 'content-type': 'application/json' } },
+          )
+        : real(input, init),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText('The current state of the item does not allow this action.'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(DEFAULT_KEPT_EN)).toBeNull();
   });
 });
