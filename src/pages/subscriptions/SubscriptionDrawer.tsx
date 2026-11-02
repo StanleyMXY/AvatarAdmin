@@ -7,6 +7,7 @@ import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { getSubscription, type SubscriptionDetail } from '../../services/subscriptions';
 import { formatInstant } from '../../utils/format';
+import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { sortTimeline } from './featureRules';
 
@@ -143,6 +144,21 @@ export function SubscriptionDrawer({ id, onClose }: Props) {
               key: 'period',
               label: t('subscriptions.list.period'),
               children: `${when(detail.currentPeriodStart)} → ${when(detail.currentPeriodEnd)}`,
+            },
+            {
+              key: 'periodOrderId',
+              label: t('subscriptions.detail.periodOrderId'),
+              // The order ID is read as text whatever the store sent; an order ID is read from the
+              // left in any language, and a long one breaks anywhere instead of widening the drawer.
+              children: (
+                <Typography.Text
+                  data-testid="period-order-id"
+                  dir="ltr"
+                  style={{ overflowWrap: 'anywhere' }}
+                >
+                  {plainText(detail.periodOrderId) || DASH}
+                </Typography.Text>
+              ),
             },
             {
               key: 'grace',

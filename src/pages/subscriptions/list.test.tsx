@@ -151,6 +151,39 @@ describe('the subscription detail drawer', { timeout: 30000 }, () => {
     expect(dialog.textContent).toContain('2000000123456789');
   });
 
+  it('shows the store order ID of the current billing period, and a dash when there is none', async () => {
+    const rows = subscriptionsState().subscriptions;
+    for (const s of rows) s.periodOrderId = null;
+    useMockBackend(subscriptionsMock);
+    const empty = await openFirst();
+    await within(empty).findAllByTestId('timeline-event');
+    expect(within(empty).getByText('Billing period order ID')).toBeInTheDocument();
+    expect(within(empty).getByTestId('period-order-id').textContent).toBe('—');
+    expect(empty.textContent).not.toMatch(/null|undefined/);
+  });
+
+  it('shows the order ID as it came, in any script, and as text even when it is not a string', async () => {
+    const rows = subscriptionsState().subscriptions;
+    const first = [...rows].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+    first.periodOrderId = 'GPA.3345-9876-5432-ใบสั่ง-طلب';
+    useMockBackend(subscriptionsMock);
+    const dialog = await openFirst();
+    await within(dialog).findAllByTestId('timeline-event');
+    expect(within(dialog).getByTestId('period-order-id').textContent).toBe(
+      'GPA.3345-9876-5432-ใบสั่ง-طلب',
+    );
+  });
+
+  it('writes a period order ID that is not a string out as text instead of breaking the drawer', async () => {
+    const rows = subscriptionsState().subscriptions;
+    const first = [...rows].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+    (first as unknown as { periodOrderId: unknown }).periodOrderId = 2000000987654321;
+    useMockBackend(subscriptionsMock);
+    const dialog = await openFirst();
+    await within(dialog).findAllByTestId('timeline-event');
+    expect(within(dialog).getByTestId('period-order-id').textContent).toBe('2000000987654321');
+  });
+
   it('lists the events newest first by the time the store signed them', async () => {
     useMockBackend(subscriptionsMock);
     const dialog = await openFirst();

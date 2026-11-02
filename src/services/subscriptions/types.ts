@@ -69,6 +69,8 @@ export type Subscription = {
   firstActiveAt: string | null;
   voidedAt: string | null;
   lastEventSignedAt: string | null;
+  /** The store's order ID of the current billing period (contract 15.3); a new value is a new period. */
+  periodOrderId: string | null;
   lastSyncedAt: string;
   createdAt: string;
   updatedAt: string;
