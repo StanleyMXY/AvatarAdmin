@@ -17,6 +17,8 @@ import { detailReason, type FieldReason, setFieldReasons } from '../../utils/fie
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { Picker } from './Picker';
+import { SurfacesEditor } from './SurfacesEditor';
+import { fromSurfaces, type SurfaceRow, surfaceProblems, toSurfaces } from './surfaces';
 import { TargetingEditor } from './TargetingEditor';
 import {
   emptyTargetingForm,
@@ -35,6 +37,7 @@ type Values = {
   weight: number | null;
   dailyImpressionCap: number | null;
   targeting: TargetingForm;
+  surfaces: SurfaceRow[];
 };
 
 type Source<T> = { status: OptionsStatus; rows: T[]; reload: () => void };
@@ -50,7 +53,14 @@ type Props = {
   onSaved: () => void;
 };
 
-const FIELDS = ['campaignId', 'placementId', 'name', 'weight', 'dailyImpressionCap'] as const;
+const FIELDS = [
+  'campaignId',
+  'placementId',
+  'name',
+  'weight',
+  'dailyImpressionCap',
+  'surfaces',
+] as const;
 
 /** What the backend refused, sorted by where it goes: under a form field, under the targeting, or in the bar. */
 function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknown) {
@@ -126,7 +136,8 @@ export function UnitModal({
       if (unit) {
         await updateUnit(plainText(unit.id), {
           ...common,
-          targeting: toTargeting(values.targeting, unit.targeting),
+          targeting: toTargeting(values.targeting),
+          surfaces: toSurfaces(values.surfaces),
         });
       } else {
         await createUnit({
@@ -134,6 +145,7 @@ export function UnitModal({
           campaignId: values.campaignId as string,
           placementId: values.placementId as string,
           targeting: toTargeting(values.targeting),
+          surfaces: toSurfaces(values.surfaces),
         });
       }
     } catch (error) {
@@ -191,6 +203,7 @@ export function UnitModal({
           dailyImpressionCap:
             typeof unit?.dailyImpressionCap === 'number' ? unit.dailyImpressionCap : 0,
           targeting: unit ? fromTargeting(unit.targeting) : emptyTargetingForm(),
+          surfaces: unit ? fromSurfaces(unit.surfaces) : [],
         }}
         onValuesChange={(changed) => {
           if ('targeting' in changed)
@@ -304,6 +317,21 @@ export function UnitModal({
           ]}
         >
           <TargetingEditor geoConfigured={geoConfigured} serverErrors={serverErrors} />
+        </Form.Item>
+        <Form.Item
+          name="surfaces"
+          label={t('ads.units.field.surfaces')}
+          rules={[
+            {
+              validator: async (_, value: SurfaceRow[] | undefined) => {
+                if (surfaceProblems(value ?? []).some((problem) => problem !== null)) {
+                  throw new Error(t('ads.targeting.invalid'));
+                }
+              },
+            },
+          ]}
+        >
+          <SurfacesEditor />
         </Form.Item>
         {failure ? (
           <Alert

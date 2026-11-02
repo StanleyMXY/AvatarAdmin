@@ -91,6 +91,7 @@ describe('the unit page: reading', { timeout: 30000 }, () => {
       'Weight',
       'Daily cap',
       'Targeting',
+      'Served on',
       'Actions',
     ]);
   });
@@ -174,7 +175,17 @@ describe('the unit page: reading', { timeout: 30000 }, () => {
     renderPage(<UnitsPage />, 'zh-CN');
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
     const heads = [...document.querySelectorAll('.ant-table-thead th')].map((h) => h.textContent);
-    expect(heads).toEqual(['名称', '计划', '广告位', '状态', '权重', '单元日上限', '定向', '操作']);
+    expect(heads).toEqual([
+      '名称',
+      '计划',
+      '广告位',
+      '状态',
+      '权重',
+      '单元日上限',
+      '定向',
+      '投放端',
+      '操作',
+    ]);
     expect(screen.getByRole('button', { name: '新建单元' })).toBeInTheDocument();
   });
 });
@@ -453,11 +464,129 @@ describe('the form', { timeout: 60000 }, () => {
       weight: 100,
       dailyImpressionCap: 0,
       targeting: { platforms: ['IOS'], geo: ['VN'] },
+      surfaces: [],
     });
     await dialogsClosed();
     await waitFor(() =>
       expect(rows().some((r) => r.textContent?.includes('Đơn vị 🚀'))).toBe(true),
     );
+  });
+
+  // Answers 39: the list and the form show where a unit is served, and a save sends it.
+  describe('the surfaces', () => {
+    const chooseSurfacePlatform = async (
+      user: ReturnType<typeof userEvent.setup>,
+      form: ReturnType<typeof within>,
+      index: number,
+      text: string,
+    ) => {
+      await user.click(form.getAllByRole('combobox', { name: 'Platform' })[index]);
+      const options = await screen.findAllByText(text, {
+        selector: '.ant-select-item-option-content',
+      });
+      await user.click(options[options.length - 1]);
+    };
+
+    it('has a column that says where each unit is served: every end, one platform, a channel of a platform', async () => {
+      await load();
+      const heads = [...document.querySelectorAll('.ant-table-thead th')].map((h) => h.textContent);
+      expect(heads).toContain('Served on');
+      const column = heads.indexOf('Served on');
+      expect(cellsOf(await rowOf('1'))[column]).toBe('All platforms and channels');
+      expect(cellsOf(await rowOf('5'))[column]).toBe('Only IOS');
+      expect(cellsOf(await rowOf('6'))[column]).toBe('Only ANDROID/play, ANDROID/playdirect');
+    });
+
+    it('shows the rows of a unit in the form, and sends the list as it is with an edit that did not touch it', async () => {
+      const { calls, user } = await load();
+      await user.click(within(await rowOf('6')).getByRole('button', { name: 'Edit' }));
+      const form = within(await dialog());
+      expect(form.getAllByLabelText('Channel code (all channels if empty)')).toHaveLength(2);
+      expect(form.getAllByLabelText('Channel code (all channels if empty)')[0]).toHaveValue('play');
+      await user.click(form.getByRole('button', { name: 'Submit' }));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect((writesOf(calls)[0].body as { surfaces: unknown }).surfaces).toEqual([
+        { platform: 'ANDROID', channel: 'play' },
+        { platform: 'ANDROID', channel: 'playdirect' },
+      ]);
+    });
+
+    it('sends [] when every row is removed, which makes the unit served on every end', async () => {
+      const { calls, user } = await load();
+      await user.click(within(await rowOf('6')).getByRole('button', { name: 'Edit' }));
+      const form = within(await dialog());
+      for (const _ of [0, 1]) {
+        await user.click(form.getAllByRole('button', { name: 'Remove this row' })[0]);
+      }
+      await user.click(form.getByRole('button', { name: 'Submit' }));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect((writesOf(calls)[0].body as { surfaces: unknown }).surfaces).toEqual([]);
+      await dialogsClosed();
+      expect(unit('6').surfaces).toEqual([]);
+    });
+
+    it('creates a unit with a platform and a channel, and one with a platform for every channel', async () => {
+      const { calls, user } = await load();
+      const form = await open(user);
+      await choose(user, form, 'Campaign', campaign('6').name);
+      await choose(user, form, 'Placement', /call_end/);
+      await user.type(form.getByRole('textbox', { name: 'Name' }), 'Only Android');
+      await user.click(form.getByRole('button', { name: 'Add a platform or channel' }));
+      await chooseSurfacePlatform(user, form, 0, 'Android');
+      fireEvent.change(form.getByLabelText('Channel code (all channels if empty)'), {
+        target: { value: ' play ' },
+      });
+      await user.click(form.getByRole('button', { name: 'Add a platform or channel' }));
+      await chooseSurfacePlatform(user, form, 1, 'iOS');
+      await user.click(form.getByRole('button', { name: 'Submit' }));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect((writesOf(calls)[0].body as { surfaces: unknown }).surfaces).toEqual([
+        { platform: 'ANDROID', channel: 'play' },
+        { platform: 'IOS', channel: null },
+      ]);
+    });
+
+    it('asks for a platform in a row and for a channel code of the right form, and sends nothing until both are right', async () => {
+      const { calls, user } = await load();
+      const form = await open(user);
+      await choose(user, form, 'Campaign', campaign('6').name);
+      await choose(user, form, 'Placement', /call_end/);
+      await user.type(form.getByRole('textbox', { name: 'Name' }), 'Bad rows');
+      await user.click(form.getByRole('button', { name: 'Add a platform or channel' }));
+      await user.click(form.getByRole('button', { name: 'Submit' }));
+      expect(await form.findByText('Choose a platform')).toBeInTheDocument();
+      await chooseSurfacePlatform(user, form, 0, 'Android');
+      fireEvent.change(form.getByLabelText('Channel code (all channels if empty)'), {
+        target: { value: 'Play Store' },
+      });
+      await user.click(form.getByRole('button', { name: 'Submit' }));
+      expect(await form.findByText(/A channel code has 2 to 32 characters/)).toBeInTheDocument();
+      expect(writesOf(calls)).toHaveLength(0);
+    });
+
+    it('puts the refusal of the backend for surfaces in the words of the code, never its own words', async () => {
+      backend();
+      overrideFetch(async ({ method }) =>
+        method === 'POST'
+          ? jsonAnswer(
+              400,
+              'INVALID_REQUEST',
+              { details: [{ ref: 'surfaces', reason: 'OUT_OF_RANGE' }] },
+              'SECRET BACKEND WORDS',
+            )
+          : undefined,
+      );
+      const user = userEvent.setup();
+      renderPage(<UnitsPage />);
+      await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+      const form = await open(user);
+      await choose(user, form, 'Campaign', campaign('6').name);
+      await choose(user, form, 'Placement', /call_end/);
+      await user.type(form.getByRole('textbox', { name: 'Name' }), 'Refused');
+      await user.click(form.getByRole('button', { name: 'Submit' }));
+      expect(await form.findByText('The value is outside the allowed range.')).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
+    });
   });
 
   it('takes a weight of 0, and sends it as 0', async () => {
@@ -611,7 +740,7 @@ describe('the form', { timeout: 60000 }, () => {
     expect(within(form.getByTestId('targeting-editor')).getByText('ID')).toBeInTheDocument();
   });
 
-  it('sends name, targeting, weight and cap only; a key the form emptied goes as null so that it is removed, and the campaign and the placement are not sent', async () => {
+  it('sends name, targeting, weight, cap and surfaces; the targeting is the whole object without the key the form emptied (no null), and the campaign and the placement are not sent', async () => {
     const { calls, user } = await load();
     await user.click(within(await rowOf('1')).getByRole('button', { name: 'Edit' }));
     const form = within(await dialog());
@@ -631,10 +760,14 @@ describe('the form', { timeout: 60000 }, () => {
       name: unit('1').name,
       weight: 100,
       dailyImpressionCap: 0,
-      targeting: { platforms: ['ANDROID'], geo: null, languages: ['th', 'id'] },
+      targeting: { platforms: ['ANDROID'], languages: ['th', 'id'] },
+      surfaces: [],
     });
     await dialogsClosed();
-    expect(must(adsState.units.get('1')).targeting).not.toHaveProperty('geo');
+    expect(must(adsState.units.get('1')).targeting).toEqual({
+      platforms: ['ANDROID'],
+      languages: ['th', 'id'],
+    });
   });
 });
 

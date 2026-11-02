@@ -89,21 +89,12 @@ export function validateTargeting(form: TargetingForm): Partial<Record<Targeting
   return faults;
 }
 
-const KEY_OF: Record<TargetingKey, keyof Targeting> = {
-  platforms: 'platforms',
-  geo: 'geo',
-  osVersionMin: 'os_version_min',
-  appVersionMin: 'app_version_min',
-  languages: 'languages',
-  dayParts: 'day_parts',
-};
-
 /**
- * The targeting to send. A key that is empty is left out. `before` is the targeting the unit has
- * now: the update is a JSON Merge Patch, in which a key that is not sent stays, so a key that the
- * unit had and the form emptied is sent as `null` (and no other key is).
+ * The targeting to send: the whole object, without the keys that are empty. The backend replaces
+ * the old targeting with it (answers 77): a key that the unit had and the form emptied is simply
+ * not sent, and nothing is removed with `null`.
  */
-export function toTargeting(form: TargetingForm, before?: Targeting | null): Targeting {
+export function toTargeting(form: TargetingForm): Targeting {
   const out: Record<string, unknown> = {};
   if (form.platforms.length > 0) out.platforms = form.platforms;
   if (form.geo.length > 0) out.geo = form.geo;
@@ -114,11 +105,6 @@ export function toTargeting(form: TargetingForm, before?: Targeting | null): Tar
     .filter(completeRow)
     .map((part) => ({ start: part.start, end: part.end }));
   if (parts.length > 0) out.day_parts = parts;
-  if (typeof before === 'object' && before !== null) {
-    for (const key of Object.values(KEY_OF)) {
-      if (key in before && before[key] !== null && !(key in out)) out[key] = null;
-    }
-  }
   return out as Targeting;
 }
 

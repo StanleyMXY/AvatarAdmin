@@ -35,11 +35,12 @@ const enc = encodeURIComponent;
 type Paging = { page: number; pageSize: number };
 
 /**
- * A list answer as a page. The contract says the lists are `{ items, total }` but does not say
- * what a list without `total` is, so a bare list and a page without a total are both read.
+ * A list answer as a page. The campaigns, units and creatives answer `{ items, total }` and the
+ * placements `{ items }` (answers 39): a bare list is not an answer of the backend, so it is not
+ * read (it shows as an empty list, like an answer that is not a list at all). A page without a
+ * total has as many rows as it shows.
  */
 function pageOf<T>(data: unknown): Page<T> {
-  if (Array.isArray(data)) return { items: data as T[], total: data.length };
   const items = (data as { items?: unknown } | null)?.items;
   if (!Array.isArray(items)) return { items: [], total: 0 };
   const total = (data as { total?: unknown }).total;
@@ -47,6 +48,10 @@ function pageOf<T>(data: unknown): Page<T> {
 }
 
 const listOf = <T>(data: unknown): T[] => pageOf<T>(data).items;
+
+/** The rows of a report: a list, or `{ items }` (the shape of the reports is not part of answers 39, so both are read). */
+const reportRows = <T>(data: unknown): T[] =>
+  Array.isArray(data) ? (data as T[]) : listOf<T>(data);
 
 const readPage = async <T>(url: string, params: object): Promise<Page<T>> =>
   pageOf<T>(
@@ -208,7 +213,7 @@ export async function getReport(
     url: `/ads/report/${name}`,
     params: { ...params },
   });
-  if (name !== 'overview') return listOf(data);
+  if (name !== 'overview') return reportRows(data);
   const overview = data as { totals?: unknown; daily?: unknown } | null;
   const totals =
     typeof overview?.totals === 'object' && overview.totals !== null ? overview.totals : {};

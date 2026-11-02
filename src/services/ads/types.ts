@@ -101,6 +101,9 @@ export type Targeting = {
   day_parts?: DayPart[] | null;
 };
 
+/** Where a unit is served: a platform and one channel of it, or any channel (`null`). */
+export type Surface = { platform: 'ANDROID' | 'IOS'; channel: string | null };
+
 export type AdUnit = {
   id: string;
   campaignId: string;
@@ -108,6 +111,8 @@ export type AdUnit = {
   name: string;
   status: UnitStatus;
   targeting: Targeting | null;
+  /** Where the unit is served; empty means every platform and channel. Read as what it is, never trusted. */
+  surfaces?: Surface[] | null;
   weight: number | null;
   dailyImpressionCap: number | null;
   createdAt?: string | null;
@@ -121,14 +126,23 @@ export type UnitInput = {
   weight: number;
   dailyImpressionCap: number;
   targeting: Targeting;
+  /** Left out or empty means every platform and channel. */
+  surfaces?: Surface[];
 };
 
-/** Only these four are changed by `PUT /ads/units/{id}`; the campaign and the placement are fixed. */
+/**
+ * What `PUT /ads/units/{id}` changes: the name, the weight, the daily cap, the targeting and the
+ * surfaces (the contract lists the first four; the code of the backend takes the surfaces too, which
+ * is a difference to ask about). A field that is left out stays. `targeting` and `surfaces` replace the
+ * whole old value: a key of the targeting that is not sent is gone, and nothing is removed with null.
+ * The campaign and the placement are fixed.
+ */
 export type UnitPatch = {
   name?: string;
   targeting?: Targeting;
   weight?: number;
   dailyImpressionCap?: number;
+  surfaces?: Surface[];
 };
 
 export type AdCreative = {
