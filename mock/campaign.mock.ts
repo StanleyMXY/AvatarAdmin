@@ -515,27 +515,42 @@ export default {
     const campaigns = campaignState.campaigns.filter((c) => only === '' || c.id === only);
     const days = daysIn(from, to);
 
+    // The installs that matched no campaign are not a campaign's: they are the last row of either
+    // grouping when no campaign is asked for (a number, campaignId 0, and only the count; backend reply 38).
+    const unattributed = (): Record<string, unknown>[] =>
+      only === ''
+        ? [
+            {
+              campaignId: 0,
+              unattributedInstalls: days.reduce((sum, day) => sum + between(5, 40, 'un', day), 0),
+            },
+          ]
+        : [];
+
     if (groupBy === 'day') {
       return ok({
-        items: days.map((day) => {
-          const totals = campaigns.reduce((sum, c) => addDay(sum, figuresOf(c, day)), NONE);
-          const cost = campaigns.reduce((sum, c) => sum + costOf(c.id, day), 0);
-          return { statDate: day, ...performanceRow(totals, cost) };
-        }),
+        items: [
+          ...days.map((day) => {
+            const totals = campaigns.reduce((sum, c) => addDay(sum, figuresOf(c, day)), NONE);
+            const cost = campaigns.reduce((sum, c) => sum + costOf(c.id, day), 0);
+            return { statDate: day, ...performanceRow(totals, cost) };
+          }),
+          ...unattributed(),
+        ],
       });
     }
     const items: Record<string, unknown>[] = campaigns.map((c) => {
       const totals = days.reduce((sum, day) => addDay(sum, figuresOf(c, day)), NONE);
       const cost = days.reduce((sum, day) => sum + costOf(c.id, day), 0);
-      return { campaignId: c.id, ...performanceRow(totals, cost) };
+      // campaignId is a number on the wire; the row names the campaign itself
+      return {
+        campaignId: Number(c.id),
+        campaignCode: c.code,
+        campaignName: c.name,
+        ...performanceRow(totals, cost),
+      };
     });
-    // The installs that matched no campaign are not a campaign's: one row, only with all campaigns.
-    if (only === '') {
-      items.push({
-        campaignId: '0',
-        unattributedInstalls: days.reduce((sum, day) => sum + between(5, 40, 'un', day), 0),
-      });
-    }
+    items.push(...unattributed());
     return ok({ items });
   }),
 

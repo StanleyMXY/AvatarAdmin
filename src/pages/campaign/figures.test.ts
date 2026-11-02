@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { costsText, moneyText, numberOf, rateText, shareText, unitCostText } from './figures';
+import {
+  costsText,
+  isUnattributedRow,
+  moneyText,
+  numberOf,
+  rateText,
+  shareText,
+  unitCostText,
+} from './figures';
 
 describe('numberOf', () => {
   it('takes a finite number and a decimal written as text, and nothing else', () => {
@@ -138,5 +146,26 @@ describe('costsText', () => {
         'en-US',
       ),
     ).toBe('{"a":1} 1.00');
+  });
+});
+
+describe('isUnattributedRow', () => {
+  it('knows the row of the unattributed installs by campaignId 0, or, by day, by having a count and neither a campaign nor a day', () => {
+    expect(isUnattributedRow({ campaignId: 0, unattributedInstalls: 4 })).toBe(true);
+    expect(isUnattributedRow({ unattributedInstalls: 4 })).toBe(true);
+    expect(isUnattributedRow({ campaignId: null, statDate: null, unattributedInstalls: 0 })).toBe(
+      true,
+    );
+    // a "0" written as text is read as 0, but is not relied on
+    expect(isUnattributedRow({ campaignId: '0' as unknown as number })).toBe(true);
+  });
+
+  it('does not take a campaign, a day, or a row without the count for it', () => {
+    expect(isUnattributedRow({ campaignId: 7, installs: 3 })).toBe(false);
+    expect(isUnattributedRow({ campaignId: 10 })).toBe(false);
+    expect(isUnattributedRow({ campaignId: 7, unattributedInstalls: 3 })).toBe(false);
+    expect(isUnattributedRow({ statDate: '2026-10-20', pageViews: 5 })).toBe(false);
+    expect(isUnattributedRow({ statDate: '2026-10-20', unattributedInstalls: 3 })).toBe(false);
+    expect(isUnattributedRow({})).toBe(false);
   });
 });

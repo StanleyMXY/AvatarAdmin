@@ -53,6 +53,11 @@ const messages: Record<string, string> = {
   'campaign.stats.unattributed.tip': '认领后没有匹配到任何点击的安装，即自然量。',
   'campaign.stats.unattributed.share': '占匹配安装加未归因安装的比例：{share}',
   'campaign.stats.unattributed.shareShort': '占比：{share}',
+  'campaign.stats.unattributed.dayTip':
+    '所选日期范围内没有匹配到任何投放账户的安装总数，后端不按天拆分。',
+  'campaign.stats.exportBy': '导出的分组',
+  'campaign.stats.exportBy.campaign': '按投放账户',
+  'campaign.stats.exportBy.day': '按日',
   'campaign.accounts.tab.campaigns': '投放账户',
   'campaign.accounts.tab.costs': '投放成本',
   'campaign.campaigns.note': '投放账户不能删除，只能停用：它的点击和安装仍然保留在报表里。',

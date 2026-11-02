@@ -59,6 +59,11 @@ const messages: Record<string, string> = {
     'Installs that were claimed on a device but matched no click: organic traffic.',
   'campaign.stats.unattributed.share': 'Share of matched plus unattributed installs: {share}',
   'campaign.stats.unattributed.shareShort': 'Share: {share}',
+  'campaign.stats.unattributed.dayTip':
+    'Installs of the whole date range that matched no campaign. The backend does not split them by day.',
+  'campaign.stats.exportBy': 'Export grouped by',
+  'campaign.stats.exportBy.campaign': 'By campaign',
+  'campaign.stats.exportBy.day': 'By day',
   'campaign.accounts.tab.campaigns': 'Campaigns',
   'campaign.accounts.tab.costs': 'Costs',
   'campaign.campaigns.note':

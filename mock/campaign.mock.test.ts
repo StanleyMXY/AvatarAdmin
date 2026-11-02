@@ -597,18 +597,63 @@ describe('the performance', () => {
     (await get(PERFORMANCE, { from: '2026-10-20', to: '2026-10-26', ...query })).body.data
       .items as Record<string, unknown>[];
 
-  it('has a row for each campaign, with the figures of the contract, and one row for the installs that matched no campaign', async () => {
+  it('has a row for each campaign, with the figures of the contract, and one row for the installs that matched no campaign (campaignId is a number, 0 for that row)', async () => {
     const items = await rows({ groupBy: 'campaign' });
-    const real = items.filter((r) => r.campaignId !== '0');
+    const real = items.filter((r) => r.campaignId !== 0);
     expect(real.length).toBe(campaignState.campaigns.length);
     for (const row of real) {
       for (const field of ['pageViews', 'clicks', 'installs', 'registered', 'cost']) {
         expect(row, field).toHaveProperty(field);
       }
+      expect(typeof row.campaignId).toBe('number');
     }
-    const organic = items.filter((r) => r.campaignId === '0');
+    const organic = items.filter((r) => r.campaignId === 0);
     expect(organic).toHaveLength(1);
     expect(typeof organic[0].unattributedInstalls).toBe('number');
+    // the row of the unattributed installs has nothing else, and it is the last
+    expect(Object.keys(organic[0]).sort()).toEqual(['campaignId', 'unattributedInstalls']);
+    expect(items[items.length - 1]).toBe(organic[0]);
+  });
+
+  it('names each campaign in its row (campaignCode, campaignName) and sends cost, cpa and cpi as numbers', async () => {
+    const items = await rows({ groupBy: 'campaign' });
+    for (const campaign of campaignState.campaigns) {
+      const row = items.find((r) => r.campaignId === Number(campaign.id));
+      expect(row?.campaignCode, campaign.code).toBe(campaign.code);
+      expect(row?.campaignName, campaign.code).toBe(campaign.name);
+    }
+    for (const row of items.filter((r) => r.campaignId !== 0)) {
+      expect(typeof row.cost).toBe('number');
+      for (const field of ['cpa', 'cpi']) {
+        expect(row[field] === null || typeof row[field] === 'number', field).toBe(true);
+      }
+    }
+  });
+
+  it('puts the row of the unattributed installs last when grouped by day too: no statDate, only campaignId 0 and unattributedInstalls; day rows have no campaignId', async () => {
+    const items = await rows({ groupBy: 'day' });
+    const last = items[items.length - 1];
+    expect(last).toEqual({ campaignId: 0, unattributedInstalls: expect.any(Number) });
+    const days = items.slice(0, -1);
+    expect(days).toHaveLength(7);
+    for (const day of days) {
+      expect(typeof day.statDate).toBe('string');
+      expect(day).not.toHaveProperty('campaignId');
+      expect(day).not.toHaveProperty('unattributedInstalls');
+    }
+    // the same count as the row of the campaign grouping: the whole range
+    const byCampaign = await rows({ groupBy: 'campaign' });
+    expect(last.unattributedInstalls).toBe(byCampaign[byCampaign.length - 1].unattributedInstalls);
+  });
+
+  it('has no row of unattributed installs when one campaign is asked for, in either grouping', async () => {
+    for (const groupBy of ['campaign', 'day']) {
+      const items = await rows({ groupBy, campaignId: '1' });
+      expect(
+        items.some((r) => 'unattributedInstalls' in r),
+        groupBy,
+      ).toBe(false);
+    }
   });
 
   it('works out each rate from the counts, and gives null where the denominator is 0', async () => {
@@ -639,7 +684,8 @@ describe('the performance', () => {
   });
 
   it('has a row for each day of the range by day, the total of all campaigns, or one campaign', async () => {
-    const all = await rows({ groupBy: 'day' });
+    // the last row of the all-campaigns reading is the unattributed installs, not a day
+    const all = (await rows({ groupBy: 'day' })).filter((r) => 'statDate' in r);
     expect(all.map((r) => r.statDate)).toEqual([
       '2026-10-20',
       '2026-10-21',
@@ -654,7 +700,7 @@ describe('the performance', () => {
       list.reduce((s, r) => s + (typeof r[field] === 'number' ? (r[field] as number) : 0), 0);
     expect(sum(all, 'clicks')).toBe(
       sum(
-        campaigns.filter((r) => r.campaignId !== '0'),
+        campaigns.filter((r) => r.campaignId !== 0),
         'clicks',
       ),
     );
@@ -662,7 +708,7 @@ describe('the performance', () => {
     expect(one).toHaveLength(7);
     expect(sum(one, 'clicks')).toBe(
       sum(
-        campaigns.filter((r) => r.campaignId === '2'),
+        campaigns.filter((r) => r.campaignId === 2),
         'clicks',
       ),
     );

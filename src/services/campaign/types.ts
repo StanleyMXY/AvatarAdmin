@@ -108,12 +108,16 @@ export const PERFORMANCE_GROUPS = ['campaign', 'day'] as const;
 export type PerformanceGroup = (typeof PERFORMANCE_GROUPS)[number];
 
 /**
- * A row of `GET /attribution/performance` (contract 10.5): the columns of `StatAttributionDaily` and
- * the rates. A campaign is named by `campaignId` (0 is the row of the installs that matched no
- * campaign); `campaignCode` and `campaignName` are read when the backend sends them.
+ * A row of `GET /attribution/performance` (contract 10.5, backend reply 38). By campaign a row has
+ * `campaignId` (a number), `campaignCode` and `campaignName`; by day it has `statDate` and no campaign.
+ * The last row of either reading (when no campaign is asked for) is the installs that matched no
+ * campaign: `{ campaignId: 0, unattributedInstalls }` and nothing else, also by day, where it has no
+ * `statDate`. `cost`, `cpa` and `cpi` are JSON numbers (a rate or a per-unit cost with a denominator
+ * of 0 is null); the backend's own tests show it, but no raw answer has been looked at, so the page
+ * still reads a decimal written as text, and does not rely on it.
  */
 export type PerformanceRow = {
-  campaignId?: string | number | null;
+  campaignId?: number | null;
   campaignCode?: string | null;
   campaignName?: string | null;
   statDate?: string | null;
@@ -124,10 +128,10 @@ export type PerformanceRow = {
   installRate?: number | null;
   registered?: number | null;
   registerRate?: number | null;
-  cost?: number | string | null;
-  cpa?: number | string | null;
-  cpi?: number | string | null;
-  /** Only on the row of campaign 0. */
+  cost?: number | null;
+  cpa?: number | null;
+  cpi?: number | null;
+  /** Only on the row of the unattributed installs. */
   unattributedInstalls?: number | null;
 };
 
