@@ -78,7 +78,11 @@ There are no secrets in this repository.
 
 `docs/deploy.md` describes how to serve the build: same-domain reverse proxy (`/api/` to the
 backend, every other path falls back to `index.html`), a complete nginx example, cache headers for
-the hashed files, the build variables above and the checks after a release.
+the hashed files, the build variables above and the checks after a release. The `/api/` location of
+the example adds no header of its own: the backend already sends its six security headers, including
+`Cache-Control: no-store`, on every response, and nginx's `add_header` appends, so a second
+`Cache-Control` there would give the response two. To make nginx set one, replace instead of append
+(`proxy_hide_header` first).
 
 ## Checks before a release
 
