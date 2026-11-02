@@ -87,6 +87,8 @@ const byIdDesc = (a: { id: string }, b: { id: string }) => Number(b.id) - Number
 
 const PRODUCT_STORE = /^[A-Z][A-Z0-9_]{1,31}$/;
 const CREDITS_MAX = 1_000_000_000;
+/** The most a request can move a balance by, up or down (backend reply 108). */
+const DELTA_MAX = 1_000_000_000;
 
 /** The fields of `POST` and `PUT /credit-products`: the same six, all required (backend reply 30). */
 function checkProduct(body: Record<string, unknown>): Detail[] {
@@ -221,7 +223,11 @@ export default {
       details.push({ ref: 'kind', reason: 'OUT_OF_RANGE' });
     }
     if (!isInt(body.delta)) details.push({ ref: 'delta', reason: 'NOT_AN_INTEGER' });
-    else if (body.delta === 0 || (body.kind === 'GRANT' && body.delta < 0)) {
+    else if (
+      body.delta === 0 ||
+      (body.kind === 'GRANT' && body.delta < 0) ||
+      Math.abs(body.delta) > DELTA_MAX
+    ) {
       details.push({ ref: 'delta', reason: 'OUT_OF_RANGE' });
     }
     const reason = textProblem(body.reason, true);
@@ -255,7 +261,8 @@ export default {
       reviewedAt: null,
     };
     creditsState.requests.push(created);
-    return ok(requestRow(created));
+    // the backend answers only the id of the new request
+    return ok({ id: created.id });
   }),
 
   // Order of the checks (see the contract request, question 5): permission, the request exists,

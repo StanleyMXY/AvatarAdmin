@@ -55,7 +55,8 @@ export const updateCreditProduct = (body: CreditProductBody): Promise<null> =>
 export const listAdjustRequests = (params: AdjustRequestQuery): Promise<Page<AdjustRequest>> =>
   apiRequest({ method: 'GET', url: '/credit-adjust-requests', params });
 
-export const createAdjustRequest = (body: AdjustRequestBody): Promise<AdjustRequest> =>
+/** `POST /credit-adjust-requests`: answers `{ id }`. `delta` is a whole number, not 0, of at most 1,000,000,000 up or down; a grant is above 0. */
+export const createAdjustRequest = (body: AdjustRequestBody): Promise<{ id: string }> =>
   apiRequest({ method: 'POST', url: '/credit-adjust-requests', body });
 
 /** The note is optional: an empty one is not sent. */

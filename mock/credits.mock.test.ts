@@ -132,18 +132,19 @@ describe('POST /credit-adjust-requests', () => {
       ...over,
     });
 
-  it('creates a pending request that shows up in the list, with the applicant', async () => {
+  it('creates a pending request that shows up in the list, with the applicant, and answers only { id }', async () => {
     const { status, body } = await create();
     expect(status).toBe(200);
-    expect(body.data).toMatchObject({
+    expect(body.data).toEqual({ id: expect.any(String) });
+    const list = (await get(REQUESTS, 'finance', { accountId: ACCOUNT.active })).body.data.items;
+    expect(list[0].id).toBe(body.data.id);
+    expect(list[0]).toMatchObject({
       status: 'PENDING',
       kind: 'GRANT',
       delta: 100,
       applicantAdminId: '1003',
       applicantUsername: 'finance',
     });
-    const list = (await get(REQUESTS, 'finance', { accountId: ACCOUNT.active })).body.data.items;
-    expect(list[0].id).toBe(body.data.id);
   });
 
   it('needs a positive delta for GRANT, any whole number but zero for ADJUST', async () => {
@@ -155,6 +156,38 @@ describe('POST /credit-adjust-requests', () => {
     expect((await create({ kind: 'ADJUST', delta: -30 })).status).toBe(200);
     expect((await create({ kind: 'ADJUST', delta: 30 })).status).toBe(200);
     expect((await create({ kind: 'ADJUST', delta: 0 })).status).toBe(400);
+  });
+
+  it('keeps the size of delta within 1,000,000,000 in either direction (OUT_OF_RANGE on delta), and takes the limit itself', async () => {
+    for (const [kind, delta] of [
+      ['GRANT', 1_000_000_001],
+      ['ADJUST', 1_000_000_001],
+      ['ADJUST', -1_000_000_001],
+      ['GRANT', 1e15],
+    ] as const) {
+      const { status, body } = await create({ kind, delta });
+      expect(status, `${kind} ${delta}`).toBe(400);
+      expect(body.data.details, `${kind} ${delta}`).toEqual([
+        { ref: 'delta', reason: 'OUT_OF_RANGE' },
+      ]);
+    }
+    expect((await create({ kind: 'GRANT', delta: 1_000_000_000 })).status).toBe(200);
+    expect((await create({ kind: 'ADJUST', delta: -1_000_000_000 })).status).toBe(200);
+  });
+
+  it('wants kind, and a note only for a rejection: an approval takes none, a rejection needs one of 1 to 500 code points', async () => {
+    const mine = pendingOf('1003') as { id: string };
+    const long = 'x'.repeat(501);
+    expect(
+      (await send(APPROVE, 'root', { note: long }, { id: mine.id })).body.data.details[0],
+    ).toEqual({ ref: 'note', reason: 'TOO_LONG' });
+    const missing = await send(REJECT, 'root', {}, { id: mine.id });
+    expect(missing.status).toBe(400);
+    expect(missing.body.data.details[0]).toEqual({ ref: 'note', reason: 'EMPTY_NOT_ALLOWED' });
+    expect(
+      (await send(REJECT, 'root', { note: long }, { id: mine.id })).body.data.details[0],
+    ).toEqual({ ref: 'note', reason: 'TOO_LONG' });
+    expect((await send(APPROVE, 'root', {}, { id: mine.id })).status).toBe(200);
   });
 
   it('needs a kind, an account id and a reason (trimmed, 1 to 500 code points)', async () => {

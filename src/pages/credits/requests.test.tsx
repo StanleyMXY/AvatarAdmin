@@ -463,6 +463,30 @@ describe('a new request', { timeout: 30000 }, () => {
     expect(writes(calls)[0].body).toMatchObject({ kind: 'ADJUST', delta: 30 });
   });
 
+  it('refuses a number whose size is above 1,000,000,000 for a grant and for an adjustment in either direction, without sending, and sends 1,000,000,000', async () => {
+    const calls = useMockBackend(creditsMock);
+    const user = userEvent.setup();
+    renderPage(<RequestsPage />);
+    const dialog = await open(user);
+    const tooBig = 'The number can be at most 1,000,000,000, up or down.';
+    await fill(user, dialog, { kind: 'Grant', delta: '1000000001' });
+    await submit(user, dialog);
+    expect(await within(dialog).findByText(tooBig)).toBeInTheDocument();
+    await chooseOption(user, 'Type', 'Adjust', dialog);
+    fireEvent.change(within(dialog).getByLabelText('Credits'), {
+      target: { value: '-1000000001' },
+    });
+    await submit(user, dialog);
+    expect(await within(dialog).findByText(tooBig)).toBeInTheDocument();
+    expect(writes(calls)).toHaveLength(0);
+    fireEvent.change(within(dialog).getByLabelText('Credits'), {
+      target: { value: '-1000000000' },
+    });
+    await submit(user, dialog);
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0].body).toMatchObject({ kind: 'ADJUST', delta: -1_000_000_000 });
+  });
+
   it('checks the number again when the type changes from adjustment to grant', async () => {
     const calls = useMockBackend(creditsMock);
     const user = userEvent.setup();
