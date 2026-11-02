@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { StatusTag } from '../../components/StatusTag';
-import { useFailure } from '../../hooks/useFailure';
+import { type FailureLines, useFailure, useFailureView } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
@@ -31,14 +31,20 @@ import {
   type SettableComplaintStatus,
   setComplaintStatus,
 } from '../../services/complaints';
+import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
 import { formatInstant } from '../../utils/format';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
+import { ASSET_IDS_MAX, cleanAssetIds, isUuid } from './assetIds';
 import { EvidenceViewer } from './EvidenceViewer';
 import { statusOptions } from './statusOptions';
 
 export const NOTE_MAX = 1000;
+
+/** A control character (C0, DEL, C1), a new line and a tab included: the backend refuses a note that has one. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: this is the check for them
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/;
 
 type Props = {
   /** The complaint to show; none closes the drawer. */
@@ -51,11 +57,6 @@ type Props = {
 /** The administrator's name, the id's first 8 characters when the administrator no longer exists, or a dash. */
 export const adminLabel = (username: string | null | undefined, id: string | null | undefined) =>
   username ?? (id ? id.slice(0, 8) : DASH);
-
-/** The ids typed or pasted for a removal: trimmed with the contract set, empty ones dropped, once each. */
-export const cleanAssetIds = (values: readonly string[]): string[] => [
-  ...new Set(values.map((v) => trimSpec(v)).filter((v) => v !== '')),
-];
 
 /**
  * One likeness complaint: the description, the evidence (read file by file), the history of status
@@ -74,6 +75,14 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
   const [status, setStatus] = useState<SettableComplaintStatus | undefined>();
   const [note, setNote] = useState('');
   const [assetIds, setAssetIds] = useState<string[]>([]);
+  // More IDs were offered than a removal takes: the rest were not kept, and the text says so.
+  const [idsCut, setIdsCut] = useState(false);
+  // The failure of a removal has lines under it: the IDs the backend did not find.
+  const {
+    view: removeFailure,
+    show: showRemoveFailure,
+    clear: clearRemoveFailure,
+  } = useFailureView<FailureLines>();
   const {
     text: problem,
     fail: failWrite,
@@ -103,7 +112,9 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
     setStatus(undefined);
     setNote('');
     setAssetIds([]);
+    setIdsCut(false);
     clearProblem();
+    clearRemoveFailure();
   }, [id]);
 
   useEffect(() => {
@@ -114,27 +125,38 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
   const when = (iso: string | null | undefined) => (iso ? formatInstant(iso, intl.locale) : DASH);
 
   /** Runs a write; whatever the answer, the complaint and the list are read again, since a refusal can mean the state moved. */
-  const write = async (call: () => Promise<unknown>, done: string) => {
+  const write = async (
+    call: () => Promise<unknown>,
+    done: string,
+    onFailure: (error: unknown) => void = failWrite,
+  ) => {
     clearProblem();
+    clearRemoveFailure();
     try {
       await call();
       message.success(t(done));
       setStatus(undefined);
       setNote('');
       setAssetIds([]);
+      setIdsCut(false);
     } catch (error) {
-      failWrite(error);
+      onFailure(error);
     }
     await load();
     onChanged();
   };
 
   const changeStatus = useSingleFlight(async () => {
-    if (!detail || !status) return;
+    if (!detail || !status || status === detail.status) return;
     if (countCodePoints(trimSpec(note)) > NOTE_MAX) {
       failWriteWith((words) =>
         words.formatMessage({ id: 'complaints.note.length' }, { max: NOTE_MAX }),
       );
+      return;
+    }
+    // A new line is a control character too; the backend refuses a note that has one (400).
+    if (CONTROL_CHARACTER.test(trimSpec(note))) {
+      failWriteWith((words) => words.formatMessage({ id: 'complaints.note.control' }));
       return;
     }
     await write(
@@ -145,11 +167,32 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
 
   const removeAvatars = async () => {
     if (!detail) return;
+    if (!removable) return;
     await write(
-      () => removeComplaintAvatars(detail.id, cleanAssetIds(assetIds)),
+      () => removeComplaintAvatars(detail.id, assetIds),
       'complaints.remove.done',
+      (error) =>
+        showRemoveFailure((words) => {
+          const described = describeFailure(words, error);
+          // An ID the backend did not find comes with its own line: the ID, then the reason.
+          return {
+            text: described.text,
+            more: described.fields.map((f) =>
+              f.ref === 'assetIds' ? f.text : `${f.ref}: ${f.text}`,
+            ),
+          };
+        }),
     );
   };
+
+  /** What goes into the field of IDs: cleaned, each once, at most the 20 a removal takes. */
+  const takeIds = (values: string[]) => {
+    const clean = cleanAssetIds(values);
+    setIdsCut(clean.length > ASSET_IDS_MAX);
+    setAssetIds(clean.slice(0, ASSET_IDS_MAX));
+  };
+  const badId = assetIds.find((value) => !isUuid(value));
+  const removable = assetIds.length > 0 && badId === undefined;
 
   const eventColumns = [
     {
@@ -206,6 +249,24 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
       ) : (
         <Flex vertical gap={16}>
           {problem ? <Alert type="error" showIcon title={problem} /> : null}
+          {removeFailure ? (
+            <Alert
+              type="error"
+              showIcon
+              style={{ overflowWrap: 'anywhere' }}
+              title={removeFailure.text}
+              description={
+                removeFailure.more.length > 0 ? (
+                  <ul style={{ margin: 0, paddingInlineStart: 20 }}>
+                    {removeFailure.more.map((line, index) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: lines of one failure, never reordered
+                      <li key={`${index}-${line}`}>{line}</li>
+                    ))}
+                  </ul>
+                ) : undefined
+              }
+            />
+          ) : null}
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label={t('complaints.col.id')}>{detail.id}</Descriptions.Item>
             <Descriptions.Item label={t('complaints.col.contactEmail')}>
@@ -287,9 +348,11 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
                       aria-label={t('complaints.status.newStatus')}
                       value={status}
                       onChange={setStatus}
+                      // The state the complaint has is shown but cannot be chosen: setting it again is a 409.
                       options={SETTABLE_COMPLAINT_STATUSES.map((value) => ({
                         value,
                         label: options[value]?.label ?? value,
+                        disabled: value === detail.status,
                       }))}
                     />
                   </Form.Item>
@@ -308,7 +371,7 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
                   <Button
                     type="primary"
                     htmlType="submit"
-                    disabled={!status || changeStatus.pending}
+                    disabled={!status || status === detail.status || changeStatus.pending}
                     loading={changeStatus.pending}
                   >
                     {t('complaints.status.submit')}
@@ -324,12 +387,25 @@ export function ComplaintDrawer({ id, onClose, onChanged }: Props) {
                     placeholder={t('complaints.remove.placeholder')}
                     tokenSeparators={[',', ' ', '\n']}
                     open={false}
+                    maxCount={ASSET_IDS_MAX}
                     value={assetIds}
-                    onChange={setAssetIds}
+                    onChange={takeIds}
                   />
+                  <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+                    {t('complaints.remove.count', { n: assetIds.length, max: ASSET_IDS_MAX })}
+                    {idsCut ? ` ${t('complaints.remove.cut', { max: ASSET_IDS_MAX })}` : ''}
+                  </Typography.Paragraph>
+                  {badId !== undefined ? (
+                    <Alert
+                      type="error"
+                      showIcon
+                      style={{ marginBottom: 8, overflowWrap: 'anywhere' }}
+                      title={t('complaints.remove.notUuid', { id: badId })}
+                    />
+                  ) : null}
                   <DangerConfirmButton
                     confirmText={t('complaints.remove.confirm')}
-                    disabled={cleanAssetIds(assetIds).length === 0}
+                    disabled={!removable}
                     onConfirm={removeAvatars}
                   >
                     {t('complaints.remove.button')}

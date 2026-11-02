@@ -203,8 +203,9 @@ function names(n: number): Record<string, string> {
 function seed(now: Date): AvatarStore {
   const ago = (hours: number): string => new Date(now.getTime() - hours * HOUR).toISOString();
   const ahead = (hours: number): string => new Date(now.getTime() + hours * HOUR).toISOString();
+  // A real UUID (the last group has 12 hex digits): the removal of avatars checks the form.
   const uuid = (prefix: string, n: number) =>
-    `00000000-0000-4000-8000-${prefix}${String(n).padStart(8, '0')}`;
+    `00000000-0000-4000-8000-${prefix.slice(-4)}${String(n).padStart(8, '0')}`;
 
   const cosmetics: MockCosmetic[] = [
     {

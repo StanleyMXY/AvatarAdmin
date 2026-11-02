@@ -10,8 +10,9 @@ import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { history, setTestAccess } from '../../../tests/stubs/umi-max';
 import access from '../../access';
+import enUS from '../../locales/en-US';
 import { signIn, writesOf } from '../avatar/testSetup';
-import { cleanAssetIds } from './ComplaintDrawer';
+import { cleanAssetIds, isUuid } from './assetIds';
 import LikenessComplaintsPage from './likeness';
 
 const backend = () => useMockBackend({ default: complaintsMock }, configMock);
@@ -31,6 +32,10 @@ const complaint = (n: number) => {
   if (!found) throw new Error(`no complaint ${n}`);
   return found;
 };
+/** The avatars of the sample data: they exist, so a removal of them is not a 404. */
+const sampleAvatars = () => [...avatarState.accountAvatars.values()].flat().map((a) => a.assetId);
+/** An ID that is a UUID and belongs to no avatar. */
+const NO_SUCH = '00000000-0000-4000-8000-0000000000ff';
 const rowOf = async (n: number) =>
   (await screen.findByText(`person${n}@example.org`)).closest('tr') as HTMLTableRowElement;
 /** The rows of the history table in the drawer (Ant Design draws a table with a scrolling body as two tables). */
@@ -637,6 +642,10 @@ describe('the complaint drawer: removing avatars', { timeout: 60000 }, () => {
     const box = within(drawer).getByRole('combobox', { name: 'Avatar IDs' });
     for (const id of ids) await user.type(box, `${id}{Enter}`);
   };
+  const removeButton = (drawer: HTMLElement) =>
+    within(drawer).getByRole('button', { name: 'Remove avatars' });
+  const chosen = (drawer: HTMLElement) =>
+    [...drawer.querySelectorAll('.ant-select-selection-item-content')].map((el) => el.textContent);
 
   it('has the button disabled until an ID is entered', async () => {
     backend();
@@ -644,8 +653,8 @@ describe('the complaint drawer: removing avatars', { timeout: 60000 }, () => {
     renderPage(<LikenessComplaintsPage />);
     const drawer = await openDrawer(user, 2);
     expect(await within(drawer).findByRole('button', { name: 'Remove avatars' })).toBeDisabled();
-    await addIds(user, drawer, ['asset-1']);
-    expect(within(drawer).getByRole('button', { name: 'Remove avatars' })).toBeEnabled();
+    await addIds(user, drawer, [sampleAvatars()[0]]);
+    expect(removeButton(drawer)).toBeEnabled();
   });
 
   it('asks first, with words that say it deletes looks, clips and files, notifies the uploader and cannot be undone; nothing is sent before', async () => {
@@ -653,8 +662,8 @@ describe('the complaint drawer: removing avatars', { timeout: 60000 }, () => {
     const user = userEvent.setup();
     renderPage(<LikenessComplaintsPage />);
     const drawer = await openDrawer(user, 2);
-    await addIds(user, drawer, ['asset-1']);
-    await user.click(within(drawer).getByRole('button', { name: 'Remove avatars' }));
+    await addIds(user, drawer, [sampleAvatars()[0]]);
+    await user.click(removeButton(drawer));
     const question = await screen.findByText(/It cannot be undone\./);
     expect(question.textContent).toContain('all their looks, action clips and files');
     expect(question.textContent).toContain('in-app notice that the content was rejected');
@@ -666,19 +675,20 @@ describe('the complaint drawer: removing avatars', { timeout: 60000 }, () => {
 
   it('sends the IDs (several allowed), then the complaint shows as closed with the IDs listed and no more buttons', async () => {
     const calls = backend();
+    const [first, second] = sampleAvatars();
     const user = userEvent.setup();
     renderPage(<LikenessComplaintsPage />);
     const drawer = await openDrawer(user, 2);
-    await addIds(user, drawer, ['asset-1', 'asset-2']);
-    await user.click(within(drawer).getByRole('button', { name: 'Remove avatars' }));
+    await addIds(user, drawer, [first, second]);
+    await user.click(removeButton(drawer));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(writesOf(calls)[0]).toMatchObject({
       method: 'POST',
       url: `/api/admin/likeness-complaints/${complaint(2).id}/remove-avatars`,
-      body: { assetIds: ['asset-1', 'asset-2'] },
+      body: { assetIds: [first, second] },
     });
-    expect(await within(drawer).findByText('asset-2')).toBeInTheDocument();
+    expect(await within(drawer).findByText(second)).toBeInTheDocument();
     expect(within(drawer).getAllByText('Avatars removed').length).toBeGreaterThan(0);
     await waitFor(() =>
       expect(
@@ -686,6 +696,7 @@ describe('the complaint drawer: removing avatars', { timeout: 60000 }, () => {
       ).not.toBeInTheDocument(),
     );
     expect(within(drawer).queryByRole('button', { name: 'Change state' })).not.toBeInTheDocument();
+    expect(sampleAvatars()).not.toContain(first);
   });
 
   it('sends one request when the confirmation is pressed twice at once', async () => {
@@ -693,8 +704,8 @@ describe('the complaint drawer: removing avatars', { timeout: 60000 }, () => {
     const user = userEvent.setup();
     renderPage(<LikenessComplaintsPage />);
     const drawer = await openDrawer(user, 2);
-    await addIds(user, drawer, ['asset-1']);
-    await user.click(within(drawer).getByRole('button', { name: 'Remove avatars' }));
+    await addIds(user, drawer, [sampleAvatars()[0]]);
+    await user.click(removeButton(drawer));
     const ok = await screen.findByRole('button', { name: 'OK' });
     fireEvent.click(ok);
     fireEvent.click(ok);
@@ -707,14 +718,207 @@ describe('the complaint drawer: removing avatars', { timeout: 60000 }, () => {
     const user = userEvent.setup();
     renderPage(<LikenessComplaintsPage />);
     const drawer = await openDrawer(user, 2);
-    await addIds(user, drawer, ['asset-1']);
+    await addIds(user, drawer, [sampleAvatars()[0]]);
     complaint(2).status = 'REJECTED';
-    await user.click(within(drawer).getByRole('button', { name: 'Remove avatars' }));
+    await user.click(removeButton(drawer));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
       await within(drawer).findByText('The current state of the item does not allow this action.'),
     ).toBeInTheDocument();
     expect(complaint(2).relatedAvatarAssetIds).toEqual([]);
+  });
+
+  it('does not send an ID that is not a UUID: the button stays disabled and the text says what an ID looks like', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    const drawer = await openDrawer(user, 2);
+    await addIds(user, drawer, ['asset-1']);
+    expect(await within(drawer).findByText(/asset-1.*is not a UUID/)).toBeInTheDocument();
+    expect(removeButton(drawer)).toBeDisabled();
+    // a good ID beside the bad one does not make it sendable
+    await addIds(user, drawer, [sampleAvatars()[0]]);
+    expect(removeButton(drawer)).toBeDisabled();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('keeps an ID once even when it is typed again in capitals, as the backend counts it as a repeat', async () => {
+    const calls = backend();
+    const [first, second] = sampleAvatars();
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    const drawer = await openDrawer(user, 2);
+    await addIds(user, drawer, [first, first.toUpperCase(), second]);
+    expect(chosen(drawer)).toEqual([first, second]);
+    await user.click(removeButton(drawer));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(writesOf(calls)[0].body).toEqual({ assetIds: [first, second] });
+  });
+
+  it('takes at most 20 IDs: the 21st is not kept and the text says that 20 is the most', async () => {
+    const calls = backend();
+    const many = Array.from(
+      { length: 21 },
+      (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+    );
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    const drawer = await openDrawer(user, 2);
+    await addIds(user, drawer, many);
+    expect(chosen(drawer)).toEqual(many.slice(0, 20));
+    expect(within(drawer).getByText('20 of 20 IDs')).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('sends exactly 20 when the avatars exist (the most the backend takes)', async () => {
+    const calls = backend();
+    const extra = Array.from(
+      { length: 20 },
+      (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`,
+    );
+    avatarState.accountAvatars.set(
+      'bulk',
+      extra.map((assetId) => ({
+        assetId,
+        name: 'bulk',
+        style: 'STYLIZED_3D' as const,
+        createdAt: '2026-10-01T00:00:00Z',
+        currentLookId: null,
+        looks: [],
+      })),
+    );
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    const drawer = await openDrawer(user, 2);
+    await addIds(user, drawer, extra);
+    await user.click(removeButton(drawer));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { assetIds: string[] }).assetIds).toHaveLength(20);
+    expect(await within(drawer).findByText(extra[19])).toBeInTheDocument();
+  });
+
+  it('shows the words of 404 RESOURCE_NOT_FOUND and each ID that was not found, and the complaint stays open', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    const drawer = await openDrawer(user, 2);
+    await addIds(user, drawer, [sampleAvatars()[0], NO_SUCH]);
+    await user.click(removeButton(drawer));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(await within(drawer).findByText(enUS['error.RESOURCE_NOT_FOUND'])).toBeInTheDocument();
+    expect(
+      await within(drawer).findByText(`${NO_SUCH}: ${enUS['reason.RESOURCE_NOT_FOUND']}`),
+    ).toBeInTheDocument();
+    // the one that was found is not named, and nothing was deleted
+    expect(drawer.textContent).not.toContain(`${sampleAvatars()[0]}: `);
+    expect(sampleAvatars()).toContain(sampleAvatars()[0]);
+    expect(complaint(2).status).toBe('INVESTIGATING');
+    expect(removeButton(drawer)).toBeInTheDocument();
+  });
+
+  it('shows only the words of the code for a refusal of the list, never the message of the backend', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    const drawer = await openDrawer(user, 2);
+    await addIds(user, drawer, [sampleAvatars()[0]]);
+    const real = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) =>
+        init.method === 'POST'
+          ? jsonResponse(
+              400,
+              envelope(
+                'INVALID_REQUEST',
+                { details: [{ ref: 'assetIds', reason: 'OUT_OF_RANGE' }] },
+                'backend words about ids',
+              ),
+            )
+          : real(input, init),
+      ),
+    );
+    await user.click(removeButton(drawer));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(await within(drawer).findByText(enUS['error.INVALID_REQUEST'])).toBeInTheDocument();
+    expect(await within(drawer).findByText(enUS['reason.OUT_OF_RANGE'])).toBeInTheDocument();
+    expect(drawer.textContent).not.toContain('backend words about ids');
+  });
+});
+
+describe('the complaint drawer: the state and the note', { timeout: 60000 }, () => {
+  const pickState = async (
+    user: ReturnType<typeof userEvent.setup>,
+    drawer: HTMLElement,
+    label: string,
+  ) => {
+    await user.click(await within(drawer).findByRole('combobox', { name: 'New state' }));
+    const options = await screen.findAllByText(label, {
+      selector: '.ant-select-item-option-content',
+    });
+    await user.click(options[options.length - 1]);
+  };
+
+  it('does not offer the state the complaint has: it is shown but cannot be chosen', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    const drawer = await openDrawer(user, 2);
+    await user.click(await within(drawer).findByRole('combobox', { name: 'New state' }));
+    const options = [...document.querySelectorAll('.ant-select-item-option')].filter(
+      (el) => !el.closest('.ant-select-dropdown-hidden'),
+    );
+    const byLabel = Object.fromEntries(
+      options.map((el) => [
+        el.textContent,
+        el.classList.contains('ant-select-item-option-disabled'),
+      ]),
+    );
+    expect(byLabel).toEqual({
+      Investigating: true,
+      'No such avatar found': false,
+      Rejected: false,
+    });
+  });
+
+  it('does not send when another administrator moved the complaint to the state chosen meanwhile: the words of 409 and the complaint read again', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    const drawer = await openDrawer(user, 3);
+    await pickState(user, drawer, 'Investigating');
+    complaint(3).status = 'INVESTIGATING';
+    await user.click(within(drawer).getByRole('button', { name: 'Change state' }));
+    expect(await within(drawer).findByText(enUS['error.INVALID_STATE'])).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(1);
+    // the complaint is read again: what was chosen is now its own state, so the button is off
+    await waitFor(() =>
+      expect(within(drawer).getByRole('button', { name: 'Change state' })).toBeDisabled(),
+    );
+    expect(complaint(3).events).toHaveLength(0);
+  });
+
+  it('refuses a note with a new line or another control character before anything is sent, and says so', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<LikenessComplaintsPage />);
+    const drawer = await openDrawer(user, 3);
+    await pickState(user, drawer, 'Investigating');
+    await user.type(within(drawer).getByLabelText('Note'), 'first line{Enter}second line');
+    await user.click(within(drawer).getByRole('button', { name: 'Change state' }));
+    expect(await within(drawer).findByText(enUS['complaints.note.control'])).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+    fireEvent.change(within(drawer).getByLabelText('Note'), {
+      target: { value: 'ข้อความ, العربية, 中文, 😀' },
+    });
+    await user.click(within(drawer).getByRole('button', { name: 'Change state' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(writesOf(calls)[0].body).toEqual({
+      status: 'INVESTIGATING',
+      note: 'ข้อความ, العربية, 中文, 😀',
+    });
   });
 });
 
@@ -748,5 +952,29 @@ describe('the ids typed for a removal', () => {
     ]);
     expect(cleanAssetIds([])).toEqual([]);
     expect(cleanAssetIds(['  '])).toEqual([]);
+  });
+
+  it('count the same UUID in another case as a repeat, and keep the first way it was written', () => {
+    const a = '0AB1C2D3-0000-4000-8000-00000000ABCD';
+    expect(cleanAssetIds([a, a.toLowerCase(), 'x', 'X'])).toEqual([a, 'x']);
+  });
+});
+
+describe('isUuid', () => {
+  it('takes the 36-character form with hyphens, in any case, and nothing else', () => {
+    expect(isUuid('00000000-0000-4000-8000-000000000001')).toBe(true);
+    expect(isUuid('7D0C0000-0000-4000-8000-00000000ABCD')).toBe(true);
+    for (const bad of [
+      '',
+      'asset-1',
+      '00000000000040008000000000000001',
+      '00000000-0000-4000-8000-00000000000',
+      '00000000-0000-4000-8000-0000000000011',
+      ' 00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-00000000000g',
+      '٠٠٠٠٠٠٠٠-0000-4000-8000-000000000001',
+    ]) {
+      expect(isUuid(bad), bad).toBe(false);
+    }
   });
 });
