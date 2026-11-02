@@ -1,7 +1,10 @@
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockPassword, resetStore } from '../../../../mock/_core/store';
+import auth from '../../../../mock/auth.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../../tests/httpStubs';
+import { useMockBackend } from '../../../../tests/mockBackend';
 import { renderPage } from '../../../../tests/renderPage';
 import {
   history,
@@ -233,7 +236,7 @@ describe('the sign-in page', () => {
     expect(history.replace).not.toHaveBeenCalled();
   });
 
-  it('shows the text of the code for a lock of the verification code that gives no waiting time, with no countdown and no failure of its own (contract 1.4 lists none for it)', async () => {
+  it('shows the text of the code for a 429 that gives no waiting time (the limit by address and user name, before the password is checked), with no countdown and no failure of its own', async () => {
     stubFetch((call) =>
       bodyOf(call.init)?.totp
         ? jsonResponse(429, envelope('RATE_LIMITED'))
@@ -442,5 +445,115 @@ describe('someone who is already signed in opens the sign-in page', () => {
     await act(async () => {});
     expect(history.replace).not.toHaveBeenCalled();
     expect(screen.getByLabelText('User name')).toBeInTheDocument();
+  });
+});
+
+describe('the lock of the verification code, against the fake backend (backend answer 10)', () => {
+  const enterCode = async (user: ReturnType<typeof userEvent.setup>, code: string) => {
+    const box = await screen.findByLabelText('Verification code');
+    await user.clear(box);
+    await user.type(box, code);
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+  };
+
+  const LAST_TRY_EN = 'Another wrong code will lock sign-in for a while.';
+
+  it('shows the wrong-code text for each of the first four wrong codes, the same text with a warning for the fifth, and the waiting time only from the sixth attempt', async () => {
+    resetStore();
+    const calls = useMockBackend({ default: auth });
+    const user = userEvent.setup();
+    renderPage(<Login />);
+    await fill(user, 'root', mockPassword('root'));
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    for (let i = 1; i <= 5; i++) {
+      await enterCode(user, '111111');
+      await waitFor(() =>
+        expect(calls.filter((c) => c.body && 'totp' in (c.body as object)).length).toBe(i),
+      );
+      const alert = await screen.findByRole('alert');
+      await waitFor(() => expect(alert.textContent).toContain(TOTP_INVALID_EN));
+      if (i < 5) expect(alert.textContent).not.toContain(LAST_TRY_EN);
+      else expect(alert.textContent).toContain(LAST_TRY_EN);
+      expect(screen.queryByText(/Try again in/)).toBeNull();
+    }
+    await enterCode(user, '111111');
+    expect(
+      await screen.findByText('Too many attempts. Try again in 5 minutes.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(LAST_TRY_EN))).toBeNull();
+    expect(history.replace).not.toHaveBeenCalled();
+  });
+
+  it('counts the wrong codes of one user name: another user name starts again, and a right code does not leave a count behind', async () => {
+    resetStore();
+    useMockBackend({ default: auth });
+    const user = userEvent.setup();
+    renderPage(<Login />);
+    await fill(user, 'root', mockPassword('root'));
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    for (let i = 0; i < 4; i++) {
+      await enterCode(user, '111111');
+      await waitFor(() =>
+        expect(screen.queryByRole('alert')?.textContent).toContain(TOTP_INVALID_EN),
+      );
+    }
+    // another user name: the fifth wrong code of the page is the first one of this name
+    await user.clear(screen.getByLabelText('User name'));
+    await user.type(screen.getByLabelText('User name'), 'support');
+    await user.clear(screen.getByLabelText('Password'));
+    await user.type(screen.getByLabelText('Password'), mockPassword('support'));
+    await enterCode(user, '111111');
+    await waitFor(() =>
+      expect(screen.queryByRole('alert')?.textContent).toContain(TOTP_INVALID_EN),
+    );
+    expect(screen.getByRole('alert').textContent).not.toContain(LAST_TRY_EN);
+  });
+
+  it('says the warning in Chinese too', async () => {
+    resetStore();
+    const calls = useMockBackend({ default: auth });
+    const user = userEvent.setup();
+    renderPage(<Login />, 'zh-CN');
+    await user.type(screen.getByLabelText('用户名'), 'root');
+    await user.type(screen.getByLabelText('密码'), mockPassword('root'));
+    await user.click(screen.getByRole('button', { name: /登\s?录/ }));
+    for (let i = 0; i < 5; i++) {
+      const box = await screen.findByLabelText('验证码');
+      await user.clear(box);
+      await user.type(box, '111111');
+      await user.click(screen.getByRole('button', { name: /登\s?录/ }));
+      await waitFor(() =>
+        expect(calls.filter((c) => c.body && 'totp' in (c.body as object)).length).toBe(i + 1),
+      );
+      await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('无法校验'));
+    }
+    expect(screen.getByRole('alert').textContent).toContain('再输错一次将被暂时锁定');
+  });
+
+  it('shows the wrong-password text, not a lock, for a wrong password while the user name is locked', async () => {
+    resetStore();
+    useMockBackend({ default: auth });
+    const { adminOf } = await import('../../../../mock/_core/testing');
+    adminOf('root').lockedUntil = Date.now() + 120_000;
+    const user = userEvent.setup();
+    renderPage(<Login />);
+    await fill(user, 'root', 'not-the-password');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByText('Incorrect username or password.')).toBeInTheDocument();
+    expect(screen.queryByText(/Try again in/)).toBeNull();
+  });
+
+  it('shows the minutes of the lock for the right password while it holds,', async () => {
+    resetStore();
+    useMockBackend({ default: auth });
+    const { adminOf } = await import('../../../../mock/_core/testing');
+    adminOf('root').lockedUntil = Date.now() + 120_000;
+    const user = userEvent.setup();
+    renderPage(<Login />);
+    await fill(user, 'root', mockPassword('root'));
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(
+      await screen.findByText('Too many attempts. Try again in 2 minutes.'),
+    ).toBeInTheDocument();
   });
 });

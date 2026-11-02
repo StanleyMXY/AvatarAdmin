@@ -33,19 +33,25 @@ function lockedFor(admin: MockAdmin, now: number): number {
 function rejectLocked(admin: MockAdmin, now = Date.now()): void {
   const seconds = lockedFor(admin, now);
   if (seconds > 0) {
-    // Contract 1.4 lists no waiting time for this lock (2270): no data, no Retry-After.
-    throw new MockHttpError(429, 'RATE_LIMITED', 'Too many wrong verification codes');
+    // The backend answers the lock of the verification code with the waiting time (its answer 10).
+    throw new MockHttpError(429, 'RATE_LIMITED', 'Too many wrong verification codes', {
+      retryAfterSeconds: seconds,
+    });
   }
 }
 
-/** Counts a wrong code; the fifth in a row locks the user name for a while (contract 17.2). */
+/**
+ * Counts a wrong code. The fifth in a row is still answered 401 ADMIN_TOTP_INVALID; it uses the
+ * last attempt, and from the next attempt on the user name is locked for a while (the sign-in then
+ * answers 429 once the password is right). On enrollment the count voids the enrollment token and
+ * the step never answers 429.
+ */
 function wrongCode(admin: MockAdmin, now = Date.now(), enrollToken?: string): never {
   admin.totpFailures += 1;
   if (admin.totpFailures >= TOTP_MAX_FAILURES) {
     admin.totpFailures = 0;
-    if (enrollToken) store.enrollTokens.delete(enrollToken); // too many wrong codes: the enrollment token is void
+    if (enrollToken) store.enrollTokens.delete(enrollToken);
     admin.lockedUntil = now + TOTP_LOCKOUT_MINUTES * 60 * 1000;
-    rejectLocked(admin, now);
   }
   throw new MockHttpError(
     401,
@@ -71,10 +77,11 @@ export default {
     const body = bodyOf(req);
     requireFields(body, ['username', 'password']);
     const admin = findAdminByUsername(text(body.username));
-    if (admin) rejectLocked(admin);
     if (admin?.status !== 'ACTIVE' || admin.password !== text(body.password)) {
       return fail(401, 'ADMIN_INVALID_CREDENTIALS', 'Incorrect username or password');
     }
+    // After the password: a wrong password gives no hint of the lock.
+    rejectLocked(admin);
     if (!admin.totpEnrolled) {
       return ok({
         status: 'ENROLL_REQUIRED',
@@ -99,7 +106,11 @@ export default {
     if (admin?.status !== 'ACTIVE') {
       return fail(401, 'ADMIN_INVALID_TOKEN', 'The enrollment token is invalid or expired');
     }
-    rejectLocked(admin);
+    if (lockedFor(admin, Date.now()) > 0) {
+      // The attempts are used up: the token is void, and enrollment never answers 429 (the sign-in does).
+      store.enrollTokens.delete(text(body.enrollToken));
+      return fail(401, 'ADMIN_INVALID_TOKEN', 'The enrollment token is invalid or expired');
+    }
     if (admin.enrollSecretUnreadable) {
       // The pending secret cannot be decrypted: the token is void and the person signs in again.
       store.enrollTokens.delete(text(body.enrollToken));

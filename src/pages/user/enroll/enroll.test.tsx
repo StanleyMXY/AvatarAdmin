@@ -223,15 +223,31 @@ describe('the authenticator setup page', () => {
     expect(admin.totpEnrolled).toBe(false);
   });
 
-  it('shows the lock when there were too many wrong codes', async () => {
-    stubFetch(() => jsonResponse(429, envelope('RATE_LIMITED')));
+  it('against the fake backend: the fifth wrong code is still a wrong-code message, and the next attempt (the token is void, a 401, not a 429) goes back to sign-in with the notice', async () => {
+    resetStore();
+    const admin = adminOf('fresh');
+    const enrollToken = issueEnrollToken(admin);
+    setPendingEnroll({ enrollToken, otpauthUri: OTPAUTH });
+    useMockBackend({ default: auth });
     const user = userEvent.setup();
     renderPage(<Enroll />);
+    for (let i = 1; i <= 5; i++) {
+      await user.clear(screen.getByLabelText('Verification code'));
+      await user.type(screen.getByLabelText('Verification code'), '111111');
+      await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+      await waitFor(() => expect(admin.totpFailures).toBe(i % 5));
+      expect(
+        await screen.findByText('The verification code is wrong, already used, or expired.'),
+      ).toBeInTheDocument();
+    }
+    expect(history.replace).not.toHaveBeenCalled();
+    await user.clear(screen.getByLabelText('Verification code'));
     await user.type(screen.getByLabelText('Verification code'), '000000');
     await user.click(screen.getByRole('button', { name: 'Finish setup' }));
-    expect(
-      await screen.findByText('Too many requests. Please try again later.'),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(history.replace).toHaveBeenCalledWith('/user/login'));
+    expect(await screen.findByText('The setup has expired. Sign in again.')).toBeInTheDocument();
+    expect(getPendingEnroll()).toBeUndefined();
+    expect(admin.totpEnrolled).toBe(false);
   });
 
   it('goes to sign-in at once when there is nothing to set up (opened directly, or after a reload)', async () => {
