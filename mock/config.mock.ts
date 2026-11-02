@@ -4,7 +4,7 @@ import { validateServerLink } from '../src/utils/linkRule';
 import { adsState } from './_core/adsData';
 import { guard, hasPermission } from './_core/auth';
 import { campaignState } from './_core/campaignData';
-import { currentValue, defaultOf, saved } from './_core/configStore';
+import { currentValue, defaultOf, deployEnv, saved } from './_core/configStore';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
 import { pushState } from './_core/pushData';
 import { smsState } from './_core/smsData';
@@ -291,6 +291,21 @@ function costCurrencyLock(key: string, proposed: unknown) {
   );
 }
 
+/**
+ * Contract 17.2, 17.5: saving `admin.totp_required` as false in production is 400 INVALID_REQUEST,
+ * the floor of the administrator sign-in (the contract names no detail for it). Outside production
+ * it is allowed, and a value of false that is already stored does not stop the service starting.
+ * Resetting to the default (true) is never refused.
+ */
+function productionFloor(key: string, value: unknown) {
+  if (key !== 'admin.totp_required' || value !== false || !deployEnv.production) return null;
+  return new MockHttpError(
+    400,
+    'INVALID_REQUEST',
+    'admin.totp_required cannot be set to false in a production deployment',
+  );
+}
+
 const keyOf = (params: Record<string, string>): string => params.key ?? '';
 
 export default {
@@ -328,6 +343,8 @@ export default {
     if (refusal) throw refused(refusal);
     const locked = costCurrencyLock(key, body.value);
     if (locked) throw locked;
+    const floor = productionFloor(key, body.value);
+    if (floor) throw floor;
     saved.set(key, {
       value: body.value,
       updatedAt: new Date().toISOString(),

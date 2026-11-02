@@ -568,7 +568,7 @@ const messages: Record<string, string> = {
     '直接查询事件日志的接口（事件明细、事件汇总、事件名、漏斗）允许的最大时间跨度，单位天。',
   'config.admin.totp_required.label': '管理员必须二次验证',
   'config.admin.totp_required.desc':
-    '管理员登录是否必须二次验证。生产环境不能关闭：关闭后服务拒绝启动，保存为关闭也会被拒绝。仅非生产环境可以关闭，此时登录只校验用户名和密码，忽略验证码和绑定状态。',
+    '管理员登录是否必须二次验证。生产环境不能保存为关闭，保存会被拒绝；库里已经是关闭时，生产环境照常启动，后台只写一条警告。仅非生产环境可以关闭，此时登录只校验用户名和密码，忽略验证码和绑定状态。',
   'config.admin.password_min_length.label': '管理员密码最小长度',
   'config.admin.password_min_length.desc': '管理员密码允许的最小长度。',
   'config.admin.permission_cache_seconds.label': '权限缓存时长',

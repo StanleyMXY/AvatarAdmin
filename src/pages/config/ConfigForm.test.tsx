@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
 import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetConfigStore, saved } from '../../../mock/_core/configStore';
+import { deployEnv, resetConfigStore, saved } from '../../../mock/_core/configStore';
 import { resetSmsStore, smsState } from '../../../mock/_core/smsData';
 import { resetStore } from '../../../mock/_core/store';
 import { adminOf } from '../../../mock/_core/testing';
@@ -526,6 +526,60 @@ describe('ConfigForm: the switch of the model check', { timeout: 30000 }, () => 
       url: '/api/admin/config/moderation.model_check_enabled',
       body: { value: false },
     });
+  });
+});
+
+describe('ConfigForm: admin.totp_required cannot be saved as off in production', {
+  timeout: 30000,
+}, () => {
+  const tryOff = async (locale: 'en-US' | 'zh-CN') => {
+    signInAs('root');
+    const calls = useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['admin.totp_required']} />, locale);
+    const r = await row('admin.totp_required');
+    expect(within(r).getByRole('switch')).toBeChecked();
+    fireEvent.click(within(r).getByRole('switch'));
+    fireEvent.click(
+      within(r).getByRole('button', { name: locale === 'zh-CN' ? /保\s?存/ : 'Save' }),
+    );
+    return { r, calls };
+  };
+
+  it.each([
+    ['en-US', 'Some input is not valid. Please check the fields and try again.'],
+    ['zh-CN', '输入内容不合法，请检查后重试'],
+  ] as const)(
+    'shows the words of the code INVALID_REQUEST on that row in %s, and not the message of the backend',
+    async (locale, words) => {
+      const { r, calls } = await tryOff(locale);
+      await waitFor(() => expect(within(r).getByRole('alert')).toHaveTextContent(words));
+      const put = calls.find((c) => c.method === 'PUT');
+      expect(put).toMatchObject({
+        url: '/api/admin/config/admin.totp_required',
+        body: { value: false },
+      });
+      expect(document.body.textContent).not.toContain('set to false in a production deployment');
+      // the value on the page is still the one in force
+      expect(saved.has('admin.totp_required')).toBe(false);
+    },
+  );
+
+  it.each([
+    ['en-US', /cannot be saved as off/],
+    ['zh-CN', /不能保存为关闭/],
+  ] as const)('says in %s on the row that production does not take off', async (locale, words) => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['admin.totp_required']} />, locale);
+    expect((await row('admin.totp_required')).textContent).toMatch(words);
+  });
+
+  it('saves it when the deployment is not production', async () => {
+    deployEnv.production = false;
+    const { r, calls } = await tryOff('en-US');
+    await waitFor(() => expect(saved.get('admin.totp_required')?.value).toBe(false));
+    expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+    expect(within(r).queryByRole('alert')).toBeNull();
   });
 });
 

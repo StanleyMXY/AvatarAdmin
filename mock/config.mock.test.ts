@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { adsState, resetAdsStore } from './_core/adsData';
-import { resetConfigStore } from './_core/configStore';
+import { deployEnv, resetConfigStore } from './_core/configStore';
 import { pushState, resetPushStore } from './_core/pushData';
 import { resetSmsStore, smsState } from './_core/smsData';
 import { issueToken, resetStore } from './_core/store';
@@ -347,6 +347,50 @@ describe('GET /config: the keys the contract does not list yet', () => {
     expect((await put('root', 'attribution.facebook_graph_version', 'v26')).status).toBe(400);
     expect((await put('root', 'attribution.facebook_graph_version', 'v27.1')).status).toBe(200);
     expect((await put('root', 'chat.message_retention_days', 31)).status).toBe(400);
+  });
+});
+
+describe('PUT /config/admin.totp_required: the production floor of the administrator sign-in', () => {
+  it('refuses to save false in production with 400 INVALID_REQUEST (contract 17.2, 17.5), and no details', async () => {
+    expect(deployEnv.production).toBe(true);
+    const { status, body } = await put('root', 'admin.totp_required', false);
+    expect(status).toBe(400);
+    expect(body.code).toBe('INVALID_REQUEST');
+    // the contract names no detail for this refusal
+    expect(body.data ?? null).toBeNull();
+    // nothing was saved: the key still reads true, with no saved row
+    expect(await rowOf('root', 'admin.totp_required')).toMatchObject({
+      value: true,
+      updatedAt: null,
+    });
+  });
+
+  it('accepts true in production, and a reset to the default', async () => {
+    expect((await put('root', 'admin.totp_required', true)).status).toBe(200);
+    expect((await del('root', 'admin.totp_required')).status).toBe(200);
+  });
+
+  it('accepts false outside production, and then true again', async () => {
+    deployEnv.production = false;
+    expect((await put('root', 'admin.totp_required', false)).status).toBe(200);
+    expect(await rowOf('root', 'admin.totp_required')).toMatchObject({ value: false });
+    expect((await put('root', 'admin.totp_required', true)).status).toBe(200);
+  });
+
+  it('is production again after the store is reset', async () => {
+    deployEnv.production = false;
+    resetConfigStore();
+    expect(deployEnv.production).toBe(true);
+  });
+
+  it('still takes false for integrity.check_enabled in production: that switch may be off in any environment', async () => {
+    expect((await put('root', 'integrity.check_enabled', false)).status).toBe(200);
+  });
+
+  it('refuses a value that is not a boolean with the reason NOT_BOOLEAN, as for any switch', async () => {
+    expect((await put('root', 'admin.totp_required', 'no')).body.data.details).toEqual([
+      { ref: 'admin.totp_required', reason: 'NOT_BOOLEAN' },
+    ]);
   });
 });
 

@@ -624,7 +624,7 @@ const messages: Record<string, string> = {
     'Longest time span allowed for queries that read the event log directly (event details, event summary, event names, funnels), in days.',
   'config.admin.totp_required.label': 'Require admin two-factor',
   'config.admin.totp_required.desc':
-    'Whether administrator sign-in requires two-factor authentication. It cannot be turned off in production: the service refuses to start and saving it as off is rejected. Outside production it may be off, and then sign-in checks only the username and password and ignores the code and enrolment state.',
+    'Whether administrator sign-in requires two-factor authentication. In production it cannot be saved as off: the save is rejected. If the stored value is already off, the service still starts in production and only writes a warning. Outside production it may be off, and then sign-in checks only the username and password and ignores the code and enrolment state.',
   'config.admin.password_min_length.label': 'Admin minimum password length',
   'config.admin.password_min_length.desc': 'Shortest password allowed for administrators.',
   'config.admin.permission_cache_seconds.label': 'Permission cache time',
