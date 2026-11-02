@@ -385,7 +385,7 @@ describe('the rules of the form', { timeout: 60000 }, () => {
     const form = await openNew(user);
     await pickChannel(user, form, /Android store/);
     await fillCommon(user, form, { en: '😀'.repeat(50) });
-    const longText = 'ก'.repeat(5000);
+    const longText = 'ก'.repeat(4000);
     await user.click(form.getByRole('tab', { name: /th/ }));
     fireEvent.change(form.getByRole('textbox', { name: 'th' }), { target: { value: longText } });
     await user.click(form.getByRole('tab', { name: /ar/ }));
@@ -400,6 +400,36 @@ describe('the rules of the form', { timeout: 60000 }, () => {
       th: longText,
       ar: 'تحسينات 🌟',
     });
+  });
+
+  // Answers 91: a text of the notes has at most 4000 code points, there are at most 30 languages and
+  // a number of the version is at most 2147483647; the page says so and sends nothing.
+  it('refuses update notes over 4000 code points in one language, naming the language, and sends nothing', async () => {
+    const { calls, user } = await load();
+    const form = await openNew(user);
+    await pickChannel(user, form, /Android store/);
+    await fillCommon(user, form);
+    await user.click(form.getByRole('tab', { name: /th/ }));
+    fireEvent.change(form.getByRole('textbox', { name: 'th' }), {
+      target: { value: 'ก'.repeat(4001) },
+    });
+    await typeUrl(user, form, PLAY_URL);
+    await user.click(submit(form));
+    expect(await form.findByText('The notes in th have more than 4000 characters')).toBeTruthy();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('refuses a version number above 2147483647 with the range in the words, and sends nothing', async () => {
+    const { calls, user } = await load();
+    const form = await openNew(user);
+    await pickChannel(user, form, /Android store/);
+    await fillCommon(user, form, { code: '2147483648', min: '1' });
+    await typeUrl(user, form, PLAY_URL);
+    await user.click(submit(form));
+    expect(await form.findAllByText('Enter a whole number from 1 to 2147483647')).not.toHaveLength(
+      0,
+    );
+    expect(writesOf(calls)).toHaveLength(0);
   });
 
   it('checks the store link while it is typed, with the rule of the platform and the package name of the channel', async () => {
@@ -721,7 +751,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     expect(form.queryByTestId('apk-unavailable')).toBeNull();
   });
 
-  it('asks for the file again, and sends nothing, when the server says the upload id cannot be used', async () => {
+  it('asks for the file again, and sends nothing, when the server says the upload is used (409 with data.status CONSUMED)', async () => {
     const { calls, user } = await load();
     const form = await openNew(user);
     await pickChannel(user, form, /Direct download/);
@@ -730,7 +760,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     await form.findByTestId('apk-info');
     overrideFetch(async ({ method, url }) =>
       method === 'POST' && url.pathname === '/api/admin/app-versions'
-        ? jsonAnswer(409, 'INVALID_STATE', { status: 'USED' })
+        ? jsonAnswer(409, 'INVALID_STATE', { status: 'CONSUMED' })
         : undefined,
     );
     await user.click(submit(form));
@@ -740,6 +770,53 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     await user.click(submit(form));
     expect(await form.findByText(enUS['appVersions.apk.required'])).toBeTruthy();
     expect(writesOf(calls).length).toBe(before);
+  });
+
+  // Answers 47: a 409 INVALID_STATE with no data is a channel that is off or a version in the wrong
+  // state, not the upload; the file is still good, and the words are those of the code. Only
+  // data.status === "CONSUMED" is the upload.
+  it.each([
+    ['no data (a channel that is off)', null],
+    ['an empty object', {}],
+    ['a state of a version', { status: 'DRAFT' }],
+    ['the state of the channel', { status: 'DISABLED' }],
+    ['the old guess USED', { status: 'USED' }],
+    ['a status that is not text', { status: 5 }],
+    ['consumed in small letters', { status: 'consumed' }],
+  ])(
+    'keeps the uploaded file and shows the words of the code for a 409 with %s',
+    async (_n, data) => {
+      const { user } = await load();
+      const form = await openNew(user);
+      await pickChannel(user, form, /Direct download/);
+      await fillCommon(user, form, { min: '1' });
+      choose(apk());
+      await form.findByTestId('apk-info');
+      const taken = overrideFetch(async ({ method, url }) =>
+        method === 'POST' && url.pathname === '/api/admin/app-versions'
+          ? jsonAnswer(409, 'INVALID_STATE', data, 'backend words about the state')
+          : undefined,
+      );
+      await user.click(submit(form));
+      expect(await form.findByText(enUS['error.INVALID_STATE'])).toBeTruthy();
+      expect(taken).toHaveLength(1);
+      expect(form.getByTestId('apk-info')).toBeTruthy();
+      expect(form.queryByText(enUS['appVersions.apk.rejected'])).toBeNull();
+      expect(document.body.textContent).not.toContain('backend words about the state');
+    },
+  );
+
+  it('shows the words of the code for a channel that was switched off meanwhile, from the mock, and keeps the file', async () => {
+    const { user } = await load();
+    const form = await openNew(user);
+    await pickChannel(user, form, /Direct download/);
+    await fillCommon(user, form, { min: '1' });
+    choose(apk());
+    await form.findByTestId('apk-info');
+    must(channelsState.channels.get('direct')).enabled = false;
+    await user.click(submit(form));
+    expect(await form.findByText(enUS['error.INVALID_STATE'])).toBeTruthy();
+    expect(form.getByTestId('apk-info')).toBeTruthy();
   });
 
   it('keeps the uploaded file when a 400 does not say that the file is at fault (no details), and asks for it again only when a detail names apkUploadId', async () => {

@@ -25,7 +25,6 @@ import {
   type AppVersion,
   createAppVersion,
   updateAppVersion,
-  VERSION_STATUSES,
   type VersionFields,
 } from '../../services/appVersions';
 import type { ChannelPackage } from '../../services/channelPackages';
@@ -102,10 +101,11 @@ const numberOr = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
 
 /**
- * The backend refused the upload id: it is already used by another object (409 without a state of a
- * version), it is of another kind or does not fit (400 about `apkUploadId`) or it is not there
- * (404). The form then asks for the file again. A refusal that is about the version itself (its
- * state, other fields) is not this: the file is still good.
+ * The backend refused the upload id: it is already used by another object (409 INVALID_STATE with
+ * `data.status` exactly `CONSUMED`; answers 47), it is of another kind or does not fit (400 about
+ * `apkUploadId`) or it is not there (404). The form then asks for the file again. Any other 409
+ * (a channel that is off, a version in the wrong state: no data, or a state of a version) is not
+ * this: the file is still good, and the words are those of the code.
  */
 function uploadRefused(error: unknown, carriedNewUpload: boolean): boolean {
   if (!(error instanceof ApiError) || !isUploadIdRejection(error)) return false;
@@ -116,9 +116,7 @@ function uploadRefused(error: unknown, carriedNewUpload: boolean): boolean {
   }
   if (error.httpStatus === 409) {
     const status = (error.data as { status?: unknown } | null)?.status;
-    const ofVersion =
-      typeof status === 'string' && (VERSION_STATUSES as readonly string[]).includes(status);
-    return carriedNewUpload && !ofVersion;
+    return status === 'CONSUMED';
   }
   return carriedNewUpload;
 }
@@ -420,7 +418,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
             {
               validator: async (_, value: Texts | undefined) => {
                 const check = checkChangelog(value);
-                if (!check.ok) throw new Error(t(check.reasonKey));
+                if (!check.ok) throw new Error(t(check.reasonKey, check.values));
               },
             },
           ]}
