@@ -13,8 +13,9 @@ const REASON_CODES = reasonCodes(readContract());
 // The codes of the version of the contract that the snapshot does not have yet (NEXT_CONTRACT): the
 // texts exist before it is adopted, so replacing the snapshot does not fail a test for a missing text.
 const NEXT_ERROR_CODES = errorTable(readContract(NEXT_CONTRACT)).codes;
+const NEXT_REASON_CODES = reasonCodes(readContract(NEXT_CONTRACT));
 const ALL_ERROR_CODES = [...new Set([...codes, ...NEXT_ERROR_CODES])];
-const ALL_REASON_CODES = REASON_CODES;
+const ALL_REASON_CODES = [...new Set([...REASON_CODES, ...NEXT_REASON_CODES])];
 
 const LOCAL_CODES = [
   'NETWORK_ERROR',
@@ -72,6 +73,13 @@ describe.each(LANGUAGES)('%s error and reason texts', (_name, error, reason) => 
     'has a non-empty text for error.%s of the new contract version',
     (code) => {
       expect(error[`error.${code}`]?.trim()).toBeTruthy();
+    },
+  );
+
+  it.each(NEXT_REASON_CODES)(
+    'has a non-empty text for reason.%s of the new contract version',
+    (code) => {
+      expect(reason[`reason.${code}`]?.trim()).toBeTruthy();
     },
   );
 
