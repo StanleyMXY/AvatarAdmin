@@ -28,4 +28,5 @@ export const EXTRA_DEFAULTS: Record<string, unknown> = {
   'ratelimit.events_per_ip_per_minute': 600,
   'chat.moderation_concurrency': 16,
   'chat.moderation_deadline_ms': 2000,
+  'moderation.model_check_enabled': true,
 };

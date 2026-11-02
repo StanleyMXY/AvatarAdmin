@@ -158,7 +158,7 @@ function refusalFor(key: string, value: unknown): Refusal | null {
   }
   // Each retention period against the statistics landing window: [key, least value for a window w].
   const needs: [string, (window: number) => number, (v: number) => boolean][] = [
-    ['events.ttl_days', (w) => 30 + w, () => true],
+    ['events.ttl_days', (w) => 31 + w, () => true],
     ['chat.message_retention_days', (w) => w + 1, (v) => v > 0],
     ['guest.device_retention_days', (w) => 91 + w, (v) => v > 0],
   ];

@@ -286,7 +286,7 @@ describe('full coverage of the texts against the sources of truth', () => {
       const rows = parseConfigRows(contractText());
       expect(rows.length).toBe(225);
       expect(rows.map((r) => r.key)).toEqual(configKeys.map((k) => k.key));
-      expect(EXTRA_CONFIG_KEYS).toHaveLength(25);
+      expect(EXTRA_CONFIG_KEYS).toHaveLength(26);
       for (const key of [...rows.map((r) => r.key), ...EXTRA_CONFIG_KEYS]) {
         expect(dict[`config.${key}.label`]?.trim(), `${key} label`).toBeTruthy();
         expect(dict[`config.${key}.desc`]?.trim(), `${key} desc`).toBeTruthy();

@@ -384,6 +384,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'CONFIG:MANAGE',
     group: 'upload',
     min: 1,
+    max: 536870912,
   },
   {
     key: 'voice.transcript_max_chars',
@@ -1333,6 +1334,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'CONFIG:MANAGE',
     group: 'upload',
     min: 1,
+    max: 536870912,
   },
   { key: 'ads.enabled', kind: 'bool', editPermission: 'ADS:PLACEMENT', group: 'ads' },
   { key: 'ads.preload_enabled', kind: 'bool', editPermission: 'ADS:PLACEMENT', group: 'ads' },
@@ -1411,6 +1413,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'CONFIG:MANAGE',
     group: 'upload',
     min: 1,
+    max: 536870912,
   },
   { key: 'upload.public_base_url', kind: 'url', editPermission: 'CONFIG:MANAGE', group: 'upload' },
   {
@@ -1419,6 +1422,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'CONFIG:MANAGE',
     group: 'upload',
     min: 1,
+    max: 536870912,
   },
   { key: 'auth.phone_login_enabled', kind: 'bool', editPermission: 'CONFIG:MANAGE', group: 'auth' },
   {
@@ -1506,6 +1510,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'CONFIG:MANAGE',
     group: 'upload',
     min: 1,
+    max: 536870912,
   },
   {
     key: 'ratelimit.public_config_per_min',
@@ -1534,6 +1539,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'CONFIG:MANAGE',
     group: 'notification',
     min: 1,
+    max: 10000,
   },
   {
     key: 'notification.read_retention_days',

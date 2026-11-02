@@ -455,7 +455,7 @@ describe('the parameters section', { timeout: 30000 }, () => {
     const keys = [...document.querySelectorAll('[data-testid^="config-row-"]')].map((e) =>
       (e.getAttribute('data-testid') as string).replace('config-row-', ''),
     );
-    expect(keys.filter((k) => k.startsWith('moderation.'))).toHaveLength(10);
+    expect(keys.filter((k) => k.startsWith('moderation.'))).toHaveLength(11);
     expect(keys.every((k) => k.startsWith('moderation.'))).toBe(true);
     expect(keys).not.toContain('moderation.text_rules');
     expect(screen.queryByRole('link', { name: '/moderation/rules' })).toBeNull();

@@ -346,7 +346,7 @@ const messages: Record<string, string> = {
     'Number of event upload requests allowed per minute, counted separately per device and per account.',
   'config.events.ttl_days.label': 'Event retention',
   'config.events.ttl_days.desc':
-    'How many days event records are kept, in days. The expiry is computed when each record is written, so a change only affects records written afterwards. It must be at least 30 plus the statistics look-back days (3 by default, so the default minimum is 33), or the save is rejected.',
+    'How many days event records are kept, in days. The expiry is computed when each record is written, so a change only affects records written afterwards. It must be at least 31 plus the statistics look-back days (3 by default, so the default minimum is 34), or the save is rejected.',
   'config.recall.scan_interval_minutes.label': 'Recall scan interval',
   'config.recall.scan_interval_minutes.desc':
     'How often users who should receive a recall push are looked up, in minutes.',
@@ -424,7 +424,7 @@ const messages: Record<string, string> = {
     'Days of companionship that count as milestones, as a JSON array, for example the 7th, 30th and 100th day.',
   'config.moderation.block_score.label': 'Moderation block score',
   'config.moderation.block_score.desc':
-    'The threshold on the score (0 to 1) returned by the moderation service: a score at or above it is blocked. A higher value means fewer blocks. It must be above 0 and at most 1, with up to three decimals, and higher than the review score (checked when both are saved). The value depends on the chosen moderation service and has no default. If either score is not saved the moderation service is not called. In production, if it is not set, user-facing endpoints that depend on moderation are unavailable and generation jobs are not processed; the admin site is not affected, so configure it here first and then bring the user side online.',
+    'The threshold on the score (0 to 1) returned by the moderation service: a score at or above it is blocked. A higher value means fewer blocks. It must be above 0 and at most 1, with up to three decimals, and higher than the review score (checked when both are saved). The value depends on the chosen moderation service and has no default. If either score is not saved the moderation service is not called (the model check does not run): nothing fails and no 503 is returned, text is still checked against the rule list, and other content is let through. A saved value applies from the next check, with no restart.',
   'config.moderation.review_score.label': 'Moderation review score',
   'config.moderation.review_score.desc':
     'A score at or above this threshold but below the block score goes to manual review; a score below it passes. A higher value means fewer reviews. It must be above 0 and at most 1, with up to three decimals, and lower than the block score (checked when both are saved). The value depends on the chosen moderation service and has no default. If it is not set the consequences are the same as for the block score.',
@@ -452,7 +452,7 @@ const messages: Record<string, string> = {
     'Minimum face detection score; anything below it does not count as a detected face. It must be between 0.1 and 1 inclusive; values below 0.1 have no effect and are rejected. It is passed to the avatar generation service with each request.',
   'config.moderation.generated_output_review.label': 'Review generated output',
   'config.moderation.generated_output_review.desc':
-    'Whether generated look images and action clips are reviewed.',
+    'Whether generated look images and action clips are reviewed. When the moderation service switch is off the service is not called, so this finds nothing even when it is on: the generated output is accepted as passed.',
   'config.complaint.likeness_due_hours.label': 'Likeness complaint deadline',
   'config.complaint.likeness_due_hours.desc':
     'Time allowed to handle a complaint from the person in a photo, in hours. An alert is written when it is exceeded.',
@@ -821,6 +821,9 @@ const messages: Record<string, string> = {
   'config.chat.moderation_deadline_ms.label': 'Chat moderation deadline',
   'config.chat.moderation_deadline_ms.desc':
     'How long a batch of chat messages waits for moderation, in milliseconds (100 to 2500). When the time runs out, the content goes to review.',
+  'config.moderation.model_check_enabled.label': 'Moderation service switch',
+  'config.moderation.model_check_enabled.desc':
+    'Turns calls to the external moderation service on or off, for every content type: text, personas, companion names, chat messages, photos, voice samples, generated look images and action clips. When it is off the service is never called and the model check always passes; text is still checked against the rule list that operations maintain (a rule that blocks still rejects, a rule that sends to review still does), and generated images and clips are not reviewed either: they are accepted as passed, even if “Review generated output” is on. When it is on, the model check runs only if a moderation service is registered and both moderation.block_score and moderation.review_score are saved; if any of these is missing the service is not called and nothing fails. Read on every check, so a saved change applies from the next check, with no restart.',
   'config.push.schedule_catchup_minutes.hint':
     'Rule: catch-up minutes × 60 must be at least 600 + poll seconds; with the default values the catch-up must be at least 11.',
   'config.push.task_poll_seconds.hint':
@@ -847,9 +850,9 @@ const messages: Record<string, string> = {
   'config.guest.device_retention_days.reject.OUT_OF_RANGE':
     'Not saved. Use 0 (never delete), or at least 91 days plus the statistics look-back days (stats.land_window_days).',
   'config.events.ttl_days.reject.OUT_OF_RANGE':
-    'Not saved. Event retention must be at least 30 days plus the statistics look-back days (stats.land_window_days).',
+    'Not saved. Event retention must be at least 31 days plus the statistics look-back days (stats.land_window_days).',
   'config.stats.land_window_days.reject.OUT_OF_RANGE':
-    'Not saved. The look-back must be at least 1 and must stay below what depends on it: event retention (at least 30 plus the look-back), chat message retention (more than the look-back) and guest device retention (at least 91 plus the look-back).',
+    'Not saved. The look-back must be at least 1 and must stay below what depends on it: event retention (at least 31 plus the look-back), chat message retention (more than the look-back) and guest device retention (at least 91 plus the look-back).',
   'config.sms.allowed_country_codes.reject.EMPTY_NOT_ALLOWED':
     'Phone sign-in cannot be turned on yet: no allowed SMS country codes are saved (sms.allowed_country_codes). Save at least one country code, then try again.',
   'config.sms.daily_global_cap.reject.EMPTY_NOT_ALLOWED':

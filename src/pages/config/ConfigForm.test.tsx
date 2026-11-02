@@ -49,7 +49,7 @@ describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
     const ttl = await row('auth.access_ttl_minutes');
     expect(within(ttl).getByText('auth.access_ttl_minutes')).toBeInTheDocument();
     expect(within(ttl).getByText(/Default/)).toHaveTextContent('1440');
-    expect(document.querySelectorAll('[data-testid^="config-row-"]').length).toBe(250);
+    expect(document.querySelectorAll('[data-testid^="config-row-"]').length).toBe(251);
     // the backend keys the contract does not list yet are known rows, not "unrecognised settings"
     expect(screen.queryByText(/Unrecognised settings/)).toBeNull();
     expect(screen.queryByTestId(/^config-unknown-/)).toBeNull();
@@ -74,7 +74,7 @@ describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
     expect(keys).toContain('milestone.days');
     expect(keys).toContain('auth.access_ttl_minutes');
     expect(keys).not.toContain('auth.refresh_ttl_days');
-    expect(keys.filter((k) => k.startsWith('moderation.')).length).toBe(11);
+    expect(keys.filter((k) => k.startsWith('moderation.')).length).toBe(12);
   });
 
   it('scrolls to the row named by the address fragment', async () => {
@@ -120,7 +120,7 @@ describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
     );
     expect(keys).not.toContain('moderation.text_rules');
     expect(keys).not.toContain('auth.access_ttl_minutes');
-    expect(keys.filter((k) => k.startsWith('moderation.')).length).toBe(10);
+    expect(keys.filter((k) => k.startsWith('moderation.')).length).toBe(11);
     expect(keys).toContain('auth.refresh_ttl_days');
   });
 
@@ -130,8 +130,9 @@ describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
     useMockBackend(configMock);
     renderPage(<ConfigForm editPermission="MODERATION:CONFIG" />);
     await row('moderation.block_score');
-    expect(document.querySelectorAll('[data-testid^="config-row-"]').length).toBe(11);
+    expect(document.querySelectorAll('[data-testid^="config-row-"]').length).toBe(12);
     expect(screen.getByTestId('config-row-moderation.record_retention_days')).toBeInTheDocument();
+    expect(screen.getByTestId('config-row-moderation.model_check_enabled')).toBeInTheDocument();
   });
 
   it('shows nothing, not an error, to an administrator without any config permission', async () => {
@@ -419,13 +420,14 @@ const EXTRA_WITH_TEXT = [
   'ratelimit.events_per_ip_per_minute',
   'chat.moderation_concurrency',
   'chat.moderation_deadline_ms',
+  'moderation.model_check_enabled',
 ];
 
 describe('ConfigForm: the keys the backend has before the contract lists them', {
   timeout: 60000,
 }, () => {
   it.each(['en-US', 'zh-CN'] as const)(
-    'writes a name and a description for each of the 25 in %s',
+    'writes a name and a description for each of the 26 in %s',
     async (locale) => {
       signInAs('root');
       useMockBackend(configMock);
@@ -485,6 +487,43 @@ describe('ConfigForm: the keys the backend has before the contract lists them', 
     await waitFor(() => expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1));
     expect(calls.find((c) => c.method === 'PUT')).toMatchObject({
       url: '/api/admin/config/attribution.store_click_ip',
+      body: { value: false },
+    });
+  });
+});
+
+describe('ConfigForm: the switch of the model check', { timeout: 30000 }, () => {
+  it.each([
+    [
+      'en-US',
+      /still checked against the rule list/i,
+      /moderation\.block_score[\s\S]*moderation\.review_score/,
+    ],
+    ['zh-CN', /仍检查.*规则词表/, /moderation\.block_score[\s\S]*moderation\.review_score/],
+  ] as const)(
+    'says in %s what turning it off does and that both scores must be saved for the check to run',
+    async (locale, off, scores) => {
+      signInAs('root');
+      useMockBackend(configMock);
+      renderPage(<ConfigForm keys={['moderation.model_check_enabled']} />, locale);
+      const r = await row('moderation.model_check_enabled');
+      expect(within(r).getByRole('switch')).toBeChecked();
+      expect(r.textContent).toMatch(off);
+      expect(r.textContent).toMatch(scores);
+    },
+  );
+
+  it('is saved with { value } by an administrator who has MODERATION:CONFIG only', async () => {
+    adminOf('support').permissions = ['MODERATION:CONFIG'];
+    signInAs('support');
+    const calls = useMockBackend(configMock);
+    renderPage(<ConfigForm editPermission="MODERATION:CONFIG" />);
+    const r = await row('moderation.model_check_enabled');
+    fireEvent.click(within(r).getByRole('switch'));
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1));
+    expect(calls.find((c) => c.method === 'PUT')).toMatchObject({
+      url: '/api/admin/config/moderation.model_check_enabled',
       body: { value: false },
     });
   });
