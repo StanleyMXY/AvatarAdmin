@@ -63,7 +63,13 @@ export type CreateChannelBody = {
 export const createChannelPackage = (body: CreateChannelBody): Promise<unknown> =>
   apiRequest({ method: 'POST', url: '/channels', body });
 
-export type UpdateChannelBody = { name: string; packageName: string | null; enabled: boolean };
+/**
+ * What can be changed, and only what is named is changed (answers 89): the switch sends `{ enabled }`
+ * alone and a rename `{ name }` alone, so that a value read earlier does not overwrite what another
+ * administrator changed meanwhile. `null` is "not named" for every field, so a package name is
+ * cleared with an empty text, not with null.
+ */
+export type UpdateChannelBody = { name?: string; packageName?: string; enabled?: boolean };
 
 /** Only these three can be changed. There is no delete: a channel is switched off. */
 export const updateChannelPackage = (code: string, body: UpdateChannelBody): Promise<unknown> =>

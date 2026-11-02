@@ -37,6 +37,8 @@ const messages: Record<string, string> = {
   'channels.rule.codeReserved': 'unknown 在统计里表示“没有渠道”，不能用作渠道码',
   'channels.rule.codeExists': '已经有这个渠道码的渠道包',
   'channels.rule.nameRequired': '请填写名称',
+  'channels.rule.nameTooLong': '名称最多 64 个字符',
+  'channels.rule.packageTooLong': '包名最多 255 个字符',
   'channels.rule.packageName': '包名只能用字母、数字、点、连字符和下划线',
   'channels.rule.platformRequired': '请选择平台',
   'channels.rule.distributionRequired': '请选择分发方式',

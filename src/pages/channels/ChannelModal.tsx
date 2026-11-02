@@ -22,7 +22,12 @@ import {
 } from '../../utils/fieldReasons';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { checkChannelCode, checkPackageName, distributionsFor } from './channelRules';
+import {
+  checkChannelCode,
+  checkChannelName,
+  checkPackageName,
+  distributionsFor,
+} from './channelRules';
 
 type Values = {
   code: string;
@@ -65,8 +70,9 @@ function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknow
 
 /**
  * New channel package, or edit one. The code, the platform and the distribution are written once:
- * an edit shows them as text and changes only the name and the package name (the enabled state is
- * the switch of the list; it is sent along unchanged). Mounted by the page only while it is open.
+ * an edit shows them as text and changes only the name and the package name, and sends only the one
+ * that changed (the enabled state is the switch of the list and is not sent). Mounted by the page
+ * only while it is open.
  */
 export function ChannelModal({ channel, existing, onClose, onSaved }: Props) {
   const intl = useIntl();
@@ -87,11 +93,13 @@ export function ChannelModal({ channel, existing, onClose, onSaved }: Props) {
     const packageName = trimSpec(values.packageName ?? '');
     try {
       if (channel) {
-        await updateChannelPackage(channel.code, {
-          name,
-          packageName: packageName === '' ? null : packageName,
-          enabled: channel.enabled,
-        });
+        // Only what changed is named (answers 89): the switch is not sent, and neither is a value that
+        // was not touched. A package name is cleared with an empty text. Nothing changed, nothing sent.
+        const changes = {
+          ...(name === trimSpec(channel.name) ? {} : { name }),
+          ...(packageName === trimSpec(channel.packageName ?? '') ? {} : { packageName }),
+        };
+        if (Object.keys(changes).length > 0) await updateChannelPackage(channel.code, changes);
       } else {
         await createChannelPackage({
           code: trimSpec(values.code),
@@ -198,7 +206,8 @@ export function ChannelModal({ channel, existing, onClose, onSaved }: Props) {
           rules={[
             {
               validator: async (_, value: string | undefined) => {
-                if (trimSpec(value ?? '') === '') throw new Error(t('channels.rule.nameRequired'));
+                const check = checkChannelName(value ?? '');
+                if (!check.ok) throw new Error(t(check.reasonKey));
               },
             },
           ]}

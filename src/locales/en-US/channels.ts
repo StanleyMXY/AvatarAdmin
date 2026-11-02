@@ -40,6 +40,8 @@ const messages: Record<string, string> = {
   'channels.rule.codeReserved': 'unknown is reserved for "no channel" in the statistics',
   'channels.rule.codeExists': 'A channel package with this code exists already',
   'channels.rule.nameRequired': 'Enter a name',
+  'channels.rule.nameTooLong': 'The name has at most 64 characters',
+  'channels.rule.packageTooLong': 'The package name has at most 255 characters',
   'channels.rule.packageName':
     'A package name is written with letters, digits, dots, hyphens and underscores only',
   'channels.rule.platformRequired': 'Choose a platform',
