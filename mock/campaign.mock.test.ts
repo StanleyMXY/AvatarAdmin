@@ -932,9 +932,41 @@ describe('the clicks', () => {
         `${c.utmSource} ${c.utmMedium} ${c.utmCampaign}`.toLowerCase().includes(utm.toLowerCase()),
       ),
     ).toBe(true);
-    const at = everything[3].clickedAt as string;
-    expect((await list({ to: at })).items.some((c) => c.clickedAt === at)).toBe(false);
-    expect((await list({ from: at })).items.some((c) => c.clickedAt === at)).toBe(true);
+  });
+
+  it('reads from and to as UTC days YYYY-MM-DD, both included: the last day is in, the day after is not (backend reply 76)', async () => {
+    const everything = (await list()).items;
+    const day = String(everything[3].clickedAt).slice(0, 10);
+    const sameDay = (await list({ from: day, to: day })).items;
+    expect(sameDay.length).toBeGreaterThan(0);
+    expect(sameDay.every((c) => String(c.clickedAt).slice(0, 10) === day)).toBe(true);
+    expect(sameDay.some((c) => c.clickedAt === everything[3].clickedAt)).toBe(true);
+    const next = new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+    expect(
+      (await list({ to: day })).items.every((c) => String(c.clickedAt).slice(0, 10) <= day),
+    ).toBe(true);
+    expect(
+      (await list({ from: next, to: next })).items.every(
+        (c) => String(c.clickedAt).slice(0, 10) === next,
+      ),
+    ).toBe(true);
+    // every click of the range, nothing more: from the day to the day after is two days
+    const twoDays = (await list({ from: day, to: next })).items;
+    expect(twoDays.length).toBe(
+      everything.filter((c) => [day, next].includes(String(c.clickedAt).slice(0, 10))).length,
+    );
+  });
+
+  it('refuses a time with hours (an instant) in from or to, a day that does not exist, and from after to, each as OUT_OF_RANGE on the field', async () => {
+    const instant = await get(CLICKS, { from: '2026-10-20T00:00:00Z', to: '2026-10-27T00:00:00Z' });
+    expect(instant.status).toBe(400);
+    expect(refs(instant.body as never).sort()).toEqual(['from:OUT_OF_RANGE', 'to:OUT_OF_RANGE']);
+    expect(refs((await get(CLICKS, { to: '2026-02-30' })).body as never)).toEqual([
+      'to:OUT_OF_RANGE',
+    ]);
+    const reversed = await get(CLICKS, { from: '2026-10-26', to: '2026-10-20' });
+    expect(reversed.status).toBe(400);
+    expect((await get(CLICKS, { from: '2026-10-20', to: '2026-10-20' })).status).toBe(200);
   });
 
   it('matches a whole address in the keyword only for an administrator who may see addresses', async () => {
@@ -1064,6 +1096,21 @@ describe('the summary', () => {
       );
       expect(row.installs, `${row.source} ${row.key}`).toBe(own.length);
       expect(row.activations).toBe(own.filter((r) => r.accountId !== null).length);
+    }
+  });
+
+  it('gives an empty text, never null, as the key of the records that have no media source or no campaign', async () => {
+    const installs = campaignState.records.filter(
+      (r) => r.eventName === 'install' && r.installTime !== null,
+    );
+    for (const r of installs) {
+      r.mediaSource = null;
+      r.campaign = null;
+    }
+    for (const groupBy of ['media_source', 'campaign']) {
+      const rows = await summary({ groupBy });
+      expect(rows.length, groupBy).toBeGreaterThan(0);
+      for (const row of rows) expect(row.key, groupBy).toBe('');
     }
   });
 

@@ -17,7 +17,7 @@ import { useAdminMeta } from '../../session/useSession';
 import { codeText, instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { lastNDaysUtc, utcDayRangeToInstants } from '../../utils/utcDay';
+import { lastNDaysUtc } from '../../utils/utcDay';
 import { CampaignSelect } from './CampaignSelect';
 import type { CampaignList } from './useCampaigns';
 
@@ -59,10 +59,11 @@ export function ClicksTab({ campaigns, kept }: { campaigns: CampaignList; kept: 
   const [draft, setDraft] = useKeptState<Filter>(kept, 'clicks.draft', initialFilter);
   const [applied, setApplied] = useKeptState<Filter>(kept, 'clicks.applied', initialFilter);
 
-  const { from, to } = utcDayRangeToInstants(applied.range.from, applied.range.to);
+  // The days themselves: the clicks take `YYYY-MM-DD` for both ends, the last day included. An
+  // instant (the start of the day after) would add a day, and one with hours is refused.
   const state = useServerPage(getClicks, {
-    from,
-    to,
+    from: applied.range.from,
+    to: applied.range.to,
     campaignId: applied.campaignId,
     status: applied.status,
     keyword: trimSpec(applied.keyword),

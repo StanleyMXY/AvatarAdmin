@@ -301,6 +301,33 @@ function instantRange(req: { query: Record<string, unknown> }): { from: number; 
   return { from, to };
 }
 
+/**
+ * `from` and `to` of the clicks (backend reply 76): UTC days `YYYY-MM-DD`, both included, so the end
+ * is the start of the day after `to`. An instant (with hours) is refused, as is a day that does not
+ * exist and a `from` after the `to`; each as OUT_OF_RANGE on the field.
+ */
+function dayRange(req: { query: Record<string, unknown> }): { from: number; to: number } {
+  const details: Detail[] = [];
+  const read = (ref: 'from' | 'to') => {
+    const value = text(req.query[ref]);
+    if (value === '') return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !validDay(value)) {
+      details.push({ ref, reason: 'OUT_OF_RANGE' });
+      return null;
+    }
+    return value;
+  };
+  const from = read('from');
+  const to = read('to');
+  if (from !== null && to !== null && from > to)
+    details.push({ ref: 'from', reason: 'OUT_OF_RANGE' });
+  if (details.length > 0) throw fail(details);
+  return {
+    from: from === null ? Number.NEGATIVE_INFINITY : Date.parse(`${from}T00:00:00Z`),
+    to: to === null ? Number.POSITIVE_INFINITY : Date.parse(`${to}T00:00:00Z`) + 86_400_000,
+  };
+}
+
 function enumQuery(
   req: { query: Record<string, unknown> },
   ref: string,
@@ -653,7 +680,7 @@ export default {
     const details: Detail[] = [];
     const status = enumQuery(req, 'status', CLICK_STATUSES, details);
     if (details.length > 0) throw fail(details);
-    const { from, to } = instantRange(req);
+    const { from, to } = dayRange(req);
     const campaignId = text(req.query.campaignId);
     const keyword = text(req.query.keyword);
     const lower = keyword.toLowerCase();
@@ -720,7 +747,7 @@ export default {
       string,
       {
         source: string;
-        key: string | null;
+        key: string;
         installs: number;
         activations: number;
         costs: Map<string, number>;
@@ -730,8 +757,13 @@ export default {
       if (r.eventName !== 'install' || r.installTime === null) continue;
       const day = r.installTime.slice(0, 10);
       if (day < from || day > to) continue;
+      // a missing media source or campaign is an empty text, never null (backend reply 76)
       const key =
-        groupBy === 'source' ? r.source : groupBy === 'media_source' ? r.mediaSource : r.campaign;
+        (groupBy === 'source'
+          ? r.source
+          : groupBy === 'media_source'
+            ? r.mediaSource
+            : r.campaign) ?? '';
       const id = `${r.source}|${key}`;
       const row = groups.get(id) ?? {
         source: r.source,

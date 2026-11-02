@@ -96,7 +96,13 @@ export function SummaryTab({ kept }: { kept: Kept }) {
           {
             title: t(`campaign.summary.col.key.${groupBy}`),
             dataIndex: 'key',
-            render: (value: unknown) => <EllipsisPopoverText text={plainText(value)} width={260} />,
+            // A group with no media source or campaign has the empty text for its key: a dash.
+            render: (value: unknown) =>
+              plainText(value) === '' ? (
+                DASH
+              ) : (
+                <EllipsisPopoverText text={plainText(value)} width={260} />
+              ),
           },
         ]),
     {

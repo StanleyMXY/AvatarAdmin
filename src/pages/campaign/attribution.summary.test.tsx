@@ -192,6 +192,29 @@ describe('the summary', { timeout: 30000 }, () => {
     expect(cellsOf(rows()[1])).toEqual(['Own attribution (SELF)', '0', '0', '—']);
   });
 
+  it('writes a dash for the key of the installs that have no media source or no campaign (the backend sends an empty text; a null is read the same)', async () => {
+    useMockBackend({ default: campaignMock });
+    overrideFetch(({ url }) =>
+      url.pathname === '/api/admin/attribution/summary'
+        ? jsonAnswer(200, '200', {
+            items: [
+              { source: 'APPSFLYER', key: '', installs: 8, activations: 3, costs: [] },
+              { source: 'SELF', key: null, installs: 2, activations: 1, costs: [] },
+              { source: 'SELF', key: 'facebook', installs: 5, activations: 4, costs: [] },
+            ],
+          })
+        : undefined,
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage(<AttributionPage />);
+    await user.click(await screen.findByRole('tab', { name: 'Summary' }));
+    await groupBy(user, 'Media source');
+    await waitFor(() => expect(rows()).toHaveLength(3));
+    expect(cellsOf(rows()[0])).toEqual(['Platform postback (APPSFLYER)', '—', '8', '3', '—']);
+    expect(cellsOf(rows()[1])).toEqual(['Own attribution (SELF)', '—', '2', '1', '—']);
+    expect(cellsOf(rows()[2])[1]).toBe('facebook');
+  });
+
   it('draws one bar chart of the installs and the activations of each source and key, the two sources apart', async () => {
     const { user } = await load();
     await groupBy(user, 'Media source');

@@ -222,7 +222,11 @@ export type SummaryGroup = (typeof SUMMARY_GROUPS)[number];
 
 export type SummaryCost = { currency: string; amount: number | string };
 
-/** `GET /attribution/summary` (backend note 5): not paged; `costs` is empty when there is no cost. */
+/**
+ * `GET /attribution/summary` (backend note 5): not paged; `costs` is empty when there is no cost.
+ * `key` is the group; for installs with no media source or campaign it is the empty text (backend
+ * reply 76), never null (a null is read as the same).
+ */
 export type SummaryRow = {
   source: RecordSource;
   key: string | null;
