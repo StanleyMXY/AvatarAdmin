@@ -18,6 +18,7 @@ import { instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { CampaignModal } from './CampaignModal';
+import { CAMPAIGN_KEYWORD_MAX, codePointLimit } from './keywordLimit';
 import { LinkModal } from './LinkModal';
 import type { CampaignList } from './useCampaigns';
 
@@ -106,7 +107,10 @@ export function CampaignsTab({ campaigns, linkBase, kept }: Props) {
       title: t('campaign.campaigns.search.keyword'),
       dataIndex: 'keyword',
       hideInTable: true,
-      fieldProps: { placeholder: t('campaign.campaigns.search.keywordPlaceholder') },
+      fieldProps: {
+        placeholder: t('campaign.campaigns.search.keywordPlaceholder'),
+        count: codePointLimit(CAMPAIGN_KEYWORD_MAX),
+      },
     },
     {
       title: t('campaign.campaigns.col.name'),

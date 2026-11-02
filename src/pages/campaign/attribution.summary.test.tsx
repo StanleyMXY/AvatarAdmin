@@ -313,6 +313,34 @@ describe('the summary', { timeout: 30000 }, () => {
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
   });
 
+  it.each([
+    ['EMPTY_NOT_ALLOWED', 'en-US', /Failed to load:.*Some input is not valid/],
+    ['OUT_OF_RANGE', 'en-US', /Failed to load:.*Some input is not valid/],
+    ['OUT_OF_RANGE', 'zh-CN', /加载失败：.*输入内容不合法/],
+  ] as const)(
+    'shows the words of the error code, in the language of the page, when the grouping is refused (400, groupBy, %s) and not the backend words (%s)',
+    async (reason, locale, words) => {
+      useMockBackend({ default: campaignMock });
+      overrideFetch(({ url }) =>
+        url.pathname === '/api/admin/attribution/summary'
+          ? jsonAnswer(
+              400,
+              'INVALID_REQUEST',
+              { details: [{ ref: 'groupBy', reason }] },
+              'raw backend words',
+            )
+          : undefined,
+      );
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderPage(<AttributionPage />, locale);
+      await user.click(
+        await screen.findByRole('tab', { name: locale === 'zh-CN' ? '汇总' : 'Summary' }),
+      );
+      expect(await screen.findByText(words)).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('raw backend words');
+    },
+  );
+
   it('never lets a slow answer to an older grouping replace the answer to the newer one', async () => {
     useMockBackend({ default: campaignMock });
     const releases: (() => void)[] = [];

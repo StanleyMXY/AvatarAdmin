@@ -19,6 +19,7 @@ import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { lastNDaysUtc } from '../../utils/utcDay';
 import { CampaignSelect } from './CampaignSelect';
+import { CLICK_KEYWORD_MAX, codePointLimit } from './keywordLimit';
 import type { CampaignList } from './useCampaigns';
 
 type Filter = {
@@ -156,6 +157,7 @@ export function ClicksTab({ campaigns, kept }: { campaigns: CampaignList; kept: 
             : t('campaign.clicks.retention.unknown')}
         </Typography.Text>
         <Typography.Text type="secondary">{t('campaign.clicks.nonAndroid')}</Typography.Text>
+        <Typography.Text type="secondary">{t('campaign.clicks.status.note')}</Typography.Text>
         <Typography.Text type="secondary">
           {mayReadAddress
             ? t('campaign.clicks.ip.full')
@@ -204,6 +206,7 @@ export function ClicksTab({ campaigns, kept }: { campaigns: CampaignList; kept: 
             style={{ width: 220 }}
             aria-label={t('campaign.clicks.keyword')}
             placeholder={t('campaign.clicks.keywordPlaceholder')}
+            count={codePointLimit(CLICK_KEYWORD_MAX)}
             value={draft.keyword}
             onChange={(event) => setDraft((d) => ({ ...d, keyword: event.target.value }))}
             onPressEnter={search}

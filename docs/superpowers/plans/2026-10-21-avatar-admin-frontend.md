@@ -826,6 +826,11 @@ AvatarAdmin/
   - 点击明细：`status`（`PENDING`、`MATCHED`、`EXPIRED`，由 `claimedAt` 和 `expireAt` 现算；持有其 `attrId` 的归因记录让点击也算 `MATCHED`，所以这样的点击也会出现在选“待认领”的列表里，页面写一句说明）和 `keyword`（最多 200 个字符，页面按 200 个码点限制输入；在 UTM 来源、媒介、活动上各自做不区分大小写的字面包含匹配，持有 `ANALYTICS:IP_VIEW` 时还匹配完整等于 `ip`；含 U+0000 是 400 `INVALID_REQUEST`，`details` 为 `keyword`、`INVALID_FORMAT`）；两个筛选都在点“查询”时才发出，并从第 1 页读起。
   - 汇总：`groupBy` 页面只会发三个合法取值，缺失或取值不对后端是 400；这类 400 页面只显示按错误码翻译的文字，不显示后端 `message`。
   - 假后端按此检查：账户关键字超过 100 个码点、点击关键字超过 200 个码点各 400（`ref` 为 `keyword`，`reason` 为 `TOO_LONG`：契约没写这两处的 `reason`，写在 `docs/contract-requests/2026-11-02-new-differences-b4.md`）；关键字在几个字段上各自匹配，不跨字段。
+- 列表与明细的筛选（新版契约 10.3、10.5，负责人已授权按业界做法加）：
+  - 投放账户列表：搜索区有“关键字”（`keyword`，对 `code`、`name` 不区分大小写的包含匹配，`%`、`_`、`\` 按字面；输入框限 100 个码点，按码点数不按 UTF-16 单位，粘贴超长时截到 100 个码点且不切开代理对）和“状态”（`enabled=true|false`，其他值 400），放在共用分页表（`PagedListTable`）的筛选列里；此前“离开页签再回来保留搜索与页码”（`initial`/`onCommit`）不变；两者都为空时请求里不带这两个参数。
+  - 点击明细：`status`（`PENDING`、`MATCHED`、`EXPIRED`，由 `claimedAt` 和 `expireAt` 现算；持有其 `attrId` 的归因记录让点击也算 `MATCHED`，所以这样的点击也会出现在选“待认领”的列表里，页面写一句说明）和 `keyword`（最多 200 个字符，页面按 200 个码点限制输入；在 UTM 来源、媒介、活动上各自做不区分大小写的字面包含匹配，持有 `ANALYTICS:IP_VIEW` 时还匹配完整等于 `ip`；含 U+0000 是 400 `INVALID_REQUEST`，`details` 为 `keyword`、`INVALID_FORMAT`）；两个筛选都在点“查询”时才发出，并从第 1 页读起。
+  - 汇总：`groupBy` 页面只会发三个合法取值，缺失或取值不对后端是 400；这类 400 页面只显示按错误码翻译的文字，不显示后端 `message`。
+  - 假后端按此检查：账户关键字超过 100 个码点、点击关键字超过 200 个码点各 400（`ref` 为 `keyword`，`reason` 为 `TOO_LONG`：契约没写这两处的 `reason`，写在 `docs/contract-requests/2026-11-02-new-differences-b4.md`）；关键字在几个字段上各自匹配，不跨字段。
 - 投放账户：`code` 符合 `^[a-z0-9_-]{3,32}$`，创建后只读；没有删除按钮，只有状态开关（立即提交，无二次确认）；Facebook 访问令牌输入框永远是空的，已设置只显示"已设置"，留空提交时请求体不含该字段。
 - 生成链接：所选平台没有像素编号时提示"请先配置该平台的像素编号"且不发请求；有则显示链接和复制按钮，并显示落地页接口地址；链接根地址未配置的提示。
 - 投放效果：比率分母 0 显示"—"；有"未归因"行及其占比；落地条 `attribution-daily`；导出 `attribution-performance`；页面顶部有可关闭的"如何阅读此报表"提示面板。

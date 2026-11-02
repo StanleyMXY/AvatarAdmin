@@ -280,6 +280,8 @@ const messages: Record<string, string> = {
   'campaign.clicks.ip.masked':
     'IP addresses are masked. The permission "{permission}" shows them in full and lets the keyword match a whole address.',
   'campaign.clicks.ip.full': 'The keyword matches the UTM values and a whole IP address.',
+  'campaign.clicks.status.note':
+    'A click that an install record already holds counts as Matched, so such a click can also be in the list when the Pending state is chosen.',
   'campaign.clicks.time': 'Click time (UTC days)',
   'campaign.clicks.status': 'Status',
   'campaign.clicks.status.all': 'All',

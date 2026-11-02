@@ -176,6 +176,40 @@ describe('the search', { timeout: 30000 }, () => {
     await waitFor(() => expect(rows().length).toBe(2));
   });
 
+  it('keeps what is typed in the keyword to 100 code points (an emoji is one), and asks with that', async () => {
+    const { calls, user } = await load();
+    const box = screen.getByRole('textbox', { name: 'Keyword' });
+    // 60 Thai letters and 60 emoji: 120 code points, 180 UTF-16 units
+    fireEvent.change(box, { target: { value: `${'ก'.repeat(60)}${'🎉'.repeat(60)}` } });
+    expect([...(box as HTMLInputElement).value]).toHaveLength(100);
+    expect((box as HTMLInputElement).value).toBe(`${'ก'.repeat(60)}${'🎉'.repeat(40)}`);
+    await user.type(box, '{Enter}');
+    await waitFor(() => expect([...(lastQuery(calls).get('keyword') ?? '')]).toHaveLength(100));
+  });
+
+  it('keeps a keyword of exactly 100 code points whole, and the words of the code are shown when the backend refuses one', async () => {
+    const { user } = await load();
+    const box = screen.getByRole('textbox', { name: 'Keyword' });
+    fireEvent.change(box, { target: { value: 'ب'.repeat(100) } });
+    expect((box as HTMLInputElement).value).toBe('ب'.repeat(100));
+    const asked: (string | null)[] = [];
+    overrideFetch(({ url }) => {
+      if (url.pathname !== '/api/admin/attribution/campaigns' || !url.searchParams.has('keyword'))
+        return undefined;
+      asked.push(url.searchParams.get('keyword'));
+      return jsonAnswer(
+        400,
+        'INVALID_REQUEST',
+        { details: [{ ref: 'keyword', reason: 'TOO_LONG' }] },
+        'raw backend words',
+      );
+    });
+    await user.type(box, '{Enter}');
+    expect(await screen.findByText(/Failed to load:.*Some input is not valid/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('raw backend words');
+    expect(asked.at(-1)).toBe('ب'.repeat(100));
+  });
+
   it('filters by the state', async () => {
     const { calls, user } = await load();
     const select = screen.getByRole('combobox', { name: 'Status' });

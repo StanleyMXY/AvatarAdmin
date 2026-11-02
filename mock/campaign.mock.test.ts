@@ -182,6 +182,39 @@ describe('the campaigns', () => {
     });
   });
 
+  it('matches the keyword in the code or in the name, each by itself (never across the two), without regard to case, with % _ and a backslash as themselves (contract 10.5)', async () => {
+    await send(CAMPAIGN_CREATE, campaignBody({ code: 'ab_cd', name: 'Zz%Yy\\Ww' }));
+    const find = async (keyword: string) =>
+      ((await get(CAMPAIGNS, { keyword })).body.data.items as { code: string }[]).map(
+        (c) => c.code,
+      );
+    expect(await find('B_C')).toEqual(['ab_cd']);
+    expect(await find('zz%yy')).toEqual(['ab_cd']);
+    expect(await find('yy\\ww')).toEqual(['ab_cd']);
+    expect(await find('%')).toEqual(['ab_cd']);
+    // the code and the name are two texts: a word that would need the end of one and the start of the other is in neither
+    expect(await find('cd zz')).toEqual([]);
+    expect(await find('cdzz')).toEqual([]);
+  });
+
+  it('refuses a keyword of more than 100 code points, counted as code points and not as UTF-16 units (400, ref keyword, TOO_LONG)', async () => {
+    expect((await get(CAMPAIGNS, { keyword: '🎉'.repeat(100) })).status).toBe(200);
+    expect((await get(CAMPAIGNS, { keyword: 'ก'.repeat(100) })).status).toBe(200);
+    for (const keyword of ['🎉'.repeat(101), 'a'.repeat(101)]) {
+      const refused = await get(CAMPAIGNS, { keyword });
+      expect(refused.status).toBe(400);
+      expect(refused.body.code).toBe('INVALID_REQUEST');
+      expect(refs(refused.body as never)).toEqual(['keyword:TOO_LONG']);
+    }
+  });
+
+  it('refuses a state that is not true or false (400)', async () => {
+    const refused = await get(CAMPAIGNS, { enabled: 'yes' });
+    expect(refused.status).toBe(400);
+    expect(refused.body.code).toBe('INVALID_REQUEST');
+    expect(refs(refused.body as never)).toEqual(['enabled:NOT_BOOLEAN']);
+  });
+
   it('pages, and refuses a page outside the range', async () => {
     const page = await get(CAMPAIGNS, { page: '2', pageSize: '3' });
     expect(page.body.data.items).toHaveLength(3);
@@ -978,6 +1011,32 @@ describe('the clicks', () => {
     expect(withRight.items.length).toBeGreaterThan(0);
     const without = await list({ keyword: address }, only('ATTRIBUTION:VIEW'));
     expect(without.items).toHaveLength(0);
+  });
+
+  it('matches the keyword in the UTM source, medium and campaign, each by itself and never across two of them', async () => {
+    Object.assign(campaignState.clicks[0], {
+      utmSource: 'qzxSrc',
+      utmMedium: 'qzxMed',
+      utmCampaign: 'qzxCmp',
+    });
+    const ids = async (keyword: string) =>
+      (await list({ keyword })).items.map((c) => c.id as string);
+    const first = campaignState.clicks[0].id;
+    expect(await ids('QZXMED')).toContain(first);
+    expect(await ids('qzxsrc qzxmed')).toEqual([]);
+    expect(await ids('SrcqzxMed')).toEqual([]);
+  });
+
+  it('refuses a keyword of more than 200 characters (400, keyword, TOO_LONG) and one with U+0000 (400, keyword, INVALID_FORMAT)', async () => {
+    expect((await get(CLICKS, { keyword: '🎉'.repeat(200) })).status).toBe(200);
+    const long = await get(CLICKS, { keyword: 'x'.repeat(201) });
+    expect(long.status).toBe(400);
+    expect(long.body.code).toBe('INVALID_REQUEST');
+    expect(refs(long.body as never)).toEqual(['keyword:TOO_LONG']);
+    const nul = await get(CLICKS, { keyword: 'a\u0000b' });
+    expect(nul.status).toBe(400);
+    expect(nul.body.code).toBe('INVALID_REQUEST');
+    expect(refs(nul.body as never)).toEqual(['keyword:INVALID_FORMAT']);
   });
 
   it('refuses a status that is not one of the three, and a time that is not an instant', async () => {
