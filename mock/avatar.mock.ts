@@ -45,7 +45,8 @@ const notFound = (what: string) =>
 const invalidState = (status: string, message: string) =>
   new MockHttpError(409, 'INVALID_STATE', message, { status });
 
-const byIdAsc = (a: { id: string }, b: { id: string }) => Number(a.id) - Number(b.id);
+/** Texts in the order of their code units, as the database sorts a key. */
+const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 // ---- the upload records: a file is uploaded first, then named by its uploadId ----
 
@@ -202,15 +203,6 @@ function checkName(value: unknown): string {
   return name;
 }
 
-const boolParam = (req: MockReq, name: string): boolean | undefined => {
-  const raw = text(req.query[name]);
-  if (raw === '') return undefined;
-  if (raw !== 'true' && raw !== 'false') {
-    throw fail([{ ref: name, reason: 'NOT_BOOLEAN' }], `${name} must be true or false`);
-  }
-  return raw === 'true';
-};
-
 const enumParam = (req: MockReq, name: string, allowed: string[]): string | undefined => {
   const raw = text(req.query[name]);
   if (raw === '') return undefined;
@@ -268,17 +260,13 @@ export default {
 
   // ---- cosmetics ----
   'GET /api/admin/cosmetics': guard(['COSMETIC:MANAGE', 'COSMETIC:GRANT'], (req) => {
+    // `kind` is the only filter (a value that is not a kind is a 400); `enabled`, `style` and any
+    // other parameter are ignored, and the order is kind, sortOrder, key (the backend's answer of
+    // 2026-11-02, question 64).
     const kind = enumParam(req, 'kind', KINDS);
-    const style = enumParam(req, 'style', STYLES);
-    const enabled = boolParam(req, 'enabled');
     const rows = avatarState.cosmetics
-      .filter(
-        (c) =>
-          (kind === undefined || c.kind === kind) &&
-          (style === undefined || c.compatibleStyles.includes(style as 'REALISTIC')) &&
-          (enabled === undefined || c.enabled === enabled),
-      )
-      .sort((a, b) => a.sortOrder - b.sortOrder || byIdAsc(a, b));
+      .filter((c) => kind === undefined || c.kind === kind)
+      .sort((a, b) => byText(a.kind, b.kind) || a.sortOrder - b.sortOrder || byText(a.key, b.key));
     const page = paginateQuery(rows, req);
     return ok({ items: page.items.map(cosmeticRow), total: page.total });
   }),
@@ -342,7 +330,7 @@ export default {
   // ---- actions ----
   'GET /api/admin/actions': guard('ACTION:MANAGE', (req) => {
     const rows = [...avatarState.actions].sort(
-      (a, b) => a.sortOrder - b.sortOrder || byIdAsc(a, b),
+      (a, b) => a.sortOrder - b.sortOrder || byText(a.key, b.key),
     );
     const page = paginateQuery(rows, req);
     return ok({ items: page.items.map(actionRow), total: page.total });

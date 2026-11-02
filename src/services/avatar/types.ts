@@ -44,9 +44,8 @@ export type CosmeticItem = {
 export type CosmeticQuery = {
   page: number;
   pageSize: number;
+  /** The only filter the backend has; it ignores any other parameter. */
   kind?: CosmeticKind;
-  enabled?: boolean;
-  style?: AvatarStyle;
 };
 
 /** The fields a cosmetic is written with; the picture goes as `previewUploadId`, never as an address. */

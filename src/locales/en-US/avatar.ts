@@ -67,6 +67,10 @@ const messages: Record<string, string> = {
   // ---- cosmetics ----
   'avatar.cosmetics.note':
     'Outfits and backgrounds a user can pick for an avatar. Users cannot type their own description. Each type has one free default item.',
+  'avatar.cosmetics.pageFilterNote':
+    'The filters On and Fits style only hide rows of the page that is shown. The backend filters by type only, so the page numbers and the total still count every item of the type.',
+  'avatar.cosmetics.pageFilter':
+    '{shown} of the {onPage} items on this page match the on-sale state and style that were chosen. The page numbers and the total ({total}) count every item of the type; look at the other pages for more.',
   'avatar.cosmetics.kind': 'Type',
   'avatar.cosmetics.kind.OUTFIT': 'Outfit',
   'avatar.cosmetics.kind.BACKGROUND': 'Background',

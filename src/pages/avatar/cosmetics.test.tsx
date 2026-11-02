@@ -103,33 +103,76 @@ describe('the cosmetic catalog page: the list', { timeout: 30000 }, () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<CosmeticsPage />);
-    await rowOf('outfit_default');
-    expect(screen.queryByText('bulk_item_18')).not.toBeInTheDocument();
+    // the order is kind, sortOrder, key: the backgrounds first, so the last outfit is on page 2
+    await rowOf('bg_default');
+    expect(screen.queryByText('bulk_item_17')).not.toBeInTheDocument();
     await user.click(await screen.findByTitle('2'));
-    expect(await screen.findByText('bulk_item_18')).toBeInTheDocument();
+    expect(await screen.findByText('bulk_item_17')).toBeInTheDocument();
     expect(calls.some((c) => c.url.includes('page=2&pageSize=20'))).toBe(true);
   });
 
-  it('asks the backend for the type, the on-sale state and the style that were chosen', async () => {
+  it('asks the backend for the type only, and applies the on-sale state and the style to the page that was read, saying so', async () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<CosmeticsPage />);
     await rowOf('outfit_default');
+    expect(screen.getByText(/only hide rows of the page that is shown/)).toBeVisible();
+    expect(screen.queryByTestId('cosmetics-page-filter')).toBeNull();
     await expandSearch(user);
     await chooseOption(user, 'Type', 'Background');
     await chooseOption(user, 'Fits style', 'Realistic');
     await chooseOption(user, 'On', 'Off sale');
     await user.click(screen.getByRole('button', { name: /查\s*询/ }));
-    await waitFor(() =>
-      expect(
-        calls.some(
-          (c) =>
-            c.url.includes('kind=BACKGROUND') &&
-            c.url.includes('style=REALISTIC') &&
-            c.url.includes('enabled=false'),
-        ),
-      ).toBe(true),
-    );
+    const note = await screen.findByTestId('cosmetics-page-filter', undefined, { timeout: 10000 });
+    await waitFor(() => expect(screen.queryByText('outfit_default')).not.toBeInTheDocument(), {
+      timeout: 10000,
+    });
+    const lists = calls.filter((c) => c.url.startsWith('/api/admin/cosmetics?'));
+    expect(lists.length).toBeGreaterThan(0);
+    for (const call of lists) {
+      expect(call.url).not.toContain('style=');
+      expect(call.url).not.toContain('enabled=');
+    }
+    expect(lists.at(-1)?.url).toContain('kind=BACKGROUND');
+    // every row left is a background that is off sale and fits the realistic style
+    const keys = [...document.querySelectorAll('tbody tr')]
+      .map((r) => r.textContent ?? '')
+      .filter((text) => /bg_|bulk_item/.test(text));
+    for (const text of keys) {
+      expect(text).toContain('Background');
+      expect(text).toContain('Realistic');
+    }
+    for (const row of document.querySelectorAll('tbody tr')) {
+      const toggle = row.querySelector('[role="switch"]');
+      if (toggle) expect(toggle.getAttribute('aria-checked')).toBe('false');
+    }
+    expect(note).toHaveTextContent(/of the \d+ items on this page/);
+    expect(note).toHaveTextContent(/every item of the type/);
+  });
+
+  it('sends only the type and no filter of the page when none of the two is chosen, and says nothing about a page filter', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    await rowOf('outfit_default');
+    await expandSearch(user);
+    await chooseOption(user, 'Type', 'Outfit');
+    await user.click(screen.getByRole('button', { name: /查\s*询/ }));
+    await waitFor(() => expect(calls.some((c) => c.url.includes('kind=OUTFIT'))).toBe(true));
+    expect(screen.queryByTestId('cosmetics-page-filter')).toBeNull();
+  });
+
+  it('says it in Chinese', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />, 'zh-CN');
+    await rowOf('outfit_default');
+    expect(screen.getByText(/只是把本页里不符合的行隐藏/)).toBeVisible();
+    await expandSearch(user);
+    await chooseOption(user, '适用风格', '写实');
+    await user.click(screen.getByRole('button', { name: /查\s*询/ }));
+    const note = await screen.findByTestId('cosmetics-page-filter', undefined, { timeout: 10000 });
+    expect(note).toHaveTextContent(/本页 \d+ 个条目中有 \d+ 个/);
   });
 });
 

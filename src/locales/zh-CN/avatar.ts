@@ -67,6 +67,10 @@ const messages: Record<string, string> = {
   // ---- cosmetics ----
   'avatar.cosmetics.note':
     '用户可以给形象选的服装和背景。用户不能自己输入描述。每种类型有一个免费的默认条目。',
+  'avatar.cosmetics.pageFilterNote':
+    '“是否上架”和“适用风格”筛选只是把本页里不符合的行隐藏。后端只能按类型筛选，所以页数和总数仍然包含该类型的所有条目。',
+  'avatar.cosmetics.pageFilter':
+    '本页 {onPage} 个条目中有 {shown} 个符合所选的上架状态和适用风格。页数和总数（{total}）包含该类型的所有条目；要看更多请翻到其他页。',
   'avatar.cosmetics.kind': '类型',
   'avatar.cosmetics.kind.OUTFIT': '服装',
   'avatar.cosmetics.kind.BACKGROUND': '背景',

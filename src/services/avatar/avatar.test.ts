@@ -40,18 +40,14 @@ const answer = (data: unknown) => stubFetch(() => jsonResponse(200, envelope('20
 const body = (call: { init: RequestInit }) => JSON.parse(call.init.body as string);
 
 describe('the catalogs', () => {
-  it('lists cosmetics with the paging and the three filters, and leaves an empty filter out', async () => {
+  it('lists cosmetics with the paging and the type, and leaves an empty filter out', async () => {
     const calls = answer({ items: [{ id: '1' }], total: 41 });
     const page = await listCosmetics({
       page: 2,
       pageSize: 20,
       kind: 'OUTFIT',
-      enabled: false,
-      style: 'REALISTIC',
     });
-    expect(calls[0].url).toBe(
-      '/api/admin/cosmetics?page=2&pageSize=20&kind=OUTFIT&enabled=false&style=REALISTIC',
-    );
+    expect(calls[0].url).toBe('/api/admin/cosmetics?page=2&pageSize=20&kind=OUTFIT');
     expect(page).toEqual({ items: [{ id: '1' }], total: 41 });
     await listCosmetics({ page: 1, pageSize: 20 });
     expect(calls[1].url).toBe('/api/admin/cosmetics?page=1&pageSize=20');

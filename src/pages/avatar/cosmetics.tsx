@@ -1,11 +1,12 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useAccess, useIntl } from '@umijs/max';
-import { Button, Flex, Tag, Typography } from 'antd';
+import { Alert, Button, Flex, Tag, Typography } from 'antd';
 import { useRef, useState } from 'react';
 import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { EnabledSwitch } from '../../components/EnabledSwitch';
 import { PagedListTable } from '../../components/PagedListTable';
+import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   AVATAR_STYLES,
   type AvatarStyle,
@@ -33,6 +34,11 @@ export default function CosmeticsPage() {
     intl.formatMessage({ id }, values);
   const ref = useRef<ActionType | undefined>(undefined);
   const [editing, setEditing] = useState<CosmeticItem | null | 'new'>(null);
+  // What the filters of the page left of the list that was read (null: neither is chosen).
+  const [pageView, setPageView] = useState<{ shown: number; onPage: number; total: number } | null>(
+    null,
+  );
+  const beginList = useLatestCall();
   const reload = () => ref.current?.reload();
   const yesNo = (value: boolean) => t(value ? 'avatar.yes' : 'avatar.no');
 
@@ -159,19 +165,53 @@ export default function CosmeticsPage() {
   return (
     <>
       <Typography.Paragraph type="secondary">{t('avatar.cosmetics.note')}</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">
+        {t('avatar.cosmetics.pageFilterNote')}
+      </Typography.Paragraph>
+      {pageView ? (
+        <Alert
+          type="info"
+          showIcon
+          data-testid="cosmetics-page-filter"
+          style={{ marginBottom: 12 }}
+          title={t('avatar.cosmetics.pageFilter', {
+            shown: pageView.shown,
+            onPage: pageView.onPage,
+            total: intl.formatNumber(pageView.total),
+          })}
+        />
+      ) : null}
       <PagedListTable<CosmeticItem, Filter>
         rowKey="id"
         columns={columns}
         actionRef={ref}
-        request={({ page, pageSize, kind, enabled, style }) =>
-          listCosmetics({
-            page,
-            pageSize,
-            kind,
-            style,
-            enabled: enabled === undefined || enabled === '' ? undefined : enabled === 'true',
-          })
-        }
+        request={async ({ page, pageSize, kind, enabled, style }) => {
+          const isCurrent = beginList();
+          // The backend filters by the type only and ignores any other parameter, so the on-sale
+          // state and the style are never sent: they hide rows of the page that was read, and the
+          // page count and the total stay those of every item of the type.
+          let answer: Awaited<ReturnType<typeof listCosmetics>>;
+          try {
+            answer = await listCosmetics({ page, pageSize, kind });
+          } catch (error) {
+            if (isCurrent()) setPageView(null);
+            throw error;
+          }
+          const onShelf = enabled === undefined || enabled === '' ? null : enabled === 'true';
+          if (onShelf === null && !style) {
+            if (isCurrent()) setPageView(null);
+            return answer;
+          }
+          const items = answer.items.filter(
+            (row) =>
+              (onShelf === null || row.enabled === onShelf) &&
+              (!style || row.compatibleStyles.includes(style)),
+          );
+          if (isCurrent()) {
+            setPageView({ shown: items.length, onPage: answer.items.length, total: answer.total });
+          }
+          return { ...answer, items };
+        }}
         toolbar={
           canWrite
             ? [

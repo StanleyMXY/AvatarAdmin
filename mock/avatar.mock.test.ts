@@ -119,33 +119,50 @@ describe('uploads and the cosmetic catalog', () => {
     }
   });
 
-  it('lists with the filters, in the order of sortOrder, with an address per preview that changes each time', async () => {
+  it('lists in the order of kind, sortOrder and key, with an address per preview that changes each time', async () => {
     const first = await get(COSMETICS, 'root', { pageSize: '200' });
-    const all = first.body.data.items;
+    const all = first.body.data.items as {
+      kind: string;
+      sortOrder: number;
+      key: string;
+      previewUrl: string | null;
+    }[];
     expect(first.body.data.total).toBe(avatarState.cosmetics.length);
-    expect(all.map((c: { sortOrder: number }) => c.sortOrder)).toEqual(
-      [...all.map((c: { sortOrder: number }) => c.sortOrder)].sort((a, b) => a - b),
-    );
+    const order = (a: (typeof all)[number], b: (typeof all)[number]) =>
+      a.kind < b.kind
+        ? -1
+        : a.kind > b.kind
+          ? 1
+          : a.sortOrder - b.sortOrder || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+    expect(all.map((c) => c.key)).toEqual([...all].sort(order).map((c) => c.key));
+    // the backgrounds come before the outfits
+    expect(all[0].kind).toBe('BACKGROUND');
     const second = await get(COSMETICS, 'root', { pageSize: '200' });
     expect(second.body.data.items[0].previewUrl).not.toBe(all[0].previewUrl);
-    expect(all.find((c: { key: string }) => c.key === 'bg_night_city').previewUrl).toBeNull();
+    expect(all.find((c) => c.key === 'bg_night_city')?.previewUrl).toBeNull();
     expect('previewRef' in all[0]).toBe(false);
-
-    const outfits = await get(COSMETICS, 'root', { kind: 'OUTFIT', pageSize: '200' });
-    expect(outfits.body.data.items.every((c: { kind: string }) => c.kind === 'OUTFIT')).toBe(true);
-    const off = await get(COSMETICS, 'root', { enabled: 'false', pageSize: '200' });
-    expect(off.body.data.items.map((c: { key: string }) => c.key)).toContain('bg_night_city');
-    expect(off.body.data.items.every((c: { enabled: boolean }) => !c.enabled)).toBe(true);
-    const real = await get(COSMETICS, 'root', { style: 'REALISTIC', pageSize: '200' });
-    expect(
-      real.body.data.items.every((c: { compatibleStyles: string[] }) =>
-        c.compatibleStyles.includes('REALISTIC'),
-      ),
-    ).toBe(true);
     expect((await get(COSMETICS, 'root', { kind: 'HAT' })).status).toBe(400);
     expect((await get(COSMETICS, 'root', { pageSize: '0' })).body.data.details[0].ref).toBe(
       'pageSize',
     );
+  });
+
+  it('filters by kind only: enabled and style are ignored like any parameter the backend does not know, whatever their value', async () => {
+    const outfits = await get(COSMETICS, 'root', { kind: 'OUTFIT', pageSize: '200' });
+    expect(outfits.body.data.items.every((c: { kind: string }) => c.kind === 'OUTFIT')).toBe(true);
+    expect(outfits.body.data.total).toBeLessThan(avatarState.cosmetics.length);
+    const plain = await get(COSMETICS, 'root', { pageSize: '200' });
+    for (const query of [
+      { enabled: 'false' },
+      { enabled: 'maybe' },
+      { style: 'REALISTIC' },
+      { style: 'x' },
+    ]) {
+      const answer = await get(COSMETICS, 'root', { pageSize: '200', ...query });
+      expect(answer.status, JSON.stringify(query)).toBe(200);
+      expect(answer.body.data.total).toBe(plain.body.data.total);
+      expect(answer.body.data.items).toHaveLength(plain.body.data.items.length);
+    }
   });
 
   it('creates an item with the picture named by its uploadId and keeps the key', async () => {
@@ -241,6 +258,23 @@ describe('uploads and the cosmetic catalog', () => {
 });
 
 describe('actions', () => {
+  it('lists in the order of sortOrder and then key, not of the id', async () => {
+    // nod (id 4) gets the sortOrder of smile (id 2): the key puts nod first, the id would put it last
+    const smile = avatarState.actions.find((a) => a.key === 'smile');
+    const nod = avatarState.actions.find((a) => a.key === 'nod');
+    if (!smile || !nod) throw new Error('the seed has smile and nod');
+    nod.sortOrder = smile.sortOrder;
+    const answer = await get(ACTIONS, 'root', { pageSize: '200' });
+    const rows = answer.body.data.items as { sortOrder: number; key: string }[];
+    expect(rows.map((r) => `${r.sortOrder}:${r.key}`)).toEqual(
+      [...rows]
+        .sort((a, b) => a.sortOrder - b.sortOrder || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+        .map((r) => `${r.sortOrder}:${r.key}`),
+    );
+    const keys = rows.map((r) => r.key);
+    expect(keys.indexOf('nod')).toBeLessThan(keys.indexOf('smile'));
+  });
+
   it('lists, creates with iconUploadId and starts the new action disabled', async () => {
     expect((await get(ACTIONS)).body.data.total).toBe(avatarState.actions.length);
     const body = {
