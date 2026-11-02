@@ -58,7 +58,9 @@ const messages: Record<string, string> = {
   'appVersions.versionCodeHelp': '整数：Android 的 versionCode，iOS 的构建号。',
   'appVersions.activeHint': '该渠道当前生效的版本号：{code}。取自列表，仅供参考，以后端为准。',
   'appVersions.activeNone': '该渠道目前没有生效版本。',
-  'appVersions.activeUnknown': '读不到该渠道的生效版本，所以这里不比较版本号，以后端为准。',
+  'appVersions.activeUnknown': '读不到该渠道的版本，所以这里不比较版本号，以后端为准。',
+  'appVersions.floorHint':
+    '新的版本号必须大于该渠道其他所有版本（含草稿、已下线）的最大版本号：{max}。取自列表，仅供参考。',
   'appVersions.minVersionCodeHelp': '低于此版本号的用户将被强制更新。',
   'appVersions.changelogHelp': '按语言分页签填写，英文必填。',
   'appVersions.changelogRequiredTab': '必填',
@@ -81,7 +83,8 @@ const messages: Record<string, string> = {
   'appVersions.apk.openConfig': '打开系统配置',
   'appVersions.rule.versionName': '版本名要写成 x.y.z，三个数字用点隔开，最多 32 个字符',
   'appVersions.rule.versionCodeWhole': '请填 1 到 2147483647 的整数',
-  'appVersions.rule.versionCodeAbove': '必须大于该渠道当前生效的版本号 {active}',
+  'appVersions.rule.versionCodeAbove':
+    '必须大于该渠道其他所有版本（含草稿、已下线）的最大版本号 {max}',
   'appVersions.rule.minWhole': '请填 1 到 2147483647 的整数',
   'appVersions.rule.minAbove': '不能大于版本号 {versionCode}',
   'appVersions.rule.changelogEn': '英文更新说明必填',
@@ -116,7 +119,8 @@ const messages: Record<string, string> = {
     '读不到当前生效的版本，不知道最低版本号 {min} 会不会强制已装最新版本的用户更新。确认前请自己核对。',
   'appVersions.activate.minimum': '版本号低于 {min} 的用户将被强制更新。',
   'appVersions.activate.direct': '激活后该渠道的用户将被提示下载此 APK。',
-  'appVersions.activate.notAbove': '版本号 {code} 不大于当前生效的版本号 {active}，后端会拒绝。',
+  'appVersions.activate.notAbove':
+    '版本号 {code} 不大于该渠道所有生效过的版本（含已下线）的最大版本号 {max}，后端会拒绝。',
 };
 
 export default messages;

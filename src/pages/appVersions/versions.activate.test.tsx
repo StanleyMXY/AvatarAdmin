@@ -138,7 +138,7 @@ describe('activating a version of a STORE channel', () => {
         if (
           url.pathname === '/api/admin/app-versions' &&
           (init.method ?? 'GET') === 'GET' &&
-          url.searchParams.get('status') === 'ACTIVE'
+          url.searchParams.has('channelCode')
         ) {
           await gate;
         }
@@ -209,7 +209,7 @@ describe('activating a version of a STORE channel', () => {
     await user.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() => expect(rows().every((tr) => tr.textContent?.includes('Draft'))).toBe(true));
     overrideFetch(async ({ url, method }) =>
-      method === 'GET' && url.searchParams.get('status') === 'ACTIVE'
+      method === 'GET' && url.searchParams.has('channelCode')
         ? jsonAnswer(500, 'INTERNAL_ERROR')
         : undefined,
     );
@@ -223,7 +223,7 @@ describe('activating a version of a STORE channel', () => {
   it('falls back on the active version the page shows when the read of it failed', async () => {
     const { user } = await load();
     overrideFetch(async ({ url, method }) =>
-      method === 'GET' && url.searchParams.get('status') === 'ACTIVE'
+      method === 'GET' && url.searchParams.has('channelCode')
         ? jsonAnswer(500, 'INTERNAL_ERROR')
         : undefined,
     );
@@ -248,6 +248,62 @@ describe('activating a version of a STORE channel', () => {
     expect(await within(dialog).findByText(enUS['error.INVALID_REQUEST'])).toBeTruthy();
     expect(writesOf(calls)).toHaveLength(1);
     expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('warns when the draft is not higher than a version that was taken down, although none is active (the active one is not the only one that counts)', async () => {
+    for (const v of appVersionsState.versions.values()) {
+      if (v.channelCode === 'play' && v.status === 'ACTIVE') v.status = 'ARCHIVED';
+    }
+    const draft = versionBy('play', 120);
+    draft.versionCode = 105;
+    draft.minVersionCode = 1;
+    const { calls, user } = await load();
+    const dialog = await openActivation(user, draft.id);
+    const warning = await within(dialog).findByTestId('activate-not-above');
+    expect(warning.textContent).toBe(
+      'The version number 105 is not higher than 110, the highest number of the versions of this channel that have been active (taken-down ones included). The server will refuse it.',
+    );
+    await user.click(within(dialog).getByRole('checkbox', { name: LIVE }));
+    await user.click(dialogSubmit(dialog));
+    expect(await within(dialog).findByText(enUS['error.INVALID_REQUEST'])).toBeTruthy();
+    expect(writesOf(calls)).toHaveLength(1);
+    expect(appVersionsState.versions.get(draft.id)?.status).toBe('DRAFT');
+  });
+
+  it('does not count another draft: a draft above every version that was live is not warned about, whatever other drafts there are', async () => {
+    const base = versionBy('play', 120);
+    appVersionsState.versions.set('ver-high', {
+      ...structuredClone(base),
+      id: 'ver-high',
+      versionCode: 130,
+    });
+    const { calls, user } = await load();
+    const dialog = await openActivation(user, base.id);
+    await within(dialog).findByRole('checkbox', { name: LIVE });
+    await settled();
+    expect(within(dialog).queryByTestId('activate-not-above')).toBeNull();
+    await user.click(within(dialog).getByRole('checkbox', { name: LIVE }));
+    await user.click(dialogSubmit(dialog));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(appVersionsState.versions.get(base.id)?.status).toBe('ACTIVE');
+  });
+
+  it('falls back on the versions the page shows when the read of the channel failed, and still warns about a taken-down one', async () => {
+    for (const v of appVersionsState.versions.values()) {
+      if (v.channelCode === 'play' && v.status === 'ACTIVE') v.status = 'ARCHIVED';
+    }
+    const draft = versionBy('play', 120);
+    draft.versionCode = 105;
+    draft.minVersionCode = 1;
+    const { user } = await load();
+    overrideFetch(async ({ url, method }) =>
+      method === 'GET' && url.searchParams.has('channelCode')
+        ? jsonAnswer(500, 'INTERNAL_ERROR')
+        : undefined,
+    );
+    const dialog = await openActivation(user, draft.id);
+    const warning = await within(dialog).findByTestId('activate-not-above');
+    expect(warning.textContent).toContain('110');
   });
 
   it('shows only the words of the error code when the server refuses, never its own message', async () => {
@@ -362,10 +418,7 @@ describe('what the dialog does not remember', () => {
       'fetch',
       vi.fn(async (input: string | URL, init: RequestInit = {}) => {
         const url = new URL(String(input), 'http://localhost');
-        if (
-          url.pathname === '/api/admin/app-versions' &&
-          url.searchParams.get('status') === 'ACTIVE'
-        ) {
+        if (url.pathname === '/api/admin/app-versions' && url.searchParams.has('channelCode')) {
           reads += 1;
           if (reads === 1) await first;
         }

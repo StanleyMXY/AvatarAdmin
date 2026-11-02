@@ -8,7 +8,8 @@ import type { ChannelPackage } from '../../services/channelPackages';
 import { describeFailure } from '../../session/describe';
 import { plainText } from '../../utils/plainText';
 import { distributionOf } from './distribution';
-import { useActiveVersion } from './useActiveVersion';
+import { useChannelVersions } from './useChannelVersions';
+import { highestLiveCode } from './versionRules';
 
 type Props = {
   version: AppVersion;
@@ -42,7 +43,7 @@ export function ActivateModal({ version, channels, rows, onClose, onDone }: Prop
   const channel = channels.find((c) => c.code === channelCode);
   const channelName = (channel && plainText(channel.name)) || channelCode;
 
-  const hint = useActiveVersion(channelCode);
+  const hint = useChannelVersions(channelCode);
   // The read is the fresher; the list the page shows is the hint when the read failed.
   const fromList = rows.find((r) => r.status === 'ACTIVE' && r.channelCode === channelCode);
   const activeCode =
@@ -50,6 +51,14 @@ export function ActivateModal({ version, channels, rows, onClose, onDone }: Prop
       ? hint.code
       : hint.state === 'failed'
         ? numberOr(fromList?.versionCode)
+        : null;
+  // The number to beat is the highest of the versions that have been live, taken-down ones too
+  // (contract 24.2), not the one that is active now.
+  const liveMax =
+    hint.state === 'known' || hint.state === 'none'
+      ? highestLiveCode(hint.versions)
+      : hint.state === 'failed'
+        ? highestLiveCode(rows.filter((r) => r.channelCode === channelCode))
         : null;
   const settled = hint.state === 'known' || hint.state === 'none' || hint.state === 'failed';
   // Activating before the read is back would skip the strong warning that the read may bring.
@@ -130,12 +139,12 @@ export function ActivateModal({ version, channels, rows, onClose, onDone }: Prop
             }
           />
         ) : null}
-        {settled && code !== null && activeCode !== null && code <= activeCode ? (
+        {settled && code !== null && liveMax !== null && code <= liveMax ? (
           <Alert
             type="warning"
             showIcon
             data-testid="activate-not-above"
-            title={t('appVersions.activate.notAbove', { code, active: activeCode })}
+            title={t('appVersions.activate.notAbove', { code, max: liveMax })}
           />
         ) : null}
         {needsBox ? (

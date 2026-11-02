@@ -99,6 +99,10 @@ const fillCommon = async (
   await setNumber(user, form, 'Minimum version number', over.min ?? '110');
   await user.type(form.getByRole('textbox', { name: 'en' }), over.en ?? 'Faster calls');
 };
+const HIGHER_THAN_120 =
+  'It must be higher than 120, the highest version number of the other versions of this channel (drafts and taken-down versions included)';
+const HIGHER_THAN_110 =
+  'It must be higher than 110, the highest version number of the other versions of this channel (drafts and taken-down versions included)';
 const PLAY_URL = 'https://play.google.com/store/apps/details?id=app.example.play';
 const typeUrl = async (
   user: ReturnType<typeof userEvent.setup>,
@@ -239,30 +243,68 @@ describe('creating a version of a STORE channel', { timeout: 60000 }, () => {
 });
 
 describe('the rules of the form', { timeout: 60000 }, () => {
-  it('compares the version number with the version that is active in the channel, as a hint', async () => {
+  it('compares the version number with the highest number of the other versions of the channel (a draft counts, the active one is not the top), as a hint', async () => {
     const { calls, user } = await load();
     const form = await openNew(user);
     await pickChannel(user, form, /Android store/);
     expect(await form.findByText(/now: 110/)).toBeTruthy();
-    expect(form.getByText(/the server decides/)).toBeTruthy();
-    await setNumber(user, form, 'Version number', '110');
+    expect(
+      form.getByText(/the highest number of the other versions of this channel.*: 120\./),
+    ).toBeTruthy();
+    expect(
+      form.getByText(/the server decides/, { selector: '[data-testid="version-active-hint"]' }),
+    ).toBeTruthy();
+    await setNumber(user, form, 'Version number', '111');
     await setNumber(user, form, 'Minimum version number', '1');
     await user.type(form.getByRole('textbox', { name: 'Version name' }), '1.1.0');
     await user.type(form.getByRole('textbox', { name: 'en' }), 'x');
     await typeUrl(user, form, PLAY_URL);
     await user.click(submit(form));
-    expect(
-      await form.findByText(
-        'It must be higher than 110, the version number active in this channel',
-      ),
-    ).toBeTruthy();
+    // 111 is above the active version 110, but not above the draft 120: the old rule let it through.
+    expect(await form.findByText(HIGHER_THAN_120)).toBeTruthy();
+    expect(writesOf(calls)).toHaveLength(0);
+    await setNumber(user, form, 'Version number', '120');
+    await user.click(submit(form));
+    expect(await form.findByText(HIGHER_THAN_120)).toBeTruthy();
+    expect(writesOf(calls)).toHaveLength(0);
+    await setNumber(user, form, 'Version number', '121');
+    await user.click(submit(form));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+  });
+
+  it('counts a version that was taken down: with nothing active, a number must still beat the archived ones', async () => {
+    for (const v of appVersionsState.versions.values()) {
+      if (v.channelCode !== 'play') continue;
+      if (v.status === 'DRAFT') appVersionsState.versions.delete(v.id);
+      else if (v.status === 'ACTIVE') v.status = 'ARCHIVED';
+    }
+    const { calls, user } = await load();
+    const form = await openNew(user);
+    await pickChannel(user, form, /Android store/);
+    expect(await form.findByText(enUS['appVersions.activeNone'])).toBeTruthy();
+    await fillCommon(user, form, { code: '110', min: '1' });
+    await typeUrl(user, form, PLAY_URL);
+    await user.click(submit(form));
+    expect(await form.findByText(HIGHER_THAN_110)).toBeTruthy();
     expect(writesOf(calls)).toHaveLength(0);
     await setNumber(user, form, 'Version number', '111');
     await user.click(submit(form));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
   });
 
-  it('says that no version is active, and does not compare, when the channel has none', async () => {
+  it('does not compare with the versions of another channel', async () => {
+    const { calls, user } = await load();
+    const form = await openNew(user);
+    await pickChannel(user, form, /iOS store/);
+    expect(await form.findByText(/now: 310/)).toBeTruthy();
+    // the highest of the iOS channel is the draft 311; the Android draft 120 is not its business
+    await fillCommon(user, form, { code: '312', min: '300' });
+    await typeUrl(user, form, 'https://apps.apple.com/th/app/avatar-chat/id1234567890');
+    await user.click(submit(form));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+  });
+
+  it('says that no version is active when the channel has none', async () => {
     for (const v of appVersionsState.versions.values()) {
       if (v.channelCode === 'play' && v.status === 'ACTIVE') v.status = 'ARCHIVED';
     }
@@ -275,7 +317,7 @@ describe('the rules of the form', { timeout: 60000 }, () => {
   it('says that the number is not compared when the active version could not be read, and still sends (the server decides)', async () => {
     const { calls, user } = await load();
     overrideFetch(async ({ url, method }) =>
-      method === 'GET' && url.searchParams.get('status') === 'ACTIVE'
+      method === 'GET' && url.searchParams.has('channelCode')
         ? jsonAnswer(500, 'INTERNAL_ERROR')
         : undefined,
     );
@@ -300,10 +342,7 @@ describe('the rules of the form', { timeout: 60000 }, () => {
       'fetch',
       vi.fn(async (input: string | URL, init: RequestInit = {}) => {
         const url = new URL(String(input), 'http://localhost');
-        if (
-          url.pathname === '/api/admin/app-versions' &&
-          url.searchParams.get('status') === 'ACTIVE'
-        ) {
+        if (url.pathname === '/api/admin/app-versions' && url.searchParams.has('channelCode')) {
           reads += 1;
           if (reads === 1) await first;
         }
@@ -557,6 +596,56 @@ describe('editing a draft', { timeout: 60000 }, () => {
     expect(form.getByRole('textbox', { name: 'Store link' })).toHaveValue(
       versionBy('appstore', 311).storeUrl as string,
     );
+  });
+
+  describe('the number of a draft: checked only when it changes, against the other versions', () => {
+    /** A second draft in the Android store channel, above the first one. */
+    const addHigherDraft = () => {
+      const base = versionBy('play', 120);
+      appVersionsState.versions.set('ver-high', {
+        ...structuredClone(base),
+        id: 'ver-high',
+        versionCode: 130,
+      });
+    };
+
+    it('leaves an unchanged number alone even when other versions are above it (the backend checks it only when it changes)', async () => {
+      addHigherDraft();
+      const { calls, user } = await load();
+      const form = await openEdit(user, versionBy('play', 120).id);
+      const name = form.getByRole('textbox', { name: 'Version name' });
+      await user.clear(name);
+      await user.type(name, '1.2.2');
+      await user.click(submit(form));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect(writesOf(calls)[0].body).toMatchObject({ versionCode: 120 });
+    });
+
+    it('asks a changed number to beat every other version (not itself), and sends it when it does', async () => {
+      addHigherDraft();
+      const { calls, user } = await load();
+      const form = await openEdit(user, versionBy('play', 120).id);
+      await setNumber(user, form, 'Version number', '125');
+      await user.click(submit(form));
+      expect(
+        await form.findByText(
+          'It must be higher than 130, the highest version number of the other versions of this channel (drafts and taken-down versions included)',
+        ),
+      ).toBeTruthy();
+      expect(writesOf(calls)).toHaveLength(0);
+      await setNumber(user, form, 'Version number', '131');
+      await user.click(submit(form));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect(writesOf(calls)[0].body).toMatchObject({ versionCode: 131 });
+    });
+
+    it('does not count the draft itself: raising the highest draft by one is fine', async () => {
+      const { calls, user } = await load();
+      const form = await openEdit(user, versionBy('play', 120).id);
+      await setNumber(user, form, 'Version number', '121');
+      await user.click(submit(form));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    });
   });
 
   it('is not offered for a version that is not a draft', async () => {

@@ -43,13 +43,14 @@ import { isUploadIdRejection } from '../../utils/uploadErrors';
 import { ChangelogField } from './ChangelogField';
 import { distributionOf } from './distribution';
 import { validateStoreUrl } from './storeUrl';
-import { useActiveVersion } from './useActiveVersion';
+import { useChannelVersions } from './useChannelVersions';
 import {
   checkChangelog,
   checkMinVersionCode,
   checkVersionCode,
   checkVersionName,
   cleanChangelog,
+  highestOtherCode,
   type Texts,
 } from './versionRules';
 
@@ -183,17 +184,22 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
   const platform = channel ? channel.platform : plainText(version?.platform);
   const packageName = channel?.packageName ?? undefined;
 
-  const hint = useActiveVersion(channelCode || undefined);
-  const activeCode = hint.state === 'known' ? hint.code : null;
-  const activeRef = useRef<number | null>(null);
-  activeRef.current = activeCode;
+  const hint = useChannelVersions(channelCode || undefined);
+  // The number a new version, or a draft whose number changes, has to beat: the highest of the other
+  // versions of the channel, drafts and taken-down ones included (contract 24.2).
+  const floor =
+    hint.state === 'known' || hint.state === 'none'
+      ? highestOtherCode(hint.versions, editing ? plainText(version.id) : null)
+      : null;
+  const floorRef = useRef<number | null>(null);
+  floorRef.current = floor;
   // The hint arrives after the person typed: look at the number again.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the hint is what makes the number worth looking at again
   useEffect(() => {
     if (hint.state !== 'idle' && form.isFieldTouched('versionCode')) {
       void form.validateFields(['versionCode']).catch(() => {});
     }
-  }, [hint.state, activeCode, form]);
+  }, [hint.state, floor, form]);
 
   const hasFile = editing && !rejected && plainText(version.apkUploadId) !== '';
   const shownFile = slot.upload
@@ -258,7 +264,9 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
   const versionCodeRules = [
     {
       validator: async (_: unknown, value: unknown) => {
-        const check = checkVersionCode(value, activeRef.current);
+        // The backend compares the size only when the number of a draft changes.
+        const unchanged = editing && value === numberOr(version.versionCode);
+        const check = checkVersionCode(value, unchanged ? null : floorRef.current);
         if (!check.ok) throw new Error(t(check.reasonKey, check.values));
       },
     },
@@ -272,6 +280,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
         : hint.state === 'failed' || (hint.state === 'known' && hint.code === null)
           ? t('appVersions.activeUnknown')
           : null;
+  const floorText = floor !== null ? t('appVersions.floorHint', { max: floor }) : null;
 
   const storeHelp =
     platform === 'IOS'
@@ -385,6 +394,12 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
                 <>
                   <br />
                   <span data-testid="version-active-hint">{activeText}</span>
+                </>
+              ) : null}
+              {floorText ? (
+                <>
+                  <br />
+                  <span data-testid="version-floor-hint">{floorText}</span>
                 </>
               ) : null}
             </>

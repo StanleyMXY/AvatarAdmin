@@ -2,8 +2,8 @@ import { countCodePoints } from '../../utils/codePoints';
 import { trimSpec } from '../../utils/trimSpec';
 
 // The rules of a version that the browser can check before it asks (contract 24.1 and 24.2). The
-// backend checks them all again and has the last word; the number of the version that is active is
-// only what the list showed a moment ago.
+// backend checks them all again and has the last word; the numbers of the other versions of the
+// channel are only what the list showed a moment ago.
 
 export type Texts = Record<string, string>;
 
@@ -32,13 +32,46 @@ export function checkVersionName(value: string): RuleCheck {
     : bad(rule('versionName'));
 }
 
-/** A whole number from 1, and strictly above the version number that is active in the channel (when that is known). */
-export function checkVersionCode(value: unknown, activeCode: number | null): RuleCheck {
+/**
+ * A whole number from 1, and strictly above `mustExceed` (when that is known). What it has to beat
+ * depends on the act (contract 24.2): a new version or an edited draft beats every other version of
+ * the channel (`highestOtherCode`); an activation beats every version that has been live
+ * (`highestLiveCode`). The caller passes `null` for an edit that leaves the number as it was: the
+ * backend checks the size only when the number changes.
+ */
+export function checkVersionCode(value: unknown, mustExceed: number | null): RuleCheck {
   if (!wholeFrom1(value)) return bad(rule('versionCodeWhole'));
-  if (known(activeCode) && value <= activeCode) {
-    return bad(rule('versionCodeAbove'), { active: activeCode });
+  if (known(mustExceed) && value <= mustExceed) {
+    return bad(rule('versionCodeAbove'), { max: mustExceed });
   }
   return ok;
+}
+
+/** What the rows of the list need to be counted: a number, a state and an id (read from the backend, so any of them can be odd). */
+export type CodeRow = { id?: unknown; versionCode?: unknown; status?: unknown };
+
+const highest = (codes: unknown[]): number | null => {
+  const numbers = codes.filter(known);
+  return numbers.length === 0 ? null : Math.max(...numbers);
+};
+
+/**
+ * The highest number among the versions of a channel other than `ownId`, of any state, drafts and
+ * taken-down versions included: the number a new version, or a draft whose number changes, has to
+ * beat. `null` when there is none. The rows are what the list read, so this is a hint; the backend decides.
+ */
+export function highestOtherCode(rows: readonly CodeRow[], ownId: string | null): number | null {
+  return highest(rows.filter((r) => ownId === null || r.id !== ownId).map((r) => r.versionCode));
+}
+
+/**
+ * The highest number among the versions of a channel that have been live (`ACTIVE` or `ARCHIVED`):
+ * the number a version being activated has to beat. A draft is not counted. `null` when there is none.
+ */
+export function highestLiveCode(rows: readonly CodeRow[]): number | null {
+  return highest(
+    rows.filter((r) => r.status === 'ACTIVE' || r.status === 'ARCHIVED').map((r) => r.versionCode),
+  );
 }
 
 /** A whole number from 1 that is not above the version number (when that is known). */

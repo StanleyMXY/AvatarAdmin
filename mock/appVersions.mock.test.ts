@@ -239,19 +239,60 @@ describe('POST /app-versions: a version of a STORE channel', () => {
     expect((await create(STORE_BODY, ['APPVERSION:MANAGE'])).status).toBe(200);
   });
 
-  it('checks the version number against the active version of the channel: strictly above', async () => {
-    const active = activeOf('play')?.versionCode ?? 0;
-    for (const code of [active, active - 1, 0, -2]) {
+  it('wants a whole number from 1 for the version number, naming the field', async () => {
+    for (const code of [0, -2, 1.5, null, '130']) {
       const answer = await create({ ...STORE_BODY, versionCode: code, minVersionCode: 1 });
       expect(answer.status, String(code)).toBe(400);
       expect(refs(answer), String(code)).toContain('versionCode');
     }
-    expect(refs(await create({ ...STORE_BODY, versionCode: active, minVersionCode: 1 }))).toEqual([
-      'versionCode',
-    ]);
+  });
+
+  it('wants a version number above every other version of the channel, a draft and a taken-down one included, as contract 24.2 says', async () => {
+    // play: 100 taken down, 110 active, 120 a draft; the old rule only looked at the active 110
+    const highest = Math.max(
+      ...[...appVersionsState.versions.values()]
+        .filter((v) => v.channelCode === 'play')
+        .map((v) => v.versionCode),
+    );
+    expect(highest).toBe(120);
+    // 120 is the draft's own number, so it is a duplicate (409, before the sizes are compared)
+    for (const code of [highest, highest - 1, 1]) {
+      const answer = await create({ ...STORE_BODY, versionCode: code, minVersionCode: 1 });
+      expect(answer.status, String(code)).toBe(code === highest ? 409 : 400);
+    }
+    const refused = await create({ ...STORE_BODY, versionCode: 119, minVersionCode: 1 });
+    expect(refused.body.code).toBe('INVALID_REQUEST');
+    expect(refused.body.message).toContain('versionCode');
+    expect(refused.body.message).toContain('120');
+    // answers 47: this refusal has a message only, no field list
+    expect(refused.body.data).toBeNull();
     expect(
-      (await create({ ...STORE_BODY, versionCode: active + 1, minVersionCode: 1 })).status,
+      (await create({ ...STORE_BODY, versionCode: highest + 1, minVersionCode: 1 })).status,
     ).toBe(200);
+  });
+
+  it('counts a version that was taken down when nothing is active', async () => {
+    for (const v of appVersionsState.versions.values()) {
+      if (v.channelCode !== 'play') continue;
+      if (v.status === 'DRAFT') appVersionsState.versions.delete(v.id);
+      else if (v.status === 'ACTIVE') v.status = 'ARCHIVED';
+    }
+    const refused = await create({ ...STORE_BODY, versionCode: 105, minVersionCode: 1 });
+    expect([refused.status, refused.body.code]).toEqual([400, 'INVALID_REQUEST']);
+    expect((await create({ ...STORE_BODY, versionCode: 111, minVersionCode: 1 })).status).toBe(200);
+  });
+
+  it('does not look at the versions of another channel', async () => {
+    // the iOS channel is at 311; the Android number 130 is only checked against the Android versions
+    expect((await create({ ...STORE_BODY, versionCode: 130, minVersionCode: 1 })).status).toBe(200);
+    const ios = await create({
+      ...STORE_BODY,
+      channelCode: 'appstore',
+      versionCode: 200,
+      minVersionCode: 1,
+      storeUrl: 'https://apps.apple.com/th/app/avatar-chat/id1234567890',
+    });
+    expect(ios.status).toBe(400);
   });
 
   it('keeps the minimum from 1 to the version number', async () => {
@@ -424,16 +465,25 @@ describe('POST /app-versions: a version of a STORE channel', () => {
     expect(off.body.data).toBeNull();
   });
 
-  it('refuses a version number the channel has already (409 DUPLICATE_RESOURCE naming the field)', async () => {
+  it('refuses a version number the channel has already (409 DUPLICATE_RESOURCE naming the field), before it compares sizes', async () => {
+    // 100 is taken and also far below the highest number of the channel: the duplicate is answered
     const taken = versionBy('play', 100);
     expect(taken.status).toBe('ARCHIVED');
-    // lower than the active one, so the order check comes first; make the active one lower to reach the duplicate
-    const active = activeOf('play');
-    if (active) active.status = 'ARCHIVED';
-    const answer = await create({ ...STORE_BODY, versionCode: 100, minVersionCode: 1 });
-    expect(answer.status).toBe(409);
-    expect(answer.body.code).toBe('DUPLICATE_RESOURCE');
-    expect(answer.body.data).toEqual({ field: 'versionCode' });
+    for (const code of [100, 110, 120]) {
+      const answer = await create({ ...STORE_BODY, versionCode: code, minVersionCode: 1 });
+      expect(answer.status, String(code)).toBe(409);
+      expect(answer.body.code).toBe('DUPLICATE_RESOURCE');
+      expect(answer.body.data).toEqual({ field: 'versionCode' });
+    }
+  });
+
+  it('checks the channel is on after the numbers, as the backend does (answers 47)', async () => {
+    const channel = channelsState.channels.get('play');
+    if (channel) channel.enabled = false;
+    const low = await create({ ...STORE_BODY, versionCode: 119, minVersionCode: 1 });
+    expect([low.status, low.body.code]).toEqual([400, 'INVALID_REQUEST']);
+    const off = await create(STORE_BODY);
+    expect([off.status, off.body.code]).toEqual([409, 'INVALID_STATE']);
   });
 });
 
@@ -567,18 +617,46 @@ describe('PUT /app-versions/{id}: editing a draft', () => {
     expect((await update(draft.id, {}, ['APPVERSION:ACTIVATE'])).status).toBe(403);
   });
 
-  it('checks the version number against the active version again', async () => {
+  const editBody = (draft: MockVersion, over: Record<string, unknown> = {}) => ({
+    versionName: draft.versionName,
+    versionCode: draft.versionCode,
+    minVersionCode: 1,
+    changelog: draft.changelog,
+    storeUrl: PLAY_URL,
+    ...over,
+  });
+
+  it('wants a changed number above every other version of the channel, not counting the draft itself', async () => {
     const draft = draftOf('play');
-    const active = activeOf('play') as MockVersion;
-    const answer = await update(draft.id, {
-      versionName: draft.versionName,
-      versionCode: active.versionCode,
-      minVersionCode: 1,
-      changelog: draft.changelog,
-      storeUrl: PLAY_URL,
-    });
-    expect(answer.status).toBe(400);
-    expect(refs(answer)).toEqual(['versionCode']);
+    // the other versions of play are 100, 110 (active): the draft 120 may be raised or lowered above 110
+    expect((await update(draft.id, editBody(draft, { versionCode: 110 }))).status).toBe(409);
+    const low = await update(draft.id, editBody(draft, { versionCode: 105 }));
+    expect([low.status, low.body.code, low.body.data]).toEqual([400, 'INVALID_REQUEST', null]);
+    expect(low.body.message).toContain('versionCode');
+    expect((await update(draft.id, editBody(draft, { versionCode: 111 }))).status).toBe(200);
+    expect(appVersionsState.versions.get(draft.id)?.versionCode).toBe(111);
+  });
+
+  it('counts the drafts and the taken-down versions of the channel, not only the active one', async () => {
+    const draft = draftOf('play');
+    const other = structuredClone(draft);
+    other.id = 'ver-other';
+    other.versionCode = 130;
+    appVersionsState.versions.set(other.id, other);
+    const low = await update(draft.id, editBody(draft, { versionCode: 125 }));
+    expect([low.status, low.body.code]).toEqual([400, 'INVALID_REQUEST']);
+    expect((await update(draft.id, editBody(draft, { versionCode: 131 }))).status).toBe(200);
+  });
+
+  it('does not compare the size when the number is not changed (the backend checks it only when it changes)', async () => {
+    const draft = draftOf('play');
+    const other = structuredClone(draft);
+    other.id = 'ver-other';
+    other.versionCode = 130;
+    appVersionsState.versions.set(other.id, other);
+    const answer = await update(draft.id, editBody(draft, { versionName: '1.2.9' }));
+    expect(answer.status).toBe(200);
+    expect(appVersionsState.versions.get(draft.id)?.versionName).toBe('1.2.9');
   });
 
   it('does not let the channel be changed', async () => {
@@ -671,11 +749,55 @@ describe('PUT /app-versions/{id}/status: activating and taking down', () => {
   it('refuses a draft whose number is not above the active one (the order is checked at activation too)', async () => {
     const draft = draftOf('play');
     const active = activeOf('play') as MockVersion;
-    draft.versionCode = active.versionCode;
+    active.versionCode = draft.versionCode + 5;
     draft.minVersionCode = 1;
     const answer = await status(draft.id, { status: 'ACTIVE', confirmStoreLive: true });
-    expect(answer.status).toBe(400);
-    expect(refs(answer)).toEqual(['versionCode']);
+    expect([answer.status, answer.body.code, answer.body.data]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      null,
+    ]);
+    expect(answer.body.message).toContain('versionCode');
+    expect(appVersionsState.versions.get(draft.id)?.status).toBe('DRAFT');
+  });
+
+  it('wants the number to beat every version that was live, a taken-down one too, though none is active', async () => {
+    const down = activeOf('play') as MockVersion;
+    down.status = 'ARCHIVED';
+    const draft = draftOf('play');
+    draft.versionCode = 105;
+    draft.minVersionCode = 1;
+    const refused = await status(draft.id, { status: 'ACTIVE', confirmStoreLive: true });
+    expect([refused.status, refused.body.code]).toEqual([400, 'INVALID_REQUEST']);
+    expect(refused.body.message).toContain('110');
+    draft.versionCode = 111;
+    expect((await status(draft.id, { status: 'ACTIVE', confirmStoreLive: true })).status).toBe(200);
+  });
+
+  it('does not count another draft: a draft above every version that was live can be activated', async () => {
+    const draft = draftOf('play');
+    const other = structuredClone(draft);
+    other.id = 'ver-other';
+    other.versionCode = 130;
+    appVersionsState.versions.set(other.id, other);
+    expect((await status(draft.id, { status: 'ACTIVE', confirmStoreLive: true })).status).toBe(200);
+  });
+
+  it('checks in the order of answers 47: state, then the store confirmation, then the number, then whether the channel is on', async () => {
+    const draft = draftOf('play');
+    const channel = channelsState.channels.get('play');
+    if (channel) channel.enabled = false;
+    // channel off, no confirmation: the confirmation is answered first
+    const first = await status(draft.id, { status: 'ACTIVE' });
+    expect([first.status, refs(first)]).toEqual([400, ['confirmStoreLive']]);
+    // channel off, a number that is too low: the number is answered before the channel
+    draft.versionCode = 105;
+    draft.minVersionCode = 1;
+    const second = await status(draft.id, { status: 'ACTIVE', confirmStoreLive: true });
+    expect([second.status, second.body.code]).toEqual([400, 'INVALID_REQUEST']);
+    draft.versionCode = 130;
+    const third = await status(draft.id, { status: 'ACTIVE', confirmStoreLive: true });
+    expect([third.status, third.body.code]).toEqual([409, 'INVALID_STATE']);
   });
 
   it('does not activate in a channel that is off (409)', async () => {
