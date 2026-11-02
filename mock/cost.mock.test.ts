@@ -294,7 +294,10 @@ describe('creating a batch by hand', () => {
     expect((await allPrices({ model: 'v' }))[0].unitPrice).toBe('0.0000000001');
     const wrongUnit = await write(CREATE, {}, { ...body, unit: 'MINUTE' });
     expect(wrongUnit.status).toBe(400);
-    expect(wrongUnit.body.data.details).toEqual([{ ref: 'unit', reason: 'OUT_OF_RANGE' }]);
+    // a refused price has a message and no details (backend reply 111)
+    expect(wrongUnit.body.code).toBe('INVALID_REQUEST');
+    expect(wrongUnit.body.data).toBeNull();
+    expect(wrongUnit.body.message).toMatch(/unit/);
   });
 
   it('a new batch for the same model and effective date supersedes the old one in force', async () => {
@@ -309,7 +312,23 @@ describe('creating a batch by hand', () => {
   it('refuses a currency that is not allowed', async () => {
     const answer = await write(CREATE, {}, llmBody({ currency: 'EUR' }));
     expect(answer.status).toBe(400);
-    expect(answer.body.data.details).toEqual([{ ref: 'currency', reason: 'OUT_OF_RANGE' }]);
+    expect(answer.body.data).toBeNull();
+    expect(answer.body.message).toMatch(/currency/);
+  });
+
+  it('answers the new batch, in the shape of an item of the list, when a price is saved (status ACTIVE, source MANUAL, the administrator as confirmedBy)', async () => {
+    const answer = await write(CREATE, {}, llmBody());
+    expect(answer.status).toBe(200);
+    const batch = answer.body.data;
+    expect(batch).toMatchObject({
+      resourceType: 'LLM',
+      model: 'model-z',
+      status: 'ACTIVE',
+      source: 'MANUAL',
+      confirmedByUsername: 'root',
+    });
+    const listed = (await allPrices({ model: 'model-z' })).find((b) => b.batchId === batch.batchId);
+    expect(batch).toEqual(listed);
   });
 
   it('refuses bands with a gap, an overlap, a first band that does not start at 0 and a last band with a limit', async () => {
@@ -328,7 +347,9 @@ describe('creating a batch by hand', () => {
     ]) {
       const answer = await write(CREATE, {}, llmBody({ bands }));
       expect(answer.status).toBe(400);
-      expect(answer.body.data.details[0].ref).toBe('bands');
+      // no ref and no reason: the gap and the overlap are one message, and the body has no details
+      expect(answer.body.data).toBeNull();
+      expect(answer.body.message).toMatch(/band/i);
     }
   });
 
@@ -393,11 +414,12 @@ describe('confirm, reject and retire', () => {
     expect(rows.find((b) => b.batchId === BATCH.activeLlm)?.status).toBe('SUPERSEDED');
   });
 
-  it('refuses to confirm a batch with a gap in its bands, with the reason', async () => {
+  it('refuses to confirm a batch with a gap in its bands, with a message and no details', async () => {
     const answer = await write(CONFIRM, { batchId: BATCH.pendingGap }, {});
     expect(answer.status).toBe(400);
     expect(answer.body.code).toBe('INVALID_REQUEST');
-    expect(answer.body.data.details[0].ref).toBe('bands');
+    expect(answer.body.data).toBeNull();
+    expect(answer.body.message).toMatch(/band/i);
     expect(costState.batches.find((b) => b.batchId === BATCH.pendingGap)?.status).toBe(
       'PENDING_REVIEW',
     );
@@ -585,7 +607,8 @@ describe('the final currency of a confirmed batch must be in usage_price.allowed
     const currency = await write(CONFIRM, { batchId: BATCH.pendingGap }, { currency: 'EUR' });
     expect(currency.body.data.details).toEqual([{ ref: 'currency', reason: 'OUT_OF_RANGE' }]);
     const bands = await write(CONFIRM, { batchId: BATCH.pendingGap }, {});
-    expect(bands.body.data.details[0].ref).toBe('bands');
+    expect(bands.status).toBe(400);
+    expect(bands.body.data).toBeNull();
     // a batch that is not pending answers the currency first, and 409 only for a good body
     const activeBad = await write(CONFIRM, { batchId: BATCH.activeLlm }, { currency: 'EUR' });
     expect(activeBad.status).toBe(400);
