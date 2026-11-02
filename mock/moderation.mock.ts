@@ -51,13 +51,10 @@ function enumParam(req: MockReq, name: string, allowed: readonly string[]): stri
   return value;
 }
 
-/** Waiting ones first, the longest waiting first; then the others, the newest first. */
+/** The backend's order: the oldest first (created_at, then id, ascending), whatever the status. */
 function byQueueOrder(a: MockRecord, b: MockRecord): number {
-  const aWaits = a.status === 'PENDING_REVIEW';
-  const bWaits = b.status === 'PENDING_REVIEW';
-  if (aWaits !== bWaits) return aWaits ? -1 : 1;
-  if (aWaits) return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
-  return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0;
+  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
 const notFound = () => new MockHttpError(404, 'RESOURCE_NOT_FOUND', 'There is no such record');

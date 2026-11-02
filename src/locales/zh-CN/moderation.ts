@@ -58,7 +58,8 @@ const messages: Record<string, string> = {
   'moderation.queue.oldest': '最老一条待处理的记录已等待 {duration}',
   'moderation.queue.oldestNone': '当前没有待处理的记录',
   'moderation.queue.oldestFailed': '最老待处理记录的等待时长取不到：{message}',
-  'moderation.queue.note': '待处理的记录按等待时长从长到短排在前面。举报必须真的被处理。',
+  'moderation.queue.note':
+    '记录不论状态，按创建时间从老到新排列。只看待处理的，请把状态选为“待复核”。举报必须真的被处理。',
   'moderation.queue.typeNote':
     '内容类型筛选只是把本页里其他类型的行隐藏。后端目前还不能按内容类型筛选，所以页数和总数仍然包含所有类型。',
   'moderation.queue.typeFilter':

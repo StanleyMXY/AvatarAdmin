@@ -60,7 +60,7 @@ const messages: Record<string, string> = {
   'moderation.queue.oldestFailed':
     'The waiting time of the oldest record could not be read: {message}',
   'moderation.queue.note':
-    'Records that wait come first, the longest waiting at the top. Reports must really be handled.',
+    'Records are listed from the oldest to the newest, whatever their state. To see only the ones that wait, choose the status Waiting for review. Reports must really be handled.',
   'moderation.queue.typeNote':
     'The content type filter only hides the other types in the page that is shown. The backend cannot filter by content type yet, so the page numbers and the total still count every type.',
   'moderation.queue.typeFilter':

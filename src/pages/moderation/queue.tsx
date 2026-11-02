@@ -35,7 +35,8 @@ type Oldest =
 
 /**
  * 审核队列 (`MODERATION:VIEW`): the records of the automatic check, of reports and of complaints.
- * The backend puts the ones that wait first, longest waiting at the top; the banner says how long
+ * The backend lists the records from the oldest to the newest, whatever their state, so the ones
+ * that wait are mixed with the others unless the status is chosen; the banner says how long
  * the oldest one has waited, because reports must really be handled.
  */
 export default function ModerationQueuePage() {

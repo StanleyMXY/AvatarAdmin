@@ -40,6 +40,16 @@ describe('the review queue', { timeout: 30000 }, () => {
     expect(within(row).getByText(/^3 d 4 h$/)).toBeInTheDocument();
   });
 
+  it('tells that the records come from the oldest to the newest whatever their state, and how to see only the waiting ones', async () => {
+    installMockBackend(moderationMock);
+    renderPage(<QueuePage />);
+    await rowOf(RECORD_ID.oldestImage);
+    expect(
+      screen.getByText(/listed from the oldest to the newest, whatever their state/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/choose the status Waiting for review/)).toBeInTheDocument();
+  });
+
   it('has a column for the waiting time and one for the creation time, with the time of the record in each', async () => {
     installMockBackend(moderationMock);
     renderPage(<QueuePage />);

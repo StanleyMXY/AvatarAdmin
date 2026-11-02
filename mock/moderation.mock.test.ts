@@ -87,18 +87,27 @@ describe('permissions (contract 17.4, content moderation row)', () => {
 });
 
 describe('GET /moderation/records', () => {
-  it('puts what has waited longest first among the pending ones, then the others, newest first', async () => {
+  it('lists the oldest record first, whatever its status (created_at, then id, ascending), so the waiting ones are not first', async () => {
     const { body } = await get(RECORDS, 'reviewer', { pageSize: '200' });
-    const rows = body.data.items as { status: string; createdAt: string }[];
-    const pending = rows.filter((r) => r.status === 'PENDING_REVIEW');
-    expect(pending.length).toBeGreaterThan(5);
-    expect(rows.slice(0, pending.length).every((r) => r.status === 'PENDING_REVIEW')).toBe(true);
-    const asc = pending.map((r) => r.createdAt);
-    expect(asc).toEqual([...asc].sort());
+    const rows = body.data.items as { id: string; status: string; createdAt: string }[];
     expect(rows[0]).toMatchObject({ id: RECORD_ID.oldestImage, contentType: 'AVATAR_IMAGE' });
-    const rest = rows.slice(pending.length).map((r) => r.createdAt);
-    expect(rest).toEqual([...rest].sort().reverse());
+    const order = (a: (typeof rows)[number], b: (typeof rows)[number]) =>
+      a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1;
+    expect(rows.map((r) => r.id)).toEqual([...rows].sort(order).map((r) => r.id));
+    // an approved or blocked record sits among the pending ones by its age
+    const firstDone = rows.findIndex((r) => r.status !== 'PENDING_REVIEW');
+    const lastPending = rows.map((r) => r.status).lastIndexOf('PENDING_REVIEW');
+    expect(firstDone).toBeLessThan(lastPending);
     expect(body.data.total).toBe(rows.length);
+  });
+
+  it('gives only the waiting records, oldest first, when the status is chosen', async () => {
+    const { body } = await get(RECORDS, 'reviewer', { pageSize: '200', status: 'PENDING_REVIEW' });
+    const rows = body.data.items as { status: string; createdAt: string }[];
+    expect(rows.length).toBeGreaterThan(5);
+    expect(rows.every((r) => r.status === 'PENDING_REVIEW')).toBe(true);
+    const asc = rows.map((r) => r.createdAt);
+    expect(asc).toEqual([...asc].sort());
   });
 
   it('gives the columns of the contract, the name of the reviewer, and null when that administrator is gone', async () => {
