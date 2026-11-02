@@ -4,14 +4,12 @@
 > **来源：** 管理端前端的系统配置页（`ConfigForm`/`ConfigRow`），后端第一批交付清单 `docs/backend-inputs/2026-10-29-avatar-backend-d1-admin-frontend-changes.md` 的 a4、a6、a8、a9、d14、d16 和 2026-10-31 追加的 GROUP B。
 > **背景：** 负责人定的规则是：错误码已知时，界面只显示按码翻译的文字，不附后端的英文 `message`。所以凡是靠 `message` 里的细节才讲得清的情形，前端要后端给结构化字段。下面每一条都说明前端现在怎么做（按最小做法继续），以及希望后端补什么。
 
-## 一、开启手机号登录被拒：缺的是哪一项（需要结构化字段）
+## 一、开启手机号登录被拒：缺的是哪一项（后端已答复，不需要结构化字段）
 
 - **接口：** `PUT /config/auth.phone_login_enabled`，`value` 为 `true`。
-- **现状：** 400 `INVALID_REQUEST`，`data.details` 为 `[{"ref":"SmsTemplate","reason":"EMPTY_NOT_ALLOWED"}]`；`message` "逐项写出缺的内容"（清单 a6）。`ref` 是 `SmsTemplate`，不是设置键，页面上没有对应的行。
-- **前端现在做的：** 把这条拒绝显示在设置表单的顶部（`config.refusal.SmsTemplate.EMPTY_NOT_ALLOWED`），固定写"必须至少有一个启用的验证码短信模板，语言为 en（en-GB、en-US 不算），且不限国家；先在短信模板里新增或启用"。这是清单 e2 里的规则本身，覆盖最常见的一项。
-- **前端为什么还需要后端补：** `message` 写的是"逐项"，也就是可能不止一项（清单只给出缺英文不限国家模板时的那一句），前端无法从错误码得知缺的是哪几项，也不应该去解析英文句子。
-- **希望：** 这个 400 的 `data` 加一个数组 `missing`，每项一个固定的大写码，例如 `OTP_TEMPLATE_ANY`（一个启用的验证码模板都没有）和 `OTP_TEMPLATE_EN_ALL_COUNTRIES`（缺 `locale` 等于 `en` 且 `country` 为空的启用模板）；码的名字由后端定，前端按码各写一句话。已有字段不变。
-- **测试（后端）：** 一个启用的验证码模板都没有时 `missing` 含第一个码；有模板但没有英文不限国家的时，`missing` 只含第二个码；两项都缺时两个都在。
+- **后端的答复（2026-11-02，第 42 条）：** 400 的 `data.details` 已经是一项缺失一条，按顺序最多四条，`reason` 都是 `EMPTY_NOT_ALLOWED`：`sms.allowed_country_codes`（没设或为空）、`sms.daily_global_cap`（没设）、`SmsChannel`（没有启用的验证码渠道）、`SmsTemplate`（没有启用、验证码类型、语言 en、不限国家的模板）。后端建议不加 `missing` 数组（重复信息）。
+- **前端现在做的：** 逐条按 `ref` 显示。`sms.allowed_country_codes`、`sms.daily_global_cap` 是设置键，表单里有这两行时写在对应的行上，没有时写在表单顶部；`SmsChannel`、`SmsTemplate` 各一句固定文字，写在表单顶部。不再固定写一句最常见的缺项，也不解析 `message`。
+- **不再需要后端做什么。**
 
 ## 二、`attribution.facebook_graph_version` 格式不对时的原因码
 

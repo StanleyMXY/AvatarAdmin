@@ -766,6 +766,12 @@ const messages: Record<string, string> = {
     '没有保存。事件保留天数必须不小于 30 加统计回溯天数（stats.land_window_days）。',
   'config.stats.land_window_days.reject.OUT_OF_RANGE':
     '没有保存。回溯天数不能小于 1，并且要小于依赖它的几项：事件保留天数（不小于 30 加回溯天数）、聊天消息保留天数（大于回溯天数）、游客设备记录保留天数（不小于 91 加回溯天数）。',
+  'config.sms.allowed_country_codes.reject.EMPTY_NOT_ALLOWED':
+    '还不能开启手机号登录：没有保存短信允许的国家码（sms.allowed_country_codes）。先保存至少一个国家码，再重试。',
+  'config.sms.daily_global_cap.reject.EMPTY_NOT_ALLOWED':
+    '还不能开启手机号登录：没有保存每日短信总量上限（sms.daily_global_cap）。先保存一个上限，再重试。',
+  'config.refusal.SmsChannel.EMPTY_NOT_ALLOWED':
+    '还不能开启手机号登录：至少需要一个已启用的验证码（OTP）短信渠道。请先在“短信渠道”里新增或启用一个，再重试。',
   'config.refusal.SmsTemplate.EMPTY_NOT_ALLOWED':
     '还不能开启手机号登录：必须至少有一个启用的验证码短信模板，语言为 en（en-GB、en-US 不算），且不限国家。请先在“短信模板”里新增或启用一个，再重试。',
   'config.push.default_locale.reject.OUT_OF_RANGE':

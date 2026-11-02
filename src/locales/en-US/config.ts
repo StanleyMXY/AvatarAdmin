@@ -848,6 +848,12 @@ const messages: Record<string, string> = {
     'Not saved. Event retention must be at least 30 days plus the statistics look-back days (stats.land_window_days).',
   'config.stats.land_window_days.reject.OUT_OF_RANGE':
     'Not saved. The look-back must be at least 1 and must stay below what depends on it: event retention (at least 30 plus the look-back), chat message retention (more than the look-back) and guest device retention (at least 91 plus the look-back).',
+  'config.sms.allowed_country_codes.reject.EMPTY_NOT_ALLOWED':
+    'Phone sign-in cannot be turned on yet: no allowed SMS country codes are saved (sms.allowed_country_codes). Save at least one country code, then try again.',
+  'config.sms.daily_global_cap.reject.EMPTY_NOT_ALLOWED':
+    'Phone sign-in cannot be turned on yet: the daily SMS cap is not saved (sms.daily_global_cap). Save a cap, then try again.',
+  'config.refusal.SmsChannel.EMPTY_NOT_ALLOWED':
+    'Phone sign-in cannot be turned on yet. At least one enabled SMS channel for verification codes (OTP) is needed. Add or enable one under SMS channels, then try again.',
   'config.refusal.SmsTemplate.EMPTY_NOT_ALLOWED':
     'Phone sign-in cannot be turned on yet. There must be at least one enabled OTP SMS template in language en (not en-GB or en-US) with no country set. Add or enable one under SMS templates, then try again.',
   'config.push.default_locale.reject.OUT_OF_RANGE':

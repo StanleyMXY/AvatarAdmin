@@ -123,6 +123,28 @@ describe('refusalTexts: where the words of each detail go', () => {
     ]);
   });
 
+  it('keeps the order of the details at the top, whether the ref is a setting key the form does not show or not', () => {
+    const intl = intlOf('en-US');
+    const { rows, top } = refusalTexts(
+      intl,
+      refusal([
+        { ref: 'sms.allowed_country_codes', reason: 'EMPTY_NOT_ALLOWED' },
+        { ref: 'sms.daily_global_cap', reason: 'EMPTY_NOT_ALLOWED' },
+        { ref: 'SmsChannel', reason: 'EMPTY_NOT_ALLOWED' },
+        { ref: 'SmsTemplate', reason: 'EMPTY_NOT_ALLOWED' },
+      ]),
+      new Set(['auth.phone_login_enabled']),
+      'auth.phone_login_enabled',
+    );
+    expect(rows.size).toBe(0);
+    expect(top).toEqual([
+      intl.formatMessage({ id: 'config.sms.allowed_country_codes.reject.EMPTY_NOT_ALLOWED' }),
+      intl.formatMessage({ id: 'config.sms.daily_global_cap.reject.EMPTY_NOT_ALLOWED' }),
+      intl.formatMessage({ id: 'config.refusal.SmsChannel.EMPTY_NOT_ALLOWED' }),
+      intl.formatMessage({ id: 'config.refusal.SmsTemplate.EMPTY_NOT_ALLOWED' }),
+    ]);
+  });
+
   it('takes the first detail when one key is named twice', () => {
     const { rows } = refusalTexts(
       intl,

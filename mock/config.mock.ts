@@ -198,15 +198,25 @@ function refusalFor(key: string, value: unknown): Refusal | null {
     }
   }
   if (key === 'auth.phone_login_enabled' && value === true) {
+    // The backend checks four things in this order and names each one that is missing (a detail
+    // for each; at most four): the allowed countries, the daily cap, an enabled OTP channel and an
+    // enabled OTP template in language en (any case) with no country set.
+    const countries = currentValue('sms.allowed_country_codes');
+    const missing: string[] = [];
+    if (!Array.isArray(countries) || countries.length === 0)
+      missing.push('sms.allowed_country_codes');
+    if (currentValue('sms.daily_global_cap') === null) missing.push('sms.daily_global_cap');
+    if (![...smsState.channels.values()].some((c) => c.enabled && c.smsType === 'OTP'))
+      missing.push('SmsChannel');
     const served = [...smsState.templates.values()].some(
       (t) =>
         t.enabled && t.smsType === 'OTP' && t.locale.toLowerCase() === 'en' && t.country === null,
     );
-    if (!served) {
+    if (!served) missing.push('SmsTemplate');
+    if (missing.length > 0) {
       return {
-        message:
-          'auth.phone_login_enabled needs an enabled OTP SMS template in language en for every country (no country set)',
-        details: [{ ref: 'SmsTemplate', reason: 'EMPTY_NOT_ALLOWED' }],
+        message: `Phone login cannot be enabled; missing: ${missing.join(', ')}`,
+        details: missing.map((ref) => ({ ref, reason: 'EMPTY_NOT_ALLOWED' })),
       };
     }
   }
