@@ -34,7 +34,11 @@ import {
   normalizeCountries,
 } from './channelRules';
 import { type Coverage, keepsCoverage } from './lastOtp';
-import { guardedFailureText, type useLastOtpPrompt } from './useLastOtpPrompt';
+import {
+  guardedFailureText,
+  isLastChannelRefusal,
+  type useLastOtpPrompt,
+} from './useLastOtpPrompt';
 
 type Values = Omit<ChannelFormValues, 'priority' | 'smsType'> & {
   smsType?: ChannelFormValues['smsType'];
@@ -75,7 +79,7 @@ export const asCoverage = (c: Partial<SmsChannel>): Coverage => ({
   countries: c.countries,
 });
 
-/** The text of the extension box for a channel: the JSON that is saved, written out; empty when there is none. */
+/** The text of the extension box for a channel: the JSON that is saved, written out; empty when there is none (or it is {}). */
 function extConfigText(value: unknown): string {
   if (value === null || value === undefined || value === '') return '';
   let shown = value;
@@ -86,6 +90,8 @@ function extConfigText(value: unknown): string {
       return value;
     }
   }
+  // The backend always answers an object; {} is "no extension", so the box is empty for it.
+  if (typeof shown === 'object' && shown !== null && Object.keys(shown).length === 0) return '';
   try {
     return JSON.stringify(shown, null, 2) ?? '';
   } catch {
@@ -120,7 +126,6 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
     clear();
-    let guarded = false;
     if (channel) {
       // Without the list of every channel the others are taken as not there: the question is asked.
       const others = all ?? [channel];
@@ -130,7 +135,6 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
       };
       if (!keepsCoverage(asCoverage(channel), after, others.map(asCoverage))) {
         if (!(await ask('change', 'channel'))) return;
-        guarded = true;
       }
     }
     const input = {
@@ -143,9 +147,12 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
       else await createChannel(buildChannelBody(input, 'create'));
     } catch (error) {
       failureToForm(intl, form, error, FIELDS, {}, { generalReason: true });
+      // The refusal about the last channel names no field: its words stand alone at the top.
       show((words) => ({
-        text: guardedFailureText(words, error, guarded),
-        more: failureWords(words, error, FIELDS, {}, { generalReason: true }).unplaced,
+        text: guardedFailureText(words, error),
+        more: isLastChannelRefusal(error)
+          ? []
+          : failureWords(words, error, FIELDS, {}, { generalReason: true }).unplaced,
       }));
       return;
     }

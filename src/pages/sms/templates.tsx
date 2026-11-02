@@ -26,9 +26,6 @@ import { templateFailureText } from './templateFailure';
 import { useLastOtpPrompt } from './useLastOtpPrompt';
 
 const NO_FILTERS: Record<string, never> = {};
-/** An enabled OTP row: when the backend refuses to delete or switch it off, the reason is the rule of contract 23.4, last or not (the page may not have known that it was the last). */
-const servesCodes = (row: { enabled?: unknown; smsType?: unknown }): boolean =>
-  row.enabled === true && plainText(row.smsType) === 'OTP';
 const isRecord = (row: unknown): row is SmsTemplate => typeof row === 'object' && row !== null;
 const asCoverage = (t: Partial<SmsTemplate>) => ({
   id: plainText(t.id),
@@ -82,12 +79,12 @@ export default function TemplatesPage() {
   const questionFor = (row: SmsTemplate): 'template' | 'englishTemplate' | null =>
     isLast(row) ? 'template' : isLastEnglish(row) ? 'englishTemplate' : null;
 
-  const remove = async (row: SmsTemplate, guarded: boolean) => {
+  const remove = async (row: SmsTemplate) => {
     try {
       await deleteTemplate(plainText(row.id));
       message.success(t('sms.common.deleted'));
     } catch (error) {
-      message.error(templateFailureText(intl, error, guarded));
+      message.error(templateFailureText(intl, error));
     }
     refresh();
   };
@@ -101,7 +98,7 @@ export default function TemplatesPage() {
           onClick: async () => {
             const question = questionFor(row);
             if (question !== null && (await ask('delete', question))) {
-              await remove(row, servesCodes(row));
+              await remove(row);
             }
           },
         }
@@ -109,7 +106,7 @@ export default function TemplatesPage() {
           key: 'delete',
           label: t('sms.common.delete'),
           confirmText: t('sms.templates.deleteAsk'),
-          onClick: () => remove(row, servesCodes(row)),
+          onClick: () => remove(row),
         },
   ];
 
@@ -179,7 +176,7 @@ export default function TemplatesPage() {
             if (!next && question !== null && !(await ask('disable', question))) return;
             await setTemplateEnabled(plainText(row.id), next);
           }}
-          failureText={(error, next) => templateFailureText(intl, error, !next && servesCodes(row))}
+          failureText={(error) => templateFailureText(intl, error)}
           onDone={refresh}
         />
       ),

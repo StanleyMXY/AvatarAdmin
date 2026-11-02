@@ -33,9 +33,10 @@ const messages: Record<string, string> = {
     '只要还存在用手机号登录的账号，后端同样会拒绝，因为这些账号要靠短信才能删除自己的账号。本页看不到有没有这样的账号。',
   'sms.guard.final': '以后端的判断为准。被拒绝时，什么都不会改变。',
   'sms.guard.ok': '继续',
-  'sms.guard.refused': '什么都没有改变。手机号登录开启，或存在手机号账号时，后端会拒绝这个操作。',
 
   // ---- channels ----
+  'sms.channels.lastRefused':
+    '什么都没有改变。手机号登录开启，或存在手机号账号时，必须至少保留一个启用的验证码通道，并且允许发送的每个国家都要有启用的验证码通道覆盖。先启用或新建另一个通道，或扩大另一个通道的国家范围，再改这一个。',
   'sms.channels.note.selection':
     '同一个国家里，取启用的验证码通道中优先级数值最小的一个。发送失败时不会改用别的通道重试。',
   'sms.channels.note.credentials':
@@ -119,8 +120,8 @@ const messages: Record<string, string> = {
   // ---- templates ----
   'sms.templates.note.rule':
     '发送时怎样选模板：先找号码所在国家、用户语言（请求头 Accept-Language）都匹配的，其次找同语言、不限国家的，最后回退到英文模板。没有任何可用的模板时，发送会失败。手机号登录开启，或存在手机号账号时，必须保留至少一个启用的、语言为英文（en）、不限国家的验证码模板；会让它消失的改动会被后端拒绝。',
-  'sms.templates.englishRefused':
-    '什么都没有改变。手机号登录开启，或存在手机号账号时，必须保留至少一个启用的、语言为英文（en）、不限国家的验证码模板。先启用或新建另一个，再改这一个。',
+  'sms.templates.lastRefused':
+    '什么都没有改变。手机号登录开启，或存在手机号账号时，必须保留至少一个启用的验证码模板，其中必须有一个是启用的、语言为英文（en）、不限国家的验证码模板。先启用或新建另一个，再改这一个。',
   'sms.templates.new': '新建模板',
   'sms.templates.empty': '没有模板',
   'sms.templates.col.code': '编码',

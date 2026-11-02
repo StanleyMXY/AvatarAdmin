@@ -92,7 +92,7 @@ describe('the channels', () => {
       name: 'n',
       providerCode: 'gateway-a',
       apiUrl: 'https://sms.example.com/v1',
-      extConfig: null,
+      extConfig: {},
       countries: [],
       smsType: 'OTP',
       priority: 1,

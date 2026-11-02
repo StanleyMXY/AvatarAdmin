@@ -119,13 +119,27 @@ describe('the body of a channel', () => {
     expect('channelCode' in update).toBe(false);
     expect('enabled' in update).toBe(false);
   });
-  it('sends null for an empty extension box and an empty list for all countries', () => {
+  it('sends {} on an update and null on a create for an empty extension box, and an empty list for all countries', () => {
+    // On an update null means "unchanged" (answers 6, 78): only {} clears the extension.
     expect(buildChannelBody({ ...values, extConfig: '  ', countries: [] }, 'update')).toMatchObject(
+      {
+        extConfig: {},
+        countries: [],
+      },
+    );
+    expect(buildChannelBody({ ...values, extConfig: '  ', countries: [] }, 'create')).toMatchObject(
       {
         extConfig: null,
         countries: [],
       },
     );
+  });
+  it('never sends null for a field of an update: null would keep the stored value', () => {
+    const body = buildChannelBody({ ...values, extConfig: '', countries: [] }, 'update');
+    for (const [name, value] of Object.entries(body)) {
+      expect(value, name).not.toBeNull();
+      expect(value, name).not.toBeUndefined();
+    }
   });
 });
 

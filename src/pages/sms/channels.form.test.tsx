@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { saved } from '../../../mock/_core/configStore';
 import configMock from '../../../mock/config.mock';
 import smsMock from '../../../mock/sms.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
@@ -353,6 +354,65 @@ describe('the credentials are names with text values (400 EMPTY_NOT_ALLOWED on c
   });
 });
 
+describe('a credentials body that the backend cannot read (answers 5)', () => {
+  it('is a 400 without details: the words of the code at the top, no field marked, the dialog open, the secret nowhere', async () => {
+    backend();
+    overrideFetch(async ({ method }) =>
+      method === 'PUT'
+        ? jsonAnswer(400, 'INVALID_REQUEST', null, 'SECRET BACKEND WORDS')
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<ChannelsPage />);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    const form = await openEdit(user, 'gw_th_otp');
+    await addCredential(user, form, 'apiKey', 'typed-secret-77');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    const bar = await screen.findByText(
+      'Some input is not valid. Please check the fields and try again.',
+    );
+    expect(bar.closest('.ant-alert')).not.toBeNull();
+    expect(document.querySelector('.ant-form-item-explain-error')).toBeNull();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('typed-secret-77');
+    expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
+  });
+
+  it('offers no way to clear the saved credentials: removing every row sends no key, and the hint says that a row replaces them all', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'gw_th_otp');
+    expect(form.getByText(/adding entries replaces all of them/)).toBeInTheDocument();
+    await addCredential(user, form, 'apiKey', 'x');
+    await user.click(form.getByRole('button', { name: 'Remove this credential' }));
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect('credentials' in (writesOf(calls)[0].body as object)).toBe(false);
+    expect(channel('gw_th_otp').credentials).toEqual({ apiKey: 'seed-secret-1' });
+  });
+});
+
+describe('the extension box of an edit (answers 6 and 78: null keeps the value, {} clears it)', () => {
+  it('sends {} when the box is emptied, and the extension is cleared', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'gw_sea_otp');
+    setText(form.getByRole('textbox', { name: 'Extension (JSON)' }), '');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { extConfig: unknown }).extConfig).toEqual({});
+    expect(channel('gw_sea_otp').extConfig).toEqual({});
+  });
+
+  it('shows an empty box for a channel whose extension is {}, and sends {} again', async () => {
+    channel('gw_th_otp').extConfig = {};
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'gw_th_otp');
+    expect(form.getByRole('textbox', { name: 'Extension (JSON)' })).toHaveValue('');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect((writesOf(calls)[0].body as { extConfig: unknown }).extConfig).toEqual({});
+  });
+});
+
 describe('the dialog', () => {
   it('creates a channel with the values as they are written and shows it in the list', async () => {
     const { calls, user } = await load();
@@ -679,6 +739,28 @@ describe('the question before a change that takes the last OTP coverage away', (
     );
     await settled();
     expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('shows the fixed text of the refusal (SmsChannel / OUT_OF_RANGE) at the top of the dialog, keeps it open and the form filled', async () => {
+    saved.set('auth.phone_login_enabled', {
+      value: true,
+      updatedAt: '2026-10-26T10:00:00Z',
+      updatedBy: '1',
+      updatedByUsername: 'root',
+    });
+    const { calls, user } = await load();
+    await editType(user, 'gw_th_otp', 'Marketing');
+    await user.click(
+      within(document.querySelector('.ant-modal-confirm') as HTMLElement).getByRole('button', {
+        name: 'Continue',
+      }),
+    );
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    const bar = await screen.findByText(/at least one enabled OTP channel must remain/);
+    expect(bar.closest('.ant-modal .ant-alert')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Some input is not valid');
+    expect(document.body.textContent).not.toContain('The value is outside the allowed range');
+    expect(channel('gw_th_otp').smsType).toBe('OTP');
   });
 
   it('is asked when countries that only this channel serves are taken away, and the save goes out when it is confirmed', async () => {

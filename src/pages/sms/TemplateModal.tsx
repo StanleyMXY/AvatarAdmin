@@ -9,7 +9,7 @@ import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { countryCodeProblem } from './channelRules';
 import { isLastOtpTemplate, keepsEnglishFallback } from './lastOtp';
-import { isEnglishFallbackRefusal, templateFailureText } from './templateFailure';
+import { isLastTemplateRefusal, templateFailureText } from './templateFailure';
 import {
   buildTemplateBody,
   CODE_PLACEHOLDER,
@@ -93,10 +93,10 @@ export function TemplateModal({ template, all, ask, onClose, onSaved }: Props) {
       else await createTemplate(buildTemplateBody(input, 'create'));
     } catch (error) {
       failureToForm(intl, form, error, FIELDS, {}, { generalReason: true });
-      // The refusal about the English template names no field: its words stand alone at the top.
+      // The refusal about the last template names no field: its words stand alone at the top.
       show((words) => ({
-        text: templateFailureText(words, error, guarded),
-        more: isEnglishFallbackRefusal(error)
+        text: templateFailureText(words, error),
+        more: isLastTemplateRefusal(error)
           ? []
           : failureWords(words, error, FIELDS, {}, { generalReason: true }).unplaced,
       }));

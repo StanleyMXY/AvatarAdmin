@@ -37,10 +37,10 @@ const messages: Record<string, string> = {
     'The backend also refuses while accounts that sign in with a phone number exist, because they need SMS to delete their accounts. This page cannot see whether there are any.',
   'sms.guard.final': 'The backend decides. If it refuses, nothing changes.',
   'sms.guard.ok': 'Continue',
-  'sms.guard.refused':
-    'Nothing was changed. The backend refuses this while phone sign-in is on or phone-number accounts exist.',
 
   // ---- channels ----
+  'sms.channels.lastRefused':
+    'Nothing was changed. While phone sign-in is on or phone-number accounts exist, at least one enabled OTP channel must remain, and every country that may receive codes must still be served by an enabled OTP channel. Enable or create another channel, or widen the countries of another one, first, then change this one.',
   'sms.channels.note.selection':
     'For a country, the enabled OTP channel with the smallest priority number is used. When a send fails, it is not retried on another channel.',
   'sms.channels.note.credentials':
@@ -130,8 +130,8 @@ const messages: Record<string, string> = {
   // ---- templates ----
   'sms.templates.note.rule':
     'How a template is chosen for a send: first the one for the country of the number and the language of the user (the Accept-Language request header), then one in the same language for any country, and last the English one. When no template can be used, the send fails. While phone sign-in is on or phone-number accounts exist, at least one enabled OTP template in English (en) with no country must remain; the backend refuses the change that would remove it.',
-  'sms.templates.englishRefused':
-    'Nothing was changed. While phone sign-in is on or phone-number accounts exist, an enabled OTP template in English (en) for every country (no country set) must remain. Enable or create another one first, then change this one.',
+  'sms.templates.lastRefused':
+    'Nothing was changed. While phone sign-in is on or phone-number accounts exist, at least one enabled OTP template must remain, and one of them must be an enabled OTP template in English (en) for every country (no country set). Enable or create another one first, then change this one.',
   'sms.templates.new': 'New template',
   'sms.templates.empty': 'No templates',
   'sms.templates.col.code': 'Code',

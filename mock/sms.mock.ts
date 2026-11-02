@@ -86,12 +86,16 @@ function losesCoverage(before: MockChannel, after: MockChannel | null): boolean 
   });
 }
 
+/**
+ * The backend answers 400 INVALID_REQUEST with the detail SmsChannel / OUT_OF_RANGE whether no OTP
+ * channel would be left or only a country would lose its coverage (answers 41: both have the same
+ * `ref` and `reason`, only the English message differs).
+ */
 function refuseLastChannel(before: MockChannel, after: MockChannel | null) {
   if (phoneSignInMatters() && losesCoverage(before, after)) {
-    throw new MockHttpError(
-      400,
-      'INVALID_REQUEST',
+    throw invalidRequest(
       'The last enabled OTP channel of a country cannot be removed while phone sign-in is on or phone-number accounts exist',
+      [{ ref: 'SmsChannel', reason: 'OUT_OF_RANGE' }],
     );
   }
 }
@@ -107,10 +111,9 @@ function refuseLastTemplate(before: MockTemplate, after: MockTemplate | null) {
   const wasOtp = before.enabled && before.smsType === 'OTP';
   const stillOtp = after?.enabled === true && after.smsType === 'OTP';
   if (wasOtp && !stillOtp && !others.some((t) => t.enabled && t.smsType === 'OTP')) {
-    throw new MockHttpError(
-      400,
-      'INVALID_REQUEST',
+    throw invalidRequest(
       'The last enabled OTP template cannot be removed while phone sign-in is on or phone-number accounts exist',
+      [{ ref: 'SmsTemplate', reason: 'OUT_OF_RANGE' }],
     );
   }
   // Then the one that must stay: only the removal of the last qualifying template is judged, so a
@@ -135,7 +138,8 @@ function channelView(c: MockChannel) {
     name: c.name,
     providerCode: c.providerCode,
     apiUrl: c.apiUrl,
-    extConfig: c.extConfig,
+    // The backend always answers the extension as an object (answers 6).
+    extConfig: c.extConfig ?? {},
     countries: c.countries,
     smsType: c.smsType,
     enabled: c.enabled,
@@ -162,7 +166,10 @@ function channelDetails(body: Record<string, unknown>, creating: boolean): Detai
     url = null;
   }
   if (url?.protocol !== 'https:') details.push({ ref: 'apiUrl', reason: 'NOT_HTTPS' });
-  else if (provider && !provider.allowedHosts.includes(url.hostname.toLowerCase())) {
+  else if (
+    provider &&
+    !provider.allowedHosts.some((host) => host.toLowerCase() === url.hostname.toLowerCase())
+  ) {
     details.push({ ref: 'apiUrl', reason: 'INVALID_HOST' });
   }
   if (!SMS_TYPES.includes(body.smsType as never))
@@ -180,25 +187,31 @@ function channelDetails(body: Record<string, unknown>, creating: boolean): Detai
   return details;
 }
 
+/** The backend cannot read the body (a string or a list where a map is wanted): 400 INVALID_REQUEST, no details. */
+const unreadableBody = () =>
+  new MockHttpError(400, 'INVALID_REQUEST', 'Malformed or invalid request body');
+
 /**
- * `credentials` is a map of names to text values. A null value or a name that is empty or only
- * blanks, and anything that is not such a map (null, text, a list), is 400 EMPTY_NOT_ALLOWED on
- * `credentials`. An absent key or an empty map leaves the stored credentials as they are.
+ * `credentials` is a map of names to text values (answers 5). Absent, null and {} mean "unchanged".
+ * A null value is 400 EMPTY_NOT_ALLOWED on `credentials`; an empty name or an empty value is
+ * accepted. Anything that is not a map (a string, a list) cannot be read: 400 without details.
+ * A value that is a number or a boolean is not checked against the real backend (it may turn
+ * it into text); the page never sends one, so the mock refuses it like an unreadable body.
  */
 function credentialsDetail(body: Record<string, unknown>): Detail[] {
-  if (!('credentials' in body)) return [];
   const value = body.credentials;
-  const refused: Detail[] = [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }];
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return refused;
-  const whole = Object.entries(value).every(
-    ([name, text]) => trimSpec(name) !== '' && typeof text === 'string',
-  );
-  return whole ? [] : refused;
+  if (value === undefined || value === null) return [];
+  if (typeof value !== 'object' || Array.isArray(value)) throw unreadableBody();
+  const texts = Object.values(value);
+  if (texts.some((text) => text !== null && !isText(text))) throw unreadableBody();
+  return texts.some((text) => text === null)
+    ? [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }]
+    : [];
 }
 
-/** The map the body carries, or null when it carries none (absent, or empty). */
+/** The map the body carries, or null when it carries none (absent, null or empty). */
 function credentialsOf(body: Record<string, unknown>): Record<string, string> | null {
-  const value = body.credentials as Record<string, string> | undefined;
+  const value = body.credentials as Record<string, string> | null | undefined;
   return value && Object.keys(value).length > 0 ? { ...value } : null;
 }
 
@@ -206,6 +219,17 @@ const countriesOf = (value: unknown): string[] =>
   Array.isArray(value) ? [...new Set(value.filter(isText).map((c) => c.toUpperCase()))] : [];
 
 const nowIso = () => new Date().toISOString();
+
+/** The fields of a channel that an update may leave out. */
+const UPDATE_KEYS = [
+  'name',
+  'providerCode',
+  'apiUrl',
+  'extConfig',
+  'countries',
+  'smsType',
+  'priority',
+] as const;
 
 // ---- templates ----
 
@@ -351,10 +375,11 @@ export default {
       providerCode: textOf(body.providerCode),
       apiUrl: trimSpec(textOf(body.apiUrl)),
       credentials: credentialsOf(body),
-      extConfig: (body.extConfig as Record<string, unknown> | null | undefined) ?? null,
+      extConfig: (body.extConfig as Record<string, unknown> | null | undefined) ?? {},
       countries: countriesOf(body.countries),
       smsType: body.smsType as MockChannel['smsType'],
-      enabled: body.enabled === true,
+      // Not sent means on (answers 78).
+      enabled: body.enabled !== false,
       priority: body.priority as number,
       createdAt: at,
       updatedAt: at,
@@ -366,23 +391,29 @@ export default {
   'PUT /api/admin/sms/channels/:id': guard('SMS:CHANNEL:CONFIG', (req) => {
     const channel = smsState.channels.get(idOf(req));
     if (!channel) throw notFound('channel');
-    const body = bodyOf(req);
+    const sent = bodyOf(req);
+    // A field the body leaves out or sends as null keeps its stored value (answers 78): null is not
+    // a way to clear anything. The extension is cleared with {}, the countries with [].
+    const body: Record<string, unknown> = { ...sent };
+    for (const key of UPDATE_KEYS) {
+      if (sent[key] === undefined || sent[key] === null) body[key] = channel[key];
+    }
     throwIf(channelDetails(body, false));
     const next: MockChannel = {
       ...channel,
       name: trimSpec(textOf(body.name)),
       providerCode: textOf(body.providerCode),
       apiUrl: trimSpec(textOf(body.apiUrl)),
-      extConfig: (body.extConfig as Record<string, unknown> | null | undefined) ?? null,
+      extConfig: body.extConfig as Record<string, unknown> | null,
       countries: countriesOf(body.countries),
       smsType: body.smsType as MockChannel['smsType'],
       priority: body.priority as number,
       updatedAt: nowIso(),
     };
     refuseLastChannel(channel, next);
-    // A missing field or an empty map leaves the stored ones alone; a map with entries replaces them all.
-    const sent = credentialsOf(body);
-    if (sent) next.credentials = sent;
+    // A missing field, null or an empty map leaves the stored credentials alone; a map with entries replaces them all.
+    const credentials = credentialsOf(body);
+    if (credentials) next.credentials = credentials;
     smsState.channels.set(channel.id, next);
     return ok(channelView(next));
   }),
@@ -472,7 +503,7 @@ export default {
       content: trimSpec(textOf(body.content)),
       providerTemplateId: isText(body.providerTemplateId) ? body.providerTemplateId : null,
       smsType: body.smsType as MockTemplate['smsType'],
-      enabled: body.enabled === true,
+      enabled: body.enabled !== false,
     };
     smsState.templates.set(id, template);
     return ok(template);

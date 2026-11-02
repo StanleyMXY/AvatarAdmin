@@ -539,8 +539,9 @@ describe('the switch of a template', () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    // The same detail (SmsTemplate / OUT_OF_RANGE) as for the English template: one fixed text for both cases.
     expect(
-      await screen.findByText(/Some input is not valid\. Please check the fields and try again\./),
+      await screen.findByText(/at least one enabled OTP template must remain/),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(
       'The last enabled OTP template cannot be removed',
@@ -566,14 +567,19 @@ describe('deleting a template', () => {
     expect(writesOf(calls)[0].method).toBe('DELETE');
   });
 
-  it('says what a refusal means when an enabled OTP template that is not the last is deleted with the inline question', async () => {
+  it('says the fixed text of the refusal when an enabled OTP template that is not the last is deleted with the inline question', async () => {
     template('otp_th').enabled = true;
     template('otp_th').smsType = 'OTP';
     template('otp_en').enabled = true;
     backend();
     overrideFetch(async ({ method }) =>
       method === 'DELETE'
-        ? jsonAnswer(400, 'INVALID_REQUEST', null, 'SECRET BACKEND WORDS')
+        ? jsonAnswer(
+            400,
+            'INVALID_REQUEST',
+            { details: [{ ref: 'SmsTemplate', reason: 'OUT_OF_RANGE' }] },
+            'SECRET BACKEND WORDS',
+          )
         : undefined,
     );
     const user = userEvent.setup();
@@ -583,9 +589,7 @@ describe('deleting a template', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
-      await screen.findByText(
-        /Some input is not valid.*refuses this while phone sign-in is on or phone-number accounts exist/s,
-      ),
+      await screen.findByText(/at least one enabled OTP template must remain/),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
@@ -603,7 +607,9 @@ describe('deleting a template', () => {
       (await screen.findAllByRole('button', { name: 'Continue' })).at(-1) as HTMLElement,
     );
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect(await screen.findByText(/Some input is not valid/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/at least one enabled OTP template must remain/),
+    ).toBeInTheDocument();
     expect((await rowOf('otp_en')).textContent).toContain('otp_en');
   });
 

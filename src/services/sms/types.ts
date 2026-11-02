@@ -44,8 +44,10 @@ export type SmsChannel = {
 
 /**
  * The body of a create. `credentials` is a map of names to text values (the backend answers 400
- * EMPTY_NOT_ALLOWED on a null value or an empty name), and it is left out unless something was typed.
- * With entries it replaces everything stored; absent or `{}` keeps what is stored.
+ * EMPTY_NOT_ALLOWED on a null value, and an unreadable body, such as a single string, as a 400
+ * without details), and it is left out unless something was typed. With entries it replaces
+ * everything stored; absent, null or `{}` keeps what is stored. There is no way to clear stored
+ * credentials, so the page offers none.
  */
 export type ChannelInput = {
   channelCode: string;
@@ -60,8 +62,14 @@ export type ChannelInput = {
   credentials?: Record<string, string>;
 };
 
-/** The body of an update: the code and the switch cannot be changed here. */
-export type ChannelPatch = Omit<ChannelInput, 'channelCode' | 'enabled'>;
+/**
+ * The body of an update: the code and the switch cannot be changed here. A field that is left out
+ * or null keeps its stored value, so nothing is cleared with null: the extension is cleared with `{}`,
+ * the countries with `[]`.
+ */
+export type ChannelPatch = Omit<ChannelInput, 'channelCode' | 'enabled' | 'extConfig'> & {
+  extConfig: Record<string, unknown>;
+};
 
 export type SmsProvider = { code: string; allowedHosts: string[] };
 
