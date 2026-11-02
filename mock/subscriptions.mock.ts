@@ -33,6 +33,20 @@ const bad = (ref: string, reason: string, message = `${ref} is not valid`) =>
 /** Counts code points after the ends are trimmed, as the server counts text (contract 1.9). */
 const codePointLength = (value: string) => [...value.trim()].length;
 
+/** What the server refuses in the name and the priority of an entitlement (the key is checked on its own). */
+function defProblems(body: Record<string, unknown>): { ref: string; reason: string }[] {
+  const details: { ref: string; reason: string }[] = [];
+  const name = typeof body.name === 'string' ? body.name : '';
+  if (codePointLength(name) === 0) details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
+  else if (codePointLength(name) > 100) details.push({ ref: 'name', reason: 'TOO_LONG' });
+  const priority = body.priority;
+  if (priority === undefined || priority === null)
+    details.push({ ref: 'priority', reason: 'EMPTY_NOT_ALLOWED' });
+  else if (typeof priority !== 'number' || !Number.isInteger(priority))
+    details.push({ ref: 'priority', reason: 'NOT_AN_INTEGER' });
+  return details;
+}
+
 // ---- feature values ----
 
 type FeatureInput = { mode: Mode; value: unknown };
@@ -341,46 +355,57 @@ export default {
     ok({ items: [...state().defs].sort((a, b) => a.priority - b.priority).map(defView) }),
   ),
 
+  // Backend reply 104: the key is [A-Za-z0-9][A-Za-z0-9._-]{0,63} (only when made), the name 1 to 100
+  // code points after trimming, the priority a whole number of any size and unique. A taken key or
+  // priority is 409 DUPLICATE_RESOURCE with data.field; when the key is taken and the priority is held
+  // by another entitlement too, it is the priority that is named. POST answers { key }, PUT data null.
   'POST /api/admin/entitlement-defs': guard('SUBSCRIPTION:CONFIG', (req) => {
     const body = bodyOf(req);
     const key = typeof body.key === 'string' ? body.key.trim() : '';
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    const priority = body.priority;
-    const details: { ref: string; reason: string }[] = [];
-    if (key === '') details.push({ ref: 'key', reason: 'EMPTY_NOT_ALLOWED' });
-    if (name === '') details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
-    if (typeof priority !== 'number' || !Number.isInteger(priority))
-      details.push({ ref: 'priority', reason: 'NOT_AN_INTEGER' });
+    const details = defProblems(body);
+    if (key === '') details.unshift({ ref: 'key', reason: 'EMPTY_NOT_ALLOWED' });
+    else if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(key))
+      details.unshift({ ref: 'key', reason: 'OUT_OF_RANGE' });
     if (details.length > 0) throw invalidRequest('the definition is not valid', details);
+    const name = (body.name as string).trim();
+    const priority = body.priority as number;
+    const holder = state().defs.find((d) => d.priority === priority);
+    if (holder && holder.key !== key)
+      throw new MockHttpError(
+        409,
+        'DUPLICATE_RESOURCE',
+        'The entitlement priority already exists',
+        {
+          field: 'priority',
+        },
+      );
     if (state().defs.some((d) => d.key === key))
-      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The key is taken', { field: 'key' });
-    if (state().defs.some((d) => d.priority === priority))
-      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The priority is taken', {
-        field: 'priority',
+      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The entitlement key already exists', {
+        field: 'key',
       });
-    const def: Def = { key, name, priority: priority as number };
-    state().defs.push(def);
-    return ok(defView(def));
+    state().defs.push({ key, name, priority });
+    return ok({ key });
   }),
 
   'PUT /api/admin/entitlement-defs/:key': guard('SUBSCRIPTION:CONFIG', (req) => {
     const def = state().defs.find((d) => d.key === req.params.key);
     if (!def) throw notFound('entitlement');
     const body = bodyOf(req);
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    const priority = body.priority;
-    const details: { ref: string; reason: string }[] = [];
-    if (name === '') details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
-    if (typeof priority !== 'number' || !Number.isInteger(priority))
-      details.push({ ref: 'priority', reason: 'NOT_AN_INTEGER' });
+    const details = defProblems(body);
     if (details.length > 0) throw invalidRequest('the definition is not valid', details);
+    const priority = body.priority as number;
     if (state().defs.some((d) => d.key !== def.key && d.priority === priority))
-      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The priority is taken', {
-        field: 'priority',
-      });
-    def.name = name;
-    def.priority = priority as number;
-    return ok(defView(def));
+      throw new MockHttpError(
+        409,
+        'DUPLICATE_RESOURCE',
+        'The entitlement priority already exists',
+        {
+          field: 'priority',
+        },
+      );
+    def.name = (body.name as string).trim();
+    def.priority = priority;
+    return ok(null);
   }),
 
   'PUT /api/admin/entitlement-defs/:key/features': guard('SUBSCRIPTION:CONFIG', (req) => {

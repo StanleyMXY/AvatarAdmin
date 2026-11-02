@@ -355,13 +355,14 @@ describe('entitlement definitions and their feature values', () => {
     expect(res.status).toBe(404);
   });
 
-  it('creates and edits a definition; a key or a priority that is taken is 409 DUPLICATE_RESOURCE with the field', async () => {
+  it('creates a definition and answers { key }; edits one and answers data null; a key or a priority that is taken is 409 DUPLICATE_RESOURCE with the field', async () => {
     const created = await send('POST /api/admin/entitlement-defs', root(), {
       key: 'gold',
       name: 'Gold',
       priority: 50,
     });
     expect(created.status).toBe(200);
+    expect(created.body.data).toEqual({ key: 'gold' });
     const sameKey = await send('POST /api/admin/entitlement-defs', root(), {
       key: 'gold',
       name: 'Gold 2',
@@ -383,6 +384,7 @@ describe('entitlement definitions and their feature values', () => {
       { key: 'gold' },
     );
     expect(edit.status).toBe(200);
+    expect(edit.body.data).toBeNull();
     const clash = await send(
       'PUT /api/admin/entitlement-defs/:key',
       root(),
@@ -401,17 +403,66 @@ describe('entitlement definitions and their feature values', () => {
         )
       ).status,
     ).toBe(404);
-    const empty = await send('POST /api/admin/entitlement-defs', root(), {
-      key: ' ',
-      name: '',
-      priority: 1.5,
+  });
+
+  it('names the priority, not the key, when the key is taken and the priority is held by another entitlement (the backend asks who holds the priority)', async () => {
+    const both = await send('POST /api/admin/entitlement-defs', root(), {
+      key: 'basic',
+      name: 'Basic again',
+      priority: 20,
     });
-    expect(empty.status).toBe(400);
-    expect(empty.body.data.details.map((d: { ref: string }) => d.ref).sort()).toEqual([
-      'key',
-      'name',
-      'priority',
+    expect(both.status).toBe(409);
+    expect(both.body.data.field).toBe('priority');
+    // the priority is free now: the key is what is taken
+    const keyOnly = await send('POST /api/admin/entitlement-defs', root(), {
+      key: 'basic',
+      name: 'Basic again',
+      priority: 9999,
+    });
+    expect(keyOnly.body.data.field).toBe('key');
+  });
+
+  it('checks the key ([A-Za-z0-9][A-Za-z0-9._-]{0,63}), the name (1 to 100 code points after the ends are trimmed) and the priority (a whole number, any value)', async () => {
+    const post = (over: Record<string, unknown>) =>
+      send('POST /api/admin/entitlement-defs', root(), {
+        key: 'valid-key',
+        name: 'Valid',
+        priority: 700,
+        ...over,
+      });
+    const details = async (over: Record<string, unknown>) =>
+      (await post(over)).body.data?.details as { ref: string; reason: string }[] | undefined;
+    expect(await details({ key: ' ' })).toEqual([{ ref: 'key', reason: 'EMPTY_NOT_ALLOWED' }]);
+    for (const key of ['-start', '.start', '_start', 'has space', 'ก', 'a'.repeat(65), 'a/b']) {
+      expect(await details({ key }), key).toEqual([{ ref: 'key', reason: 'OUT_OF_RANGE' }]);
+    }
+    expect((await post({ key: 'a'.repeat(64) })).status).toBe(200);
+    expect((await post({ key: '9.x_y-z', priority: 701 })).status).toBe(200);
+    expect(await details({ name: '   ' })).toEqual([{ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' }]);
+    expect(await details({ name: 'ก'.repeat(101) })).toEqual([{ ref: 'name', reason: 'TOO_LONG' }]);
+    expect((await post({ key: 'k100', name: '😀'.repeat(100), priority: 702 })).status).toBe(200);
+    expect(await details({ priority: undefined })).toEqual([
+      { ref: 'priority', reason: 'EMPTY_NOT_ALLOWED' },
     ]);
+    expect(await details({ priority: 1.5 })).toEqual([
+      { ref: 'priority', reason: 'NOT_AN_INTEGER' },
+    ]);
+    // the range of the priority is not limited: zero and a negative number are fine
+    expect((await post({ key: 'zero', priority: 0 })).status).toBe(200);
+    expect((await post({ key: 'minus', priority: -5 })).status).toBe(200);
+  });
+
+  it('does not check the key of an edit: it is the path, and the body only has the name and the priority', async () => {
+    const edit = await send(
+      'PUT /api/admin/entitlement-defs/:key',
+      root(),
+      { key: 'ignored', name: 'Basic!', priority: 10 },
+      { key: 'basic' },
+    );
+    expect(edit.status).toBe(200);
+    const defs = (await get('GET /api/admin/entitlement-defs', root())).body.data.items;
+    expect(defs.find((d: { key: string }) => d.key === 'basic')?.name).toBe('Basic!');
+    expect(defs.some((d: { key: string }) => d.key === 'ignored')).toBe(false);
   });
 });
 

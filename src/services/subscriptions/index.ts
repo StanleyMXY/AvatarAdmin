@@ -60,16 +60,21 @@ export const listEntitlementDefs = (): Promise<{ items: EntitlementDef[] }> =>
 
 export type EntitlementDefInput = { key: string; name: string; priority: number };
 
-/** `POST /entitlement-defs` (`SUBSCRIPTION:CONFIG`); the key or the priority taken is 409 DUPLICATE_RESOURCE. */
-export const createEntitlementDef = (input: EntitlementDefInput): Promise<EntitlementDef> =>
-  apiRequest<EntitlementDef>({ method: 'POST', url: '/entitlement-defs', body: input });
+/**
+ * `POST /entitlement-defs` (`SUBSCRIPTION:CONFIG`): answers `{ key }`. The key is 1 to 64 letters,
+ * digits, `.`, `_` or `-` starting with a letter or a digit, and cannot be changed afterwards; the
+ * name is 1 to 100 code points. A key or a priority that is taken is 409 DUPLICATE_RESOURCE with
+ * `data.field` `key` or `priority`.
+ */
+export const createEntitlementDef = (input: EntitlementDefInput): Promise<{ key: string }> =>
+  apiRequest<{ key: string }>({ method: 'POST', url: '/entitlement-defs', body: input });
 
-/** `PUT /entitlement-defs/{key}` (`SUBSCRIPTION:CONFIG`): the name and the priority. */
+/** `PUT /entitlement-defs/{key}` (`SUBSCRIPTION:CONFIG`): the name and the priority; answers `data: null`. */
 export const updateEntitlementDef = (
   key: string,
   input: { name: string; priority: number },
-): Promise<EntitlementDef> =>
-  apiRequest<EntitlementDef>({ method: 'PUT', url: `/entitlement-defs/${enc(key)}`, body: input });
+): Promise<null> =>
+  apiRequest<null>({ method: 'PUT', url: `/entitlement-defs/${enc(key)}`, body: input });
 
 /**
  * `PUT /entitlement-defs/{key}/features` (`SUBSCRIPTION:CONFIG`): the switches that are listed are
