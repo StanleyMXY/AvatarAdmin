@@ -22,6 +22,20 @@ import { chooseOption, signIn, stubObjectUrls } from './testSetup';
 
 vi.mock('../../request/upload', async () => (await import('./testSetup')).uploadModule);
 
+/** The item list is long and its dropdown draws only the first rows: search for the item, then click it. */
+async function chooseItem(
+  user: ReturnType<typeof userEvent.setup>,
+  dialog: HTMLElement,
+  key: string,
+) {
+  await user.click(within(dialog).getByRole('combobox', { name: 'Item' }));
+  await user.type(within(dialog).getByRole('combobox', { name: 'Item' }), key);
+  const options = await screen.findAllByText(new RegExp(key), {
+    selector: '.ant-select-item-option-content',
+  });
+  await user.click(options[options.length - 1]);
+}
+
 beforeEach(() => {
   signIn('root');
   stubObjectUrls();
@@ -54,7 +68,7 @@ describe('the failures of the avatar dialogs follow the language', { timeout: 60
       <GrantCosmeticModal accountId={ACCOUNT.empty} open onClose={noop} onGranted={noop} />,
     );
     const dialog = await screen.findByRole('dialog');
-    await chooseOption(user, 'Item', /outfit_blue_suit/, dialog);
+    await chooseItem(user, dialog, 'outfit_blue_suit');
     fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'ขอบคุณ' } });
     await submit(dialog);
     await expectFailureFollowsLanguage(view);

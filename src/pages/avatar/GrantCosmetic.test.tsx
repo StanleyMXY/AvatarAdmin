@@ -9,11 +9,25 @@ import { renderPage } from '../../../tests/renderPage';
 import { setTestAccess } from '../../../tests/stubs/umi-max';
 import access from '../../access';
 import { GrantCosmeticButton } from './GrantCosmetic';
-import { chooseOption, dialogsClosed, signIn, writesOf } from './testSetup';
+import { dialogsClosed, signIn, writesOf } from './testSetup';
 
 const backend = () => useMockBackend({ default: avatarMock });
 
 /** The cosmetic list is open to the right to give (backend reply 2, point 9); this administrator has only that. */
+/** The item list is long and its dropdown draws only the first rows: search for the item, then click it. */
+async function chooseItem(
+  user: ReturnType<typeof userEvent.setup>,
+  dialog: HTMLElement,
+  key: string,
+) {
+  await user.click(within(dialog).getByRole('combobox', { name: 'Item' }));
+  await user.type(within(dialog).getByRole('combobox', { name: 'Item' }), key);
+  const options = await screen.findAllByText(new RegExp(key), {
+    selector: '.ant-select-item-option-content',
+  });
+  await user.click(options[options.length - 1]);
+}
+
 beforeEach(() => signIn('root'));
 
 const mount = (props: { ownedItemIds?: string[]; onGranted?: () => void } = {}) =>
@@ -49,6 +63,13 @@ describe('giving a cosmetic to an account', { timeout: 60000 }, () => {
     mount({ ownedItemIds: ['3'] });
     const dialog = await openDialog(user);
     await user.click(within(dialog).getByRole('combobox', { name: 'Item' }));
+    // the backgrounds come first (kind, sortOrder, key); the outfits are found by searching
+    expect(
+      screen.getAllByText(/bg_night_city.*Off sale/, {
+        selector: '.ant-select-item-option-content',
+      }).length,
+    ).toBeGreaterThan(0);
+    await user.type(within(dialog).getByRole('combobox', { name: 'Item' }), 'outfit_');
     expect(
       (
         await screen.findAllByText(/outfit_blue_suit/, {
@@ -62,11 +83,6 @@ describe('giving a cosmetic to an account', { timeout: 60000 }, () => {
       })
     )[0].closest('.ant-select-item');
     expect(owned?.className).toContain('ant-select-item-option-disabled');
-    expect(
-      screen.getAllByText(/bg_night_city.*Off sale/, {
-        selector: '.ant-select-item-option-content',
-      }).length,
-    ).toBeGreaterThan(0);
     expect(calls.find((c) => c.url.startsWith('/api/admin/cosmetics'))?.url).toBe(
       '/api/admin/cosmetics?page=1&pageSize=200',
     );
@@ -107,7 +123,7 @@ describe('giving a cosmetic to an account', { timeout: 60000 }, () => {
     const onGranted = vi.fn();
     mount({ onGranted });
     const dialog = await openDialog(user);
-    await chooseOption(user, 'Item', /outfit_blue_suit/, dialog);
+    await chooseItem(user, dialog, 'outfit_blue_suit');
     fireEvent.change(within(dialog).getByLabelText('Reason'), {
       target: { value: ` Compensation ${String.fromCharCode(0x3000)}` },
     });
@@ -130,7 +146,7 @@ describe('giving a cosmetic to an account', { timeout: 60000 }, () => {
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     expect(await within(dialog).findByText('Choose an item.')).toBeInTheDocument();
     expect(within(dialog).getByText('Enter a reason')).toBeInTheDocument();
-    await chooseOption(user, 'Item', /outfit_blue_suit/, dialog);
+    await chooseItem(user, dialog, 'outfit_blue_suit');
     fireEvent.change(within(dialog).getByLabelText('Reason'), {
       target: { value: 'ب'.repeat(501) },
     });
@@ -149,7 +165,7 @@ describe('giving a cosmetic to an account', { timeout: 60000 }, () => {
     const user = userEvent.setup();
     mount();
     const dialog = await openDialog(user);
-    await chooseOption(user, 'Item', /outfit_blue_suit/, dialog);
+    await chooseItem(user, dialog, 'outfit_blue_suit');
     fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Gift' } });
     const submit = within(dialog).getByRole('button', { name: 'Submit' });
     fireEvent.click(submit);
@@ -173,7 +189,7 @@ describe('giving a cosmetic to an account', { timeout: 60000 }, () => {
     const onGranted = vi.fn();
     mount({ onGranted });
     const dialog = await openDialog(user);
-    await chooseOption(user, 'Item', /outfit_blue_suit/, dialog);
+    await chooseItem(user, dialog, 'outfit_blue_suit');
     fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Gift' } });
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     expect(
@@ -216,6 +232,7 @@ describe('giving a cosmetic to an account', { timeout: 60000 }, () => {
     fail = false;
     await user.click(within(dialog).getByRole('button', { name: 'Retry' }));
     await user.click(within(dialog).getByRole('combobox', { name: 'Item' }));
+    await user.type(within(dialog).getByRole('combobox', { name: 'Item' }), 'outfit_blue');
     expect(
       (
         await screen.findAllByText(/outfit_blue_suit/, {
