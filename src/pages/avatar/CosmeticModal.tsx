@@ -21,7 +21,7 @@ import { codeText } from '../../utils/displayText';
 import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
 import { LocalizedTextsField } from './LocalizedTextsField';
-import { cleanTexts, type Texts } from './localized';
+import { cleanTexts, type Texts, tagAliases, textOf } from './localized';
 import { SurfacesPicker } from './SurfacesPicker';
 import { Thumb } from './Thumb';
 
@@ -114,7 +114,7 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
         });
       }
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS);
+      const result = failureToForm(intl, form, error, FIELDS, tagAliases(error, 'names'));
       if (result.uploadRejected) {
         picture.reset();
         setPictureProblem('avatar.preview.rejected');
@@ -202,7 +202,7 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
           rules={[
             {
               validator: async (_, value: Texts | undefined) => {
-                if (Object.keys(cleanTexts(value)).length === 0) {
+                if (textOf(value, 'en') === '') {
                   throw new Error(t('avatar.names.required'));
                 }
               },

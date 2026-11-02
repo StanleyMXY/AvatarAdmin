@@ -336,9 +336,60 @@ describe('the cosmetic catalog page: new item', { timeout: 60000 }, () => {
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     expect(await within(dialog).findByText('Enter a key.')).toBeInTheDocument();
-    expect(within(dialog).getByText('Enter a name in at least one language.')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('Enter the name in English (en). The other languages are optional.'),
+    ).toBeInTheDocument();
     expect(within(dialog).getByText('Enter the generation text.')).toBeInTheDocument();
     expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('does not send a name in Thai only: English is needed, and the field says so', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New item' }));
+    const dialog = await screen.findByRole('dialog');
+    fillBasics(dialog);
+    fireEvent.change(within(dialog).getByLabelText('en'), { target: { value: '  ' } });
+    choose(png());
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    await within(dialog).findByText(/preview\.png/);
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText(
+        'Enter the name in English (en). The other languages are optional.',
+      ),
+    ).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('puts the refusal names.en of the backend under the names, in the words of the reason', async () => {
+    backend();
+    const real = globalThis.fetch;
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New item' }));
+    const dialog = await screen.findByRole('dialog');
+    fillBasics(dialog);
+    choose(png());
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    await within(dialog).findByText(/preview\.png/);
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) =>
+      init?.method === 'POST' && String(input) === '/api/admin/cosmetics'
+        ? new Response(
+            JSON.stringify({
+              code: 'INVALID_REQUEST',
+              message: 'm',
+              data: { details: [{ ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' }] },
+            }),
+            { status: 400, headers: { 'content-type': 'application/json' } },
+          )
+        : real(input, init),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    const names = (await within(dialog).findAllByText('It must not be empty.'))[0];
+    expect(names.closest('.ant-form-item')?.textContent).toContain('Names');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('counts the generation text in code points after trimming: 2000 emoji pass, 2001 Arabic letters do not, spaces only is empty', async () => {

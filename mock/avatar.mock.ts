@@ -85,9 +85,18 @@ function uploadOf(id: unknown, kind: MockUpload['kind'], ref: string): MockUploa
 
 // ---- field checks shared by the catalogs ----
 
-/** Texts by language tag; at least one must have text. */
+/**
+ * Texts by language tag, with English among them (the backend's rule): an object that is missing
+ * or empty is refused on `ref`, English missing or blank on `<ref>.en`, a text that is too long on
+ * `<ref>.<tag>`.
+ */
 function localized(value: unknown, ref: string, details: Detail[]): Record<string, string> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).length === 0
+  ) {
     details.push({ ref, reason: 'EMPTY_NOT_ALLOWED' });
     return {};
   }
@@ -96,10 +105,11 @@ function localized(value: unknown, ref: string, details: Detail[]): Record<strin
     if (typeof raw !== 'string') continue;
     const trimmed = trimSpec(raw);
     if (trimmed === '') continue;
-    if (countCodePoints(trimmed) > TEXT_MAX) details.push({ ref, reason: 'TOO_LONG' });
+    if (countCodePoints(trimmed) > TEXT_MAX)
+      details.push({ ref: `${ref}.${tag}`, reason: 'TOO_LONG' });
     result[tag] = trimmed;
   }
-  if (Object.keys(result).length === 0) details.push({ ref, reason: 'EMPTY_NOT_ALLOWED' });
+  if (!result.en) details.push({ ref: `${ref}.en`, reason: 'EMPTY_NOT_ALLOWED' });
   return result;
 }
 

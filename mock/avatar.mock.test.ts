@@ -165,6 +165,25 @@ describe('uploads and the cosmetic catalog', () => {
     }
   });
 
+  it('needs English among the names of an item: the detail is names.en, and names for a missing or empty object', async () => {
+    const detailsOf = async (names: unknown) =>
+      (await send(COSMETIC_UPDATE, cosmeticBody({ names }), { id: '3' })).body.data.details;
+    expect(await detailsOf({ th: 'ชุดนอน', ar: 'ثوب' })).toEqual([
+      { ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect(await detailsOf({ en: '  ', th: 'ชุดนอน' })).toEqual([
+      { ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect(await detailsOf({})).toEqual([{ ref: 'names', reason: 'EMPTY_NOT_ALLOWED' }]);
+    expect(await detailsOf(undefined)).toEqual([{ ref: 'names', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const fine = await send(
+      COSMETIC_UPDATE,
+      cosmeticBody({ names: { en: 'Pyjamas', th: 'ชุดนอน' } }),
+      { id: '3' },
+    );
+    expect(fine.status).toBe(200);
+  });
+
   it('creates an item with the picture named by its uploadId and keeps the key', async () => {
     const previewUploadId = await upload(UPLOAD_IMAGE);
     const created = await send(
@@ -301,6 +320,29 @@ describe('actions', () => {
     ).toBe(409);
   });
 
+  it('needs English among the names of an action, on create and update', async () => {
+    const body = {
+      names: { th: 'หมุน' },
+      description: 'Spins once',
+      generationSpec: 'The person turns around once.',
+      compatibleStyles: ['STYLIZED_3D'],
+      surfaces: [],
+      triggerableBy: 'AGENT',
+      enabled: false,
+      sortOrder: 70,
+    };
+    const updated = await send('PUT /api/admin/actions/:id', body, { id: '1' });
+    expect(updated.body.data.details).toEqual([{ ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const created = await send(ACTION_CREATE, {
+      ...body,
+      key: 'spin',
+      iconUploadId: await upload(UPLOAD_IMAGE),
+    });
+    expect(created.body.data.details).toEqual([{ ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const none = await send('PUT /api/admin/actions/:id', { ...body, names: {} }, { id: '1' });
+    expect(none.body.data.details).toEqual([{ ref: 'names', reason: 'EMPTY_NOT_ALLOWED' }]);
+  });
+
   it('takes all three values of triggerableBy and refuses another', async () => {
     for (const [n, triggerableBy] of ['USER', 'AGENT', 'BOTH'].entries()) {
       const r = await send(
@@ -347,6 +389,23 @@ describe('actions', () => {
 });
 
 describe('declarations', () => {
+  it('needs English among the texts of a declaration: the detail is texts.en, and texts for a missing or empty object', async () => {
+    const made = (texts: unknown) => send(DECLARATION_CREATE, { version: '2028-v1', texts });
+    expect((await made({ th: 'ยอมรับ' })).body.data.details).toEqual([
+      { ref: 'texts.en', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect((await made({ en: ' ', th: 'ยอมรับ' })).body.data.details).toEqual([
+      { ref: 'texts.en', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect((await made({})).body.data.details).toEqual([
+      { ref: 'texts', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect((await made(undefined)).body.data.details).toEqual([
+      { ref: 'texts', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect((await made({ en: 'Agree' })).status).toBe(200);
+  });
+
   it('lists the versions, creates one that is not active, and makes exactly one active', async () => {
     const listed = await get(DECLARATIONS);
     expect(listed.body.data.items.filter((d: { isActive: boolean }) => d.isActive)).toHaveLength(1);

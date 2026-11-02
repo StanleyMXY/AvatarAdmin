@@ -50,7 +50,7 @@ const messages: Record<string, string> = {
 
   'avatar.key.required': '请填写键。',
   'avatar.key.fixed': '条目创建后，键不能再改。',
-  'avatar.names.required': '至少填一种语言的名称。',
+  'avatar.names.required': '请填写英文（en）名称；其他语言可不填。',
   'avatar.sortOrder.whole': '排序必须是整数。',
   'avatar.spec.required': '请填写生成描述。',
   'avatar.spec.length': '生成描述必须是 1 到 {max} 个字符。',
@@ -117,7 +117,7 @@ const messages: Record<string, string> = {
   'avatar.declarations.notRequired': '当前部署不要求勾选声明。',
   'avatar.declarations.texts': '文案',
   'avatar.declarations.textsHint': '文字由律师定，有几种语言就填几种。',
-  'avatar.declarations.textsRequired': '至少填一种语言的文案。',
+  'avatar.declarations.textsRequired': '请填写英文（en）文案；其他语言可不填。',
   'avatar.declarations.versionRequired': '请填写版本。',
 
   // ---- renderer models ----

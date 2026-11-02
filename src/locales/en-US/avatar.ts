@@ -50,7 +50,7 @@ const messages: Record<string, string> = {
 
   'avatar.key.required': 'Enter a key.',
   'avatar.key.fixed': 'The key cannot be changed after the item is created.',
-  'avatar.names.required': 'Enter a name in at least one language.',
+  'avatar.names.required': 'Enter the name in English (en). The other languages are optional.',
   'avatar.sortOrder.whole': 'The order must be a whole number.',
   'avatar.spec.required': 'Enter the generation text.',
   'avatar.spec.length': 'The generation text must be 1 to {max} characters long.',
@@ -119,7 +119,8 @@ const messages: Record<string, string> = {
   'avatar.declarations.texts': 'Texts',
   'avatar.declarations.textsHint':
     'The wording is set by the lawyers. Fill in every language you have.',
-  'avatar.declarations.textsRequired': 'Enter the text in at least one language.',
+  'avatar.declarations.textsRequired':
+    'Enter the text in English (en). The other languages are optional.',
   'avatar.declarations.versionRequired': 'Enter a version.',
 
   // ---- renderer models ----

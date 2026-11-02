@@ -233,6 +233,32 @@ describe('the action catalog page: new and edit', { timeout: 60000 }, () => {
     expect(await screen.findByText('spin')).toBeInTheDocument();
   });
 
+  it('does not send a name without English, and says English is needed', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ActionsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New action' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Key'), { target: { value: 'spin' } });
+    fireEvent.change(within(dialog).getByLabelText('th'), { target: { value: 'หมุน' } });
+    fireEvent.change(within(dialog).getByLabelText('Description for the agent'), {
+      target: { value: 'Turns around once.' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Generation text'), {
+      target: { value: 'The person turns around slowly.' },
+    });
+    choose(fileOf(pngBytes(64, 64), 'spin.png'));
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    await within(dialog).findByText(/spin\.png/);
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText(
+        'Enter the name in English (en). The other languages are optional.',
+      ),
+    ).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
   it('does not send without an icon', async () => {
     const calls = backend();
     const user = userEvent.setup();
