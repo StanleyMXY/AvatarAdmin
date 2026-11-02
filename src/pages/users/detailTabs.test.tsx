@@ -11,7 +11,7 @@ import { renderPage } from '../../../tests/renderPage';
 import { setTestLocation } from '../../../tests/stubs/umi-max';
 import enUS from '../../locales/en-US';
 import UserDetailPage from './detail';
-import { chooseOption, signIn } from './testSetup';
+import { signIn } from './testSetup';
 
 beforeEach(() => signIn('root'));
 afterEach(() => vi.unstubAllGlobals());
@@ -487,7 +487,13 @@ describe('the avatars and outfits tab', { timeout: 60000 }, () => {
     await screen.findAllByTestId('avatar-card');
     await user.click(screen.getByRole('button', { name: 'Give a cosmetic' }));
     const dialog = (await screen.findAllByRole('dialog')).at(-1) as HTMLElement;
-    await chooseOption(user, 'Item', /outfit_blue_suit/);
+    // the catalog comes by kind, sortOrder, key, so the outfit is not among the first rows: search for it
+    await user.click(within(dialog).getByRole('combobox', { name: 'Item' }));
+    await user.type(within(dialog).getByRole('combobox', { name: 'Item' }), 'outfit_blue_suit');
+    const options = await screen.findAllByText(/outfit_blue_suit/, {
+      selector: '.ant-select-item-option-content',
+    });
+    await user.click(options[options.length - 1]);
     fireEvent.change(within(dialog).getByLabelText('Reason'), {
       target: { value: 'Compensation' },
     });
