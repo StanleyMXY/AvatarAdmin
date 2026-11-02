@@ -11,11 +11,13 @@ import {
 } from '../../services/moderation';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
 import { effectKey } from './effects';
 import { labelOf } from './options';
 
-export const DECISION_NOTE_MAX = 500;
+/** The longest note the backend takes, in code points, once the ends are trimmed. */
+export const DECISION_NOTE_MAX = 1000;
 
 type Props = {
   record: ModerationRecord;
@@ -48,6 +50,8 @@ export function DecisionModal({ record, decision, onSubmit, onClose }: Props) {
       await onSubmit(chosen, note);
     } catch (error) {
       setFailed({ error });
+      // The backend names the note (`ref` note) when it refuses it: its words go under the field.
+      failureToForm(intl, form, error, ['note'], {}, { generalReason: true });
     }
   });
 
@@ -70,7 +74,14 @@ export function DecisionModal({ record, decision, onSubmit, onClose }: Props) {
     return describeFailure(intl, error).text;
   }
 
-  const failure = failed === null ? null : failureText(failed.error);
+  // A refusal that is only about the note is said under the note field, not a second time in the bar.
+  const onlyNote =
+    failed !== null &&
+    failed.error instanceof ApiError &&
+    failed.error.code === 'INVALID_REQUEST' &&
+    failed.error.details.length > 0 &&
+    failed.error.details.every((detail) => detail.ref === 'note');
+  const failure = failed === null || onlyNote ? null : failureText(failed.error);
   const rejecting = decision === 'REJECT';
   return (
     <Modal

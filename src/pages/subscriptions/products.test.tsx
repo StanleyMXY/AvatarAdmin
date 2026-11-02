@@ -102,12 +102,16 @@ describe('the sale switch', { timeout: 30000 }, () => {
       method: 'PUT',
       url: '/api/admin/subscription-products',
       body: {
-        store: 'GOOGLE',
-        productId: 'avatar_plus_monthly',
-        entitlementKey: 'plus_th',
-        enabled: true,
-        sortOrder: 3,
-        surfaces: ['ANDROID'],
+        items: [
+          {
+            store: 'GOOGLE',
+            productId: 'avatar_plus_monthly',
+            entitlementKey: 'plus_th',
+            enabled: true,
+            sortOrder: 3,
+            surfaces: [{ platform: 'ANDROID', channel: null }],
+          },
+        ],
       },
     });
     await waitFor(() =>
@@ -262,12 +266,16 @@ describe('editing and adding a mapping', { timeout: 30000 }, () => {
     await user.click(within(dialog).getByRole('button', { name: /Save/ }));
     await waitFor(() => expect(writes(calls)).toHaveLength(1));
     expect(writes(calls)[0].body).toEqual({
-      store: 'GOOGLE',
-      productId: 'avatar_plus_monthly',
-      entitlementKey: 'premium',
-      enabled: false,
-      sortOrder: 7,
-      surfaces: ['ANDROID'],
+      items: [
+        {
+          store: 'GOOGLE',
+          productId: 'avatar_plus_monthly',
+          entitlementKey: 'premium',
+          enabled: false,
+          sortOrder: 7,
+          surfaces: [{ platform: 'ANDROID', channel: null }],
+        },
+      ],
     });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
@@ -286,14 +294,24 @@ describe('editing and adding a mapping', { timeout: 30000 }, () => {
     fireEvent.change(within(dialog).getByLabelText('Sort order'), { target: { value: '9' } });
     await user.click(within(dialog).getByRole('button', { name: /Save/ }));
     await waitFor(() => expect(writes(calls)).toHaveLength(1));
-    expect(writes(calls)[0].body).toMatchObject({
-      store: 'APPLE',
-      productId: 'avatar.vip.weekly',
-      entitlementKey: 'basic',
-      enabled: true,
-      sortOrder: 9,
+    expect(writes(calls)[0].body).toEqual({
+      items: [
+        {
+          store: 'APPLE',
+          productId: 'avatar.vip.weekly',
+          entitlementKey: 'basic',
+          enabled: true,
+          sortOrder: 9,
+          surfaces: [],
+        },
+      ],
     });
+    // the backend answers data null, so the list on the page is a new read, not the answer of the save
     expect(await screen.findByText('avatar.vip.weekly')).toBeInTheDocument();
+    const gets = calls.filter(
+      (c) => c.method === 'GET' && c.url.endsWith('/subscription-products'),
+    );
+    expect(gets.length).toBeGreaterThanOrEqual(2);
   });
 
   it('refuses a store and product id that are already mapped, without sending', async () => {
@@ -371,6 +389,21 @@ describe('editing and adding a mapping', { timeout: 30000 }, () => {
     expect(
       await within(dialog).findByText('The value is outside the allowed range.'),
     ).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('says the entitlement was not found (404, not a field detail) and keeps the dialog open', async () => {
+    const calls = useMockBackend(subscriptionsMock);
+    const user = userEvent.setup();
+    renderPage(<ProductsPage />);
+    const row = await rowOf('avatar_plus_monthly');
+    await user.click(within(row).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    // the entitlement is removed on the server after the page has read the list
+    subscriptionsState().defs = subscriptionsState().defs.filter((d) => d.key !== 'plus_th');
+    await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+    expect(await within(dialog).findByText('The item was not found.')).toBeInTheDocument();
+    expect(writes(calls)).toHaveLength(1);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 

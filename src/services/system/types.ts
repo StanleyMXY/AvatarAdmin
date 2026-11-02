@@ -78,9 +78,10 @@ export type AdminCreateInput = {
 };
 
 /**
- * What the edit form may change. The username cannot be changed after creation, so it is not here.
- * `roleIds` is left out when the role list could not be read (sending `[]` would take every role away),
- * `superAdmin` is left out for an administrator who is not a super administrator.
+ * What the edit form changes. The user name cannot be changed in the form, so it is not here; an update
+ * repeats it, and the current roles when `roleIds` is not here (see `adminPatchBody`). `roleIds` is
+ * left out when the role list could not be read, `superAdmin` for an administrator who is not a super
+ * administrator and when the flag did not change.
  */
 export type AdminPatch = { roleIds?: string[]; superAdmin?: boolean };
 
@@ -95,10 +96,14 @@ export type PermissionCreateInput = {
   nameEn: string;
 };
 
-/** A built-in node may change names and order only; a custom node may also change its parent. */
+/**
+ * A built-in node may change names and order only; a custom node may also change its parent. The
+ * parent is always there: the current one (null for a root) when the node does not move, because the
+ * backend reads a missing parent as null (backend answer 87).
+ */
 export type PermissionPatch = {
   nameZh: string;
   nameEn: string;
   sortOrder: number;
-  parent?: string | null;
+  parent: string | null;
 };

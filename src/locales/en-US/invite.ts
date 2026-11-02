@@ -71,6 +71,8 @@ const messages: Record<string, string> = {
   'invite.chain.fieldFailure': '{field}: {reason}',
   'invite.chain.load': 'Load chain',
   'invite.chain.idle': 'Enter an account ID and load its chain.',
+  'invite.chain.truncated':
+    'Only the first {limit} nodes are shown (the shallowest levels first). This account has {total} descendants in all.',
   'invite.chain.summary':
     '{count, plural, one {# descendant} other {# descendants}}, {depth, plural, one {# level} other {# levels}} deep',
 

@@ -48,6 +48,9 @@ const STATUS_COLORS: Record<string, string> = {
   REVOKED: 'red',
 };
 
+/** The longest grant the backend takes: ten years. */
+const MAX_PROMO_DAYS = 3650;
+
 type GrantForm = { entitlementKey: string | null; durationDays: number | null; reason: string };
 
 /** The dialog that grants a limited-time entitlement: the entitlement, the days and a reason (1 to 500 characters). */
@@ -84,7 +87,7 @@ function GrantDialog({
     await required(_, value);
     if (typeof value !== 'number' || !Number.isInteger(value))
       throw new Error(t('reason.NOT_AN_INTEGER'));
-    if (value < 1) throw new Error(t('reason.OUT_OF_RANGE'));
+    if (value < 1 || value > MAX_PROMO_DAYS) throw new Error(t('reason.OUT_OF_RANGE'));
   };
   const reason = async (_: unknown, value: string | undefined) => {
     const length = countCodePoints(trimSpec(value ?? ''));

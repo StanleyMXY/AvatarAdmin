@@ -145,7 +145,33 @@ describe('subscription writes', () => {
     });
     expect(calls[0].url).toBe('/api/admin/subscription-products');
     expect(calls[0].init.method).toBe('PUT');
-    expect(bodyOf(calls[0])).toMatchObject({ store: 'APPLE', productId: 'p', enabled: true });
+    // the backend takes a list of mappings: the one that is saved goes in as the only item
+    expect(bodyOf(calls[0])).toEqual({
+      items: [
+        {
+          store: 'APPLE',
+          productId: 'p',
+          entitlementKey: 'premium',
+          enabled: true,
+          sortOrder: 1,
+          surfaces: [],
+        },
+      ],
+    });
+  });
+
+  it('gives back nothing from the save of a product: the backend answers data null', async () => {
+    answer(null);
+    await expect(
+      saveSubscriptionProduct({
+        store: 'APPLE',
+        productId: 'p',
+        entitlementKey: 'premium',
+        enabled: true,
+        sortOrder: 1,
+        surfaces: [],
+      }),
+    ).resolves.toBeNull();
   });
 
   it('reprocesses and acknowledges an event with POST and no body', async () => {

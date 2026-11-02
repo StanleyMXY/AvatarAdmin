@@ -11,10 +11,10 @@ import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import {
   deleteTemplate,
-  listAllTemplates,
   listTemplates,
   type MissingLocales,
   type PushTemplate,
+  type TemplateOverview,
   updateTemplate,
 } from '../../services/push';
 import { useAdminMeta } from '../../session/useSession';
@@ -47,11 +47,25 @@ export default function TemplatesPage() {
   const [missing, setMissing] = useState<MissingLocales | null>(null);
   const { text: allFailure, fail, clear } = useFailure();
   const begin = useLatestCall();
+  // The matrix and the table both need the list, and the backend does not page it: one request
+  // serves both, and the table pages what was read. A change (`reload`) or a failed read clears it,
+  // so the next read asks again.
+  const reading = useRef<Promise<TemplateOverview> | null>(null);
+  const readOnce = useCallback((): Promise<TemplateOverview> => {
+    if (reading.current === null) {
+      const started = listTemplates();
+      reading.current = started;
+      started.catch(() => {
+        if (reading.current === started) reading.current = null;
+      });
+    }
+    return reading.current;
+  }, []);
 
   const loadAll = useCallback(async () => {
     const isCurrent = begin();
     try {
-      const rows = await listAllTemplates();
+      const rows = await readOnce();
       if (!isCurrent()) return;
       setAll(rows.items);
       setMissing(rows.missingLocales);
@@ -59,13 +73,15 @@ export default function TemplatesPage() {
     } catch (error) {
       if (isCurrent()) fail(error);
     }
-  }, [begin, fail, clear]);
+  }, [begin, fail, clear, readOnce]);
 
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
 
   const reload = () => {
+    // After a change the list is read afresh: a read that was still on its way started before it.
+    reading.current = null;
     ref.current?.reload();
     void loadAll();
   };
@@ -101,7 +117,10 @@ export default function TemplatesPage() {
             locale: plainText(row.locale),
           })}
           onToggle={async (next) => {
+            // The whole row goes in a PUT, the key included; no picture field keeps the picture.
             await updateTemplate(row.id, {
+              triggerReason: plainText(row.triggerReason),
+              locale: plainText(row.locale),
               title: plainText(row.title),
               body: plainText(row.body),
               linkType: row.linkType,
@@ -207,10 +226,8 @@ export default function TemplatesPage() {
         columns={columns}
         actionRef={ref}
         request={async ({ page, pageSize }) => {
-          const answer = await listTemplates({ page, pageSize });
-          if (typeof answer.total === 'number') return { items: answer.items, total: answer.total };
-          // No total in the answer (the backend's list has none): the table shows what was read, all of it.
-          const every = (await listAllTemplates()).items;
+          // The backend does not page the list: one read gives every template, and the table pages what was read.
+          const every = (await readOnce()).items;
           return {
             items: every.slice((page - 1) * pageSize, page * pageSize),
             total: every.length,

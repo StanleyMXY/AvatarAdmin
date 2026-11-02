@@ -6,13 +6,14 @@
 
 import { validateStoreUrl } from '../src/pages/appVersions/storeUrl';
 import {
-  checkChangelog,
   checkMinVersionCode,
   checkVersionCode,
   checkVersionName,
   cleanChangelog,
+  MAX_CODE,
 } from '../src/pages/appVersions/versionRules';
 import { PLATFORMS, VERSION_STATUSES } from '../src/services/appVersions/types';
+import { countCodePoints } from '../src/utils/codePoints';
 import { trimSpec } from '../src/utils/trimSpec';
 import {
   appVersionsState,
@@ -32,8 +33,22 @@ const refuse = (details: Detail[]): never => {
 };
 const notFound = (what: string) =>
   new MockHttpError(404, 'RESOURCE_NOT_FOUND', `The ${what} is not there`);
-const invalidState = (status: string, message: string) =>
-  new MockHttpError(409, 'INVALID_STATE', message, { status });
+/**
+ * 409 INVALID_STATE. The backend gives it data only when the upload is already used (status
+ * CONSUMED); the 409 of a channel that is off and of a version in the wrong state have none
+ * (answers 47), so the page cannot tell them apart from the upload by the data.
+ */
+const invalidState = (message: string) => new MockHttpError(409, 'INVALID_STATE', message);
+const uploadConsumed = () =>
+  new MockHttpError(409, 'INVALID_STATE', 'Upload is already used', { status: 'CONSUMED' });
+
+/** The language key of the notes (answers 91) and the limits of the notes. */
+const NOTE_KEY = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
+const NOTE_KEY_MAX = 35;
+const NOTE_LANGUAGES_MAX = 30;
+const NOTE_MAX = 4000;
+const malformed = () =>
+  new MockHttpError(400, 'INVALID_REQUEST', 'Malformed or invalid request body');
 
 const usernameOf = (id: string | null): string | null =>
   id === null ? null : (store.admins.get(id)?.username ?? null);
@@ -65,7 +80,7 @@ function uploadFor(id: string, holder: MockVersion | null): MockApkUpload {
   if (!upload) throw notFound('upload');
   if (upload.kind !== 'APK') refuse([{ ref: 'apkUploadId', reason: 'OUT_OF_RANGE' }]);
   if (upload.used && holder?.apkUploadId !== id) {
-    throw invalidState('USED', 'The upload belongs to another object already');
+    throw uploadConsumed();
   }
   return upload;
 }
@@ -88,6 +103,11 @@ function check(
   body: Record<string, unknown>,
   own: MockVersion | null,
 ): Checked {
+  // A number beyond 32 bits cannot be read into the field: a malformed body (not run against the backend).
+  for (const field of ['versionCode', 'minVersionCode'] as const) {
+    const value = body[field];
+    if (typeof value === 'number' && Number.isInteger(value) && value > MAX_CODE) throw malformed();
+  }
   const details: Detail[] = [];
   const versionName = typeof body.versionName === 'string' ? trimSpec(body.versionName) : '';
   if (!checkVersionName(versionName).ok)
@@ -101,11 +121,37 @@ function check(
     details.push({ ref: 'minVersionCode', reason: 'OUT_OF_RANGE' });
   }
   const raw = body.changelog;
-  const texts =
-    typeof raw === 'object' && raw !== null && !Array.isArray(raw)
-      ? cleanChangelog(raw as Record<string, string>)
-      : {};
-  if (!checkChangelog(texts).ok) details.push({ ref: 'changelog', reason: 'EMPTY_NOT_ALLOWED' });
+  const isNotes = typeof raw === 'object' && raw !== null && !Array.isArray(raw);
+  if (isNotes) {
+    const entries = Object.entries(raw as Record<string, unknown>);
+    // a language key that is not of the form is named; the other faults have a message only
+    for (const [tag] of entries) {
+      if (!NOTE_KEY.test(tag) || tag.length > NOTE_KEY_MAX) {
+        details.push({ ref: `changelog.${tag}`, reason: 'INVALID_LANGUAGE_TAG' });
+      }
+    }
+    if (entries.length > NOTE_LANGUAGES_MAX) {
+      throw new MockHttpError(400, 'INVALID_REQUEST', 'changelog has more than 30 languages');
+    }
+    for (const [tag, text] of entries) {
+      if (typeof text !== 'string' || trimSpec(text) === '') {
+        throw new MockHttpError(
+          400,
+          'INVALID_REQUEST',
+          `changelog.${tag} must be a non-empty text`,
+        );
+      }
+      if (countCodePoints(trimSpec(text)) > NOTE_MAX) {
+        throw new MockHttpError(
+          400,
+          'INVALID_REQUEST',
+          `changelog.${tag} is longer than ${NOTE_MAX} characters`,
+        );
+      }
+    }
+  }
+  const texts = isNotes ? cleanChangelog(raw as Record<string, string>) : {};
+  if (typeof texts.en !== 'string') details.push({ ref: 'changelog', reason: 'EMPTY_NOT_ALLOWED' });
 
   const storeUrl = typeof body.storeUrl === 'string' ? trimSpec(body.storeUrl) : '';
   const apkUploadId = typeof body.apkUploadId === 'string' ? body.apkUploadId : '';
@@ -196,7 +242,7 @@ export default {
     const channel = channelOf(body.channelCode);
     if (!channel) refuse([{ ref: 'channelCode', reason: 'OUT_OF_RANGE' }]);
     const target = channel as MockChannel;
-    if (!target.enabled) throw invalidState('DISABLED', 'The channel is off');
+    if (!target.enabled) throw invalidState('The channel is off');
     const fields = check(target, body, null);
     const upload = fields.apkUploadId === null ? null : uploadFor(fields.apkUploadId, null);
     const now = new Date().toISOString();
@@ -230,8 +276,7 @@ export default {
 
   'PUT /api/admin/app-versions/:id': guard('APPVERSION:MANAGE', (req) => {
     const version = versionOf(req.params.id);
-    if (version.status !== 'DRAFT')
-      throw invalidState(version.status, 'Only a draft can be edited');
+    if (version.status !== 'DRAFT') throw invalidState('Only a draft can be edited');
     const body = bodyOf(req);
     if ('channelCode' in body && body.channelCode !== version.channelCode) {
       refuse([{ ref: 'channelCode', reason: 'OUT_OF_RANGE' }]);
@@ -265,14 +310,13 @@ export default {
     const now = new Date().toISOString();
     if (body.status === 'ARCHIVED') {
       if (version.status !== 'ACTIVE')
-        throw invalidState(version.status, 'Only the active version can be taken down');
+        throw invalidState('Only the active version can be taken down');
       version.status = 'ARCHIVED';
       version.updatedAt = now;
       return ok(view(version));
     }
-    if (version.status !== 'DRAFT')
-      throw invalidState(version.status, 'Only a draft can be activated');
-    if (!channel.enabled) throw invalidState('DISABLED', 'The channel is off');
+    if (version.status !== 'DRAFT') throw invalidState('Only a draft can be activated');
+    if (!channel.enabled) throw invalidState('The channel is off');
     if (channel.distribution === 'STORE' && body.confirmStoreLive !== true) {
       refuse([{ ref: 'confirmStoreLive', reason: 'EMPTY_NOT_ALLOWED' }]);
     }
@@ -293,8 +337,7 @@ export default {
 
   'DELETE /api/admin/app-versions/:id': guard('APPVERSION:MANAGE', (req) => {
     const version = versionOf(req.params.id);
-    if (version.status !== 'DRAFT')
-      throw invalidState(version.status, 'Only a draft can be deleted');
+    if (version.status !== 'DRAFT') throw invalidState('Only a draft can be deleted');
     // the file of a draft goes with it
     if (version.apkUploadId) appVersionsState.uploads.delete(version.apkUploadId);
     appVersionsState.versions.delete(version.id);

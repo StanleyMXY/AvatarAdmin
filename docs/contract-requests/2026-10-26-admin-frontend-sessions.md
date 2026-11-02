@@ -51,3 +51,7 @@
 规格 5.5 会话列表一段写的是筛选的含义，没有参数名；建议把第一条的答案写进契约 §17.4 通话行后，规格不用改。规格 5.5 通话质量一段"阈值取自构建配置"已经对应 `ADMIN_QUALITY_MIN_SUCCESS_RATE`、`ADMIN_QUALITY_MAX_SLOW_SHARE`（任务 6 已加），不需要改。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：3、54、55）。
+
+核对于 2026-11-02

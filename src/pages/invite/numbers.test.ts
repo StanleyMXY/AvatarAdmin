@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { count, rateOf, sumCounts } from './numbers';
+import { count, pairedRate, rateOf, sumCounts } from './numbers';
 
 describe('count', () => {
   it('accepts a finite number that is not negative', () => {
@@ -49,5 +49,33 @@ describe('rateOf', () => {
     expect(rateOf(-3, 10)).toBeNull();
     expect(rateOf(null, 10)).toBeNull();
     expect(rateOf(Number.NaN, 10)).toBeNull();
+  });
+});
+
+describe('pairedRate', () => {
+  const rows = [
+    { a: 5, b: 20 },
+    { a: 10, b: null },
+    { a: 4, b: 0 },
+  ];
+  it('sets a against b only over the rows that have both, so a row without b adds nothing to a', () => {
+    expect(pairedRate([rows[0], rows[1]], 'a', 'b')).toBe(0.25);
+  });
+  it('is null when the earlier sum is 0, when no row has both, and for nothing', () => {
+    expect(pairedRate([rows[2]], 'a', 'b')).toBeNull();
+    expect(pairedRate([rows[1]], 'a', 'b')).toBeNull();
+    expect(pairedRate([], 'a', 'b')).toBeNull();
+  });
+  it('does not take a negative or a text as a count', () => {
+    expect(
+      pairedRate(
+        [
+          { a: 5, b: -1 },
+          { a: 1, b: 'x' },
+        ],
+        'a',
+        'b',
+      ),
+    ).toBeNull();
   });
 });

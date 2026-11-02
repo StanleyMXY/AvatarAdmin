@@ -355,13 +355,14 @@ describe('entitlement definitions and their feature values', () => {
     expect(res.status).toBe(404);
   });
 
-  it('creates and edits a definition; a key or a priority that is taken is 409 DUPLICATE_RESOURCE with the field', async () => {
+  it('creates a definition and answers { key }; edits one and answers data null; a key or a priority that is taken is 409 DUPLICATE_RESOURCE with the field', async () => {
     const created = await send('POST /api/admin/entitlement-defs', root(), {
       key: 'gold',
       name: 'Gold',
       priority: 50,
     });
     expect(created.status).toBe(200);
+    expect(created.body.data).toEqual({ key: 'gold' });
     const sameKey = await send('POST /api/admin/entitlement-defs', root(), {
       key: 'gold',
       name: 'Gold 2',
@@ -383,6 +384,7 @@ describe('entitlement definitions and their feature values', () => {
       { key: 'gold' },
     );
     expect(edit.status).toBe(200);
+    expect(edit.body.data).toBeNull();
     const clash = await send(
       'PUT /api/admin/entitlement-defs/:key',
       root(),
@@ -401,17 +403,66 @@ describe('entitlement definitions and their feature values', () => {
         )
       ).status,
     ).toBe(404);
-    const empty = await send('POST /api/admin/entitlement-defs', root(), {
-      key: ' ',
-      name: '',
-      priority: 1.5,
+  });
+
+  it('names the priority, not the key, when the key is taken and the priority is held by another entitlement (the backend asks who holds the priority)', async () => {
+    const both = await send('POST /api/admin/entitlement-defs', root(), {
+      key: 'basic',
+      name: 'Basic again',
+      priority: 20,
     });
-    expect(empty.status).toBe(400);
-    expect(empty.body.data.details.map((d: { ref: string }) => d.ref).sort()).toEqual([
-      'key',
-      'name',
-      'priority',
+    expect(both.status).toBe(409);
+    expect(both.body.data.field).toBe('priority');
+    // the priority is free now: the key is what is taken
+    const keyOnly = await send('POST /api/admin/entitlement-defs', root(), {
+      key: 'basic',
+      name: 'Basic again',
+      priority: 9999,
+    });
+    expect(keyOnly.body.data.field).toBe('key');
+  });
+
+  it('checks the key ([A-Za-z0-9][A-Za-z0-9._-]{0,63}), the name (1 to 100 code points after the ends are trimmed) and the priority (a whole number, any value)', async () => {
+    const post = (over: Record<string, unknown>) =>
+      send('POST /api/admin/entitlement-defs', root(), {
+        key: 'valid-key',
+        name: 'Valid',
+        priority: 700,
+        ...over,
+      });
+    const details = async (over: Record<string, unknown>) =>
+      (await post(over)).body.data?.details as { ref: string; reason: string }[] | undefined;
+    expect(await details({ key: ' ' })).toEqual([{ ref: 'key', reason: 'EMPTY_NOT_ALLOWED' }]);
+    for (const key of ['-start', '.start', '_start', 'has space', 'ก', 'a'.repeat(65), 'a/b']) {
+      expect(await details({ key }), key).toEqual([{ ref: 'key', reason: 'OUT_OF_RANGE' }]);
+    }
+    expect((await post({ key: 'a'.repeat(64) })).status).toBe(200);
+    expect((await post({ key: '9.x_y-z', priority: 701 })).status).toBe(200);
+    expect(await details({ name: '   ' })).toEqual([{ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' }]);
+    expect(await details({ name: 'ก'.repeat(101) })).toEqual([{ ref: 'name', reason: 'TOO_LONG' }]);
+    expect((await post({ key: 'k100', name: '😀'.repeat(100), priority: 702 })).status).toBe(200);
+    expect(await details({ priority: undefined })).toEqual([
+      { ref: 'priority', reason: 'EMPTY_NOT_ALLOWED' },
     ]);
+    expect(await details({ priority: 1.5 })).toEqual([
+      { ref: 'priority', reason: 'NOT_AN_INTEGER' },
+    ]);
+    // the range of the priority is not limited: zero and a negative number are fine
+    expect((await post({ key: 'zero', priority: 0 })).status).toBe(200);
+    expect((await post({ key: 'minus', priority: -5 })).status).toBe(200);
+  });
+
+  it('does not check the key of an edit: it is the path, and the body only has the name and the priority', async () => {
+    const edit = await send(
+      'PUT /api/admin/entitlement-defs/:key',
+      root(),
+      { key: 'ignored', name: 'Basic!', priority: 10 },
+      { key: 'basic' },
+    );
+    expect(edit.status).toBe(200);
+    const defs = (await get('GET /api/admin/entitlement-defs', root())).body.data.items;
+    expect(defs.find((d: { key: string }) => d.key === 'basic')?.name).toBe('Basic!');
+    expect(defs.some((d: { key: string }) => d.key === 'ignored')).toBe(false);
   });
 });
 
@@ -467,30 +518,58 @@ describe('feature gates', () => {
     expect((await put('nope', { mode: 'UNSET' })).status).toBe(404);
   });
 
-  it('sets a credit price only on a permanent LIMIT, other than avatar.looks_max', async () => {
-    const put = (key: string, creditCost: number | null) =>
-      send('PUT /api/admin/feature-gates/:key/credit-cost', root(), { creditCost }, { key });
-    expect((await put('assets.voice_max', 12)).status).toBe(200);
-    expect(subscriptionsState().gates.find((g) => g.key === 'assets.voice_max')?.creditCost).toBe(
-      12,
-    );
-    expect((await put('assets.voice_max', null)).status).toBe(200);
-    expect(
-      subscriptionsState().gates.find((g) => g.key === 'assets.voice_max')?.creditCost,
-    ).toBeNull();
-    expect((await put('avatar.looks_max', 5)).status).toBe(400);
-    expect((await put('credits.period_grant', 5)).status).toBe(400);
-    expect((await put('call.daily_minutes', 5)).status).toBe(400);
-    expect((await put('ads.removed', 5)).status).toBe(400);
-    expect((await put('assets.avatar_max', -1)).body.data.details[0].reason).toBe('OUT_OF_RANGE');
-    expect((await put('assets.avatar_max', 1.5)).body.data.details[0].reason).toBe(
-      'NOT_AN_INTEGER',
-    );
+  it('sets a credit price only on assets.avatar_max and assets.voice_max, clears it with null on any switch, and answers data null', async () => {
+    const put = (key: string, body: unknown) =>
+      send('PUT /api/admin/feature-gates/:key/credit-cost', root(), body, { key });
+    const price = (key: string) =>
+      subscriptionsState().gates.find((g) => g.key === key)?.creditCost;
+    const set = await put('assets.voice_max', { creditCost: 12 });
+    expect(set.status).toBe(200);
+    expect(set.body.data).toBeNull();
+    expect(price('assets.voice_max')).toBe(12);
+    expect((await put('assets.voice_max', { creditCost: null })).status).toBe(200);
+    expect(price('assets.voice_max')).toBeNull();
+    for (const key of [
+      'avatar.looks_max',
+      'credits.period_grant',
+      'call.daily_minutes',
+      'call.lifetime_minutes',
+      'chat.daily_messages',
+      'ads.removed',
+      'memory.tier',
+    ]) {
+      const refused = await put(key, { creditCost: 5 });
+      expect(refused.status, key).toBe(400);
+      expect(refused.body.data.details, key).toEqual([
+        { ref: 'creditCost', reason: 'OUT_OF_RANGE' },
+      ]);
+      // clearing is allowed everywhere
+      expect((await put(key, { creditCost: null })).status, key).toBe(200);
+    }
+    expect((await put('nope', { creditCost: 5 })).status).toBe(404);
+  });
+
+  it('wants a whole number from 1 with no upper limit, and a creditCost that is there (null or a number)', async () => {
+    const put = (body: unknown) =>
+      send('PUT /api/admin/feature-gates/:key/credit-cost', root(), body, {
+        key: 'assets.avatar_max',
+      });
+    expect((await put({ creditCost: 0 })).body.data.details[0].reason).toBe('OUT_OF_RANGE');
+    expect((await put({ creditCost: -1 })).body.data.details[0].reason).toBe('OUT_OF_RANGE');
+    expect((await put({ creditCost: 1.5 })).body.data.details[0].reason).toBe('NOT_AN_INTEGER');
+    expect((await put({ creditCost: 1 })).status).toBe(200);
+    expect((await put({ creditCost: 5_000_000 })).status).toBe(200);
+    const missing = await put({});
+    expect(missing.status).toBe(400);
+    expect(missing.body.data.details).toEqual([{ ref: 'creditCost', reason: 'EMPTY_NOT_ALLOWED' }]);
   });
 });
 
 describe('subscription products', () => {
-  it('lists and upserts by (store, productId)', async () => {
+  const put = (items: unknown, headers = root()) =>
+    send('PUT /api/admin/subscription-products', headers, { items });
+
+  it('lists the six columns and upserts by (store, productId) from an items list', async () => {
     const list = await get('GET /api/admin/subscription-products', root());
     expect(list.body.data.items).toHaveLength(4);
     const first = list.body.data.items[0];
@@ -502,50 +581,116 @@ describe('subscription products', () => {
       'store',
       'surfaces',
     ]);
-    const put = await send('PUT /api/admin/subscription-products', root(), {
-      ...first,
-      enabled: false,
-      sortOrder: 9,
-    });
-    expect(put.status).toBe(200);
+    const saved = await put([{ ...first, enabled: false, sortOrder: 9 }]);
+    expect(saved.status).toBe(200);
+    // the backend answers data null: the list has to be read again
+    expect(saved.body.data).toBeNull();
     const again = await get('GET /api/admin/subscription-products', root());
     expect(again.body.data.items).toHaveLength(4);
     expect(
       again.body.data.items.find((p: { productId: string }) => p.productId === first.productId),
     ).toMatchObject({ enabled: false, sortOrder: 9 });
-    await send('PUT /api/admin/subscription-products', root(), {
-      store: 'APPLE',
-      productId: 'new.one',
-      entitlementKey: 'basic',
-      enabled: true,
-      sortOrder: 5,
-    });
+    await put([
+      {
+        store: 'APPLE',
+        productId: 'new.one',
+        entitlementKey: 'basic',
+        enabled: true,
+        sortOrder: 5,
+        surfaces: [],
+      },
+    ]);
     expect(
       (await get('GET /api/admin/subscription-products', root())).body.data.items,
     ).toHaveLength(5);
   });
 
-  it('refuses an entitlement that does not exist and empty fields', async () => {
-    const bad = await send('PUT /api/admin/subscription-products', root(), {
-      store: 'APPLE',
-      productId: 'x',
-      entitlementKey: 'nope',
-      enabled: true,
-      sortOrder: 1,
-    });
-    expect(bad.status).toBe(400);
-    expect(bad.body.data.details[0]).toEqual({ ref: 'entitlementKey', reason: 'OUT_OF_RANGE' });
-    const empty = await send('PUT /api/admin/subscription-products', root(), {
-      store: '',
-      productId: '',
-      entitlementKey: 'basic',
-      enabled: true,
-      sortOrder: 1,
-    });
+  it('does not accept one mapping outside an items list', async () => {
+    const first = (await get('GET /api/admin/subscription-products', root())).body.data.items[0];
+    const bare = await send('PUT /api/admin/subscription-products', root(), first);
+    expect(bare.status).toBe(400);
+    expect(bare.body.data.details[0].ref).toBe('items');
+    const empty = await put([]);
+    expect(empty.status).toBe(400);
+  });
+
+  it('answers 404 RESOURCE_NOT_FOUND, not 400, for an entitlement that does not exist, and saves nothing', async () => {
+    const first = (await get('GET /api/admin/subscription-products', root())).body.data.items[0];
+    const missing = await put([
+      { ...first, sortOrder: 77 },
+      {
+        store: 'APPLE',
+        productId: 'x',
+        entitlementKey: 'nope',
+        enabled: true,
+        sortOrder: 1,
+        surfaces: [],
+      },
+    ]);
+    expect(missing.status).toBe(404);
+    expect(missing.body.code).toBe('RESOURCE_NOT_FOUND');
+    // one transaction: the first item is not kept
+    const after = (await get('GET /api/admin/subscription-products', root())).body.data.items;
+    expect(after.find((p: { productId: string }) => p.productId === first.productId)).toEqual(
+      first,
+    );
+    expect(after).toHaveLength(4);
+  });
+
+  it('refuses empty fields and a missing surfaces list (null is not "keep")', async () => {
+    const empty = await put([
+      {
+        store: '',
+        productId: '',
+        entitlementKey: 'basic',
+        enabled: true,
+        sortOrder: 1,
+        surfaces: [],
+      },
+    ]);
+    expect(empty.status).toBe(400);
     expect(empty.body.data.details.map((d: { ref: string }) => d.ref).sort()).toEqual([
       'productId',
       'store',
     ]);
+    const noSurfaces = await put([
+      { store: 'APPLE', productId: 'y', entitlementKey: 'basic', enabled: true, sortOrder: 1 },
+    ]);
+    expect(noSurfaces.status).toBe(400);
+    expect(noSurfaces.body.data.details).toEqual([
+      { ref: 'surfaces', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    const noEnabled = await put([
+      { store: 'APPLE', productId: 'y', entitlementKey: 'basic', sortOrder: 1, surfaces: [] },
+    ]);
+    expect(noEnabled.body.data.details).toEqual([{ ref: 'enabled', reason: 'EMPTY_NOT_ALLOWED' }]);
+  });
+
+  it('refuses a store outside [A-Z][A-Z0-9_]{1,31}, a product id over 255 code points, and a surface outside ANDROID or IOS', async () => {
+    const base = { entitlementKey: 'basic', enabled: true, sortOrder: 1, surfaces: [] };
+    const store = await put([{ ...base, store: 'apple', productId: 'a' }]);
+    expect(store.body.data.details[0].ref).toBe('store');
+    const long = await put([{ ...base, store: 'APPLE', productId: 'x'.repeat(256) }]);
+    expect(long.body.data.details[0]).toEqual({ ref: 'productId', reason: 'TOO_LONG' });
+    const surface = await put([
+      { ...base, store: 'APPLE', productId: 'a', surfaces: [{ platform: 'WEB', channel: null }] },
+    ]);
+    expect(surface.status).toBe(400);
+  });
+
+  it('answers 409 DUPLICATE_RESOURCE with field productId for the same mapping twice in one request', async () => {
+    const row = {
+      store: 'APPLE',
+      productId: 'twice',
+      entitlementKey: 'basic',
+      enabled: true,
+      sortOrder: 1,
+      surfaces: [],
+    };
+    const dup = await put([row, { ...row, sortOrder: 2 }]);
+    expect(dup.status).toBe(409);
+    expect(dup.body.code).toBe('DUPLICATE_RESOURCE');
+    expect(dup.body.data).toEqual({ field: 'productId' });
   });
 });
 
@@ -713,7 +858,7 @@ describe('account entitlements', () => {
     ).toBe(404);
   });
 
-  it('grants a promo entitlement for some days, then revokes it; revoking twice or a STORE row is 409', async () => {
+  it('grants a promo entitlement for some days, then revokes it (data null); revoking twice is 409 with the status, a STORE row or a row that is not there is 404', async () => {
     const grant = await send(
       'POST /api/admin/accounts/:id/promo-entitlements',
       root(),
@@ -741,25 +886,25 @@ describe('account entitlements', () => {
       id,
     });
     expect(revoked.status).toBe(200);
+    expect(revoked.body.data).toBeNull();
     const again = await send('POST /api/admin/promo-entitlements/:id/revoke', root(), undefined, {
       id,
     });
     expect(again.status).toBe(409);
     expect(again.body.data.status).toBe('REVOKED');
-    expect(
-      (
-        await send('POST /api/admin/promo-entitlements/:id/revoke', root(), undefined, {
-          id: '7001',
-        })
-      ).status,
-    ).toBe(409);
+    // a row from a store subscription is not a limited-time entitlement: the backend says it is not there
+    const store = await send('POST /api/admin/promo-entitlements/:id/revoke', root(), undefined, {
+      id: '7001',
+    });
+    expect(store.status).toBe(404);
+    expect(store.body.code).toBe('RESOURCE_NOT_FOUND');
     expect(
       (await send('POST /api/admin/promo-entitlements/:id/revoke', root(), undefined, { id: '1' }))
         .status,
     ).toBe(404);
   });
 
-  it('refuses a grant with a wrong duration, an empty or long reason, or an entitlement that does not exist', async () => {
+  it('refuses a grant with a wrong duration (1 to 3650 days), an empty or long reason, and an entitlement that does not exist (404, not 400)', async () => {
     const grant = (body: unknown) =>
       send('POST /api/admin/accounts/:id/promo-entitlements', root(), body, { id: account });
     expect(
@@ -767,9 +912,20 @@ describe('account entitlements', () => {
         .details[0],
     ).toEqual({ ref: 'durationDays', reason: 'OUT_OF_RANGE' });
     expect(
+      (await grant({ entitlementKey: 'plus_th', durationDays: 3651, reason: 'x' })).body.data
+        .details[0],
+    ).toEqual({ ref: 'durationDays', reason: 'OUT_OF_RANGE' });
+    expect(
+      (await grant({ entitlementKey: 'plus_th', durationDays: 3650, reason: 'x' })).status,
+    ).toBe(200);
+    expect(
       (await grant({ entitlementKey: 'plus_th', durationDays: 1.5, reason: 'x' })).body.data
         .details[0].reason,
     ).toBe('NOT_AN_INTEGER');
+    expect((await grant({ entitlementKey: 'plus_th', reason: 'x' })).body.data.details[0]).toEqual({
+      ref: 'durationDays',
+      reason: 'EMPTY_NOT_ALLOWED',
+    });
     expect(
       (await grant({ entitlementKey: 'plus_th', durationDays: 3, reason: '  ' })).body.data
         .details[0],
@@ -778,10 +934,9 @@ describe('account entitlements', () => {
       (await grant({ entitlementKey: 'plus_th', durationDays: 3, reason: 'x'.repeat(501) })).body
         .data.details[0].reason,
     ).toBe('TOO_LONG');
-    expect(
-      (await grant({ entitlementKey: 'nope', durationDays: 3, reason: 'x' })).body.data.details[0]
-        .ref,
-    ).toBe('entitlementKey');
+    const missing = await grant({ entitlementKey: 'nope', durationDays: 3, reason: 'x' });
+    expect(missing.status).toBe(404);
+    expect(missing.body.code).toBe('RESOURCE_NOT_FOUND');
     const unknown = await send(
       'POST /api/admin/accounts/:id/promo-entitlements',
       root(),

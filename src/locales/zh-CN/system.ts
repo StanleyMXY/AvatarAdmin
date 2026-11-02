@@ -23,10 +23,12 @@ const messages: Record<string, string> = {
   // ---- 管理员 ----
   'system.admins.note':
     '不能修改自己的角色、超级管理员标志和状态，也不能删除自己的账号。最后一个启用的超级管理员不能被停用或删除，它的标志也不能清除。只有超级管理员能设置或清除超级管理员标志。',
-  'system.admins.refusedHint':
-    '后端拒绝了这个操作，什么都没有改变。可能的原因：这是你自己的账号；这是最后一个启用的超级管理员；账号刚被别人改过（请重新读取列表）。',
+  'system.admins.refusedOwnHint':
+    '后端拒绝了这个操作，什么都没有改变。这是你自己的账号：不能修改自己的角色和超级管理员标志，也不能停用或删除自己。',
+  'system.admins.refusedOtherHint':
+    '后端拒绝了这个操作，什么都没有改变。可能的原因：这是最后一个启用的超级管理员（不能停用、删除，标志也不能清除）；账号刚被别人改过（请重新读取列表）。',
   'system.admins.forbiddenHint':
-    '后端拒绝了这个操作，什么都没有改变。可能的原因：这是你自己的账号；管理员只能授出自己持有的权限；只能对权限都在自己持有范围内的管理员操作。',
+    '后端拒绝了这个操作，什么都没有改变。可能的原因：管理员只能授出自己持有的权限；只能对权限都在自己持有范围内的管理员操作；只有超级管理员能对超级管理员操作。',
   'system.admins.new': '新建管理员',
   'system.admins.you': '我',
   'system.admins.col.username': '用户名',
@@ -141,8 +143,9 @@ const messages: Record<string, string> = {
   'system.permissions.field.code': '权限码',
   'system.permissions.field.codeHint': '节点创建后不能再改码。',
   'system.permissions.field.code.required': '请输入权限码',
-  'system.permissions.field.code.invalid': '权限码不能含空格或控制字符，最多 100 个字符。',
-  'system.permissions.field.code.dots': '权限码不能以点号开头或结尾。',
+  'system.permissions.field.code.invalid':
+    '权限码只能由 1 到 128 个字母（A-Z）、数字和 _ : # / . - 组成，不能含空格和其他文字。',
+  'system.permissions.field.code.dots': '权限码不能只由点号组成。',
   'system.permissions.field.code.taken': '已经有这个权限码的节点。',
   'system.permissions.field.type': '类型',
   'system.permissions.field.parent': '父节点',

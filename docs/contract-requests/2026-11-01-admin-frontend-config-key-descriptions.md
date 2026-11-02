@@ -34,3 +34,7 @@
 3. 另外前端在 `moderation.block_score`、`moderation.review_score` 和 `complaint.likeness_due_hours` 的说明里，已经删掉了契约原文之外的推断（"达到这个值就拦截"、"改大会更晚发现"），只留契约的话；如果后端愿意确认分数和阈值的方向（分数大于等于拦截阈值才拦截吗），前端可以把方向写回说明里。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：139）。
+
+核对于 2026-11-02

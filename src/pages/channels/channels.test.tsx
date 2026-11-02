@@ -420,7 +420,8 @@ describe('editing a channel package', { timeout: 60000 }, () => {
     expect(form.getByRole('textbox', { name: 'Package name' })).toHaveValue('app.example.play');
   });
 
-  it('saves the name and package name, keeping the enabled state', async () => {
+  // Answers 89: only what changed is named; the switch is never part of an edit.
+  it('sends the name and the package name when both changed, clears the package name with an empty text, and does not name the switch', async () => {
     const { calls, user } = await load();
     const form = await openEdit(user, 'play');
     const name = form.getByRole('textbox', { name: 'Name' });
@@ -431,19 +432,43 @@ describe('editing a channel package', { timeout: 60000 }, () => {
     await user.click(submit(form));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(writesOf(calls)[0]).toMatchObject({ method: 'PUT', url: '/api/admin/channels/play' });
-    expect(writesOf(calls)[0].body).toEqual({
+    expect(writesOf(calls)[0].body).toEqual({ name: 'Play สโตร์ 🌟', packageName: '' });
+    expect(channelsState.channels.get('play')).toMatchObject({
       name: 'Play สโตร์ 🌟',
       packageName: null,
       enabled: true,
     });
-    expect(channelsState.channels.get('play')).toMatchObject({
-      name: 'Play สโตร์ 🌟',
-      packageName: null,
-    });
     await waitFor(() => expect(cellsOf(rows()[0])[1]).toBe('Play สโตร์ 🌟'));
   });
 
-  it('keeps a channel that is switched off switched off when its name is changed', async () => {
+  it('names only the name when only the name changed, and only the package name when only that changed', async () => {
+    const { calls, user } = await load();
+    let form = await openEdit(user, 'play');
+    const name = form.getByRole('textbox', { name: 'Name' });
+    await user.clear(name);
+    await user.type(name, '  ชื่อใหม่  ');
+    await user.click(submit(form));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(writesOf(calls)[0].body).toEqual({ name: 'ชื่อใหม่' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    form = await openEdit(user, 'play');
+    const pkg = form.getByRole('textbox', { name: 'Package name' });
+    await user.clear(pkg);
+    await user.type(pkg, 'app.example.play2');
+    await user.click(submit(form));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
+    expect(writesOf(calls)[1].body).toEqual({ packageName: 'app.example.play2' });
+  });
+
+  it('sends nothing, and closes, when nothing was changed', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'play');
+    await user.click(submit(form));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('keeps a channel that is switched off switched off when its name is changed: the switch is not in the request at all', async () => {
     must(channelsState.channels.get('direct')).enabled = false;
     const { calls, user } = await load();
     const form = await openEdit(user, 'direct');
@@ -452,17 +477,69 @@ describe('editing a channel package', { timeout: 60000 }, () => {
     await user.type(name, 'Direct, renamed');
     await user.click(submit(form));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect(writesOf(calls)[0].body).toEqual({
-      name: 'Direct, renamed',
-      packageName: 'app.example.direct',
-      enabled: false,
-    });
+    expect(writesOf(calls)[0].body).toEqual({ name: 'Direct, renamed' });
     expect(channelsState.channels.get('direct')?.enabled).toBe(false);
+  });
+
+  it('does not overwrite a name that another administrator changed meanwhile when only the package name is saved', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'play');
+    must(channelsState.channels.get('play')).name = 'Changed by someone else';
+    const pkg = form.getByRole('textbox', { name: 'Package name' });
+    await user.clear(pkg);
+    await user.type(pkg, 'app.example.other');
+    await user.click(submit(form));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(channelsState.channels.get('play')).toMatchObject({
+      name: 'Changed by someone else',
+      packageName: 'app.example.other',
+    });
+  });
+
+  it('refuses a name of 65 code points and a package name of 256 characters before anything is sent, with their own words', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'play');
+    fireEvent.change(form.getByRole('textbox', { name: 'Name' }), {
+      target: { value: '😀'.repeat(65) },
+    });
+    fireEvent.change(form.getByRole('textbox', { name: 'Package name' }), {
+      target: { value: 'a'.repeat(256) },
+    });
+    await user.click(submit(form));
+    expect(await form.findByText(enUS['channels.rule.nameTooLong'])).toBeTruthy();
+    expect(form.getByText(enUS['channels.rule.packageTooLong'])).toBeTruthy();
+    expect(writesOf(calls)).toHaveLength(0);
+    fireEvent.change(form.getByRole('textbox', { name: 'Name' }), {
+      target: { value: '😀'.repeat(64) },
+    });
+    fireEvent.change(form.getByRole('textbox', { name: 'Package name' }), {
+      target: { value: 'a'.repeat(255) },
+    });
+    await user.click(submit(form));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+  });
+
+  it('shows the words of the code for a 400 without details, in the dialog, and keeps what was typed', async () => {
+    const { user } = await load();
+    const form = await openEdit(user, 'play');
+    overrideFetch(async ({ method }) =>
+      method === 'PUT'
+        ? jsonAnswer(400, 'INVALID_REQUEST', null, 'name is longer than 64 characters')
+        : undefined,
+    );
+    const name = form.getByRole('textbox', { name: 'Name' });
+    await user.clear(name);
+    await user.type(name, 'Renamed');
+    await user.click(submit(form));
+    expect(await form.findByText(enUS['error.INVALID_REQUEST'])).toBeTruthy();
+    expect(document.body.textContent).not.toContain('name is longer than 64 characters');
+    expect(form.getByRole('textbox', { name: 'Name' })).toHaveValue('Renamed');
   });
 
   it('sends one request when Submit is pressed twice in the same instant, before the dialog has shown that it is working', async () => {
     const { calls, user } = await load();
     const form = await openEdit(user, 'play');
+    await user.type(form.getByRole('textbox', { name: 'Name' }), ' 2');
     const button = submit(form);
     const hold = holdWrites();
     act(() => {
@@ -489,6 +566,7 @@ describe('editing a channel package', { timeout: 60000 }, () => {
   it('sends one request when Submit is pressed twice', async () => {
     const { calls, user } = await load();
     const form = await openEdit(user, 'play');
+    await user.type(form.getByRole('textbox', { name: 'Name' }), ' 2');
     const hold = holdWrites();
     await user.click(submit(form));
     fireEvent.click(submit(form));
@@ -501,7 +579,7 @@ describe('editing a channel package', { timeout: 60000 }, () => {
 });
 
 describe('the enabled switch', { timeout: 60000 }, () => {
-  it('switches a channel on without asking, with the name, the package and the new state', async () => {
+  it('switches a channel on without asking, naming the switch alone (answers 89)', async () => {
     must(channelsState.channels.get('direct')).enabled = false;
     const { calls, user } = await load();
     const row = await rowOf('direct');
@@ -509,11 +587,7 @@ describe('the enabled switch', { timeout: 60000 }, () => {
     await waitFor(() => expect(channelsState.channels.get('direct')?.enabled).toBe(true));
     expect(writesOf(calls)).toHaveLength(1);
     expect(writesOf(calls)[0]).toMatchObject({ method: 'PUT', url: '/api/admin/channels/direct' });
-    expect(writesOf(calls)[0].body).toEqual({
-      name: 'Direct download',
-      packageName: 'app.example.direct',
-      enabled: true,
-    });
+    expect(writesOf(calls)[0].body).toEqual({ enabled: true });
   });
 
   it('asks before it switches a channel off, and says what follows', async () => {
@@ -527,7 +601,7 @@ describe('the enabled switch', { timeout: 60000 }, () => {
     await user.click(await screen.findByRole('button', { name: 'Switch off' }));
     await waitFor(() => expect(channelsState.channels.get('play')?.enabled).toBe(false));
     expect(writesOf(calls)).toHaveLength(1);
-    expect(writesOf(calls)[0].body).toMatchObject({ enabled: false });
+    expect(writesOf(calls)[0].body).toEqual({ enabled: false });
   });
 
   it('breaks the name of a channel of 5000 letters without a space inside the question, not out of it', async () => {

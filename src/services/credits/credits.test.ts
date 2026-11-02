@@ -5,6 +5,7 @@ import {
   approveAdjustRequest,
   createAdjustRequest,
   createCreditProduct,
+  creditProductKey,
   getAccountCredits,
   getCreditStats,
   listAdjustRequests,
@@ -133,7 +134,9 @@ describe('credit accounts, transactions and statistics', () => {
 });
 
 describe('credit packs', () => {
-  it('lists, creates and updates', async () => {
+  const surfaces = [{ platform: 'ANDROID' as const, channel: null }];
+
+  it('lists once with no paging, creates with POST and updates with PUT /credit-products (no id in the path)', async () => {
     const calls = answer({ items: [] });
     await listCreditProducts();
     expect(calls[0].url).toBe('/api/admin/credit-products');
@@ -143,6 +146,7 @@ describe('credit packs', () => {
       credits: 100,
       enabled: false,
       sortOrder: 3,
+      surfaces: [],
     });
     expect(calls[1].init.method).toBe('POST');
     expect(body(calls[1])).toEqual({
@@ -151,47 +155,55 @@ describe('credit packs', () => {
       credits: 100,
       enabled: false,
       sortOrder: 3,
+      surfaces: [],
     });
-    await updateCreditProduct('7', { credits: 200, enabled: true, sortOrder: 1 });
-    expect(calls[2].url).toBe('/api/admin/credit-products/7');
+    await updateCreditProduct({
+      store: 'GOOGLE',
+      productId: 'p1',
+      credits: 200,
+      enabled: true,
+      sortOrder: 1,
+      surfaces,
+    });
+    expect(calls[2].url).toBe('/api/admin/credit-products');
     expect(calls[2].init.method).toBe('PUT');
-    expect(body(calls[2])).toEqual({ credits: 200, enabled: true, sortOrder: 1 });
-  });
-
-  it('reads every page when the backend pages the list, 200 a page, until it has the total', async () => {
-    const rows = Array.from({ length: 450 }, (_, n) => ({ id: String(n) }));
-    const calls = stubFetch(({ url }) => {
-      const page = Number(new URL(url, 'http://x').searchParams.get('page') ?? '1');
-      return jsonResponse(
-        200,
-        envelope('200', { items: rows.slice((page - 1) * 200, page * 200), total: 450 }),
-      );
+    expect(body(calls[2])).toEqual({
+      store: 'GOOGLE',
+      productId: 'p1',
+      credits: 200,
+      enabled: true,
+      sortOrder: 1,
+      surfaces,
     });
+  });
+
+  it('gives back nothing from the update: the backend answers data null', async () => {
+    answer(null);
+    await expect(
+      updateCreditProduct({
+        store: 'APPLE',
+        productId: 'p',
+        credits: 1,
+        enabled: true,
+        sortOrder: 0,
+        surfaces: [],
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('reads every pack with one request: the list has no total and is not paged, so a second page is never asked for', async () => {
+    const rows = Array.from({ length: 450 }, (_, n) => ({ productId: String(n) }));
+    const calls = answer({ items: rows });
     expect(await listAllCreditProducts()).toHaveLength(450);
-    expect(calls.map((c) => c.url)).toEqual([
-      '/api/admin/credit-products?page=1&pageSize=200',
-      '/api/admin/credit-products?page=2&pageSize=200',
-      '/api/admin/credit-products?page=3&pageSize=200',
-    ]);
+    expect(calls.map((c) => c.url)).toEqual(['/api/admin/credit-products']);
   });
 
-  it('stops after one page when the answer has no total and fewer rows than a page (a list that is not paged)', async () => {
-    const calls = answer({ items: [{ id: '1' }, { id: '2' }] });
-    expect(await listAllCreditProducts()).toEqual([{ id: '1' }, { id: '2' }]);
-    expect(calls).toHaveLength(1);
-  });
-
-  it('keeps each pack once and stops when a page brings nothing new, so a backend that ignores the page cannot make it loop', async () => {
-    const full = Array.from({ length: 200 }, (_, n) => ({ id: String(n) }));
-    const calls = stubFetch(() => jsonResponse(200, envelope('200', { items: full })));
-    expect(await listAllCreditProducts()).toHaveLength(200);
-    expect(calls).toHaveLength(2);
-  });
-
-  it('sends the surfaces of the row back unchanged when it has some', async () => {
-    const calls = answer({});
-    const surfaces = [{ platform: 'ANDROID' as const, channel: null }];
-    await updateCreditProduct('7', { credits: 200, enabled: true, sortOrder: 1, surfaces });
-    expect(body(calls[0]).surfaces).toEqual(surfaces);
+  it('identifies a pack by (store, productId), joined so that two different pairs never give one key', () => {
+    expect(creditProductKey({ store: 'APPLE', productId: 'a|b' })).not.toBe(
+      creditProductKey({ store: 'APPLE|a', productId: 'b' }),
+    );
+    expect(creditProductKey({ store: 'APPLE', productId: 'x' })).toBe(
+      creditProductKey({ store: 'APPLE', productId: 'x' }),
+    );
   });
 });

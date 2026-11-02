@@ -45,8 +45,11 @@ export type SessionDetail = SessionRow & {
 };
 
 /**
- * The filters of `GET /sessions`. The contract names `guest` and `endReason=DEADLINE`; the names of
- * the others are in docs/contract-requests/2026-10-26-admin-frontend-sessions.md.
+ * The filters of `GET /sessions` (the backend's answer 54, docs/backend-inputs, 2026-11-02): six
+ * parameters, each sent only when it has a value. `guest` and `inProgress` go as lower-case `true`
+ * or `false` (the backend refuses `TRUE`, `1`, `yes`); `from` and `to` as ISO instants ending in
+ * `Z` (an offset such as `+08:00` was not checked with the backend, so none is sent). A name the
+ * backend does not declare, such as the old `ongoing`, is ignored by it without an error.
  */
 export type SessionQuery = {
   page: number;
@@ -57,6 +60,7 @@ export type SessionQuery = {
   from?: string;
   /** Not included. */
   to?: string;
-  ongoing?: boolean;
+  /** True: sessions without an end time; false: with one. */
+  inProgress?: boolean;
   endReason?: EndReason;
 };

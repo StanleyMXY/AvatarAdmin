@@ -45,3 +45,7 @@
 **现状（2026-11-01）：** 负责人 2026-10-27 已定前端也挡一层：对超级管理员那一行，不是超级管理员的人看不到重置密码、重置二次验证、停用、删除，也不能编辑和启用；对自己那一行，重置密码和重置二次验证不可用（自己改密码走"修改密码"）。代码：`src/pages/system/admins.tsx`（"The row of a super administrator is closed to anyone who is not one"）。后端仍是最终裁决，上面的问题保留。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：1、8、9、22、44、45、46、83、85、86、87、88）。
+
+核对于 2026-11-02

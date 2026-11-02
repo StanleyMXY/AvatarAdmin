@@ -81,46 +81,77 @@ describe('the administrators', () => {
     });
   });
 
-  it('puts the id in the path encoded, and sends only what the patch holds', async () => {
+  it('puts the id in the path encoded, and always sends the user name and the whole list of roles: the patch roles replace the current ones, the flag goes only when the patch holds it (backend answer 44)', async () => {
     const calls = answer({});
     await updateAdmin(
-      { id: 'a/b', username: 'x' },
+      { id: 'a/b', username: 'x', roleIds: ['1', '2'] },
       { roleIds: ['3'], superAdmin: true },
       { id: '1' },
     );
     expect(calls[0].init.method).toBe('PUT');
     expect(path(calls[0])).toBe('/api/admin/admins/a%2Fb');
-    expect(body(calls[0])).toEqual({ roleIds: ['3'], superAdmin: true });
-    await updateAdmin({ id: '5', username: 'x' }, { roleIds: [] }, { id: '1' });
-    expect(body(calls[1])).toEqual({ roleIds: [] });
+    expect(body(calls[0])).toEqual({ username: 'x', roleIds: ['3'], superAdmin: true });
+    // a patch of the flag only still carries the current roles, not nothing and not []
+    await updateAdmin(
+      { id: '5', username: 'ผู้ตรวจ', roleIds: ['1', '2'] },
+      { superAdmin: false },
+      { id: '1' },
+    );
+    expect(body(calls[1])).toEqual({ username: 'ผู้ตรวจ', roleIds: ['1', '2'], superAdmin: false });
+    // a patch of the roles only has no flag
+    await updateAdmin({ id: '5', username: 'x', roleIds: ['1'] }, { roleIds: [] }, { id: '1' });
+    expect(body(calls[2])).toEqual({ username: 'x', roleIds: [] });
+    // an empty patch is still a whole request: the user name and the current roles
+    await updateAdmin({ id: '5', username: 'x', roleIds: ['7'] }, {}, { id: '1' });
+    expect(body(calls[3])).toEqual({ username: 'x', roleIds: ['7'] });
   });
 
-  it('never sends the roles or the super administrator flag of the own row, whatever the patch holds', async () => {
+  it('sends the user name and the current roles of the own row too, and never its flag or other roles, whatever the patch holds', async () => {
     const calls = answer({});
     await updateAdmin(
-      { id: '1', username: 'root' },
+      { id: '1', username: 'root', roleIds: ['1', '4'] },
       { roleIds: ['9'], superAdmin: false },
       { id: '1', username: 'root' },
     );
-    const sent = body(calls[0]);
-    expect(sent).not.toHaveProperty('roleIds');
-    expect(sent).not.toHaveProperty('superAdmin');
+    expect(body(calls[0])).toEqual({ username: 'root', roleIds: ['1', '4'] });
+    expect(body(calls[0])).not.toHaveProperty('superAdmin');
     // also when the signed-in account is only known by its name
     await updateAdmin(
-      { id: '1', username: 'Root' },
+      { id: '1', username: 'Root', roleIds: ['1'] },
       { roleIds: ['9'], superAdmin: true },
       { username: 'root' },
     );
-    expect(body(calls[1])).toEqual({});
+    expect(body(calls[1])).toEqual({ username: 'Root', roleIds: ['1'] });
     // and when nothing is known about who is signed in
-    await updateAdmin({ id: '1', username: 'x' }, { roleIds: ['9'], superAdmin: true }, undefined);
-    expect(body(calls[2])).toEqual({});
+    await updateAdmin(
+      { id: '1', username: 'x', roleIds: [] },
+      { roleIds: ['9'], superAdmin: true },
+      undefined,
+    );
+    expect(body(calls[2])).toEqual({ username: 'x', roleIds: [] });
   });
 
-  it('builds the patch body without a field that is undefined', () => {
-    expect(adminPatchBody({ roleIds: ['1'] }, false)).toEqual({ roleIds: ['1'] });
-    expect(adminPatchBody({ superAdmin: false }, false)).toEqual({ superAdmin: false });
-    expect(adminPatchBody({ roleIds: ['1'], superAdmin: true }, true)).toEqual({});
+  it('builds the body of the update: the user name and the roles always, the flag only for another row and only when the patch holds it', () => {
+    const target = { username: 'u', roleIds: ['1'] };
+    expect(adminPatchBody(target, { roleIds: ['2'] }, false)).toEqual({
+      username: 'u',
+      roleIds: ['2'],
+    });
+    expect(adminPatchBody(target, { superAdmin: false }, false)).toEqual({
+      username: 'u',
+      roleIds: ['1'],
+      superAdmin: false,
+    });
+    expect(adminPatchBody(target, { roleIds: ['2'], superAdmin: true }, true)).toEqual({
+      username: 'u',
+      roleIds: ['1'],
+    });
+  });
+
+  it('copies the list of roles: changing the body does not change the row', () => {
+    const target = { username: 'u', roleIds: ['1'] };
+    adminPatchBody(target, {}, false).roleIds.push('2');
+    expect(target.roleIds).toEqual(['1']);
   });
 
   it('switches the status, resets the password and the authenticator, and deletes', async () => {
@@ -218,21 +249,34 @@ describe('the permission tree', () => {
     ]);
   });
 
-  it('sends the parent for a custom node and never for a built-in one', async () => {
+  it('always sends the parent: the one given for a custom node, null for a root; for a built-in node its own parent, whatever the patch holds (backend answer 87)', async () => {
     const calls = answer({});
     await updatePermission(
       'CUSTOM:A',
       { nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: 'CUSTOM:B' },
-      { builtin: false },
+      { builtin: false, parent: 'CUSTOM:C' },
     );
     expect(body(calls[0])).toEqual({ nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: 'CUSTOM:B' });
     await updatePermission(
+      'CUSTOM:A',
+      { nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: null },
+      { builtin: false, parent: 'CUSTOM:C' },
+    );
+    expect(body(calls[1])).toEqual({ nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: null });
+    await updatePermission(
       'USER:VIEW',
       { nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: 'CUSTOM:B' },
-      { builtin: true },
+      { builtin: true, parent: 'USER:ROOT' },
     );
-    expect(body(calls[1])).toEqual({ nameZh: 'a', nameEn: 'b', sortOrder: 2 });
-    expect(path(calls[1])).toBe('/api/admin/permissions/USER%3AVIEW');
+    expect(body(calls[2])).toEqual({ nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: 'USER:ROOT' });
+    expect(path(calls[2])).toBe('/api/admin/permissions/USER%3AVIEW');
+    // a built-in root: null is sent, not left out
+    await updatePermission(
+      'ROOT:X',
+      { nameZh: 'a', nameEn: 'b', sortOrder: 2, parent: null },
+      { builtin: true, parent: null },
+    );
+    expect(body(calls[3])).toHaveProperty('parent', null);
   });
 });
 
@@ -277,7 +321,7 @@ describe('the type of a node on update', () => {
     await updatePermission(
       'CUSTOM:A',
       { nameZh: '甲', nameEn: 'A', sortOrder: 1, parent: null, type: 'MENU' } as never,
-      { builtin: false },
+      { builtin: false, parent: null },
     );
     expect(JSON.parse(calls[0].init.body as string)).toEqual({
       nameZh: '甲',

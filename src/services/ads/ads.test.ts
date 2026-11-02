@@ -55,12 +55,9 @@ describe('the campaigns', () => {
     expect(new URL(calls[1].url, 'http://x').search).toBe('?page=1&pageSize=20');
   });
 
-  it('reads a bare list as a page and a page without a total as having as many as it shows', async () => {
+  it('does not read a bare list (the backend answers {items, total}); a page without a total has as many as it shows', async () => {
     answer([{ id: '1' }, { id: '2' }]);
-    expect(await listCampaigns({ page: 1, pageSize: 20 })).toEqual({
-      items: [{ id: '1' }, { id: '2' }],
-      total: 2,
-    });
+    expect(await listCampaigns({ page: 1, pageSize: 20 })).toEqual({ items: [], total: 0 });
     answer({ items: [{ id: '1' }] });
     expect((await listCampaigns({ page: 1, pageSize: 20 })).total).toBe(1);
     answer(null);

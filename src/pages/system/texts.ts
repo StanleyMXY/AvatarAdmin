@@ -23,19 +23,38 @@ export function withScopeHint(intl: Translator, error: unknown, text: string): s
     : text;
 }
 
-/** The refusal of the last enabled super administrator comes as 409 (403 has its own sentences). */
-const PROTECTION_CODES = ['INVALID_STATE'];
+/**
+ * The sentence for a refusal 409 `INVALID_STATE` of a write about an administrator, after the text of
+ * the code. The 409 itself does not say why (backend answer 22): it is the protection of the own
+ * account, the last enabled super administrator, or a change of someone else meanwhile. The page
+ * knows whether the row is the signed-in person's own, so there are two fixed sentences and the page
+ * says the one that fits. Any other failure keeps its own text.
+ */
+export function withStateHint(
+  intl: Translator,
+  error: unknown,
+  text: string,
+  own: boolean,
+): string {
+  return error instanceof ApiError && error.code === 'INVALID_STATE'
+    ? afterText(
+        intl,
+        text,
+        intl.formatMessage({
+          id: own ? 'system.admins.refusedOwnHint' : 'system.admins.refusedOtherHint',
+        }),
+      )
+    : text;
+}
 
 /**
  * The words for a failed write of the administrator page: the text of the error code, never the
- * backend's message. A refusal that can be one of the protections of the account (403 or 409) gets
- * the sentence that says which protections there are, since the code alone does not say.
+ * backend's message. A 403 gets the sentence that says which rules can refuse it, a 409 the sentence
+ * for an own row or for another row (`own`), since the code alone does not say.
  */
-export function protectedFailureText(intl: Translator, error: unknown): string {
+export function protectedFailureText(intl: Translator, error: unknown, own: boolean): string {
   const { error: failure, text } = describeFailure(intl, error);
   if (failure instanceof ApiError && failure.code === 'ADMIN_FORBIDDEN')
     return afterText(intl, text, intl.formatMessage({ id: 'system.admins.forbiddenHint' }));
-  return failure instanceof ApiError && PROTECTION_CODES.includes(failure.code)
-    ? afterText(intl, text, intl.formatMessage({ id: 'system.admins.refusedHint' }))
-    : text;
+  return withStateHint(intl, failure, text, own);
 }

@@ -35,6 +35,16 @@ const RECORDS = 'GET /api/admin/push/records';
 const RECORD = 'GET /api/admin/push/records/:id';
 const UPLOAD = 'POST /api/admin/uploads/image';
 
+/**
+ * A PUT of a template. The backend wants triggerReason and locale in every PUT (answers 35), so the
+ * key of the template that is written is added here unless the test sets it.
+ */
+const putTemplate = (body: Record<string, unknown>, params: { id: string }) => {
+  const found = pushState.templates.find((t) => t.id === params.id);
+  const key = found ? { triggerReason: found.triggerReason, locale: found.locale } : {};
+  return send(TEMPLATE_UPDATE, { ...key, ...body }, params);
+};
+
 const upload = async () => (await send(UPLOAD, undefined)).body.data.uploadId as string;
 
 const template = (over: Record<string, unknown> = {}) => ({
@@ -113,27 +123,74 @@ describe('the sample data', () => {
 });
 
 describe('templates', () => {
-  it('lists with the paging and answers 400 for a page size beyond 200', async () => {
-    const r = await get(TEMPLATES, { page: '1', pageSize: '5' });
-    expect(r.body.data.items).toHaveLength(5);
-    expect(r.body.data.total).toBe(pushState.templates.length);
-    const bad = await get(TEMPLATES, { pageSize: '201' });
-    expect(bad.status).toBe(400);
-    expect(bad.body.data.details).toEqual([{ ref: 'pageSize', reason: 'OUT_OF_RANGE' }]);
+  // Answers 33: the list is not paged. page and pageSize are ignored, there is no total, the order
+  // is triggerReason, locale, id, and the filters are triggerReason and locale (exact).
+  it('lists all of them in one answer with items and missingLocales only, whatever page and pageSize say', async () => {
+    const r = await get(TEMPLATES, { page: '2', pageSize: '3' });
+    expect(r.status).toBe(200);
+    expect(Object.keys(r.body.data).sort()).toEqual(['items', 'missingLocales']);
+    expect(r.body.data.items).toHaveLength(pushState.templates.length);
+    const again = await get(TEMPLATES, { pageSize: '201' });
+    expect(again.status).toBe(200);
+    expect(again.body.data.items).toHaveLength(pushState.templates.length);
+    const keys = r.body.data.items.map(
+      (t: { triggerReason: string; locale: string }) => `${t.triggerReason}/${t.locale}`,
+    );
+    expect(keys).toEqual([...keys].sort());
   });
 
-  it('creates a template, takes the address from the upload and ignores an address in the body', async () => {
+  it('filters by triggerReason and locale, exactly; a value that matches nothing is an empty list, not a 400', async () => {
+    const reason = await get(TEMPLATES, { triggerReason: 'daily_recall' });
+    expect(
+      reason.body.data.items.every(
+        (t: { triggerReason: string }) => t.triggerReason === 'daily_recall',
+      ),
+    ).toBe(true);
+    const locale = await get(TEMPLATES, { locale: 'th' });
+    expect(locale.body.data.items.every((t: { locale: string }) => t.locale === 'th')).toBe(true);
+    expect(locale.body.data.items.length).toBeGreaterThan(0);
+    const none = await get(TEMPLATES, { triggerReason: 'nope' });
+    expect([none.status, none.body.data.items]).toEqual([200, []]);
+    // missingLocales does not follow the filters
+    expect(none.body.data.missingLocales.streak_at_risk).toEqual(pushState.supportedLocales);
+  });
+
+  it('creates a template and answers imageUploadId and imageUrl, both from the upload (answers 34)', async () => {
     const id = await upload();
-    const r = await send(
-      TEMPLATE_CREATE,
-      template({ uploadId: id, imageUrl: 'https://evil.example/x.png' }),
-    );
+    const r = await send(TEMPLATE_CREATE, template({ uploadId: id }));
     expect(r.status).toBe(200);
+    expect(r.body.data.imageUploadId).toBe(id);
     expect(r.body.data.imageUrl).toMatch(/mock-files/);
-    expect(r.body.data.imageUrl).not.toContain('evil');
     expect(r.body.data.enabled).toBe(false);
-    const list = await get(TEMPLATES, { pageSize: '200' });
+    expect('uploadId' in r.body.data).toBe(false);
+    const list = await get(TEMPLATES);
     expect(list.body.data.items.some((t: { id: string }) => t.id === r.body.data.id)).toBe(true);
+    const bare = await send(TEMPLATE_CREATE, template({ locale: 'pt' }));
+    expect([bare.body.data.imageUploadId, bare.body.data.imageUrl]).toEqual([null, null]);
+  });
+
+  it('refuses an imageUrl in the body of a write, 400 with ref imageUrl, and ignores imageUploadId', async () => {
+    const refused = await send(
+      TEMPLATE_CREATE,
+      template({ imageUrl: 'https://evil.example/x.png' }),
+    );
+    expect(refused.status).toBe(400);
+    expect(refused.body.data.details.map((d: { ref: string }) => d.ref)).toEqual(['imageUrl']);
+    const id = await upload();
+    const kept = await send(TEMPLATE_CREATE, template({ locale: 'it', imageUploadId: id }));
+    expect(kept.status).toBe(200);
+    expect(kept.body.data.imageUploadId).toBeNull();
+    expect(pushState.uploads.get(id)?.used).toBe(false);
+    for (const [name, body] of [
+      [TASK_CREATE, task({ imageUrl: 'https://evil.example/x.png' })],
+      [SCHEDULE_CREATE, schedule({ imageUrl: 'https://evil.example/x.png' })],
+    ] as const) {
+      const r = await send(name, body);
+      expect([r.status, r.body.data.details.map((d: { ref: string }) => d.ref)]).toEqual([
+        400,
+        ['imageUrl'],
+      ]);
+    }
   });
 
   it('refuses a reason that has no templates (admin, system_event) and a made-up one', async () => {
@@ -181,6 +238,46 @@ describe('templates', () => {
     expect(missing.body.code).toBe('RESOURCE_NOT_FOUND');
   });
 
+  // Answers 34: the title has 1 to 100 and the body 1 to 500 code points, counted after the ends
+  // are cut; a letter, a Thai character, an Arabic one or an emoji is one code point each.
+  it.each([
+    ['Latin', 'a'],
+    ['Thai', 'ก'],
+    ['Arabic', 'ع'],
+    ['Chinese', '字'],
+    ['an emoji outside the basic plane', String.fromCodePoint(0x1f600)],
+  ])(
+    'takes a title of 100 and a body of 500 code points of %s, and refuses one more',
+    async (_n, ch) => {
+      const fits = await send(
+        TEMPLATE_CREATE,
+        template({ title: ch.repeat(100), body: ch.repeat(500) }),
+      );
+      expect(fits.status).toBe(200);
+      const long = await send(
+        TEMPLATE_CREATE,
+        template({ locale: 'pt', title: ch.repeat(101), body: ch.repeat(501) }),
+      );
+      expect(long.body.data.details).toEqual([
+        { ref: 'title', reason: 'TOO_LONG' },
+        { ref: 'body', reason: 'TOO_LONG' },
+      ]);
+    },
+  );
+
+  it('gives the same limits to a task and a periodic push', async () => {
+    const long = { title: 'x'.repeat(101), body: 'y'.repeat(501) };
+    const expected = [
+      { ref: 'title', reason: 'TOO_LONG' },
+      { ref: 'body', reason: 'TOO_LONG' },
+    ];
+    expect((await send(TASK_CREATE, task(long))).body.data.details).toEqual(expected);
+    expect((await send(SCHEDULE_CREATE, schedule(long))).body.data.details).toEqual(expected);
+    expect(
+      (await send(TASK_CREATE, task({ title: 'x'.repeat(100), body: 'y'.repeat(500) }))).status,
+    ).toBe(200);
+  });
+
   it('uses an upload once: the second use is 409 INVALID_STATE', async () => {
     const id = await upload();
     expect((await send(TEMPLATE_CREATE, template({ uploadId: id }))).status).toBe(200);
@@ -190,9 +287,9 @@ describe('templates', () => {
   });
 
   describe('the list tells which supported languages have no enabled template (a14)', () => {
-    it('answers missingLocales for both recall reasons, in the order of the supported languages, next to items and total', async () => {
+    it('answers missingLocales for both recall reasons, in the order of the supported languages, next to items', async () => {
       const r = await get(TEMPLATES, { page: '1', pageSize: '5' });
-      expect(Object.keys(r.body.data).sort()).toEqual(['items', 'missingLocales', 'total']);
+      expect(Object.keys(r.body.data).sort()).toEqual(['items', 'missingLocales']);
       expect(r.body.data.missingLocales).toEqual({
         // daily_recall has an enabled template in each of the seven languages
         daily_recall: [],
@@ -244,7 +341,7 @@ describe('templates', () => {
 
     it('refuses to create or switch on a template of another language while the reason has none enabled in the default language, with the data of the rule and not the old missingLocales', async () => {
       const th = find('streak_at_risk', 'th');
-      const switchOn = refusal(await send(TEMPLATE_UPDATE, update(), { id: th.id }));
+      const switchOn = refusal(await putTemplate(update(), { id: th.id }));
       expect(switchOn.data).toEqual({ defaultLocale: 'en', reason: 'streak_at_risk' });
       expect(switchOn.message).toBe(
         'streak_at_risk needs an enabled template in en (the default language) while other languages are enabled; enable or restore it first',
@@ -263,9 +360,9 @@ describe('templates', () => {
         200,
       );
       expect((await send(TEMPLATE_CREATE, template({ enabled: true }))).status).toBe(200);
-      expect(
-        (await send(TEMPLATE_UPDATE, update(), { id: find('streak_at_risk', 'th').id })).status,
-      ).toBe(200);
+      expect((await putTemplate(update(), { id: find('streak_at_risk', 'th').id })).status).toBe(
+        200,
+      );
       expect((await send(TEMPLATE_CREATE, template({ locale: 'ar', enabled: true }))).status).toBe(
         200,
       );
@@ -281,7 +378,7 @@ describe('templates', () => {
 
     it('refuses to switch off or delete the default-language template while other languages are on, and says what to do', async () => {
       const en = find('daily_recall', 'en');
-      const off = refusal(await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: en.id }));
+      const off = refusal(await putTemplate(update({ enabled: false }), { id: en.id }));
       expect(off.data).toEqual({ defaultLocale: 'en', reason: 'daily_recall' });
       expect(off.message).toBe(
         'daily_recall needs an enabled template in en (the default language) while other languages are enabled; disable the other languages of daily_recall first, or keep the en template enabled',
@@ -295,23 +392,17 @@ describe('templates', () => {
     it('lets the last enabled template of a reason go, the default language one last', async () => {
       for (const t of pushState.templates) {
         if (t.triggerReason === 'daily_recall' && t.locale !== 'en') {
-          expect(
-            (await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: t.id })).status,
-          ).toBe(200);
+          expect((await putTemplate(update({ enabled: false }), { id: t.id })).status).toBe(200);
         }
       }
       const en = find('daily_recall', 'en');
-      expect((await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: en.id })).status).toBe(
-        200,
-      );
+      expect((await putTemplate(update({ enabled: false }), { id: en.id })).status).toBe(200);
     });
 
     it('lets any other language be switched off, edited and deleted at any time', async () => {
       const ar = find('daily_recall', 'ar');
-      expect((await send(TEMPLATE_UPDATE, update({ title: 'ก' }), { id: ar.id })).status).toBe(200);
-      expect((await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: ar.id })).status).toBe(
-        200,
-      );
+      expect((await putTemplate(update({ title: 'ก' }), { id: ar.id })).status).toBe(200);
+      expect((await putTemplate(update({ enabled: false }), { id: ar.id })).status).toBe(200);
       expect((await send(TEMPLATE_DELETE, {}, { id: find('daily_recall', 'vi').id })).status).toBe(
         200,
       );
@@ -322,8 +413,7 @@ describe('templates', () => {
       const off = find('daily_recall', 'ar');
       off.enabled = false;
       expect(
-        (await send(TEMPLATE_UPDATE, update({ title: 'Renamed', enabled: false }), { id: off.id }))
-          .status,
+        (await putTemplate(update({ title: 'Renamed', enabled: false }), { id: off.id })).status,
       ).toBe(200);
       expect((await send(TEMPLATE_DELETE, {}, { id: off.id })).status).toBe(200);
     });
@@ -333,7 +423,7 @@ describe('templates', () => {
         (t) => !(t.triggerReason === 'daily_recall' && t.locale !== 'en'),
       );
       const en = find('daily_recall', 'en');
-      const moved = refusal(await send(TEMPLATE_UPDATE, update({ locale: 'th' }), { id: en.id }));
+      const moved = refusal(await putTemplate(update({ locale: 'th' }), { id: en.id }));
       expect(moved.data).toEqual({ defaultLocale: 'en', reason: 'daily_recall' });
       expect(moved.message).toBe(
         'daily_recall would have no enabled template in en, the default language: keep this template in en and enabled, and create the other language as a new template',
@@ -343,7 +433,7 @@ describe('templates', () => {
 
     it('judges the old reason too when a template changes its reason', async () => {
       const refused = refusal(
-        await send(TEMPLATE_UPDATE, update({ triggerReason: 'streak_at_risk' }), {
+        await putTemplate(update({ triggerReason: 'streak_at_risk' }), {
           id: find('daily_recall', 'en').id,
         }),
       );
@@ -359,11 +449,9 @@ describe('templates', () => {
       });
       const en = find('daily_recall', 'en');
       // en is no longer the default one: it can go; th is.
-      expect((await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: en.id })).status).toBe(
-        200,
-      );
+      expect((await putTemplate(update({ enabled: false }), { id: en.id })).status).toBe(200);
       const th = refusal(
-        await send(TEMPLATE_UPDATE, update({ enabled: false }), {
+        await putTemplate(update({ enabled: false }), {
           id: find('daily_recall', 'th').id,
         }),
       );
@@ -380,13 +468,13 @@ describe('templates', () => {
       );
       // With the lower case one switched off, the EN one alone does not satisfy the rule.
       const en = find('streak_at_risk', 'en');
-      refusal(await send(TEMPLATE_UPDATE, update({ enabled: false }), { id: en.id }));
+      refusal(await putTemplate(update({ enabled: false }), { id: en.id }));
     });
 
     it('does not use the upload of a refused write', async () => {
       const id = await upload();
       refusal(
-        await send(TEMPLATE_UPDATE, update({ uploadId: id }), {
+        await putTemplate(update({ uploadId: id }), {
           id: find('streak_at_risk', 'th').id,
         }),
       );
@@ -403,6 +491,8 @@ describe('templates', () => {
     const r = await send(
       TEMPLATE_UPDATE,
       {
+        triggerReason: sample.triggerReason,
+        locale: sample.locale,
         title: 'New title',
         body: 'New body',
         linkType: 'NONE',
@@ -416,6 +506,101 @@ describe('templates', () => {
     expect((await send(TEMPLATE_DELETE, undefined, { id })).status).toBe(200);
     expect(pushState.templates.some((t) => t.id === id)).toBe(false);
     expect((await send(TEMPLATE_DELETE, undefined, { id })).status).toBe(404);
+  });
+
+  describe('the PUT is a replacement of the whole row (answers 34, 35)', () => {
+    const sample = () =>
+      pushState.templates.find(
+        (t) => t.triggerReason === 'daily_recall' && t.locale === 'ar',
+      ) as (typeof pushState.templates)[number];
+    const full = (over: Record<string, unknown> = {}) => ({
+      triggerReason: sample().triggerReason,
+      locale: sample().locale,
+      title: 'T',
+      body: 'B',
+      linkType: 'NONE',
+      linkTarget: '',
+      enabled: true,
+      ...over,
+    });
+
+    it('needs triggerReason and locale: without them 400 EMPTY_NOT_ALLOWED, and nothing changes', async () => {
+      const { triggerReason: _r, locale: _l, ...without } = full();
+      const r = await send(TEMPLATE_UPDATE, without, { id: sample().id });
+      expect([r.status, r.body.code]).toEqual([400, 'INVALID_REQUEST']);
+      expect(r.body.data.details).toEqual([
+        { ref: 'triggerReason', reason: 'EMPTY_NOT_ALLOWED' },
+        { ref: 'locale', reason: 'EMPTY_NOT_ALLOWED' },
+      ]);
+      expect(sample().title).not.toBe('T');
+    });
+
+    it('takes a missing enabled as false: a PUT without it switches the template off', async () => {
+      expect(sample().enabled).toBe(true);
+      const { enabled: _e, ...without } = full();
+      const r = await send(TEMPLATE_UPDATE, without, { id: sample().id });
+      expect(r.status).toBe(200);
+      expect(r.body.data.enabled).toBe(false);
+    });
+
+    it('moves the key: a locale that another template of the reason has is 409 DUPLICATE_RESOURCE, a reason that is not a recall reason is 400', async () => {
+      const taken = await send(TEMPLATE_UPDATE, full({ locale: 'th' }), { id: sample().id });
+      expect([taken.status, taken.body.code, taken.body.data]).toEqual([
+        409,
+        'DUPLICATE_RESOURCE',
+        { field: 'locale' },
+      ]);
+      const wrong = await send(TEMPLATE_UPDATE, full({ triggerReason: 'admin' }), {
+        id: sample().id,
+      });
+      expect(wrong.body.data.details).toEqual([{ ref: 'triggerReason', reason: 'OUT_OF_RANGE' }]);
+    });
+
+    it('keeps the picture without uploadId, replaces it with a new one and removes it with null; imageUploadId and imageUrl follow', async () => {
+      const first = await upload();
+      const created = await send(TEMPLATE_CREATE, template({ locale: 'pt', uploadId: first }));
+      const id = created.body.data.id as string;
+      const key = { triggerReason: 'streak_at_risk', locale: 'pt', enabled: false };
+      const kept = await send(TEMPLATE_UPDATE, full({ ...key, title: 'Kept' }), { id });
+      expect([kept.body.data.imageUploadId, kept.body.data.imageUrl]).toEqual([
+        first,
+        created.body.data.imageUrl,
+      ]);
+      // the id the answer gave, sent back as it is, is no change either
+      const same = await send(TEMPLATE_UPDATE, full({ ...key, uploadId: first }), { id });
+      expect(same.body.data.imageUploadId).toBe(first);
+      const second = await upload();
+      const swapped = await send(TEMPLATE_UPDATE, full({ ...key, uploadId: second }), { id });
+      expect(swapped.body.data.imageUploadId).toBe(second);
+      const removed = await send(TEMPLATE_UPDATE, full({ ...key, uploadId: null }), { id });
+      expect([removed.body.data.imageUploadId, removed.body.data.imageUrl]).toEqual([null, null]);
+    });
+
+    it('refuses an imageUrl, which the page must not send back from a GET', async () => {
+      const r = await send(TEMPLATE_UPDATE, full({ imageUrl: 'https://x.example/a.png' }), {
+        id: sample().id,
+      });
+      expect(r.status).toBe(400);
+      expect(r.body.data.details.map((d: { ref: string }) => d.ref)).toEqual(['imageUrl']);
+    });
+
+    it('ignores imageUploadId in the body: the picture stays', async () => {
+      const first = await upload();
+      const created = await send(TEMPLATE_CREATE, template({ locale: 'pt', uploadId: first }));
+      const other = await upload();
+      const r = await send(
+        TEMPLATE_UPDATE,
+        full({
+          triggerReason: 'streak_at_risk',
+          locale: 'pt',
+          enabled: false,
+          imageUploadId: other,
+        }),
+        { id: created.body.data.id },
+      );
+      expect(r.body.data.imageUploadId).toBe(first);
+      expect(pushState.uploads.get(other)?.used).toBe(false);
+    });
   });
 });
 
@@ -484,20 +669,33 @@ describe('tasks', () => {
     ]);
   });
 
-  it('cancels only a PENDING task: 409 INVALID_STATE with the current status for the others, 404 for an unknown one', async () => {
+  // Answers 72: PENDING and RUNNING can be cancelled; DONE and CANCELLED answer 409 INVALID_STATE
+  // with the current status; an unknown task is 404.
+  it('cancels a PENDING task and a RUNNING one, and answers the whole task as CANCELLED with finishedAt', async () => {
     const pending = pushState.tasks.find((t) => t.status === 'PENDING');
     const running = pushState.tasks.find((t) => t.status === 'RUNNING');
     expect(pending && running).toBeTruthy();
-    const refused = await send(TASK_CANCEL, undefined, { id: (running as { id: string }).id });
-    expect(refused.status).toBe(409);
-    expect(refused.body.code).toBe('INVALID_STATE');
-    expect(refused.body.data).toEqual({ status: 'RUNNING' });
-    const ok = await send(TASK_CANCEL, undefined, { id: (pending as { id: string }).id });
-    expect(ok.status).toBe(200);
-    expect(pushState.tasks.find((t) => t.id === pending?.id)?.status).toBe('CANCELLED');
-    expect(
-      (await send(TASK_CANCEL, undefined, { id: (pending as { id: string }).id })).status,
-    ).toBe(409);
+    for (const found of [pending, running] as { id: string }[]) {
+      const r = await send(TASK_CANCEL, undefined, { id: found.id });
+      expect(r.status).toBe(200);
+      expect(r.body.data).toMatchObject({ id: found.id, status: 'CANCELLED' });
+      expect(typeof r.body.data.finishedAt).toBe('string');
+      expect(pushState.tasks.find((t) => t.id === found.id)?.status).toBe('CANCELLED');
+    }
+  });
+
+  it('answers 409 INVALID_STATE with the current status for a task that is DONE or CANCELLED, 404 for an unknown one', async () => {
+    const done = pushState.tasks.find((t) => t.status === 'DONE');
+    const cancelled = pushState.tasks.find((t) => t.status === 'CANCELLED');
+    expect(done && cancelled).toBeTruthy();
+    for (const found of [done, cancelled] as { id: string; status: string }[]) {
+      const r = await send(TASK_CANCEL, undefined, { id: found.id });
+      expect([r.status, r.body.code, r.body.data]).toEqual([
+        409,
+        'INVALID_STATE',
+        { status: found.status },
+      ]);
+    }
     expect((await send(TASK_CANCEL, undefined, { id: 'zzz' })).status).toBe(404);
   });
 });
@@ -679,6 +877,52 @@ describe('records', () => {
     expect(Object.keys(r.body.data.items[0]).sort()).toEqual(
       ['accountId', 'createdAt', 'id', 'localDate', 'pushType', 'triggerReason'].sort(),
     );
+  });
+
+  // Answers 114: the filters are accountId (an id, exact) and triggerReason (one of the four);
+  // both may be used together; a value that is not valid is 400 with its ref and OUT_OF_RANGE.
+  it('filters by accountId and by triggerReason, alone and together', async () => {
+    const some = pushState.records[0];
+    const byAccount = await get(RECORDS, { accountId: some.accountId, pageSize: '200' });
+    expect(byAccount.body.data.items.length).toBeGreaterThan(0);
+    expect(
+      byAccount.body.data.items.every((r: { accountId: string }) => r.accountId === some.accountId),
+    ).toBe(true);
+    const byReason = await get(RECORDS, { triggerReason: some.triggerReason, pageSize: '200' });
+    expect(
+      byReason.body.data.items.every(
+        (r: { triggerReason: string }) => r.triggerReason === some.triggerReason,
+      ),
+    ).toBe(true);
+    expect(byReason.body.data.total).toBe(
+      pushState.records.filter((r) => r.triggerReason === some.triggerReason).length,
+    );
+    const both = await get(RECORDS, {
+      accountId: some.accountId,
+      triggerReason: some.triggerReason,
+      pageSize: '200',
+    });
+    expect(both.body.data.total).toBe(
+      pushState.records.filter(
+        (r) => r.accountId === some.accountId && r.triggerReason === some.triggerReason,
+      ).length,
+    );
+    const none = await get(RECORDS, { accountId: '00000000-0000-4000-8000-00000000ffff' });
+    expect([none.status, none.body.data.items, none.body.data.total]).toEqual([200, [], 0]);
+  });
+
+  it('refuses an accountId that is not an id and a triggerReason that is not one of the four', async () => {
+    const id = await get(RECORDS, { accountId: 'not-an-id' });
+    expect([id.status, id.body.code, id.body.data.details]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      [{ ref: 'accountId', reason: 'OUT_OF_RANGE' }],
+    ]);
+    const reason = await get(RECORDS, { triggerReason: 'nope' });
+    expect(reason.body.data.details).toEqual([{ ref: 'triggerReason', reason: 'OUT_OF_RANGE' }]);
+    for (const ok of ['daily_recall', 'streak_at_risk', 'admin', 'system_event']) {
+      expect((await get(RECORDS, { triggerReason: ok })).status).toBe(200);
+    }
   });
 
   it('gives the result for each token of a record, and 404 for an unknown record', async () => {

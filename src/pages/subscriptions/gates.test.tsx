@@ -387,15 +387,48 @@ describe('the credit price column', { timeout: 30000 }, () => {
 
   it('says which field and why when the backend refuses a price (out of range), not only that the request is invalid', async () => {
     useMockBackend(subscriptionsMock, configMock);
+    const fetchMock = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) =>
+      init?.method === 'PUT'
+        ? jsonResponse(
+            400,
+            envelope('INVALID_REQUEST', {
+              details: [{ ref: 'creditCost', reason: 'OUT_OF_RANGE' }],
+            }),
+          )
+        : fetchMock(input, init),
+    );
     const user = userEvent.setup();
     renderPage(<GatesPage />);
-    fireEvent.change(await price('assets.avatar_max'), { target: { value: '2000000' } });
+    fireEvent.change(await price('assets.avatar_max'), { target: { value: '45' } });
     await user.click(
       within(await rowOf('assets.avatar_max')).getByRole('button', { name: 'Save price' }),
     );
     expect(
       await screen.findByText(/creditCost: The value is outside the allowed range\./),
     ).toBeInTheDocument();
+  });
+
+  it('offers a price only on assets.avatar_max and assets.voice_max, and reads the list again after a save (the answer is data null)', async () => {
+    const calls = useMockBackend(subscriptionsMock, configMock);
+    renderPage(<GatesPage />);
+    for (const key of ['assets.avatar_max', 'assets.voice_max'])
+      expect(await price(key), key).toBeEnabled();
+    for (const key of ['avatar.looks_max', 'credits.period_grant', 'call.daily_minutes'])
+      expect(await price(key), key).toBeDisabled();
+    const before = calls.filter(
+      (c) => c.method === 'GET' && c.url.endsWith('/feature-gates'),
+    ).length;
+    fireEvent.change(await price('assets.voice_max'), { target: { value: '9' } });
+    fireEvent.click(
+      within(await rowOf('assets.voice_max')).getByRole('button', { name: 'Save price' }),
+    );
+    await waitFor(() =>
+      expect(
+        calls.filter((c) => c.method === 'GET' && c.url.endsWith('/feature-gates')).length,
+      ).toBe(before + 1),
+    );
+    expect(await price('assets.voice_max')).toHaveValue('9');
   });
 
   it('has no Save price button until the price is changed, and none for a row that cannot be edited', async () => {

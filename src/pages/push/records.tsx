@@ -1,6 +1,6 @@
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import { Link, useAccess, useIntl } from '@umijs/max';
-import { Alert, Button, Flex, Spin, Table, Tooltip, Typography } from 'antd';
+import { Alert, Button, Flex, Input, Select, Spin, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
@@ -14,10 +14,20 @@ import {
   type PushDelivery,
   type PushRecord,
   type PushRecordDetail,
+  type RecordFilters,
+  TRIGGER_REASONS,
+  type TriggerReason,
 } from '../../services/push';
 import { codeText, instantText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
+import { trimSpec } from '../../utils/trimSpec';
+
+/** An account id as the backend takes it for the filter: 36 characters, hex digits in five groups. */
+const ACCOUNT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type Draft = { accountId: string; triggerReason: TriggerReason | undefined };
+const NO_DRAFT: Draft = { accountId: '', triggerReason: undefined };
 
 /** An account id: any text, cut to two lines; a link to the user when the administrator may see users. */
 function AccountCell({ accountId }: { accountId: unknown }) {
@@ -129,6 +139,10 @@ export default function RecordsPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [paging, setPaging] = useState({ page: 1, pageSize: 20 });
+  // The filters being typed, and the ones the last Search applied (the list follows the second).
+  const [draft, setDraft] = useState<Draft>(NO_DRAFT);
+  const [applied, setApplied] = useState<RecordFilters>({});
+  const [accountProblem, setAccountProblem] = useState(false);
   const [data, setData] = useState<Page<PushRecord> | null>(null);
   const { text: failure, fail, clear } = useFailure();
   const [loading, setLoading] = useState(true);
@@ -138,7 +152,7 @@ export default function RecordsPage() {
     const isCurrent = begin();
     setLoading(true);
     try {
-      const page = await listRecords(paging);
+      const page = await listRecords({ ...paging, ...applied });
       if (!isCurrent()) return;
       setData(page);
       clear();
@@ -147,11 +161,32 @@ export default function RecordsPage() {
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [paging, begin, fail, clear]);
+  }, [paging, applied, begin, fail, clear]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const search = () => {
+    const accountId = trimSpec(draft.accountId);
+    // The backend refuses an account id that is not an id; the page says so and sends nothing.
+    if (accountId !== '' && !ACCOUNT_ID.test(accountId)) {
+      setAccountProblem(true);
+      return;
+    }
+    setAccountProblem(false);
+    setApplied({
+      ...(accountId === '' ? {} : { accountId }),
+      ...(draft.triggerReason ? { triggerReason: draft.triggerReason } : {}),
+    });
+    setPaging((p) => ({ ...p, page: 1 }));
+  };
+  const reset = () => {
+    setDraft(NO_DRAFT);
+    setAccountProblem(false);
+    setApplied({});
+    setPaging((p) => ({ ...p, page: 1 }));
+  };
 
   const columns: ColumnsType<PushRecord & { __key: string }> = [
     {
@@ -197,6 +232,43 @@ export default function RecordsPage() {
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
         {t('push.records.note')}
       </Typography.Paragraph>
+      <Flex gap={8} wrap align="flex-start" role="search">
+        <Flex vertical gap={4}>
+          <Input
+            allowClear
+            style={{ width: 340 }}
+            dir="ltr"
+            aria-label={t('push.records.filter.account')}
+            placeholder={t('push.records.filter.account')}
+            status={accountProblem ? 'error' : undefined}
+            value={draft.accountId}
+            onChange={(e) => setDraft((d) => ({ ...d, accountId: e.target.value }))}
+            onPressEnter={search}
+          />
+          {accountProblem ? (
+            <Typography.Text type="danger">
+              {t('push.records.filter.accountInvalid')}
+            </Typography.Text>
+          ) : null}
+        </Flex>
+        <Select
+          allowClear
+          style={{ minWidth: 200 }}
+          aria-label={t('push.records.filter.reason')}
+          placeholder={t('push.records.filter.reason')}
+          value={draft.triggerReason}
+          options={TRIGGER_REASONS.map((r) => ({
+            value: r,
+            label: codeText(intl, 'push.reason', r),
+          }))}
+          onChange={(value) => setDraft((d) => ({ ...d, triggerReason: value ?? undefined }))}
+        />
+        <Button type="primary" onClick={search}>
+          {t('push.records.filter.search')}
+        </Button>
+        <Button onClick={reset}>{t('push.records.filter.reset')}</Button>
+      </Flex>
+      <Typography.Text type="secondary">{t('push.records.filter.note')}</Typography.Text>
       {failure ? (
         <Alert
           type="error"

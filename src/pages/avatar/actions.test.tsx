@@ -233,6 +233,32 @@ describe('the action catalog page: new and edit', { timeout: 60000 }, () => {
     expect(await screen.findByText('spin')).toBeInTheDocument();
   });
 
+  it('does not send a name without English, and says English is needed', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ActionsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New action' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Key'), { target: { value: 'spin' } });
+    fireEvent.change(within(dialog).getByLabelText('th'), { target: { value: 'หมุน' } });
+    fireEvent.change(within(dialog).getByLabelText('Description for the agent'), {
+      target: { value: 'Turns around once.' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Generation text'), {
+      target: { value: 'The person turns around slowly.' },
+    });
+    choose(fileOf(pngBytes(64, 64), 'spin.png'));
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    await within(dialog).findByText(/spin\.png/);
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText(
+        'Enter the name in English (en). The other languages are optional.',
+      ),
+    ).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
   it('does not send without an icon', async () => {
     const calls = backend();
     const user = userEvent.setup();
@@ -275,6 +301,34 @@ describe('the action catalog page: new and edit', { timeout: 60000 }, () => {
       body: { triggerableBy: value },
     });
     expect('iconUploadId' in (writesOf(calls)[0].body as object)).toBe(false);
+  });
+
+  it('sends the whole action to update it: the description, the trigger, the enabled state it has and the order, and no key', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<ActionsPage />);
+    const row = await rowOf('blow_kiss');
+    await user.click(within(row).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    const body = writesOf(calls)[0].body as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(
+      [
+        'compatibleStyles',
+        'description',
+        'enabled',
+        'generationSpec',
+        'names',
+        'sortOrder',
+        'surfaces',
+        'triggerableBy',
+      ].sort(),
+    );
+    // blow_kiss is off sale: the enabled state goes back as it is, not switched on by an edit
+    expect(body.enabled).toBe(false);
+    expect(typeof body.description).toBe('string');
+    expect(typeof body.sortOrder).toBe('number');
   });
 
   it('checks the generation text in code points: 2001 Arabic letters are too many, 2000 emoji are fine', async () => {

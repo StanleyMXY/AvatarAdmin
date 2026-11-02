@@ -344,25 +344,48 @@ describe('the question before the last enabled OTP channel is switched off, dele
     expect(switchOf('gw_th_otp')).toBeChecked();
   });
 
-  it('sends the request when the question is confirmed, and shows the refusal in the words of the code with what it means', async () => {
+  it('sends the request when the question is confirmed, and shows the fixed text of the refusal (ref SmsChannel, reason OUT_OF_RANGE)', async () => {
     phoneLoginOn();
     const { calls, user } = await load();
     await rowOf('gw_th_otp');
     await user.click(switchOf('gw_th_otp'));
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    // The refusal of the backend has the detail SmsChannel / OUT_OF_RANGE: one fixed text for both cases.
     expect(
-      await screen.findByText(/Some input is not valid\. Please check the fields and try again\./),
+      await screen.findByText(/at least one enabled OTP channel must remain/),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/refuses this while phone sign-in is on or phone-number accounts exist/),
-    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('Some input is not valid');
     expect(document.body.textContent).not.toContain('The last enabled OTP channel of a country');
     await waitFor(() => expect(switchOf('gw_th_otp')).toBeChecked());
     expect(channel('gw_th_otp').enabled).toBe(true);
   });
 
-  it('says what a refusal means also for a channel that the page did not take for the last one', async () => {
+  it('says the same fixed text also for a channel that the page did not take for the last one, because the backend has the last word', async () => {
+    channel('gw_all_backup').enabled = true;
+    backend();
+    overrideFetch(async ({ method, url }) =>
+      method === 'PUT' && url.pathname.endsWith('/enabled')
+        ? jsonAnswer(
+            400,
+            'INVALID_REQUEST',
+            { details: [{ ref: 'SmsChannel', reason: 'OUT_OF_RANGE' }] },
+            'SECRET BACKEND WORDS',
+          )
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<ChannelsPage />);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    await user.click(switchOf('gw_th_otp'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(
+      await screen.findByText(/at least one enabled OTP channel must remain/),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
+  });
+
+  it('does not say a rule of phone sign-in for a 400 without details: the backend gives details for that rule', async () => {
     channel('gw_all_backup').enabled = true;
     backend();
     overrideFetch(async ({ method, url }) =>
@@ -374,12 +397,10 @@ describe('the question before the last enabled OTP channel is switched off, dele
     renderPage(<ChannelsPage />);
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
     await user.click(switchOf('gw_th_otp'));
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(
-      await screen.findByText(
-        /Some input is not valid.*refuses this while phone sign-in is on or phone-number accounts exist/s,
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Some input is not valid/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(
+      /phone sign-in is on or phone-number accounts exist/,
+    );
     expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
 
@@ -448,12 +469,17 @@ describe('the question before the last enabled OTP channel is switched off, dele
     await waitFor(() => expect(rows().some((tr) => cellsOf(tr)[0] === 'gw_es_promo')).toBe(false));
   });
 
-  it('says what a refusal means when an enabled OTP channel that is not the last is deleted with the inline question', async () => {
+  it('says the fixed text of the refusal when an enabled OTP channel that is not the last is deleted with the inline question', async () => {
     channel('gw_all_backup').enabled = true;
     backend();
     overrideFetch(async ({ method }) =>
       method === 'DELETE'
-        ? jsonAnswer(400, 'INVALID_REQUEST', null, 'SECRET BACKEND WORDS')
+        ? jsonAnswer(
+            400,
+            'INVALID_REQUEST',
+            { details: [{ ref: 'SmsChannel', reason: 'OUT_OF_RANGE' }] },
+            'SECRET BACKEND WORDS',
+          )
         : undefined,
     );
     const user = userEvent.setup();
@@ -463,9 +489,7 @@ describe('the question before the last enabled OTP channel is switched off, dele
     expect(screen.queryByRole('dialog')).toBeNull();
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
-      await screen.findByText(
-        /Some input is not valid.*refuses this while phone sign-in is on or phone-number accounts exist/s,
-      ),
+      await screen.findByText(/at least one enabled OTP channel must remain/),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
@@ -485,7 +509,7 @@ describe('the question before the last enabled OTP channel is switched off, dele
     );
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(
-      await screen.findByText(/Some input is not valid\. Please check the fields and try again\./),
+      await screen.findByText(/at least one enabled OTP channel must remain/),
     ).toBeInTheDocument();
     expect((await rowOf('gw_th_otp')).textContent).toContain('gw_th_otp');
   });

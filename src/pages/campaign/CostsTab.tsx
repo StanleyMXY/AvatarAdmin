@@ -61,8 +61,11 @@ export function CostsTab({ campaigns, settings, kept }: Props) {
     to: applied.range.to,
   });
 
+  // The row names its campaign; the list of campaigns and then the id are only for a row that does not.
   const nameOf = (row: AttributionCost) =>
-    plainText(campaigns.byId(row.campaignId)?.name) || plainText(row.campaignId);
+    plainText(row.campaignName) ||
+    plainText(campaigns.byId(row.campaignId)?.name) ||
+    plainText(row.campaignId);
 
   const remove = async (row: AttributionCost) => {
     try {

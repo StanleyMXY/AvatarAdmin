@@ -80,3 +80,7 @@
 **暂定做法：** 前端的订阅详情抽屉对 Google 只显示 `…` 加末 6 位，不带复制按钮；Apple 的 `originalTransactionId` 照常显示。响应 JSON 里的完整令牌前端挡不住。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：2、28、29、67、68、104、105、106、107）。
+
+核对于 2026-11-02

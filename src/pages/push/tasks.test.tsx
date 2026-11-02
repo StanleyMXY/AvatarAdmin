@@ -6,6 +6,7 @@ import pushMock from '../../../mock/push.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { fileOf, pngBytes } from '../../../tests/imageBytes';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { jsonAnswer, overrideFetch } from '../../../tests/pageHelpers';
 import { renderPage } from '../../../tests/renderPage';
 import { setTestAccess } from '../../../tests/stubs/umi-max';
 import { withTimeZone } from '../../../tests/withTimeZone';
@@ -222,22 +223,50 @@ describe('the manual task page: the list', { timeout: 30000 }, () => {
 });
 
 describe('the manual task page: cancel', { timeout: 30000 }, () => {
-  it('has a cancel button on a waiting task and on no other', async () => {
+  // Answers 72: a waiting task and a sending one can be cancelled; a done one and a cancelled one cannot.
+  it('has a cancel button on a waiting task and on a sending one, and on no other', async () => {
     backend();
     renderPage(<TasksPage />);
     await rowOf(titleOf('4'));
-    for (const id of ['3', '4', '5', '6']) {
+    for (const id of ['4', '5', '6']) {
       expect(
         within(await rowOf(titleOf(id))).queryByRole('button', { name: 'Cancel task' }),
         id,
       ).not.toBeInTheDocument();
     }
+    for (const id of ['1', '2', '3']) {
+      expect(
+        within(await rowOf(titleOf(id))).getByRole('button', { name: 'Cancel task' }),
+        id,
+      ).toBeInTheDocument();
+    }
+  });
+
+  it('cancels a sending task with one POST, keeps its counts and shows it as cancelled', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<TasksPage />);
+    const row = await rowOf(titleOf('3'));
+    await user.click(within(row).getByRole('button', { name: 'Cancel task' }));
     expect(
-      within(await rowOf(titleOf('1'))).getByRole('button', { name: 'Cancel task' }),
+      await screen.findByText(
+        /What has not been sent yet will not be sent; what was already sent stays sent/,
+      ),
     ).toBeInTheDocument();
-    expect(
-      within(await rowOf(titleOf('2'))).getByRole('button', { name: 'Cancel task' }),
-    ).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(writesOf(calls)[0]).toMatchObject({
+      method: 'POST',
+      url: '/api/admin/push/tasks/3/cancel',
+    });
+    await waitFor(async () =>
+      expect(within(await rowOf(titleOf('3'))).getByText('Cancelled')).toBeInTheDocument(),
+    );
+    expect(pushState.tasks.find((t) => t.id === '3')).toMatchObject({
+      status: 'CANCELLED',
+      sentCount: 120,
+      failedCount: 3,
+    });
   });
 
   it('asks in the row, then cancels with one POST and shows the task as cancelled', async () => {
@@ -261,20 +290,20 @@ describe('the manual task page: cancel', { timeout: 30000 }, () => {
     ).not.toBeInTheDocument();
   });
 
-  it('says the state does not allow it (translated, not the backend words) when the task started meanwhile, and reads the list again', async () => {
+  it('says the state does not allow it (translated, not the backend words) when the task finished meanwhile, and reads the list again', async () => {
     backend();
     const user = userEvent.setup();
     renderPage(<TasksPage />);
-    const row = await rowOf(titleOf('1'));
-    (pushState.tasks.find((t) => t.id === '1') as { status: string }).status = 'RUNNING';
+    const row = await rowOf(titleOf('3'));
+    (pushState.tasks.find((t) => t.id === '3') as { status: string }).status = 'DONE';
     await user.click(within(row).getByRole('button', { name: 'Cancel task' }));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
       await screen.findByText('The current state of the item does not allow this action.'),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Only a task that has not started/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Only a task that is pending or running/)).not.toBeInTheDocument();
     await waitFor(async () =>
-      expect(within(await rowOf(titleOf('1'))).getByText('Sending')).toBeInTheDocument(),
+      expect(within(await rowOf(titleOf('3'))).getByText('Done')).toBeInTheDocument(),
     );
   });
 
@@ -556,10 +585,21 @@ describe('the manual task page: new task', { timeout: 60000 }, () => {
 
   it('shows the translated text and field mark when the backend refuses, and keeps the dialog and what was typed', async () => {
     backend();
+    // The page stops a title over 100 itself; here the backend refuses one anyway (another limit than the page knows).
+    overrideFetch(async ({ method }) =>
+      method === 'POST'
+        ? jsonAnswer(
+            400,
+            'INVALID_REQUEST',
+            { details: [{ ref: 'title', reason: 'TOO_LONG' }] },
+            'SECRET BACKEND WORDS',
+          )
+        : undefined,
+    );
     const user = userEvent.setup();
     renderPage(<TasksPage />);
     const dialog = await openNew(user);
-    basics(dialog, 'x'.repeat(201));
+    basics(dialog, 'x'.repeat(100));
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     expect(
       await within(dialog).findByText(
@@ -567,7 +607,25 @@ describe('the manual task page: new task', { timeout: 60000 }, () => {
       ),
     ).toBeInTheDocument();
     expect(within(dialog).getByText('The value is too long.')).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('Title')).toHaveValue('x'.repeat(201));
+    expect(within(dialog).getByLabelText('Title')).toHaveValue('x'.repeat(100));
+    expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
+  });
+
+  it('refuses a title of 101 code points and a body of 501 before anything is sent (answers 34)', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<TasksPage />);
+    const dialog = await openNew(user);
+    basics(dialog, 'ก'.repeat(101));
+    fireEvent.change(within(dialog).getByLabelText('Body'), { target: { value: 'ع'.repeat(501) } });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText('The title has at most 100 characters; it has 101'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('The body has at most 500 characters; it has 501'),
+    ).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
   });
 });
 

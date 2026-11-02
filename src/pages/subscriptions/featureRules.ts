@@ -16,7 +16,6 @@ export const QUOTA_KEYS = [...CALL_KEYS, ...CHAT_KEYS];
 
 export const LIFETIME_KEY = 'call.lifetime_minutes';
 export const PERIOD_GRANT_KEY = 'credits.period_grant';
-export const LOOKS_MAX_KEY = 'avatar.looks_max';
 
 /** `UNSET` can be the default of a switch only for the five quota switches. */
 export const allowUnsetForDefault = (key: string): boolean => QUOTA_KEYS.includes(key);
@@ -28,14 +27,14 @@ export const allowUnlimitedFor = (gate: Pick<FeatureGate, 'key' | 'kind'>): bool
 /** `call.lifetime_minutes` only applies to free accounts; the backend refuses it in an entitlement. */
 export const hiddenInEntitlement = (key: string): boolean => key === LIFETIME_KEY;
 
-/** A credit price can be set on a permanent limit; the looks limit and the period grant never have one. */
-export const creditCostEditable = (
-  gate: Pick<FeatureGate, 'key' | 'kind' | 'limitScope'>,
-): boolean =>
-  gate.kind === 'LIMIT' &&
-  gate.limitScope === 'PERMANENT' &&
-  gate.key !== LOOKS_MAX_KEY &&
-  gate.key !== PERIOD_GRANT_KEY;
+/**
+ * The only switches that can have a credit price (backend reply 105): `assets.avatar_max` and
+ * `assets.voice_max`. Not every permanent limit: `avatar.looks_max` is permanent too and the
+ * backend refuses a price on it, as it does on every other switch. Clearing a price is allowed on any.
+ */
+export const CREDIT_COST_KEYS = ['assets.avatar_max', 'assets.voice_max'];
+export const creditCostEditable = (gate: Pick<FeatureGate, 'key'>): boolean =>
+  CREDIT_COST_KEYS.includes(gate.key);
 
 const defaultOf = (gates: readonly FeatureGate[], key: string): FeatureGate | undefined =>
   gates.find((g) => g.key === key);

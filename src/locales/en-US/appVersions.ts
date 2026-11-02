@@ -88,13 +88,17 @@ const messages: Record<string, string> = {
   'appVersions.apk.unavailable': 'Set upload.public_base_url in the system configuration first.',
   'appVersions.apk.openConfig': 'Open the system configuration',
   'appVersions.rule.versionName':
-    'Write the version name as x.y.z, three numbers separated by dots',
-  'appVersions.rule.versionCodeWhole': 'Enter a whole number from 1',
+    'Write the version name as x.y.z, three numbers separated by dots, at most 32 characters',
+  'appVersions.rule.versionCodeWhole': 'Enter a whole number from 1 to 2147483647',
   'appVersions.rule.versionCodeAbove':
     'It must be higher than {active}, the version number active in this channel',
-  'appVersions.rule.minWhole': 'Enter a whole number from 1',
+  'appVersions.rule.minWhole': 'Enter a whole number from 1 to 2147483647',
   'appVersions.rule.minAbove': 'It must not be higher than the version number {versionCode}',
   'appVersions.rule.changelogEn': 'The English update notes are required',
+  'appVersions.rule.changelogTooLong': 'The notes in {tag} have more than 4000 characters',
+  'appVersions.rule.changelogTooMany': 'The notes can have at most 30 languages',
+  'appVersions.rule.changelogKey':
+    'The language {tag} is not a language tag of at most 35 characters, such as th, zh-Hans or es-419',
   'appVersions.storeUrl.empty': 'Enter the store link',
   'appVersions.storeUrl.platform': 'The platform of the channel is not known',
   'appVersions.storeUrl.androidHost': 'The host must be exactly play.google.com',

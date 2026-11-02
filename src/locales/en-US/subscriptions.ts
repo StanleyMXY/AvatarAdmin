@@ -96,6 +96,10 @@ const messages: Record<string, string> = {
   'subscriptions.entitlements.edit': 'Edit',
   'subscriptions.entitlements.featureValues': 'Feature values',
   'subscriptions.entitlements.key': 'Key',
+  'subscriptions.entitlements.keyRule':
+    'Use 1 to 64 letters, digits, dots, underscores or hyphens, starting with a letter or a digit.',
+  'subscriptions.entitlements.keyHint':
+    'Use 1 to 64 letters, digits, dots, underscores or hyphens, starting with a letter or a digit. It cannot be changed after the entitlement is created.',
   'subscriptions.entitlements.name': 'Name',
   'subscriptions.entitlements.priority': 'Priority',
   'subscriptions.entitlements.priorityHint':

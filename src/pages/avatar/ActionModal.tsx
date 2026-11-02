@@ -21,7 +21,7 @@ import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
 import { SPEC_MAX, specRule } from './CosmeticModal';
 import { LocalizedTextsField } from './LocalizedTextsField';
-import { cleanTexts, type Texts } from './localized';
+import { cleanTexts, type Texts, tagAliases, textOf } from './localized';
 import { SurfacesPicker } from './SurfacesPicker';
 import { Thumb } from './Thumb';
 
@@ -93,12 +93,13 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
     };
     try {
       if (action) {
-        await updateAction(action.id, fields);
+        // The whole action goes to the backend, its enabled state as it was when the dialog was opened.
+        await updateAction(action.id, { ...fields, enabled: action.enabled });
       } else {
         await createAction({ ...fields, key: trimSpec(values.key), enabled: values.enabled });
       }
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS);
+      const result = failureToForm(intl, form, error, FIELDS, tagAliases(error, 'names'));
       if (result.uploadRejected) {
         icon.reset();
         setIconProblem('avatar.icon.rejected');
@@ -170,7 +171,7 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
           rules={[
             {
               validator: async (_, value: Texts | undefined) => {
-                if (Object.keys(cleanTexts(value)).length === 0) {
+                if (textOf(value, 'en') === '') {
                   throw new Error(t('avatar.names.required'));
                 }
               },

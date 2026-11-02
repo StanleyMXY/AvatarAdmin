@@ -40,7 +40,7 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     expect(screen.getByRole('button', { name: 'New credit pack' })).toBeInTheDocument();
   });
 
-  it('turns a pack off with one PUT that carries the credits and the order, and shows the new state', async () => {
+  it('turns a pack off with one PUT that carries all six fields, and shows the new state', async () => {
     const calls = useMockBackend(creditsMock);
     renderPage(<ProductsPage />);
     const pack = creditsState.products.find(
@@ -49,11 +49,22 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     const row = await rowOf(pack.productId, pack.store);
     fireEvent.click(within(row).getByRole('switch'));
     await waitFor(() => expect(writes(calls)).toHaveLength(1));
-    expect(writes(calls)[0]).toMatchObject({
-      method: 'PUT',
-      url: `/api/admin/credit-products/${pack.id}`,
-      body: { credits: pack.credits, enabled: false, sortOrder: pack.sortOrder },
-    });
+    // the backend has no id in the path: the pack is named by the store and the product in the body, and
+    // the surfaces go back as they were read
+    expect(writes(calls)[0]).toEqual(
+      expect.objectContaining({
+        method: 'PUT',
+        url: '/api/admin/credit-products',
+        body: {
+          store: pack.store,
+          productId: pack.productId,
+          credits: pack.credits,
+          enabled: false,
+          sortOrder: pack.sortOrder,
+          surfaces: pack.surfaces,
+        },
+      }),
+    );
     await waitFor(async () =>
       expect(
         within(await rowOf(pack.productId, pack.store))
@@ -99,6 +110,8 @@ describe('the credit pack page', { timeout: 30000 }, () => {
         credits: 9000,
         enabled: true,
         sortOrder: 8,
+        // the surfaces are required by the backend: [] is every end
+        surfaces: [],
       },
     });
     expect(await screen.findByText('credits_9000')).toBeInTheDocument();
@@ -156,16 +169,21 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     await waitFor(() => expect(writes(calls)).toHaveLength(1));
     expect(writes(calls)[0]).toMatchObject({
       method: 'PUT',
-      url: `/api/admin/credit-products/${pack.id}`,
-      body: { credits: 1234, enabled: pack.enabled, sortOrder: pack.sortOrder },
+      url: '/api/admin/credit-products',
+      body: {
+        store: pack.store,
+        productId: pack.productId,
+        credits: 1234,
+        enabled: pack.enabled,
+        sortOrder: pack.sortOrder,
+        surfaces: pack.surfaces,
+      },
     });
-    expect(Object.keys(writes(calls)[0].body as object)).not.toContain('productId');
   });
 
   it('sends the surfaces of a pack back unchanged, from the switch and from the dialog, so a save cannot clear them', async () => {
     const surfaces = [{ platform: 'IOS', channel: null }];
     const row = {
-      id: '1',
       store: 'APPLE',
       productId: 'p1',
       credits: 5,
@@ -176,7 +194,7 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     const calls = stubFetch(async ({ init }) =>
       (init.method ?? 'GET') === 'GET'
         ? jsonResponse(200, envelope('200', { items: [row] }))
-        : jsonResponse(200, envelope('200', row)),
+        : jsonResponse(200, envelope('200', null)),
     );
     const user = userEvent.setup();
     renderPage(<ProductsPage />);
@@ -200,7 +218,14 @@ describe('the credit pack page', { timeout: 30000 }, () => {
           200,
           envelope('200', {
             items: [
-              { id: '1', store: 'APPLE', productId: 'p1', credits: 5, enabled: true, sortOrder: 1 },
+              {
+                store: 'APPLE',
+                productId: 'p1',
+                credits: 5,
+                enabled: true,
+                sortOrder: 1,
+                surfaces: [],
+              },
             ],
           }),
         );
@@ -223,12 +248,12 @@ describe('the credit pack page', { timeout: 30000 }, () => {
             envelope('200', {
               items: [
                 {
-                  id: '1',
                   store: 'APPLE',
                   productId: 'p1',
                   credits: 5,
                   enabled: true,
                   sortOrder: 1,
+                  surfaces: [],
                 },
               ],
             }),
@@ -266,30 +291,55 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     expect(within(dialog).getByLabelText('Product ID')).toBeDisabled();
   });
 
-  it('shows every pack when the backend pages the list: the page after the first is asked for too', async () => {
+  it('reads the list once: it has no total and no paging, so a second request would only bring the same rows again', async () => {
     const rows = Array.from({ length: 250 }, (_, n) => ({
-      id: String(n + 1),
       store: 'APPLE',
       productId: `pack_${n + 1}`,
       credits: 10 + n,
       enabled: true,
       sortOrder: n,
+      surfaces: [],
     }));
-    const calls = stubFetch(async ({ url }) => {
-      const page = Number(new URL(url, 'http://x').searchParams.get('page') ?? '1');
-      return jsonResponse(
-        200,
-        envelope('200', { items: rows.slice((page - 1) * 200, page * 200), total: 250 }),
-      );
-    });
+    const calls = stubFetch(async () => jsonResponse(200, envelope('200', { items: rows })));
     renderPage(<ProductsPage />);
     await screen.findByText('pack_1');
-    expect(calls.map((c) => c.url)).toEqual([
-      '/api/admin/credit-products?page=1&pageSize=200',
-      '/api/admin/credit-products?page=2&pageSize=200',
-    ]);
-    // 250 packs at 20 a page: 13 pages, so the packs after the first 200 are there
+    expect(calls.map((c) => c.url)).toEqual(['/api/admin/credit-products']);
+    // 250 packs at 20 a page: 13 pages, cut on the page
     expect(screen.getByRole('listitem', { name: '13' })).toBeInTheDocument();
+  });
+
+  it('names a pack by its store and product: the same product id in two stores gives two rows that are switched separately', async () => {
+    const calls = useMockBackend(creditsMock);
+    renderPage(<ProductsPage />);
+    const twins = creditsState.products.filter((p) => p.productId === 'credits_100');
+    expect(twins.map((p) => p.store).sort()).toEqual(['APPLE', 'GOOGLE']);
+    const google = await rowOf('credits_100', 'GOOGLE');
+    fireEvent.click(within(google).getByRole('switch'));
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0].body).toMatchObject({ store: 'GOOGLE', productId: 'credits_100' });
+    await waitFor(() =>
+      expect(
+        creditsState.products.find((p) => p.store === 'GOOGLE' && p.productId === 'credits_100')
+          ?.enabled,
+      ).toBe(false),
+    );
+    expect(
+      creditsState.products.find((p) => p.store === 'APPLE' && p.productId === 'credits_100')
+        ?.enabled,
+    ).toBe(true);
+  });
+
+  it('does not save from a list in which the pack has been removed meanwhile: it says the pack changed, and sends nothing', async () => {
+    const calls = useMockBackend(creditsMock);
+    renderPage(<ProductsPage />);
+    const pack = creditsState.products[0];
+    const row = await rowOf(pack.productId, pack.store);
+    creditsState.products = creditsState.products.filter((p) => p !== pack);
+    fireEvent.click(within(row).getByRole('switch'));
+    expect(
+      await screen.findByText(/changed by someone else since the list was read/),
+    ).toBeInTheDocument();
+    expect(writes(calls)).toHaveLength(0);
   });
 
   it('does not turn a pack on or off from a list that someone else has changed since, and reads the list again', async () => {
@@ -305,11 +355,13 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     ).toBeInTheDocument();
     expect(writes(calls)).toHaveLength(0);
     // the list is read again: the new number is on the screen, the switch is where it was
-    expect(
-      within(await rowOf(pack.productId, pack.store)).getByText(
-        new Intl.NumberFormat('en-US').format(pack.credits),
-      ),
-    ).toBeInTheDocument();
+    await waitFor(async () =>
+      expect(
+        within(await rowOf(pack.productId, pack.store)).getByText(
+          new Intl.NumberFormat('en-US').format(pack.credits),
+        ),
+      ).toBeInTheDocument(),
+    );
   });
 
   it('does not save the dialog from a list that someone else has changed since, and reads the list again', async () => {
@@ -368,12 +420,12 @@ describe('the credit pack page', { timeout: 30000 }, () => {
       '你好',
       '😀'.repeat(50),
     ].map((productId, i) => ({
-      id: String(i),
       store: 'APPLE',
       productId,
       credits: 100,
       enabled: true,
       sortOrder: i,
+      surfaces: [],
     }));
     stubFetch(async () => jsonResponse(200, envelope('200', { items: rows })));
     renderPage(<ProductsPage />);

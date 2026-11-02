@@ -325,6 +325,7 @@ describe('the invite statistics page: fission levels', { timeout: 30000 }, () =>
 
   it('writes a whole average with the decimal and a missing one as a dash', async () => {
     backend({ depth: { ...DEPTH, avgDepth: 3, maxDepth: null } });
+    // a maxDepth that is not a number (a backend that sends none) is a dash too
     const user = userEvent.setup();
     renderPage(<StatsPage />);
     await openFission(user);
@@ -353,13 +354,92 @@ describe('the invite statistics page: fission levels', { timeout: 30000 }, () =>
   });
 
   it('draws no columns and says so when no one was invited in the range', async () => {
-    backend({ depth: { depthDistribution: [], avgDepth: null, maxDepth: null, totalChains: 0 } });
+    // what the backend sends for a range without invitees: maxDepth is the number 0, not null (answer 116)
+    backend({ depth: { depthDistribution: [], avgDepth: null, maxDepth: 0, totalChains: 0 } });
     const user = userEvent.setup();
     renderPage(<StatsPage />);
     await openFission(user);
     await screen.findByTestId('invite-fission-avgDepth');
     expect(screen.queryByTestId('chart-column')).toBeNull();
     expect(screen.getByTestId('invite-fission-totalChains').textContent).toContain('0');
+    // the deepest chain is a dash, not a 0 that reads as "chains of no depth"
+    const deepest = screen.getByTestId('invite-fission-maxDepth');
+    expect(deepest.querySelector('.ant-statistic-content')?.textContent).toBe('—');
+    expect(
+      screen.getByTestId('invite-fission-avgDepth').querySelector('.ant-statistic-content')
+        ?.textContent,
+    ).toBe('—');
+  });
+
+  it.each([
+    [
+      'an empty depth distribution',
+      { depthDistribution: [], avgDepth: 2, maxDepth: 4, totalChains: 7 },
+    ],
+    [
+      'no chains',
+      { depthDistribution: [{ depth: 1, count: 3 }], avgDepth: 1, maxDepth: 1, totalChains: 0 },
+    ],
+    ['a missing depth distribution', { avgDepth: null, maxDepth: 0, totalChains: 0 }],
+  ])(
+    'writes the deepest chain as a dash for %s, whatever number maxDepth has',
+    async (_name, depth) => {
+      backend({ depth });
+      const user = userEvent.setup();
+      renderPage(<StatsPage />);
+      await openFission(user);
+      const card = await screen.findByTestId('invite-fission-maxDepth');
+      expect(card.querySelector('.ant-statistic-content')?.textContent).toBe('—');
+    },
+  );
+
+  it('writes the deepest chain as the number when there are invitees, even a small one', async () => {
+    backend({
+      depth: {
+        depthDistribution: [{ depth: 1, count: 3 }],
+        avgDepth: 1,
+        maxDepth: 1,
+        totalChains: 3,
+      },
+    });
+    const user = userEvent.setup();
+    renderPage(<StatsPage />);
+    await openFission(user);
+    const card = await screen.findByTestId('invite-fission-maxDepth');
+    expect(card.querySelector('.ant-statistic-content')?.textContent).toBe('1');
+  });
+});
+
+describe('the invite statistics page: a chain the backend cut', { timeout: 30000 }, () => {
+  const cut = { ...CHAIN, totalDescendants: 25431, maxDepth: 2, truncated: true };
+  const open = async (chain: object) => {
+    backend({ chain });
+    const user = userEvent.setup();
+    renderPage(<StatsPage />);
+    await openFission(user);
+    await user.type(screen.getByRole('textbox', { name: 'Account ID' }), 'acc-top-1');
+    await user.click(screen.getByRole('button', { name: 'Load chain' }));
+    await screen.findByTestId('invite-chain-tree');
+  };
+
+  it('says that only the first 10,000 nodes are shown when truncated is true, and counts the descendants from totalDescendants, not from the nodes it got', async () => {
+    await open(cut);
+    const notice = await screen.findByTestId('invite-chain-truncated');
+    expect(notice.textContent).toContain('10,000');
+    expect(notice.textContent).toContain('25,431');
+    expect(screen.getByTestId('invite-chain-summary').textContent).toBe(
+      '25,431 descendants, 2 levels deep',
+    );
+  });
+
+  it('says nothing about a cut when truncated is false or missing', async () => {
+    await open({ ...CHAIN, truncated: false });
+    expect(screen.queryByTestId('invite-chain-truncated')).toBeNull();
+  });
+
+  it('says nothing about a cut for a chain without the field, and does not take a text for true', async () => {
+    await open({ ...CHAIN, truncated: 'true' });
+    expect(screen.queryByTestId('invite-chain-truncated')).toBeNull();
   });
 });
 

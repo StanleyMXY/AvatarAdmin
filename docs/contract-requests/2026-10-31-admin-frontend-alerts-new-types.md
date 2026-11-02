@@ -37,3 +37,7 @@
 **暂定做法：** 当作任意文字，过长的用省略加弹层显示完整内容。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：43、82）。
+
+核对于 2026-11-02

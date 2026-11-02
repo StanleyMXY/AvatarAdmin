@@ -236,6 +236,82 @@ describe('the share statistics page: the range and the overview', { timeout: 300
   });
 });
 
+// A day landed after the event log had expired: the six numbers from the events are null, and only
+// `registered` has a value (answer 36).
+const expiredRow = (statDate: string, registered: number) =>
+  funnelRow(statDate, {
+    sharePv: null,
+    shareUv: null,
+    linkClickPv: null,
+    linkClickUv: null,
+    downloadClickPv: null,
+    downloadClickUv: null,
+    registered,
+  });
+
+describe('the share statistics page: days whose events have expired', { timeout: 30000 }, () => {
+  const mixed = [funnelRow('2026-10-24'), expiredRow('2026-10-25', 10)];
+
+  it('adds only the days that have a number: a null is not a 0 in a sum, and registered adds both days', async () => {
+    backend({ funnel: mixed });
+    renderPage(<ShareStatsPage />);
+    expect(await card('sharePv')).toBe('100');
+    expect(await card('linkClickPv')).toBe('50');
+    expect(await card('downloadClickPv')).toBe('20');
+    expect(await card('registered')).toBe('15');
+  });
+
+  it('writes a dash for a number the day does not have, in the table, and the number it has', async () => {
+    backend({ funnel: mixed });
+    const user = userEvent.setup();
+    renderPage(<ShareStatsPage />);
+    await card('sharePv');
+    await tab(user, 'Funnel');
+    const rows = within(screen.getByTestId('invite-share-detail')).getAllByRole('row').slice(1);
+    const cells = (row: HTMLElement) =>
+      within(row)
+        .getAllByRole('cell')
+        .map((c) => c.textContent);
+    expect(cells(rows[0])).toEqual(['2026-10-24', '100', '60', '50', '20', '5']);
+    expect(cells(rows[1])).toEqual(['2026-10-25', '—', '—', '—', '—', '10']);
+    expect(screen.getByTestId('invite-share-detail').textContent).not.toMatch(/NaN|null|undefined/);
+  });
+
+  it('works out the ratio of a step only over the days that have both the step and the one before it, so a day without the earlier step does not inflate it', async () => {
+    backend({ funnel: mixed });
+    const user = userEvent.setup();
+    renderPage(<ShareStatsPage />);
+    await card('sharePv');
+    await tab(user, 'Funnel');
+    const data = json('invite-share-funnel', 'funnel') as { caption: string }[];
+    // sign-ups: 15 in all, but only the 5 of the day that has download clicks (20) are set against them
+    expect(data.map((d) => d.caption)).toEqual([
+      'Share  100',
+      'Link click  50  (50%)',
+      'Download click  20  (40%)',
+      'Sign-up  15  (25%)',
+    ]);
+  });
+
+  it('shows a dash, not 0, for a step none of the days has, and does not draw 0 as a number it knows', async () => {
+    backend({ funnel: [expiredRow('2026-10-24', 10), expiredRow('2026-10-25', 4)] });
+    const user = userEvent.setup();
+    renderPage(<ShareStatsPage />);
+    expect(await card('sharePv')).toBe('—');
+    expect(await card('registered')).toBe('14');
+    await tab(user, 'Funnel');
+    const lines = within(screen.getByTestId('invite-share-funnel-steps'))
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(lines).toEqual([
+      'Share: —',
+      'Link click: —, — of the step before',
+      'Download click: —, — of the step before',
+      'Sign-up: 14, — of the step before',
+    ]);
+  });
+});
+
 describe('the share statistics page: the funnel', { timeout: 30000 }, () => {
   it('draws share, link click, download click and sign-up, each step against the one before', async () => {
     backend();
@@ -517,6 +593,35 @@ describe('the share statistics page: the channels', { timeout: 30000 }, () => {
     ).toEqual(['2026-10-24', 'whatsapp', '40', '25']);
     expect(table.textContent).toContain('x'.repeat(300));
     expect(table.textContent).not.toMatch(/null|undefined|\[object/);
+  });
+});
+
+describe('the share statistics page: the channel with no name', { timeout: 30000 }, () => {
+  it('shows the channel `unknown` as the word the backend sends, in the list, the pie and the table, not as a dash or a blank', async () => {
+    backend({
+      channels: [
+        channelRow('2026-10-24', 'whatsapp', 40, 25),
+        channelRow('2026-10-24', 'unknown', 12, 9),
+        channelRow('2026-10-25', 'unknown', 8, 6),
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage(<ShareStatsPage />);
+    await card('sharePv');
+    await tab(user, 'Channels');
+    await screen.findByTestId('invite-channel-pie');
+    const pie = json('invite-channel-pie', 'pie') as { channel: string; value: number }[];
+    expect(pie.map((s) => [s.channel, s.value])).toEqual([
+      ['whatsapp', 40],
+      ['unknown', 20],
+    ]);
+    const table = screen.getByTestId('invite-channel-detail');
+    expect(within(table).getAllByText('unknown')).toHaveLength(2);
+    await user.click(screen.getByRole('combobox', { name: 'Share channel' }));
+    const options = await screen.findAllByText('unknown', {
+      selector: '.ant-select-item-option-content',
+    });
+    expect(options.length).toBeGreaterThan(0);
   });
 });
 

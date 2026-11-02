@@ -208,6 +208,99 @@ describe('the campaign results page: reading', () => {
     expect(cellsOf(row)[2]).toBe('—');
   });
 
+  it('shows the row of the unattributed installs of the day grouping at the end of the daily table, without a date and with the count of the whole range', async () => {
+    signIn('root');
+    mockModules();
+    renderPage(<StatsPage />);
+    await ready();
+    const row = await screen.findByTestId('unattributed-day-row');
+    const days = rowsOf(tables()[1]);
+    // seven days and then the row of the unattributed installs
+    expect(days).toHaveLength(8);
+    expect(days[days.length - 1]).toBe(row);
+    expect(within(row).getByText('Unattributed')).toBeInTheDocument();
+    const count = Number(
+      within(row).getByTestId('unattributed-day-count').textContent?.replace(/,/g, ''),
+    );
+    expect(count).toBeGreaterThan(0);
+    // the same installs as the unattributed row of the campaign table
+    const campaignRow = screen.getByTestId('unattributed-row');
+    expect(
+      Number(within(campaignRow).getByTestId('unattributed-count').textContent?.replace(/,/g, '')),
+    ).toBe(count);
+    // no figure in the other columns, and no day of the chart is made from it
+    const cells = cellsOf(row);
+    expect(cells.filter((_, i) => i !== 0 && i !== 4)).toEqual(Array(9).fill('—'));
+    expect(cells[4]).toContain(String(count));
+    expect(new Set(chartData().map((p) => p.statDate)).size).toBe(7);
+  });
+
+  it('has no row of unattributed installs in either table when the answer has none (one campaign asked for)', async () => {
+    signIn('root');
+    mockModules();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage(<StatsPage />);
+    await ready();
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Campaign' })).not.toHaveClass('x'),
+    );
+    await chooseOption(user, 'Campaign', /spring_th/);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(rowsOf(tables()[0])).toHaveLength(1));
+    expect(screen.queryByTestId('unattributed-day-row')).not.toBeInTheDocument();
+    expect(rowsOf(tables()[1])).toHaveLength(7);
+  });
+
+  it('takes the code and the name of a campaign from its row, also when the list of campaigns does not have it, and knows the unattributed row by campaignId 0 as a number', async () => {
+    signIn('root');
+    mockModules();
+    overrideFetch(({ url }) => {
+      if (url.pathname === '/api/admin/attribution/campaigns')
+        return jsonAnswer(200, '200', { items: [], total: 0 });
+      if (url.pathname !== '/api/admin/attribution/performance') return undefined;
+      if (url.searchParams.get('groupBy') === 'day') return jsonAnswer(200, '200', { items: [] });
+      return jsonAnswer(200, '200', {
+        items: [
+          {
+            campaignId: 7,
+            campaignCode: 'โปรโมชั่น_th',
+            campaignName: 'حملة الصيف — Campaña de verano',
+            pageViews: 100,
+            clicks: 50,
+            clickRate: 0.5,
+            installs: 10,
+            installRate: 0.2,
+            registered: 5,
+            registerRate: 0.5,
+            cost: 12.5,
+            cpa: 2.5,
+            cpi: 1.25,
+          },
+          { campaignId: 0, unattributedInstalls: 5 },
+        ],
+      });
+    });
+    renderPage(<StatsPage />);
+    await waitFor(() => expect(tables()).toHaveLength(2));
+    const row = await screen.findByTestId('unattributed-row');
+    expect(within(row).getByTestId('unattributed-count').textContent).toBe('5');
+    const other = rowsOf(tables()[0]).find((r) => r !== row) as Element;
+    expect(cellsOf(other)[0]).toBe('โปรโมชั่น_th');
+    expect(cellsOf(other)[1]).toBe('حملة الصيف — Campaña de verano');
+    // cost, cpa and cpi are numbers on the wire
+    expect(cellsOf(other).slice(9)).toEqual(['12.50', '2.50', '1.25']);
+  });
+
+  it('keeps every real campaign as a campaign row and has exactly one unattributed row', async () => {
+    signIn('root');
+    mockModules();
+    renderPage(<StatsPage />);
+    await ready();
+    const unattributed = screen.getAllByTestId('unattributed-row');
+    expect(unattributed).toHaveLength(1);
+    expect(rowsOf(tables()[0]).length).toBe(campaignState.campaigns.length + 1);
+  });
+
   it('draws one line chart of the counts of the days, with a point for every day of the range', async () => {
     signIn('root');
     mockModules();
@@ -316,6 +409,25 @@ describe('the campaign results page: export and landing', () => {
     await waitFor(() => expect(taken).toHaveLength(2));
     const campaignId = campaignState.campaigns.find((c) => c.code === 'spring_th')?.id;
     expect(new URL(taken[1].url, 'http://x').searchParams.get('campaignId')).toBe(campaignId);
+  });
+
+  it('exports by day when the grouping of the export is switched to day, and by campaign otherwise', async () => {
+    signIn('support', { codes: ['ATTRIBUTION:VIEW', 'STATS:EXPORT'] });
+    mockModules();
+    const taken = overrideFetch(({ url }) =>
+      url.pathname.startsWith('/api/admin/stats/export/') ? sheetAnswer() : undefined,
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage(<StatsPage />);
+    await ready();
+    await chooseOption(user, 'Export grouped by', 'By day');
+    await user.click(exportButton() as HTMLElement);
+    await waitFor(() => expect(taken).toHaveLength(1));
+    expect(new URL(taken[0].url, 'http://x').searchParams.get('groupBy')).toBe('day');
+    await chooseOption(user, 'Export grouped by', 'By campaign');
+    await user.click(exportButton() as HTMLElement);
+    await waitFor(() => expect(taken).toHaveLength(2));
+    expect(new URL(taken[1].url, 'http://x').searchParams.get('groupBy')).toBe('campaign');
   });
 
   it('sends one export request when the button is pressed twice while the file is on its way, and saves no file when the backend refuses', async () => {
@@ -452,7 +564,7 @@ describe('the campaign results page: what goes wrong', () => {
     expect(screen.queryByTestId('campaign-stats-range-error')).toBeNull();
   });
 
-  it('disables the campaign filter and says which permission is missing when the list is refused (403), and still shows the figures, with the id for the code', async () => {
+  it('disables the campaign filter and says which permission is missing when the list is refused (403), and still shows the figures with the code and the name that the rows carry', async () => {
     signIn('support', { codes: ['ATTRIBUTION:VIEW'] });
     mockModules();
     overrideFetch(({ url }) =>
@@ -468,7 +580,30 @@ describe('the campaign results page: what goes wrong', () => {
     );
     expect(screen.getByRole('combobox', { name: 'Campaign' })).toBeDisabled();
     const first = cellsOf(rowsOf(tables()[0])[0]);
-    expect(first[0]).toMatch(/^\d+$/);
+    const campaign = campaignState.campaigns[0];
+    expect(first[0]).toBe(campaign.code);
+    expect(first[1]).toBe(campaign.name);
+  });
+
+  it('falls back to the id for the code and a dash for the name only when a row carries no code and no name and the list is refused', async () => {
+    signIn('support', { codes: ['ATTRIBUTION:VIEW'] });
+    mockModules();
+    overrideFetch(({ url }) => {
+      if (url.pathname === '/api/admin/attribution/campaigns')
+        return jsonAnswer(403, 'ADMIN_FORBIDDEN', null, 'raw words');
+      if (url.pathname !== '/api/admin/attribution/performance') return undefined;
+      return jsonAnswer(200, '200', {
+        items:
+          url.searchParams.get('groupBy') === 'day'
+            ? []
+            : [{ campaignId: 41, campaignCode: null, campaignName: null, installs: 3 }],
+      });
+    });
+    renderPage(<StatsPage />);
+    await waitFor(() => expect(tables()).toHaveLength(2));
+    await waitFor(() => expect(rowsOf(tables()[0])).toHaveLength(1));
+    const first = cellsOf(rowsOf(tables()[0])[0]);
+    expect(first[0]).toBe('41');
     expect(first[1]).toBe('—');
   });
 

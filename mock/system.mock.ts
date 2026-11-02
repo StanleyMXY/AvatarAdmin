@@ -20,9 +20,9 @@ import {
 // roles, the writes of the permission tree (the read is in system.permissions.mock.ts) and the audit
 // log. The protections are the contract's: nobody changes their own roles or super administrator
 // flag, disables or deletes themselves, or takes the last enabled super administrator away; only a
-// super administrator sets or clears the flag. The contract gives no error code for them, so the
-// mock answers 403 ADMIN_FORBIDDEN for what is about the person themselves and 409 INVALID_STATE for
-// the last super administrator (see docs/contract-requests/2026-10-26-admin-frontend-system.md).
+// super administrator sets or clears the flag. The backend answers all of those protections 409
+// INVALID_STATE with `data.status` (its answer 22; 403 ADMIN_FORBIDDEN is for the rules about what the
+// operator holds and about super administrators), and the 409 does not say which rule it was.
 
 type Detail = { ref: string; reason: string };
 const refuse = (details: Detail[]): never => {
@@ -67,6 +67,17 @@ const requireHoldsTarget = (operator: MockAdmin, target: MockAdmin): void =>
   requireHolds(operator, heldCodes(target), SCOPE.admin);
 const duplicate = (field: string): never => {
   throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The value exists already', { field });
+};
+/** 409 INVALID_STATE with the current status of the target: the own account, the last super administrator. */
+const invalidState = (target: MockAdmin): never => {
+  throw new MockHttpError(
+    409,
+    'INVALID_STATE',
+    'The state of the administrator does not allow this',
+    {
+      status: target.status,
+    },
+  );
 };
 const notFound = (what: string): never => {
   throw new MockHttpError(404, 'RESOURCE_NOT_FOUND', `${what} is not there`);
@@ -143,6 +154,20 @@ function roleFields(
   };
 }
 
+/** ASCII letters, digits and `_ : # / . -`, 1 to 128, case sensitive (backend answer 87). */
+const NODE_CODE = /^[A-Za-z0-9_:#/.-]{1,128}$/;
+
+/** Both names of a node: 1 to 100 code points each, no control characters; the first bad one is the 400. */
+function nodeNames(body: Record<string, unknown>): { nameZh: string; nameEn: string } {
+  const names = { nameZh: textOf(body.nameZh), nameEn: textOf(body.nameEn) };
+  for (const ref of ['nameZh', 'nameEn'] as const) {
+    if (names[ref] === '') refuse([{ ref, reason: 'EMPTY_NOT_ALLOWED' }]);
+    if (countCodePoints(names[ref]) > 100) refuse([{ ref, reason: 'TOO_LONG' }]);
+    if (/\p{Cc}/u.test(names[ref])) refuse([{ ref, reason: 'OUT_OF_RANGE' }]);
+  }
+  return names;
+}
+
 const sortedNodes = () => [...systemState.nodes.values()];
 
 export default {
@@ -195,53 +220,69 @@ export default {
     return ok(adminView(admin));
   }),
 
+  // The update repeats the user name and the whole list of roles every time (backend answer 44): a
+  // missing one is a 400, not "keep it". The flag is optional; the same value is not a change. The
+  // order is the contract's (2392): the target exists, 403 for a super administrator target and for a
+  // target with codes the operator lacks, the input, 403 for the flag and the roles handed out, 409 for
+  // the own account (a changed set of roles or a changed flag), 409 for the last super administrator.
   'PUT /api/admin/admins/:id': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
     const body = bodyOf(req);
-    const touchesRoles = body.roleIds !== undefined;
-    const touchesFlag = body.superAdmin !== undefined;
     requireHoldsTarget(req.admin, admin);
-    if (admin.id === req.admin.id && (touchesRoles || touchesFlag))
-      forbidden('An administrator cannot change their own roles or super administrator flag');
-    if (touchesFlag && typeof body.superAdmin !== 'boolean')
+    const username = textOf(body.username);
+    if (username === '') refuse([{ ref: 'username', reason: 'EMPTY_NOT_ALLOWED' }]);
+    if (body.roleIds === undefined || body.roleIds === null)
+      refuse([{ ref: 'roleIds', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const roleIds = roleIdsOf(body.roleIds);
+    const given = body.superAdmin;
+    if (given !== undefined && given !== null && typeof given !== 'boolean')
       refuse([{ ref: 'superAdmin', reason: 'NOT_BOOLEAN' }]);
-    if (touchesFlag && !req.admin.superAdmin)
+    const current = extraOf(admin).roleIds;
+    const rolesChanged =
+      roleIds.length !== current.length || !roleIds.every((id) => current.includes(id));
+    const flagChanged = typeof given === 'boolean' && given !== Boolean(admin.superAdmin);
+    if (flagChanged && !req.admin.superAdmin)
       forbidden('Only a super administrator sets or clears the super administrator flag');
-    const roleIds = touchesRoles ? roleIdsOf(body.roleIds) : undefined;
-    if (roleIds) requireHolds(req.admin, codesOfRoles(roleIds), SCOPE.grant);
+    if (rolesChanged) requireHolds(req.admin, codesOfRoles(roleIds), SCOPE.grant);
+    if ((rolesChanged || flagChanged) && admin.id === req.admin.id) invalidState(admin);
+    if (flagChanged && given === false && admin.superAdmin && isLastEnabledSuper(admin.id))
+      invalidState(admin);
     if (
-      touchesFlag &&
-      body.superAdmin === false &&
-      admin.superAdmin &&
-      isLastEnabledSuper(admin.id)
+      [...store.admins.values()].some(
+        (a) => a.id !== admin.id && a.username.toLowerCase() === username.toLowerCase(),
+      )
     )
-      throw new MockHttpError(409, 'INVALID_STATE', 'The last enabled super administrator', {
-        status: admin.status,
-      });
+      duplicate('username');
     const before = adminView(admin);
-    if (roleIds) extraOf(admin).roleIds = roleIds;
-    if (touchesFlag) admin.superAdmin = body.superAdmin as boolean;
-    syncPermissions(admin);
+    if (rolesChanged) extraOf(admin).roleIds = roleIds;
+    if (flagChanged) admin.superAdmin = given as boolean;
+    admin.username = username;
+    if (rolesChanged || flagChanged) syncPermissions(admin);
     writeAudit(req.admin, 'ADMIN_UPDATE', 'ADMIN', admin.id, {
-      roleIds: roleIds ? { old: before.roles.map((r) => r.id), new: roleIds } : undefined,
-      superAdmin: touchesFlag ? { old: before.superAdmin, new: admin.superAdmin } : undefined,
+      username: username !== before.username ? { old: before.username, new: username } : undefined,
+      roleIds: rolesChanged ? { old: before.roles.map((r) => r.id), new: roleIds } : undefined,
+      superAdmin: flagChanged ? { old: before.superAdmin, new: admin.superAdmin } : undefined,
     });
     return ok(adminView(admin));
   }),
 
+  // The status is checked first, then the administrator is looked up (backend answer 1), then the
+  // protections: the own account answers 409 for either value, the last enabled super administrator
+  // for DISABLED.
   'POST /api/admin/admins/:id/status': guard('ADMIN:MANAGE', (req) => {
-    const admin = adminOrFail(req.params.id);
-    requireHoldsTarget(req.admin, admin);
     const status = bodyOf(req).status;
     if (status !== 'ACTIVE' && status !== 'DISABLED')
       refuse([{ ref: 'status', reason: 'OUT_OF_RANGE' }]);
-    if (status === 'DISABLED') {
-      if (admin.id === req.admin.id) forbidden('An administrator cannot disable themselves');
-      if (admin.superAdmin && admin.status === 'ACTIVE' && isLastEnabledSuper(admin.id))
-        throw new MockHttpError(409, 'INVALID_STATE', 'The last enabled super administrator', {
-          status: admin.status,
-        });
-    }
+    const admin = adminOrFail(req.params.id);
+    requireHoldsTarget(req.admin, admin);
+    if (admin.id === req.admin.id) invalidState(admin);
+    if (
+      status === 'DISABLED' &&
+      admin.superAdmin &&
+      admin.status === 'ACTIVE' &&
+      isLastEnabledSuper(admin.id)
+    )
+      invalidState(admin);
     admin.status = status as 'ACTIVE' | 'DISABLED';
     // A disabled administrator's tokens are void at once.
     if (status === 'DISABLED') admin.tokenVersion += 1;
@@ -275,11 +316,9 @@ export default {
   'DELETE /api/admin/admins/:id': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
     requireHoldsTarget(req.admin, admin);
-    if (admin.id === req.admin.id) forbidden('An administrator cannot delete themselves');
+    if (admin.id === req.admin.id) invalidState(admin);
     if (admin.superAdmin && admin.status === 'ACTIVE' && isLastEnabledSuper(admin.id))
-      throw new MockHttpError(409, 'INVALID_STATE', 'The last enabled super administrator', {
-        status: admin.status,
-      });
+      invalidState(admin);
     store.admins.delete(admin.id);
     systemState.extras.delete(admin.id);
     // The audit rows of the administrator stay, with the name they were written with.
@@ -343,30 +382,28 @@ export default {
   }),
 
   // ---- the writes of the permission tree (PERMISSION:MANAGE) ----
+  // The checks stop at the first that fails, in the order code, type, parent, nameZh, nameEn, then the
+  // order: one detail (backend answer 87). A code is 1 to 128 of ASCII letters, digits and `_ : # / . -`.
   'POST /api/admin/permissions': guard('PERMISSION:MANAGE', (req) => {
     const body = bodyOf(req);
     const code = textOf(body.code);
-    const details: Detail[] = [];
-    if (code === '') details.push({ ref: 'code', reason: 'EMPTY_NOT_ALLOWED' });
-    else if (countCodePoints(code) > 100) details.push({ ref: 'code', reason: 'TOO_LONG' });
+    if (code === '') refuse([{ ref: 'code', reason: 'EMPTY_NOT_ALLOWED' }]);
+    if (countCodePoints(code) > 128) refuse([{ ref: 'code', reason: 'TOO_LONG' }]);
+    if (!NODE_CODE.test(code)) refuse([{ ref: 'code', reason: 'OUT_OF_RANGE' }]);
     if (body.type !== 'MENU' && body.type !== 'FUNCTION')
-      details.push({ ref: 'type', reason: 'OUT_OF_RANGE' });
-    if (!Number.isInteger(body.sortOrder))
-      details.push({ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' });
-    const nameZh = textOf(body.nameZh);
-    const nameEn = textOf(body.nameEn);
-    if (nameZh === '') details.push({ ref: 'nameZh', reason: 'EMPTY_NOT_ALLOWED' });
-    if (nameEn === '') details.push({ ref: 'nameEn', reason: 'EMPTY_NOT_ALLOWED' });
+      refuse([{ ref: 'type', reason: 'OUT_OF_RANGE' }]);
     const parent = body.parent === null || body.parent === undefined ? null : String(body.parent);
     if (parent !== null && !systemState.nodes.has(parent))
-      details.push({ ref: 'parent', reason: 'OUT_OF_RANGE' });
-    if (details.length > 0) refuse(details);
+      refuse([{ ref: 'parent', reason: 'OUT_OF_RANGE' }]);
+    const { nameZh, nameEn } = nodeNames(body);
+    const sortOrder = body.sortOrder === undefined || body.sortOrder === null ? 0 : body.sortOrder;
+    if (!Number.isInteger(sortOrder)) refuse([{ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' }]);
     if (systemState.nodes.has(code)) duplicate('code');
     const node = {
       code,
       parent,
       type: body.type as 'MENU' | 'FUNCTION',
-      sortOrder: body.sortOrder as number,
+      sortOrder: sortOrder as number,
       nameZh,
       nameEn,
       builtin: false,
@@ -377,44 +414,40 @@ export default {
     return ok(node);
   }),
 
+  // An update has no "keep the parent": a missing parent is null, which moves a custom node to the root
+  // and is refused for a built-in node that has a parent, so a client always sends the current one
+  // (backend answers 87 and 88). The code and the type of the body must be the node's own, or absent.
   'PUT /api/admin/permissions/:code': guard('PERMISSION:MANAGE', (req) => {
     const node = systemState.nodes.get(req.params.code) ?? notFound('The permission node');
     const body = bodyOf(req);
-    const details: Detail[] = [];
-    const nameZh = textOf(body.nameZh);
-    const nameEn = textOf(body.nameEn);
-    if (nameZh === '') details.push({ ref: 'nameZh', reason: 'EMPTY_NOT_ALLOWED' });
-    if (nameEn === '') details.push({ ref: 'nameEn', reason: 'EMPTY_NOT_ALLOWED' });
-    if (!Number.isInteger(body.sortOrder))
-      details.push({ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' });
+    if (body.code !== undefined && body.code !== null && body.code !== node.code)
+      refuse([{ ref: 'code', reason: 'OUT_OF_RANGE' }]);
     // The type of a node never changes (400 on `type`); writing the same type again is no change.
-    if (body.type !== undefined && body.type !== node.type)
-      details.push({ ref: 'type', reason: 'OUT_OF_RANGE' });
-    let parent = node.parent;
-    if (body.parent !== undefined) {
-      const wanted = body.parent === null ? null : String(body.parent);
-      if (wanted !== node.parent) {
-        // The code and the parent of a built-in node cannot change: the checks of the application rely on them.
-        if (node.builtin) details.push({ ref: 'parent', reason: 'OUT_OF_RANGE' });
-        else if (wanted !== null) {
-          // Not under itself, not under one of its own descendants (that would make a loop).
-          if (
-            !systemState.nodes.has(wanted) ||
-            wanted === node.code ||
-            descendantCodes(node.code).has(wanted)
-          )
-            details.push({ ref: 'parent', reason: 'OUT_OF_RANGE' });
-        }
-        parent = wanted;
-      }
+    if (body.type !== undefined && body.type !== null && body.type !== node.type)
+      refuse([{ ref: 'type', reason: 'OUT_OF_RANGE' }]);
+    const wanted = body.parent === undefined || body.parent === null ? null : String(body.parent);
+    if (wanted !== node.parent) {
+      // The parent of a built-in node cannot change: the checks of the application rely on it.
+      if (node.builtin) refuse([{ ref: 'parent', reason: 'OUT_OF_RANGE' }]);
+      // Not under itself, not under one of its own descendants (that would make a loop), and it exists.
+      if (
+        wanted !== null &&
+        (!systemState.nodes.has(wanted) ||
+          wanted === node.code ||
+          descendantCodes(node.code).has(wanted))
+      )
+        refuse([{ ref: 'parent', reason: 'OUT_OF_RANGE' }]);
     }
-    if (details.length > 0) refuse(details);
+    const { nameZh, nameEn } = nodeNames(body);
+    const sortOrder =
+      body.sortOrder === undefined || body.sortOrder === null ? node.sortOrder : body.sortOrder;
+    if (!Number.isInteger(sortOrder)) refuse([{ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' }]);
     node.nameZh = nameZh;
     node.nameEn = nameEn;
-    node.sortOrder = body.sortOrder as number;
-    node.parent = parent;
+    node.sortOrder = sortOrder as number;
+    node.parent = wanted;
     writeAudit(req.admin, 'PERMISSION_UPDATE', 'PERMISSION', node.code, {
-      parent,
+      parent: wanted,
       sortOrder: node.sortOrder,
     });
     return ok(node);

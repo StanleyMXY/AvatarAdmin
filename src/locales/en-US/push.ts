@@ -38,6 +38,11 @@ const messages: Record<string, string> = {
   'push.content.imageHelp':
     'Optional. The picture is uploaded first and the form sends only its upload; an address cannot be typed.',
   'push.content.imageCurrent': 'Current picture',
+  'push.content.imageRemove': 'Remove the picture',
+  'push.content.imageKeep': 'Keep the picture',
+  'push.content.imageWillGo': 'The picture is removed when you save.',
+  'push.content.titleTooLong': 'The title has at most {max} characters; it has {count}',
+  'push.content.bodyTooLong': 'The body has at most {max} characters; it has {count}',
   'push.content.imageRejected': 'The backend did not accept the uploaded picture. Upload it again.',
   'push.link.summary': '{kind}: {target}',
   'push.content.uploadWait': 'Wait for the upload to finish before you submit.',
@@ -89,7 +94,7 @@ const messages: Record<string, string> = {
 
   // ---- manual tasks ----
   'push.tasks.note':
-    'A one-off push to an audience, now or at a time you choose. A task can be cancelled only while it is waiting.',
+    'A one-off push to an audience, now or at a time you choose. A task can be cancelled while it is waiting or running; a running one stops at its next step and what it has already sent stays sent.',
   'push.tasks.col.title': 'Title',
   'push.tasks.col.audience': 'Audience',
   'push.tasks.col.status': 'Status',
@@ -101,7 +106,8 @@ const messages: Record<string, string> = {
   'push.tasks.new': 'New task',
   'push.tasks.newTitle': 'New push task',
   'push.tasks.cancel': 'Cancel task',
-  'push.tasks.cancelConfirm': 'Cancel this task? It will not be sent.',
+  'push.tasks.cancelConfirm':
+    'Cancel this task? What has not been sent yet will not be sent; what was already sent stays sent.',
   'push.tasks.cancelled': 'Task cancelled',
   'push.tasks.created': 'Task created',
   'push.tasks.missed': 'Missed: the push executor was down for too long, nothing was sent',
@@ -177,6 +183,14 @@ const messages: Record<string, string> = {
   // ---- records ----
   'push.records.note': 'Each push sent to an account. Open a row to see the result for each token.',
   'push.records.col.account': 'Account',
+  'push.records.filter.account': 'Account ID',
+  'push.records.filter.reason': 'Trigger reason',
+  'push.records.filter.search': 'Search',
+  'push.records.filter.reset': 'Reset',
+  'push.records.filter.accountInvalid':
+    'An account ID has 36 characters: digits, letters a to f and hyphens, as 00000000-0000-4000-8000-000000000011.',
+  'push.records.filter.note':
+    'The backend filters by account and trigger reason only, not by date.',
   'push.records.col.type': 'Type',
   'push.records.col.reason': 'Trigger reason',
   'push.records.col.localDate': 'Local date',

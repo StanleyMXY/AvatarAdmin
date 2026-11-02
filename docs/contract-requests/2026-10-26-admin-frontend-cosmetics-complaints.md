@@ -62,3 +62,7 @@
 **暂定做法：** 前端对这几个读请求都带 `cache: 'no-store'`（浏览器的请求选项），所以不依赖后端的头；后端补上 `Cache-Control: no-store` 是同一件事的第二层保险（代理和别的客户端也不会缓存）。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：11、14、64、96、97、98、99、100、135、136）。
+
+核对于 2026-11-02

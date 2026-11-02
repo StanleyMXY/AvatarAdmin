@@ -15,6 +15,7 @@ import {
   MEMORY_TIERS,
   MODEL_TIERS,
   type Mode,
+  type Product,
   QUOTA_KEYS,
   SUBSCRIPTION_STATES,
   subscriptionsState,
@@ -31,6 +32,20 @@ const bad = (ref: string, reason: string, message = `${ref} is not valid`) =>
 
 /** Counts code points after the ends are trimmed, as the server counts text (contract 1.9). */
 const codePointLength = (value: string) => [...value.trim()].length;
+
+/** What the server refuses in the name and the priority of an entitlement (the key is checked on its own). */
+function defProblems(body: Record<string, unknown>): { ref: string; reason: string }[] {
+  const details: { ref: string; reason: string }[] = [];
+  const name = typeof body.name === 'string' ? body.name : '';
+  if (codePointLength(name) === 0) details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
+  else if (codePointLength(name) > 100) details.push({ ref: 'name', reason: 'TOO_LONG' });
+  const priority = body.priority;
+  if (priority === undefined || priority === null)
+    details.push({ ref: 'priority', reason: 'EMPTY_NOT_ALLOWED' });
+  else if (typeof priority !== 'number' || !Number.isInteger(priority))
+    details.push({ ref: 'priority', reason: 'NOT_AN_INTEGER' });
+  return details;
+}
 
 // ---- feature values ----
 
@@ -286,22 +301,26 @@ export default {
     });
   }),
 
+  // Backend reply 106: the fields are checked first (400), then the account (404), then the entitlement
+  // (404 RESOURCE_NOT_FOUND, not 400); the days are 1 to 3650; the answer is { id }.
   'POST /api/admin/accounts/:id/promo-entitlements': guard('SUBSCRIPTION:GRANT', (req) => {
     const accountId = idParam(req);
-    if (!ACCOUNT_IDS.includes(accountId)) throw notFound('account');
     const body = bodyOf(req);
     const details: { ref: string; reason: string }[] = [];
     const key = typeof body.entitlementKey === 'string' ? body.entitlementKey : '';
-    if (!state().defs.some((d) => d.key === key))
-      details.push({ ref: 'entitlementKey', reason: 'OUT_OF_RANGE' });
+    if (key.trim() === '') details.push({ ref: 'entitlementKey', reason: 'EMPTY_NOT_ALLOWED' });
     const days = body.durationDays;
-    if (typeof days !== 'number' || !Number.isInteger(days))
+    if (days === undefined || days === null)
+      details.push({ ref: 'durationDays', reason: 'EMPTY_NOT_ALLOWED' });
+    else if (typeof days !== 'number' || !Number.isInteger(days))
       details.push({ ref: 'durationDays', reason: 'NOT_AN_INTEGER' });
     else if (days < 1 || days > 3650) details.push({ ref: 'durationDays', reason: 'OUT_OF_RANGE' });
     const reason = typeof body.reason === 'string' ? body.reason : '';
     if (codePointLength(reason) === 0) details.push({ ref: 'reason', reason: 'EMPTY_NOT_ALLOWED' });
     else if (codePointLength(reason) > 500) details.push({ ref: 'reason', reason: 'TOO_LONG' });
     if (details.length > 0) throw invalidRequest('the grant is not valid', details);
+    if (!ACCOUNT_IDS.includes(accountId)) throw notFound('account');
+    if (!state().defs.some((d) => d.key === key)) throw notFound('entitlement');
     const now = new Date();
     const row: AccountEntitlementRow = {
       id: String(state().nextPromoId++),
@@ -321,10 +340,12 @@ export default {
     return ok({ id: row.id });
   }),
 
+  // A row that is not there, or is a store subscription's, is 404; one that is no longer active is
+  // 409 with its status; success is data null.
   'POST /api/admin/promo-entitlements/:id/revoke': guard('SUBSCRIPTION:GRANT', (req) => {
     const row = state().accountEntitlements.find((r) => r.id === idParam(req));
-    if (!row) throw notFound('entitlement');
-    const status = row.source === 'STORE' ? 'STORE' : entitlementStatus(row);
+    if (row?.source !== 'PROMO') throw notFound('entitlement');
+    const status = entitlementStatus(row);
     if (status !== 'ACTIVE')
       throw new MockHttpError(
         409,
@@ -333,53 +354,64 @@ export default {
         { status },
       );
     row.revokedAt = new Date().toISOString();
-    return ok({ id: row.id });
+    return ok(null);
   }),
 
   'GET /api/admin/entitlement-defs': guard(['SUBSCRIPTION:VIEW', 'SUBSCRIPTION:GRANT'], () =>
     ok({ items: [...state().defs].sort((a, b) => a.priority - b.priority).map(defView) }),
   ),
 
+  // Backend reply 104: the key is [A-Za-z0-9][A-Za-z0-9._-]{0,63} (only when made), the name 1 to 100
+  // code points after trimming, the priority a whole number of any size and unique. A taken key or
+  // priority is 409 DUPLICATE_RESOURCE with data.field; when the key is taken and the priority is held
+  // by another entitlement too, it is the priority that is named. POST answers { key }, PUT data null.
   'POST /api/admin/entitlement-defs': guard('SUBSCRIPTION:CONFIG', (req) => {
     const body = bodyOf(req);
     const key = typeof body.key === 'string' ? body.key.trim() : '';
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    const priority = body.priority;
-    const details: { ref: string; reason: string }[] = [];
-    if (key === '') details.push({ ref: 'key', reason: 'EMPTY_NOT_ALLOWED' });
-    if (name === '') details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
-    if (typeof priority !== 'number' || !Number.isInteger(priority))
-      details.push({ ref: 'priority', reason: 'NOT_AN_INTEGER' });
+    const details = defProblems(body);
+    if (key === '') details.unshift({ ref: 'key', reason: 'EMPTY_NOT_ALLOWED' });
+    else if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(key))
+      details.unshift({ ref: 'key', reason: 'OUT_OF_RANGE' });
     if (details.length > 0) throw invalidRequest('the definition is not valid', details);
+    const name = (body.name as string).trim();
+    const priority = body.priority as number;
+    const holder = state().defs.find((d) => d.priority === priority);
+    if (holder && holder.key !== key)
+      throw new MockHttpError(
+        409,
+        'DUPLICATE_RESOURCE',
+        'The entitlement priority already exists',
+        {
+          field: 'priority',
+        },
+      );
     if (state().defs.some((d) => d.key === key))
-      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The key is taken', { field: 'key' });
-    if (state().defs.some((d) => d.priority === priority))
-      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The priority is taken', {
-        field: 'priority',
+      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The entitlement key already exists', {
+        field: 'key',
       });
-    const def: Def = { key, name, priority: priority as number };
-    state().defs.push(def);
-    return ok(defView(def));
+    state().defs.push({ key, name, priority });
+    return ok({ key });
   }),
 
   'PUT /api/admin/entitlement-defs/:key': guard('SUBSCRIPTION:CONFIG', (req) => {
     const def = state().defs.find((d) => d.key === req.params.key);
     if (!def) throw notFound('entitlement');
     const body = bodyOf(req);
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    const priority = body.priority;
-    const details: { ref: string; reason: string }[] = [];
-    if (name === '') details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
-    if (typeof priority !== 'number' || !Number.isInteger(priority))
-      details.push({ ref: 'priority', reason: 'NOT_AN_INTEGER' });
+    const details = defProblems(body);
     if (details.length > 0) throw invalidRequest('the definition is not valid', details);
+    const priority = body.priority as number;
     if (state().defs.some((d) => d.key !== def.key && d.priority === priority))
-      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The priority is taken', {
-        field: 'priority',
-      });
-    def.name = name;
-    def.priority = priority as number;
-    return ok(defView(def));
+      throw new MockHttpError(
+        409,
+        'DUPLICATE_RESOURCE',
+        'The entitlement priority already exists',
+        {
+          field: 'priority',
+        },
+      );
+    def.name = (body.name as string).trim();
+    def.priority = priority;
+    return ok(null);
   }),
 
   'PUT /api/admin/entitlement-defs/:key/features': guard('SUBSCRIPTION:CONFIG', (req) => {
@@ -432,21 +464,23 @@ export default {
     return ok(gate);
   }),
 
+  // Backend reply 105: { creditCost: whole number from 1, or null }; the field has to be there; a price
+  // can be set on assets.avatar_max and assets.voice_max only (any other switch: 400 OUT_OF_RANGE on
+  // creditCost), clearing it (null) is allowed on every switch; the answer is data null.
   'PUT /api/admin/feature-gates/:key/credit-cost': guard('SUBSCRIPTION:CONFIG', (req) => {
     const gate = gateOf(req.params.key ?? '');
     if (!gate) throw notFound('feature switch');
     const cost = bodyOf(req).creditCost;
-    if (cost !== null && cost !== undefined) {
+    if (cost === undefined) throw bad('creditCost', 'EMPTY_NOT_ALLOWED');
+    if (cost !== null) {
       if (typeof cost !== 'number' || !Number.isInteger(cost))
         throw bad('creditCost', 'NOT_AN_INTEGER');
-      if (cost < 0 || cost > 1_000_000) throw bad('creditCost', 'OUT_OF_RANGE');
+      if (cost < 1) throw bad('creditCost', 'OUT_OF_RANGE');
+      if (!['assets.avatar_max', 'assets.voice_max'].includes(gate.key))
+        throw bad('creditCost', 'OUT_OF_RANGE');
     }
-    // only a permanent limit can be bought with credits; avatar.looks_max and credits.period_grant never
-    const buyable =
-      gate.kind === 'LIMIT' && gate.limitScope === 'PERMANENT' && gate.key !== 'avatar.looks_max';
-    if (!buyable && cost !== null && cost !== undefined) throw bad('creditCost', 'OUT_OF_RANGE');
-    gate.creditCost = cost ?? null;
-    return ok(gate);
+    gate.creditCost = cost;
+    return ok(null);
   }),
 
   'GET /api/admin/subscription-products': guard('SUBSCRIPTION:VIEW', () =>
@@ -460,34 +494,73 @@ export default {
     }),
   ),
 
+  // Backend reply 28: the body is { items: [...] }, every item carries all six fields; an item is added
+  // or changed by (store, productId), the ones not listed stay; one transaction (a refusal saves
+  // nothing); success is data null; an entitlement that does not exist is 404, not 400.
   'PUT /api/admin/subscription-products': guard('SUBSCRIPTION:CONFIG', (req) => {
-    const body = bodyOf(req);
-    const store = typeof body.store === 'string' ? body.store.trim() : '';
-    const productId = typeof body.productId === 'string' ? body.productId.trim() : '';
-    const entitlementKey = typeof body.entitlementKey === 'string' ? body.entitlementKey : '';
+    const list = bodyOf(req).items;
+    if (!Array.isArray(list) || list.length === 0) throw bad('items', 'EMPTY_NOT_ALLOWED');
     const details: { ref: string; reason: string }[] = [];
-    if (store === '') details.push({ ref: 'store', reason: 'EMPTY_NOT_ALLOWED' });
-    if (productId === '') details.push({ ref: 'productId', reason: 'EMPTY_NOT_ALLOWED' });
-    if (typeof body.enabled !== 'boolean') details.push({ ref: 'enabled', reason: 'NOT_BOOLEAN' });
-    if (typeof body.sortOrder !== 'number' || !Number.isInteger(body.sortOrder))
-      details.push({ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' });
-    if (details.length === 0 && !state().defs.some((d) => d.key === entitlementKey))
-      details.push({ ref: 'entitlementKey', reason: 'OUT_OF_RANGE' });
+    const items: Product[] = [];
+    for (const raw of list as Record<string, unknown>[]) {
+      const row = raw && typeof raw === 'object' ? raw : {};
+      const add = (ref: string, reason: string) => details.push({ ref, reason });
+      const store = typeof row.store === 'string' ? row.store : '';
+      const productId = typeof row.productId === 'string' ? row.productId.trim() : '';
+      if (store === '') add('store', 'EMPTY_NOT_ALLOWED');
+      else if (!/^[A-Z][A-Z0-9_]{1,31}$/.test(store)) add('store', 'OUT_OF_RANGE');
+      if (productId === '') add('productId', 'EMPTY_NOT_ALLOWED');
+      else if ([...productId].length > 255) add('productId', 'TOO_LONG');
+      if (typeof row.entitlementKey !== 'string' || row.entitlementKey.trim() === '')
+        add('entitlementKey', 'EMPTY_NOT_ALLOWED');
+      if (row.enabled === undefined || row.enabled === null) add('enabled', 'EMPTY_NOT_ALLOWED');
+      else if (typeof row.enabled !== 'boolean') add('enabled', 'NOT_BOOLEAN');
+      if (row.sortOrder === undefined || row.sortOrder === null)
+        add('sortOrder', 'EMPTY_NOT_ALLOWED');
+      else if (typeof row.sortOrder !== 'number' || !Number.isInteger(row.sortOrder))
+        add('sortOrder', 'NOT_AN_INTEGER');
+      const surfaces = row.surfaces;
+      if (surfaces === undefined || surfaces === null) add('surfaces', 'EMPTY_NOT_ALLOWED');
+      else if (
+        !Array.isArray(surfaces) ||
+        surfaces.length > 50 ||
+        surfaces.some(
+          (x) =>
+            !x ||
+            (x.platform !== 'ANDROID' && x.platform !== 'IOS') ||
+            (x.channel !== null && x.channel !== undefined && typeof x.channel !== 'string'),
+        )
+      )
+        add('surfaces', 'OUT_OF_RANGE');
+      items.push({
+        store,
+        productId,
+        entitlementKey: typeof row.entitlementKey === 'string' ? row.entitlementKey : '',
+        enabled: row.enabled as boolean,
+        sortOrder: row.sortOrder as number,
+        surfaces: Array.isArray(surfaces) ? (surfaces as Product['surfaces']) : [],
+      });
+    }
     if (details.length > 0) throw invalidRequest('the product is not valid', details);
-    const existing = state().products.find((p) => p.store === store && p.productId === productId);
-    const next = {
-      store,
-      productId,
-      entitlementKey,
-      enabled: body.enabled as boolean,
-      sortOrder: body.sortOrder as number,
-      surfaces: Array.isArray(body.surfaces)
-        ? (body.surfaces as string[])
-        : (existing?.surfaces ?? []),
-    };
-    if (existing) Object.assign(existing, next);
-    else state().products.push(next);
-    return ok(next);
+    const seen = new Set<string>();
+    for (const item of items) {
+      const id = `${item.store}|${item.productId}`;
+      if (seen.has(id))
+        throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The product is listed twice', {
+          field: 'productId',
+        });
+      seen.add(id);
+    }
+    if (items.some((item) => !state().defs.some((d) => d.key === item.entitlementKey)))
+      throw notFound('entitlement');
+    for (const item of items) {
+      const existing = state().products.find(
+        (p) => p.store === item.store && p.productId === item.productId,
+      );
+      if (existing) Object.assign(existing, item);
+      else state().products.push(item);
+    }
+    return ok(null);
   }),
 
   'GET /api/admin/subscription-events': guard('SUBSCRIPTION:VIEW', (req) => {

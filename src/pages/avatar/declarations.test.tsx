@@ -83,10 +83,19 @@ describe('the upload declaration page', { timeout: 30000 }, () => {
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     expect(await within(dialog).findByText('Enter a version.')).toBeInTheDocument();
     expect(
-      within(dialog).getByText('Enter the text in at least one language.'),
+      within(dialog).getByText('Enter the text in English (en). The other languages are optional.'),
     ).toBeInTheDocument();
     expect(writesOf(calls)).toHaveLength(0);
+    // a text in Thai only is not enough either
     fireEvent.change(within(dialog).getByLabelText('Version'), { target: { value: '2026-10-v2' } });
+    fireEvent.change(within(dialog).getByLabelText('th'), { target: { value: 'ฉันยอมรับ' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText(
+        'Enter the text in English (en). The other languages are optional.',
+      ),
+    ).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
     fireEvent.change(within(dialog).getByLabelText('en'), { target: { value: 'x' } });
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     expect(

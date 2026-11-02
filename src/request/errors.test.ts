@@ -45,6 +45,29 @@ describe('ApiError', () => {
     expect(e.details).toEqual([{ ref: 'privacyPolicyUrl', reason: 'NOT_HTTPS' }]);
   });
 
+  it('keeps index, the place of the row in a list that was sent, when it is a whole number from 0, and leaves it out otherwise', () => {
+    const e = make({
+      data: {
+        details: [
+          { index: 0, ref: 'amount', reason: 'NEGATIVE' },
+          { index: 7, ref: 'campaignCode', reason: 'DUPLICATE' },
+          { ref: 'body', reason: 'OUT_OF_RANGE' },
+          { index: -1, ref: 'a', reason: 'X' },
+          { index: 1.5, ref: 'b', reason: 'X' },
+          { index: '2', ref: 'c', reason: 'X' },
+        ],
+      },
+    });
+    expect(e.details).toEqual([
+      { index: 0, ref: 'amount', reason: 'NEGATIVE' },
+      { index: 7, ref: 'campaignCode', reason: 'DUPLICATE' },
+      { ref: 'body', reason: 'OUT_OF_RANGE' },
+      { ref: 'a', reason: 'X' },
+      { ref: 'b', reason: 'X' },
+      { ref: 'c', reason: 'X' },
+    ]);
+  });
+
   it('has an empty details list when data has none or has the wrong shape', () => {
     expect(make({ data: null }).details).toEqual([]);
     expect(make({ data: 'text' }).details).toEqual([]);

@@ -36,6 +36,11 @@ const messages: Record<string, string> = {
   'push.content.image': '图片',
   'push.content.imageHelp': '可不填。图片先上传，表单只带上传编号；不能手填地址。',
   'push.content.imageCurrent': '当前图片',
+  'push.content.imageRemove': '去掉图片',
+  'push.content.imageKeep': '保留图片',
+  'push.content.imageWillGo': '保存时会去掉这张图片。',
+  'push.content.titleTooLong': '标题最多 {max} 个字符，现在有 {count} 个',
+  'push.content.bodyTooLong': '正文最多 {max} 个字符，现在有 {count} 个',
   'push.content.imageRejected': '后端没有接受上传的图片，请重新上传。',
   'push.link.summary': '{kind}：{target}',
   'push.content.uploadWait': '请等上传结束再提交。',
@@ -85,7 +90,8 @@ const messages: Record<string, string> = {
   'push.templates.enabled': '启用',
 
   // ---- 手动推送任务 ----
-  'push.tasks.note': '一次性推送给一批受众，立即发或定时发。任务只有在等待中才能取消。',
+  'push.tasks.note':
+    '一次性推送给一批受众，立即发或定时发。任务在等待中或发送中都能取消；发送中的任务会在下一步停下，已经发出的不撤回。',
   'push.tasks.col.title': '标题',
   'push.tasks.col.audience': '受众',
   'push.tasks.col.status': '状态',
@@ -97,7 +103,7 @@ const messages: Record<string, string> = {
   'push.tasks.new': '新建任务',
   'push.tasks.newTitle': '新建推送任务',
   'push.tasks.cancel': '取消任务',
-  'push.tasks.cancelConfirm': '取消这个任务吗？取消后不会发送。',
+  'push.tasks.cancelConfirm': '取消这个任务吗？还没发出的不会再发，已经发出的不撤回。',
   'push.tasks.cancelled': '任务已取消',
   'push.tasks.created': '任务已创建',
   'push.tasks.missed': '错过：执行器停机过久，未发送',
@@ -171,6 +177,13 @@ const messages: Record<string, string> = {
   // ---- 发送记录 ----
   'push.records.note': '发给账号的每一次推送。点开一行看对每个 token 的发送结果。',
   'push.records.col.account': '账号',
+  'push.records.filter.account': '账号编号',
+  'push.records.filter.reason': '触发原因',
+  'push.records.filter.search': '查询',
+  'push.records.filter.reset': '重置',
+  'push.records.filter.accountInvalid':
+    '账号编号是 36 个字符：数字、a 到 f 的字母和连字符，例如 00000000-0000-4000-8000-000000000011。',
+  'push.records.filter.note': '后端只能按账号和触发原因筛选，不能按日期。',
   'push.records.col.type': '类型',
   'push.records.col.reason': '触发原因',
   'push.records.col.localDate': '本地日期',

@@ -45,7 +45,12 @@ const notFound = (what: string) =>
 const invalidState = (status: string, message: string) =>
   new MockHttpError(409, 'INVALID_STATE', message, { status });
 
-const byIdAsc = (a: { id: string }, b: { id: string }) => Number(a.id) - Number(b.id);
+/** A 409 INVALID_STATE that says nothing about the state (`data` is null), as the backend answers for the default avatars and the backfill. */
+const invalidStateNoData = (message: string) =>
+  new MockHttpError(409, 'INVALID_STATE', message, null);
+
+/** Texts in the order of their code units, as the database sorts a key. */
+const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 // ---- the upload records: a file is uploaded first, then named by its uploadId ----
 
@@ -78,15 +83,24 @@ function uploadOf(id: unknown, kind: MockUpload['kind'], ref: string): MockUploa
   if (upload.kind !== kind) {
     throw fail([{ ref, reason: 'OUT_OF_RANGE' }], `${ref} is the upload of another kind`);
   }
-  if (upload.used) throw invalidState('USED', 'The upload belongs to another object already');
+  if (upload.used) throw invalidState('CONSUMED', 'The upload belongs to another object already');
   return upload;
 }
 
 // ---- field checks shared by the catalogs ----
 
-/** Texts by language tag; at least one must have text. */
+/**
+ * Texts by language tag, with English among them (the backend's rule): an object that is missing
+ * or empty is refused on `ref`, English missing or blank on `<ref>.en`, a text that is too long on
+ * `<ref>.<tag>`.
+ */
 function localized(value: unknown, ref: string, details: Detail[]): Record<string, string> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).length === 0
+  ) {
     details.push({ ref, reason: 'EMPTY_NOT_ALLOWED' });
     return {};
   }
@@ -95,10 +109,11 @@ function localized(value: unknown, ref: string, details: Detail[]): Record<strin
     if (typeof raw !== 'string') continue;
     const trimmed = trimSpec(raw);
     if (trimmed === '') continue;
-    if (countCodePoints(trimmed) > TEXT_MAX) details.push({ ref, reason: 'TOO_LONG' });
+    if (countCodePoints(trimmed) > TEXT_MAX)
+      details.push({ ref: `${ref}.${tag}`, reason: 'TOO_LONG' });
     result[tag] = trimmed;
   }
-  if (Object.keys(result).length === 0) details.push({ ref, reason: 'EMPTY_NOT_ALLOWED' });
+  if (!result.en) details.push({ ref: `${ref}.en`, reason: 'EMPTY_NOT_ALLOWED' });
   return result;
 }
 
@@ -158,6 +173,22 @@ function flag(value: unknown, ref: string, details: Detail[]): boolean {
   return value;
 }
 
+/** A flag the backend needs in the request: missing is EMPTY_NOT_ALLOWED, another type NOT_BOOLEAN. */
+function requiredFlag(value: unknown, ref: string, details: Detail[]): boolean {
+  if (value === undefined || value === null) {
+    details.push({ ref, reason: 'EMPTY_NOT_ALLOWED' });
+    return false;
+  }
+  return flag(value, ref, details);
+}
+
+/** An update may carry the key, but only the one the item has. */
+function sameKey(value: unknown, current: string, details: Detail[]): void {
+  if (value !== undefined && value !== null && value !== current) {
+    details.push({ ref: 'key', reason: 'OUT_OF_RANGE' });
+  }
+}
+
 const keyOf = (value: unknown, details: Detail[]): string => {
   const trimmed = typeof value === 'string' ? trimSpec(value) : '';
   if (trimmed === '') details.push({ ref: 'key', reason: 'EMPTY_NOT_ALLOWED' });
@@ -201,15 +232,6 @@ function checkName(value: unknown): string {
   if (reason) throw fail([{ ref: 'name', reason }], 'The name is not allowed');
   return name;
 }
-
-const boolParam = (req: MockReq, name: string): boolean | undefined => {
-  const raw = text(req.query[name]);
-  if (raw === '') return undefined;
-  if (raw !== 'true' && raw !== 'false') {
-    throw fail([{ ref: name, reason: 'NOT_BOOLEAN' }], `${name} must be true or false`);
-  }
-  return raw === 'true';
-};
 
 const enumParam = (req: MockReq, name: string, allowed: string[]): string | undefined => {
   const raw = text(req.query[name]);
@@ -268,17 +290,13 @@ export default {
 
   // ---- cosmetics ----
   'GET /api/admin/cosmetics': guard(['COSMETIC:MANAGE', 'COSMETIC:GRANT'], (req) => {
+    // `kind` is the only filter (a value that is not a kind is a 400); `enabled`, `style` and any
+    // other parameter are ignored, and the order is kind, sortOrder, key (the backend's answer of
+    // 2026-11-02, question 64).
     const kind = enumParam(req, 'kind', KINDS);
-    const style = enumParam(req, 'style', STYLES);
-    const enabled = boolParam(req, 'enabled');
     const rows = avatarState.cosmetics
-      .filter(
-        (c) =>
-          (kind === undefined || c.kind === kind) &&
-          (style === undefined || c.compatibleStyles.includes(style as 'REALISTIC')) &&
-          (enabled === undefined || c.enabled === enabled),
-      )
-      .sort((a, b) => a.sortOrder - b.sortOrder || byIdAsc(a, b));
+      .filter((c) => kind === undefined || c.kind === kind)
+      .sort((a, b) => byText(a.kind, b.kind) || a.sortOrder - b.sortOrder || byText(a.key, b.key));
     const page = paginateQuery(rows, req);
     return ok({ items: page.items.map(cosmeticRow), total: page.total });
   }),
@@ -291,7 +309,7 @@ export default {
       details.push({ ref: 'kind', reason: 'OUT_OF_RANGE' });
     }
     const item = readCosmeticFields(body, details);
-    if (body.enabled !== undefined) flag(body.enabled, 'enabled', details);
+    requiredFlag(body.enabled, 'enabled', details);
     if (details.length > 0) throw fail(details);
     if (avatarState.cosmetics.some((c) => c.key === key)) {
       throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The key exists already', {
@@ -299,7 +317,6 @@ export default {
       });
     }
     const picture = uploadOf(body.previewUploadId, 'CATALOG_IMAGE', 'previewUploadId');
-    picture.used = true;
     const created: MockCosmetic = {
       id: nextId(),
       key,
@@ -308,8 +325,11 @@ export default {
       previewFile: `${key}.svg`,
       enabled: body.enabled === true,
     };
-    avatarState.cosmetics.push(created);
-    clearOtherDefaults(created);
+    keepingDefaults(() => {
+      avatarState.cosmetics.push(created);
+      clearOtherDefaults(created);
+    });
+    picture.used = true;
     return ok(cosmeticRow(created));
   }),
 
@@ -318,15 +338,26 @@ export default {
     if (!found) throw notFound('cosmetic');
     const body = bodyOf(req);
     const details: Detail[] = [];
+    // The whole item is sent: the kind and the enabled state too (the key may be, the picture
+    // is only when it is replaced).
+    sameKey(body.key, found.key, details);
+    const kind = typeof body.kind === 'string' ? body.kind : '';
+    if (body.kind === undefined || body.kind === null || body.kind === '') {
+      details.push({ ref: 'kind', reason: 'EMPTY_NOT_ALLOWED' });
+    } else if (!KINDS.includes(kind)) details.push({ ref: 'kind', reason: 'OUT_OF_RANGE' });
+    const enabled = requiredFlag(body.enabled, 'enabled', details);
     const item = readCosmeticFields(body, details);
     if (details.length > 0) throw fail(details);
-    if (body.previewUploadId !== undefined) {
-      const picture = uploadOf(body.previewUploadId, 'CATALOG_IMAGE', 'previewUploadId');
-      picture.used = true;
-      found.previewFile = `${found.key}-${picture.id}.svg`;
-    }
-    Object.assign(found, item);
-    clearOtherDefaults(found);
+    const picture =
+      body.previewUploadId !== undefined
+        ? uploadOf(body.previewUploadId, 'CATALOG_IMAGE', 'previewUploadId')
+        : null;
+    keepingDefaults(() => {
+      Object.assign(found, item, { kind: kind as MockCosmetic['kind'], enabled });
+      if (picture) found.previewFile = `${found.key}-${picture.id}.svg`;
+      clearOtherDefaults(found);
+    });
+    if (picture) picture.used = true;
     return ok(cosmeticRow(found));
   }),
 
@@ -334,15 +365,18 @@ export default {
     const found = avatarState.cosmetics.find((c) => c.id === req.params.id);
     if (!found) throw notFound('cosmetic');
     const details: Detail[] = [];
-    found.enabled = flag(bodyOf(req).enabled, 'enabled', details);
+    const enabled = flag(bodyOf(req).enabled, 'enabled', details);
     if (details.length > 0) throw fail(details);
+    keepingDefaults(() => {
+      found.enabled = enabled;
+    });
     return ok(cosmeticRow(found));
   }),
 
   // ---- actions ----
   'GET /api/admin/actions': guard('ACTION:MANAGE', (req) => {
     const rows = [...avatarState.actions].sort(
-      (a, b) => a.sortOrder - b.sortOrder || byIdAsc(a, b),
+      (a, b) => a.sortOrder - b.sortOrder || byText(a.key, b.key),
     );
     const page = paginateQuery(rows, req);
     return ok({ items: page.items.map(actionRow), total: page.total });
@@ -353,7 +387,7 @@ export default {
     const details: Detail[] = [];
     const key = keyOf(body.key, details);
     const item = readActionFields(body, details);
-    if (body.enabled !== undefined) flag(body.enabled, 'enabled', details);
+    requiredFlag(body.enabled, 'enabled', details);
     if (details.length > 0) throw fail(details);
     if (avatarState.actions.some((a) => a.key === key)) {
       throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The key exists already', {
@@ -379,6 +413,9 @@ export default {
     if (!found) throw notFound('action');
     const body = bodyOf(req);
     const details: Detail[] = [];
+    // The whole action is sent, the enabled state included (the key may be, the icon is only when it is replaced).
+    sameKey(body.key, found.key, details);
+    const enabled = requiredFlag(body.enabled, 'enabled', details);
     const item = readActionFields(body, details);
     if (details.length > 0) throw fail(details);
     if (body.iconUploadId !== undefined) {
@@ -386,7 +423,7 @@ export default {
       picture.used = true;
       found.iconFile = `${found.key}-${picture.id}.svg`;
     }
-    Object.assign(found, item);
+    Object.assign(found, item, { enabled });
     return ok(actionRow(found));
   }),
 
@@ -403,7 +440,7 @@ export default {
   'POST /api/admin/actions/:id/backfill': guard('ACTION:MANAGE', (req) => {
     const found = avatarState.actions.find((a) => a.id === req.params.id);
     if (!found) throw notFound('action');
-    if (!found.enabled) throw invalidState('DISABLED', 'The action is disabled');
+    if (!found.enabled) throw invalidStateNoData('The action is disabled');
     const scheduled = found.missingClips;
     found.missingClips = 0;
     return ok({ scheduled });
@@ -582,7 +619,7 @@ export default {
     settleGenerations();
     const found = defaultAvatarOf(req);
     if (found.status !== 'DRAFT') {
-      throw invalidState(found.status, 'Only a draft can be generated');
+      throw invalidStateNoData('Only a draft can be generated');
     }
     if (!avatarState.generationConfigured) {
       throw new MockHttpError(
@@ -601,7 +638,7 @@ export default {
     settleGenerations();
     const found = defaultAvatarOf(req);
     if (found.status !== 'READY')
-      throw invalidState(found.status, 'Only a ready avatar can be activated');
+      throw invalidStateNoData('Only a READY default avatar can be activated');
     for (const d of avatarState.defaultAvatars) d.isActive = false;
     found.isActive = true;
     return ok(defaultAvatarRow(found));
@@ -610,9 +647,9 @@ export default {
   'DELETE /api/admin/default-avatars/:id': guard('DEFAULT_AVATAR:MANAGE', (req) => {
     settleGenerations();
     const found = defaultAvatarOf(req);
-    if (found.isActive) throw invalidState(found.status, 'The active avatar cannot be deleted');
+    if (found.isActive) throw invalidStateNoData('The active avatar cannot be deleted');
     if (found.status === 'GENERATING')
-      throw invalidState(found.status, 'A running generation cannot be deleted');
+      throw invalidStateNoData('A running generation cannot be deleted');
     avatarState.defaultAvatars.splice(avatarState.defaultAvatars.indexOf(found), 1);
     return ok(null);
   }),
@@ -657,11 +694,8 @@ export default {
     const item = avatarState.cosmetics.find((c) => c.id === body.itemId);
     if (!item) throw notFound('cosmetic');
     const owned = avatarState.accountCosmetics.get(req.params.id) ?? [];
-    if (owned.some((o) => o.itemId === item.id)) {
-      throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The account owns the item already', {
-        field: 'itemId',
-      });
-    }
+    // An item the account owns already is a success that changes nothing.
+    if (owned.some((o) => o.itemId === item.id)) return ok(null);
     const row = {
       itemId: item.id,
       itemKey: item.key,
@@ -670,7 +704,7 @@ export default {
       grantedAt: new Date().toISOString(),
     };
     avatarState.accountCosmetics.set(req.params.id, [...owned, row]);
-    return ok(row);
+    return ok(null);
   }),
 };
 
@@ -681,6 +715,43 @@ function defaultAvatarOf(req: MockReq): MockDefaultAvatar {
 }
 
 /** There is one default item of each kind: making this one the default takes it from the others. */
+/** The kinds that have a default item that qualifies: the default, on sale, free and fitting both styles. */
+function kindsWithDefault(items: MockCosmetic[]): Set<string> {
+  return new Set(
+    items
+      .filter(
+        (c) =>
+          c.isDefault &&
+          c.enabled &&
+          c.isFree &&
+          STYLES.every((style) => c.compatibleStyles.includes(style as 'REALISTIC')),
+      )
+      .map((c) => c.kind),
+  );
+}
+
+/**
+ * Runs a change of the catalog and keeps it only when every kind that had a default item that
+ * qualifies still has one; otherwise it is all undone and the answer is 409 INVALID_STATE with
+ * `data.kind` (a kind that had none is not judged, so an item that does not qualify can be made the
+ * default of it). The backend does this in one transaction after the other checks.
+ */
+function keepingDefaults(change: () => void): void {
+  const before = avatarState.cosmetics.map((c) => ({ ...c }));
+  const had = kindsWithDefault(before);
+  change();
+  const has = kindsWithDefault(avatarState.cosmetics);
+  const lost = [...had].find((kind) => !has.has(kind));
+  if (lost === undefined) return;
+  avatarState.cosmetics.splice(0, avatarState.cosmetics.length, ...before);
+  throw new MockHttpError(
+    409,
+    'INVALID_STATE',
+    'The change leaves the kind without its default item',
+    { kind: lost },
+  );
+}
+
 function clearOtherDefaults(item: MockCosmetic): void {
   if (!item.isDefault) return;
   for (const other of avatarState.cosmetics) {
@@ -692,14 +763,18 @@ function readCosmeticFields(body: Record<string, unknown>, details: Detail[]) {
   const names = localized(body.names, 'names', details);
   const generationSpec = spec(body.generationSpec, 'generationSpec', details);
   const compatibleStyles = styles(body.compatibleStyles, details);
-  const surfaceList = surfaces(body.surfaces, details);
+  // Surfaces left out are none (all ends).
+  const surfaceList = surfaces(body.surfaces ?? [], details);
+  const isFree = flag(body.isFree, 'isFree', details);
+  // No price (null) clears it; a price is 1 to 1000000000 and an item that is free has none.
   let creditPrice: number | null = null;
   if (body.creditPrice !== null && body.creditPrice !== undefined) {
-    creditPrice = whole(body.creditPrice, 'creditPrice', details, 0);
+    creditPrice = whole(body.creditPrice, 'creditPrice', details, 1);
+    if (isInt(body.creditPrice) && (body.creditPrice > 1_000_000_000 || isFree)) {
+      details.push({ ref: 'creditPrice', reason: 'OUT_OF_RANGE' });
+    }
   }
-  const isFree = flag(body.isFree, 'isFree', details);
   const isDefault = flag(body.isDefault, 'isDefault', details);
-  if (isDefault && !isFree) details.push({ ref: 'isDefault', reason: 'OUT_OF_RANGE' });
   const sortOrder = whole(body.sortOrder, 'sortOrder', details);
   return {
     names,
@@ -719,7 +794,7 @@ function readActionFields(body: Record<string, unknown>, details: Detail[]) {
   if (description === '') details.push({ ref: 'description', reason: 'EMPTY_NOT_ALLOWED' });
   const generationSpec = spec(body.generationSpec, 'generationSpec', details);
   const compatibleStyles = styles(body.compatibleStyles, details);
-  const surfaceList = surfaces(body.surfaces, details);
+  const surfaceList = surfaces(body.surfaces ?? [], details);
   if (typeof body.triggerableBy !== 'string' || !TRIGGERS.includes(body.triggerableBy)) {
     details.push({ ref: 'triggerableBy', reason: 'OUT_OF_RANGE' });
   }

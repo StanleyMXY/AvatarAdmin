@@ -119,7 +119,9 @@ export function CostModal({ cost, campaigns, currency, onClose, onSaved }: Props
           <>
             <Form.Item label={t('campaign.costs.f.campaign')}>
               <Typography.Text data-testid="cost-campaign" style={{ overflowWrap: 'anywhere' }}>
-                {plainText(campaignOf(cost.campaignId)?.name) || plainText(cost.campaignId)}
+                {plainText(cost.campaignName) ||
+                  plainText(campaignOf(cost.campaignId)?.name) ||
+                  plainText(cost.campaignId)}
               </Typography.Text>
             </Form.Item>
             <Form.Item label={t('campaign.costs.f.date')}>

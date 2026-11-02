@@ -66,12 +66,12 @@ export default function AdminsPage() {
   const who = { id: me?.id, username: me?.username };
   const protectionOf = (row: AdminUser): RowProtection => rowProtection(row, who, all);
 
-  const attempt = async (work: () => Promise<unknown>, done: string) => {
+  const attempt = async (work: () => Promise<unknown>, done: string, own: boolean) => {
     try {
       await work();
       message.success(done);
     } catch (error) {
-      message.error(protectedFailureText(intl, error));
+      message.error(protectedFailureText(intl, error, own));
     }
     refresh();
   };
@@ -110,12 +110,14 @@ export default function AdminsPage() {
       label: t('system.admins.disable'),
       confirmText: t('system.admins.disableAsk', { name }),
       disabled: own || protection.lastSuper,
-      onClick: () => attempt(() => setAdminStatus(id, 'DISABLED'), t('system.admins.disabledDone')),
+      onClick: () =>
+        attempt(() => setAdminStatus(id, 'DISABLED'), t('system.admins.disabledDone'), own),
     };
     const enable: RowAction = {
       key: 'enable',
       label: t('system.admins.enable'),
-      onClick: () => attempt(() => setAdminStatus(id, 'ACTIVE'), t('system.admins.enabledDone')),
+      onClick: () =>
+        attempt(() => setAdminStatus(id, 'ACTIVE'), t('system.admins.enabledDone'), own),
     };
     const resetPassword: RowAction = {
       key: 'password',
@@ -128,14 +130,14 @@ export default function AdminsPage() {
       label: t('system.admins.resetTotp'),
       confirmText: t('system.admins.resetTotpAsk', { name }),
       disabled: own,
-      onClick: () => attempt(() => resetAdminTotp(id), t('system.admins.resetTotpDone')),
+      onClick: () => attempt(() => resetAdminTotp(id), t('system.admins.resetTotpDone'), own),
     };
     const remove: RowAction = {
       key: 'delete',
       label: t('system.common.delete'),
       confirmText: t('system.admins.deleteAsk', { name }),
       disabled: own || protection.lastSuper,
-      onClick: () => attempt(() => deleteAdmin(id), t('system.common.deleted')),
+      onClick: () => attempt(() => deleteAdmin(id), t('system.common.deleted'), own),
     };
     const edit: RowAction = {
       key: 'edit',

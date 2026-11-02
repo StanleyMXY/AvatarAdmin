@@ -99,7 +99,8 @@ export function buildChannelBody(
 /**
  * The body of a create or an update. The credentials are in it only when a whole row was typed
  * (a name and a value); no row, or rows left blank, leaves the key out, so that the backend keeps
- * what it holds. With rows, the map replaces everything stored.
+ * what it holds (the page has no way to clear them: `{}` and null mean "unchanged" too). With rows,
+ * the map replaces everything stored. No field of an update is null: null would keep the stored value.
  * An update has neither the code nor the switch: the code cannot change, and the switch has its own
  * request.
  */
@@ -117,16 +118,18 @@ export function buildChannelBody(
     name: trimSpec(values.name),
     providerCode: values.providerCode,
     apiUrl: trimSpec(values.apiUrl),
-    extConfig: extConfigOf(values.extConfig),
     countries: normalizeCountries(values.countries),
     smsType: values.smsType,
     priority: values.priority,
     ...(Object.keys(credentials).length === 0 ? {} : { credentials }),
   };
-  if (mode === 'update') return common;
+  const extConfig = extConfigOf(values.extConfig);
+  // On an update null means "unchanged" (answers 6 and 78): an empty box is {}, which clears it.
+  if (mode === 'update') return { ...common, extConfig: extConfig ?? {} };
   return {
     channelCode: trimSpec(values.channelCode ?? ''),
     ...common,
+    extConfig,
     enabled: values.enabled === true,
   };
 }

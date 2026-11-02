@@ -152,3 +152,7 @@
 清单还列了与管理端前端无关的后端变化（手机端接口、运维日志等），不在这里。GROUP B 里'手机端普通 403 页面现在是 403 `FORBIDDEN`（以前是 400 `INVALID_REQUEST`）'属于客户端接口，不影响管理端前端。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：140）。
+
+核对于 2026-11-02

@@ -40,18 +40,14 @@ const answer = (data: unknown) => stubFetch(() => jsonResponse(200, envelope('20
 const body = (call: { init: RequestInit }) => JSON.parse(call.init.body as string);
 
 describe('the catalogs', () => {
-  it('lists cosmetics with the paging and the three filters, and leaves an empty filter out', async () => {
+  it('lists cosmetics with the paging and the type, and leaves an empty filter out', async () => {
     const calls = answer({ items: [{ id: '1' }], total: 41 });
     const page = await listCosmetics({
       page: 2,
       pageSize: 20,
       kind: 'OUTFIT',
-      enabled: false,
-      style: 'REALISTIC',
     });
-    expect(calls[0].url).toBe(
-      '/api/admin/cosmetics?page=2&pageSize=20&kind=OUTFIT&enabled=false&style=REALISTIC',
-    );
+    expect(calls[0].url).toBe('/api/admin/cosmetics?page=2&pageSize=20&kind=OUTFIT');
     expect(page).toEqual({ items: [{ id: '1' }], total: 41 });
     await listCosmetics({ page: 1, pageSize: 20 });
     expect(calls[1].url).toBe('/api/admin/cosmetics?page=1&pageSize=20');
@@ -108,15 +104,23 @@ describe('the catalogs', () => {
       isDefault: false,
       sortOrder: 3,
     };
-    await createCosmetic({ ...base, key: 'red_dress', kind: 'OUTFIT', previewUploadId: 'up-1' });
+    await createCosmetic({
+      ...base,
+      key: 'red_dress',
+      kind: 'OUTFIT',
+      enabled: false,
+      previewUploadId: 'up-1',
+    });
     expect(calls[0].url).toBe('/api/admin/cosmetics');
     expect(calls[0].init.method).toBe('POST');
     expect(body(calls[0])).toMatchObject({ key: 'red_dress', previewUploadId: 'up-1' });
     expect(JSON.stringify(body(calls[0]))).not.toContain('previewUrl');
-    await updateCosmetic('a/b', base);
+    await updateCosmetic('a/b', { ...base, kind: 'OUTFIT', enabled: true });
     expect(calls[1].url).toBe('/api/admin/cosmetics/a%2Fb');
     expect(calls[1].init.method).toBe('PUT');
     expect(body(calls[1]).creditPrice).toBeNull();
+    expect(body(calls[1])).toMatchObject({ kind: 'OUTFIT', enabled: true });
+    expect('key' in body(calls[1])).toBe(false);
     expect('previewUploadId' in body(calls[1])).toBe(false);
   });
 
@@ -144,13 +148,15 @@ describe('the catalogs', () => {
       sortOrder: 1,
     };
     await createAction({ ...base, key: 'wave', iconUploadId: 'ic-1', enabled: false });
-    await updateAction('7', base);
+    await updateAction('7', { ...base, enabled: true });
     expect(body(calls[0])).toMatchObject({
       key: 'wave',
       iconUploadId: 'ic-1',
       triggerableBy: 'BOTH',
     });
     expect(calls[1].url).toBe('/api/admin/actions/7');
+    expect(body(calls[1]).enabled).toBe(true);
+    expect('key' in body(calls[1])).toBe(false);
     expect('iconUploadId' in body(calls[1])).toBe(false);
   });
 

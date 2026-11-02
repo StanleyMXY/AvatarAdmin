@@ -6,6 +6,7 @@ import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AdjustKind, createAdjustRequest } from '../../services/credits';
 import { countCodePoints } from '../../utils/codePoints';
 import { detailReasons, setFieldReasons } from '../../utils/fieldReasons';
+import { formatCount } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 
 type Values = { accountId: string; kind: AdjustKind; delta: number | null; reason: string };
@@ -20,6 +21,8 @@ type Props = {
 
 const FIELDS = ['accountId', 'kind', 'delta', 'reason'] as const;
 const REASON_MAX = 500;
+/** The most a request can move a balance by, up or down. */
+const DELTA_MAX = 1_000_000_000;
 
 /**
  * 新建申请 (`SUBSCRIPTION:GRANT`): account id, type, credits and reason. A grant needs a positive
@@ -65,6 +68,9 @@ export function AdjustRequestModal({ open, accountId, onClose, onCreated }: Prop
   const validateDelta = async (_: unknown, value: number | null | undefined) => {
     if (typeof value !== 'number' || !Number.isInteger(value)) {
       throw new Error(t('credits.form.deltaWhole'));
+    }
+    if (Math.abs(value) > DELTA_MAX) {
+      throw new Error(t('credits.form.deltaMax', { max: formatCount(DELTA_MAX, intl.locale) }));
     }
     if (form.getFieldValue('kind') === 'GRANT' ? value <= 0 : value === 0) {
       throw new Error(

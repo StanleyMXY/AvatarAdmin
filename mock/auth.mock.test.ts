@@ -90,10 +90,10 @@ describe('POST /auth/login', () => {
     expect([status, body.code]).toEqual([401, 'ADMIN_TOTP_INVALID']);
   });
 
-  it('answers 401 ADMIN_TOTP_INVALID for the right code when the stored secret cannot be decrypted, and counts it like a wrong code', async () => {
+  it('answers 401 ADMIN_TOTP_INVALID for the right code when the stored secret cannot be decrypted, and counts it like a wrong code: the fifth is still a 401, the sixth is the 429', async () => {
     adminOf('root').totpSecretUnreadable = true;
     const body = { username: 'root', password: mockPassword('root'), totp: FAKE_TOTP_CODE };
-    for (let i = 1; i < TOTP_MAX_FAILURES; i++) {
+    for (let i = 1; i <= TOTP_MAX_FAILURES; i++) {
       const refused = await login(body);
       expect([refused.status, refused.body.code, refused.body.data]).toEqual([
         401,
@@ -102,12 +102,8 @@ describe('POST /auth/login', () => {
       ]);
     }
     const locked = await login(body);
-    // contract 1.4 and 2.3: this lock of 429 has no data and no Retry-After
-    expect([locked.status, locked.body.code, locked.body.data]).toEqual([
-      429,
-      'RATE_LIMITED',
-      null,
-    ]);
+    expect([locked.status, locked.body.code]).toEqual([429, 'RATE_LIMITED']);
+    expect(locked.body.data.retryAfterSeconds).toBeGreaterThanOrEqual(1);
   });
 
   it('asks for the code first when the stored secret cannot be decrypted: nothing is decrypted without a code', async () => {
@@ -177,28 +173,53 @@ describe('POST /auth/login', () => {
     ).toBe(401);
   });
 
-  it('locks the user name after repeated wrong codes with 429 RATE_LIMITED and no data (contract 1.4 lists no waiting time for it)', async () => {
-    for (let i = 1; i < TOTP_MAX_FAILURES; i++) {
-      expect(
-        (await login({ username: 'root', password: mockPassword('root'), totp: '111111' })).status,
-      ).toBe(401);
+  it('answers 401 ADMIN_TOTP_INVALID on the fifth wrong code too; from the sixth attempt with the right password it answers 429 RATE_LIMITED with data.retryAfterSeconds (backend answer 10)', async () => {
+    for (let i = 1; i <= TOTP_MAX_FAILURES; i++) {
+      const refused = await login({
+        username: 'root',
+        password: mockPassword('root'),
+        totp: '111111',
+      });
+      expect([refused.status, refused.body.code]).toEqual([401, 'ADMIN_TOTP_INVALID']);
     }
     const locked = await login({
       username: 'root',
       password: mockPassword('root'),
       totp: '111111',
     });
-    expect([locked.status, locked.body.code, locked.body.data]).toEqual([
-      429,
-      'RATE_LIMITED',
-      null,
-    ]);
+    expect([locked.status, locked.body.code]).toEqual([429, 'RATE_LIMITED']);
+    expect(Number.isInteger(locked.body.data.retryAfterSeconds)).toBe(true);
     const correctButLocked = await login({
       username: 'root',
       password: mockPassword('root'),
       totp: FAKE_TOTP_CODE,
     });
     expect(correctButLocked.status).toBe(429);
+  });
+
+  it('answers the lock only after the password: a wrong password is still 401 ADMIN_INVALID_CREDENTIALS while the user name is locked', async () => {
+    adminOf('root').lockedUntil = Date.now() + 60_000;
+    const wrongPassword = await login({
+      username: 'root',
+      password: 'wrong-wrong-wrong',
+      totp: FAKE_TOTP_CODE,
+    });
+    expect([wrongPassword.status, wrongPassword.body.code, wrongPassword.body.data]).toEqual([
+      401,
+      'ADMIN_INVALID_CREDENTIALS',
+      null,
+    ]);
+    const noCode = await login({ username: 'root', password: 'wrong-wrong-wrong' });
+    expect(noCode.body.code).toBe('ADMIN_INVALID_CREDENTIALS');
+  });
+
+  it('answers 429 for the right password while locked, with or without a code, and also for an administrator who has no authenticator yet', async () => {
+    adminOf('root').lockedUntil = Date.now() + 60_000;
+    const withoutCode = await login({ username: 'root', password: mockPassword('root') });
+    expect([withoutCode.status, withoutCode.body.code]).toEqual([429, 'RATE_LIMITED']);
+    adminOf('fresh').lockedUntil = Date.now() + 60_000;
+    const fresh = await login({ username: 'fresh', password: mockPassword('fresh') });
+    expect([fresh.status, fresh.body.code]).toEqual([429, 'RATE_LIMITED']);
   });
 
   it('resets the count of wrong codes after a right one', async () => {
@@ -567,7 +588,7 @@ describe('the lock after wrong codes', () => {
     for (let i = 0; i < TOTP_MAX_FAILURES; i++) await wrong();
   };
 
-  it('lasts 5 minutes, and the answer carries no waiting time', async () => {
+  it('lasts 5 minutes: retryAfterSeconds is about 300', async () => {
     expect(TOTP_LOCKOUT_MINUTES).toBe(5);
     expect(TOTP_MAX_FAILURES).toBe(5);
     await lock();
@@ -576,10 +597,8 @@ describe('the lock after wrong codes', () => {
       password: mockPassword('root'),
       totp: FAKE_TOTP_CODE,
     });
-    expect(body.data).toBeNull();
-    const left = adminOf('root').lockedUntil - Date.now();
-    expect(left).toBeGreaterThan(290_000);
-    expect(left).toBeLessThanOrEqual(300_000);
+    expect(body.data.retryAfterSeconds).toBeGreaterThan(290);
+    expect(body.data.retryAfterSeconds).toBeLessThanOrEqual(300);
   });
 
   it('ends: after the time has passed the right code signs in', async () => {
@@ -604,24 +623,31 @@ describe('the lock after wrong codes', () => {
     ).toBe(200);
   });
 
-  it('also stops enrollment, and a lock reached while enrolling voids the enrollment token', async () => {
+  it('the fifth wrong code on enrollment is still 401 ADMIN_TOTP_INVALID and voids the enrollment token; afterwards the token answers 401 ADMIN_INVALID_TOKEN, never 429, and signing in again answers 429', async () => {
     const enrollToken = (await login({ username: 'fresh', password: mockPassword('fresh') })).body
       .data.enrollToken as string;
-    for (let i = 1; i < TOTP_MAX_FAILURES; i++) {
-      expect((await enroll({ enrollToken, totp: '111111' })).body.code).toBe('ADMIN_TOTP_INVALID');
+    for (let i = 1; i <= TOTP_MAX_FAILURES; i++) {
+      const refused = await enroll({ enrollToken, totp: '111111' });
+      expect([refused.status, refused.body.code]).toEqual([401, 'ADMIN_TOTP_INVALID']);
     }
-    const last = await enroll({ enrollToken, totp: '111111' });
-    expect([last.status, last.body.code]).toEqual([429, 'RATE_LIMITED']);
-    adminOf('fresh').lockedUntil = 0;
+    // even the right code is refused now, as a void token
     const afterwards = await enroll({ enrollToken, totp: FAKE_TOTP_CODE });
     expect([afterwards.status, afterwards.body.code]).toEqual([401, 'ADMIN_INVALID_TOKEN']);
+    const again = await login({ username: 'fresh', password: mockPassword('fresh') });
+    expect([again.status, again.body.code]).toEqual([429, 'RATE_LIMITED']);
+    expect(again.body.data.retryAfterSeconds).toBeGreaterThanOrEqual(1);
   });
 
-  it('refuses enrollment with the right code while the user name is locked', async () => {
+  it('enrollment never answers 429: a token used while the user name is locked is void (401 ADMIN_INVALID_TOKEN)', async () => {
     const enrollToken = (await login({ username: 'fresh', password: mockPassword('fresh') })).body
       .data.enrollToken as string;
     adminOf('fresh').lockedUntil = Date.now() + 60_000;
-    expect((await enroll({ enrollToken, totp: FAKE_TOTP_CODE })).status).toBe(429);
+    const refused = await enroll({ enrollToken, totp: FAKE_TOTP_CODE });
+    expect([refused.status, refused.body.code]).toEqual([401, 'ADMIN_INVALID_TOKEN']);
+    adminOf('fresh').lockedUntil = 0;
+    expect((await enroll({ enrollToken, totp: FAKE_TOTP_CODE })).body.code).toBe(
+      'ADMIN_INVALID_TOKEN',
+    );
   });
 
   it('a right code on enrollment resets the count of wrong ones', async () => {

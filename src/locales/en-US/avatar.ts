@@ -50,7 +50,7 @@ const messages: Record<string, string> = {
 
   'avatar.key.required': 'Enter a key.',
   'avatar.key.fixed': 'The key cannot be changed after the item is created.',
-  'avatar.names.required': 'Enter a name in at least one language.',
+  'avatar.names.required': 'Enter the name in English (en). The other languages are optional.',
   'avatar.sortOrder.whole': 'The order must be a whole number.',
   'avatar.spec.required': 'Enter the generation text.',
   'avatar.spec.length': 'The generation text must be 1 to {max} characters long.',
@@ -67,6 +67,10 @@ const messages: Record<string, string> = {
   // ---- cosmetics ----
   'avatar.cosmetics.note':
     'Outfits and backgrounds a user can pick for an avatar. Users cannot type their own description. Each type has one free default item.',
+  'avatar.cosmetics.pageFilterNote':
+    'The filters On and Fits style only hide rows of the page that is shown. The backend filters by type only, so the page numbers and the total still count every item of the type.',
+  'avatar.cosmetics.pageFilter':
+    '{shown} of the {onPage} items on this page match the on-sale state and style that were chosen. The page numbers and the total ({total}) count every item of the type; look at the other pages for more.',
   'avatar.cosmetics.kind': 'Type',
   'avatar.cosmetics.kind.OUTFIT': 'Outfit',
   'avatar.cosmetics.kind.BACKGROUND': 'Background',
@@ -77,7 +81,10 @@ const messages: Record<string, string> = {
   'avatar.cosmetics.saved': 'Saved.',
   'avatar.cosmetics.priceWhole': 'The price must be a whole number, 0 or more.',
   'avatar.creditPrice.hint': 'Leave empty if the item cannot be bought with credits.',
-  'avatar.isDefault.hint': 'The one free default item of its type.',
+  'avatar.isDefault.hint':
+    'Saving makes this the default of its type; any other default item of the type is cancelled automatically.',
+  'avatar.cosmetics.defaultKept':
+    'The type must keep one default item that is on sale, free and fits both styles.',
   'avatar.preview.required': 'Upload a preview picture first.',
   'avatar.preview.rejected': 'The server did not accept the uploaded picture. Upload it again.',
 
@@ -115,7 +122,8 @@ const messages: Record<string, string> = {
   'avatar.declarations.texts': 'Texts',
   'avatar.declarations.textsHint':
     'The wording is set by the lawyers. Fill in every language you have.',
-  'avatar.declarations.textsRequired': 'Enter the text in at least one language.',
+  'avatar.declarations.textsRequired':
+    'Enter the text in English (en). The other languages are optional.',
   'avatar.declarations.versionRequired': 'Enter a version.',
 
   // ---- renderer models ----

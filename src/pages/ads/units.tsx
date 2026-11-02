@@ -27,6 +27,7 @@ import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { Checklist } from './Checklist';
 import { Picker } from './Picker';
+import { summarizeSurfaces } from './surfaces';
 import { summarizeTargeting } from './targeting';
 import { UnitModal } from './UnitModal';
 import { useOptions } from './useOptions';
@@ -207,6 +208,13 @@ export default function UnitsPage() {
       title: t('ads.units.col.targeting'),
       render: (_, row) => (
         <EllipsisPopoverText text={summarizeTargeting(intl, row.targeting)} lines={2} width={260} />
+      ),
+    },
+    {
+      key: 'surfaces',
+      title: t('ads.units.col.surfaces'),
+      render: (_, row) => (
+        <EllipsisPopoverText text={summarizeSurfaces(intl, row.surfaces)} lines={2} width={200} />
       ),
     },
     {

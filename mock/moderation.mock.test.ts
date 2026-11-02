@@ -87,18 +87,27 @@ describe('permissions (contract 17.4, content moderation row)', () => {
 });
 
 describe('GET /moderation/records', () => {
-  it('puts what has waited longest first among the pending ones, then the others, newest first', async () => {
+  it('lists the oldest record first, whatever its status (created_at, then id, ascending), so the waiting ones are not first', async () => {
     const { body } = await get(RECORDS, 'reviewer', { pageSize: '200' });
-    const rows = body.data.items as { status: string; createdAt: string }[];
-    const pending = rows.filter((r) => r.status === 'PENDING_REVIEW');
-    expect(pending.length).toBeGreaterThan(5);
-    expect(rows.slice(0, pending.length).every((r) => r.status === 'PENDING_REVIEW')).toBe(true);
-    const asc = pending.map((r) => r.createdAt);
-    expect(asc).toEqual([...asc].sort());
+    const rows = body.data.items as { id: string; status: string; createdAt: string }[];
     expect(rows[0]).toMatchObject({ id: RECORD_ID.oldestImage, contentType: 'AVATAR_IMAGE' });
-    const rest = rows.slice(pending.length).map((r) => r.createdAt);
-    expect(rest).toEqual([...rest].sort().reverse());
+    const order = (a: (typeof rows)[number], b: (typeof rows)[number]) =>
+      a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1;
+    expect(rows.map((r) => r.id)).toEqual([...rows].sort(order).map((r) => r.id));
+    // an approved or blocked record sits among the pending ones by its age
+    const firstDone = rows.findIndex((r) => r.status !== 'PENDING_REVIEW');
+    const lastPending = rows.map((r) => r.status).lastIndexOf('PENDING_REVIEW');
+    expect(firstDone).toBeLessThan(lastPending);
     expect(body.data.total).toBe(rows.length);
+  });
+
+  it('gives only the waiting records, oldest first, when the status is chosen', async () => {
+    const { body } = await get(RECORDS, 'reviewer', { pageSize: '200', status: 'PENDING_REVIEW' });
+    const rows = body.data.items as { status: string; createdAt: string }[];
+    expect(rows.length).toBeGreaterThan(5);
+    expect(rows.every((r) => r.status === 'PENDING_REVIEW')).toBe(true);
+    const asc = rows.map((r) => r.createdAt);
+    expect(asc).toEqual([...asc].sort());
   });
 
   it('gives the columns of the contract, the name of the reviewer, and null when that administrator is gone', async () => {
@@ -134,7 +143,7 @@ describe('GET /moderation/records', () => {
     }
   });
 
-  it('filters by status, source and content type, and by the three together', async () => {
+  it('filters by status and source, and by the two together', async () => {
     const rows = async (query: Record<string, unknown>) =>
       (await get(RECORDS, 'reviewer', { pageSize: '200', ...query })).body.data.items as {
         status: string;
@@ -145,17 +154,29 @@ describe('GET /moderation/records', () => {
     const complaints = await rows({ source: 'COMPLAINT' });
     expect(complaints.length).toBeGreaterThan(0);
     expect(complaints.every((r) => r.source === 'COMPLAINT')).toBe(true);
-    const clips = await rows({ contentType: 'ACTION_CLIP' });
-    expect(clips.map((r) => r.contentType)).toEqual(['ACTION_CLIP']);
-    const both = await rows({ status: 'PENDING_REVIEW', source: 'REPORT', contentType: 'VOICE' });
-    expect(both).toHaveLength(1);
+    const both = await rows({ status: 'PENDING_REVIEW', source: 'REPORT' });
+    expect(both.length).toBeGreaterThan(0);
+    expect(both.every((r) => r.status === 'PENDING_REVIEW' && r.source === 'REPORT')).toBe(true);
+  });
+
+  it('ignores a query parameter it does not know, content type among them: no 400, no filtering, the total of all types', async () => {
+    const plain = await get(RECORDS, 'reviewer', { pageSize: '200' });
+    for (const query of [
+      { contentType: 'ACTION_CLIP' },
+      { contentType: 'GIF' },
+      { colour: 'red' },
+    ]) {
+      const answer = await get(RECORDS, 'reviewer', { pageSize: '200', ...query });
+      expect(answer.status, JSON.stringify(query)).toBe(200);
+      expect(answer.body.data.total).toBe(plain.body.data.total);
+      expect(answer.body.data.items).toEqual(plain.body.data.items);
+    }
   });
 
   it('refuses a value that is not in the list and a paging that is out of range, naming the parameter', async () => {
     for (const query of [
       { status: 'DONE' },
       { source: 'ROBOT' },
-      { contentType: 'GIF' },
       { page: '0' },
       { pageSize: '201' },
     ]) {
@@ -314,16 +335,65 @@ describe('POST /moderation/records/{id}/decision', () => {
     expect(findRecord(RECORD_ID.persona)?.status).toBe('PENDING_REVIEW');
   });
 
-  it('refuses a decision that is neither APPROVE nor REJECT, and a note that is too long', async () => {
-    const bad = await send(DECISION, 'reviewer', { decision: 'MAYBE' }, { id: RECORD_ID.persona });
-    expect(bad.body.data.details).toEqual([{ ref: 'decision', reason: 'OUT_OF_RANGE' }]);
-    const long = await send(
+  it('refuses a decision that is neither APPROVE nor REJECT (case matters) or missing, on the ref decision', async () => {
+    const refused = async (body: Record<string, unknown>) =>
+      (await send(DECISION, 'reviewer', body, { id: RECORD_ID.persona })).body.data.details;
+    expect(await refused({ decision: 'MAYBE' })).toEqual([
+      { ref: 'decision', reason: 'OUT_OF_RANGE' },
+    ]);
+    expect(await refused({ decision: 'approve' })).toEqual([
+      { ref: 'decision', reason: 'OUT_OF_RANGE' },
+    ]);
+    expect(await refused({})).toEqual([{ ref: 'decision', reason: 'EMPTY_NOT_ALLOWED' }]);
+    expect(await refused({ decision: '' })).toEqual([
+      { ref: 'decision', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+  });
+
+  it('takes a note of up to 1000 code points (an emoji counts one), for approving as for rejecting, and refuses 1001 on the ref note', async () => {
+    for (const decision of ['APPROVE', 'REJECT']) {
+      const long = await send(
+        DECISION,
+        'reviewer',
+        { decision, note: '😀'.repeat(1001) },
+        { id: RECORD_ID.persona },
+      );
+      expect(long.status).toBe(400);
+      expect(long.body.data.details).toEqual([{ ref: 'note', reason: 'TOO_LONG' }]);
+    }
+    expect(findRecord(RECORD_ID.persona)?.status).toBe('PENDING_REVIEW');
+    const fine = await send(
       DECISION,
       'reviewer',
-      { decision: 'APPROVE', note: 'x'.repeat(501) },
+      { decision: 'REJECT', note: `${WIDE_SPACE}${'😀'.repeat(1000)} ` },
       { id: RECORD_ID.persona },
     );
-    expect(long.body.data.details).toEqual([{ ref: 'note', reason: 'TOO_LONG' }]);
+    expect(fine.status).toBe(200);
+    expect(findRecord(RECORD_ID.persona)?.note).toBe('😀'.repeat(1000));
+  });
+
+  it('keeps an approval without a note, and with a note that is only white space, as no note', async () => {
+    const answer = await send(
+      DECISION,
+      'reviewer',
+      { decision: 'APPROVE', note: `  ${WIDE_SPACE}` },
+      { id: RECORD_ID.persona },
+    );
+    expect(answer.status).toBe(200);
+    expect(findRecord(RECORD_ID.persona)).toMatchObject({ status: 'APPROVED', note: null });
+  });
+
+  it('reports the first error only, the decision before the note, and checks the parameters before the record exists', async () => {
+    const both = await send(
+      DECISION,
+      'reviewer',
+      { decision: 'MAYBE', note: 'x'.repeat(1001) },
+      { id: RECORD_ID.persona },
+    );
+    expect(both.body.data.details).toEqual([{ ref: 'decision', reason: 'OUT_OF_RANGE' }]);
+    const beforeRecord = await send(DECISION, 'reviewer', { decision: 'REJECT' }, { id: 'nope' });
+    expect(beforeRecord.status).toBe(400);
+    expect(beforeRecord.body.data.details).toEqual([{ ref: 'note', reason: 'EMPTY_NOT_ALLOWED' }]);
   });
 
   it('answers 409 INVALID_STATE with the current status for a record that is not waiting, and 404 for a missing one', async () => {

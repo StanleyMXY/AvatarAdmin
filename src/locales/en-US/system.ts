@@ -24,10 +24,12 @@ const messages: Record<string, string> = {
   // ---- administrators ----
   'system.admins.note':
     'You cannot change your own roles, super administrator flag or status, and you cannot delete your own account. The last enabled super administrator cannot be disabled or deleted, and its flag cannot be cleared. Only a super administrator sets or clears the super administrator flag.',
-  'system.admins.refusedHint':
-    'The backend refused this and nothing was changed. Possible reasons: it is your own account; it is the last enabled super administrator; or the account was changed by someone else meanwhile (read the list again).',
+  'system.admins.refusedOwnHint':
+    'The backend refused this and nothing was changed. This is your own account: you cannot change your own roles or super administrator flag, and you cannot disable or delete yourself.',
+  'system.admins.refusedOtherHint':
+    'The backend refused this and nothing was changed. Possible reasons: it is the last enabled super administrator (it cannot be disabled or deleted, and its flag cannot be cleared); or the account was changed by someone else meanwhile (read the list again).',
   'system.admins.forbiddenHint':
-    'The backend refused this and nothing was changed. Possible reasons: it is your own account; administrators can only grant permissions they hold; and can only act on administrators whose permissions they all hold.',
+    'The backend refused this and nothing was changed. Possible reasons: administrators can only grant permissions they hold; they can only act on administrators whose permissions they all hold; and only a super administrator can act on a super administrator.',
   'system.admins.new': 'New administrator',
   'system.admins.you': 'You',
   'system.admins.col.username': 'User name',
@@ -154,8 +156,8 @@ const messages: Record<string, string> = {
   'system.permissions.field.codeHint': 'Cannot be changed after the node is made.',
   'system.permissions.field.code.required': 'Enter a code',
   'system.permissions.field.code.invalid':
-    'The code cannot contain spaces or control characters, and is at most 100 characters.',
-  'system.permissions.field.code.dots': 'The code cannot start or end with a dot.',
+    'Use 1 to 128 of letters A-Z, digits and the characters _ : # / . - (no spaces, no other letters).',
+  'system.permissions.field.code.dots': 'A code made only of dots cannot be used.',
   'system.permissions.field.code.taken': 'A node with this code exists already.',
   'system.permissions.field.type': 'Type',
   'system.permissions.field.parent': 'Parent node',

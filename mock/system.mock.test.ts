@@ -23,6 +23,11 @@ const withCodes = (username: string, codes: string[]) => {
   adminOf(username).permissions = codes as never;
 };
 
+/** The ids of the roles an administrator has now, as an update must repeat them. */
+const adminRoleIds = (username: string): string[] => [
+  ...(systemState.extras.get(adminOf(username).id)?.roleIds ?? []),
+];
+
 beforeEach(() => {
   resetStore();
   resetSystemStore();
@@ -191,10 +196,14 @@ describe('POST /admins', () => {
 });
 
 describe('PUT /admins/:id', () => {
+  /** An update as the backend wants it (answer 44): the user name and the whole list of roles every time. */
+  const put = (who: string, id: string, body: Record<string, unknown>) =>
+    run('PUT /api/admin/admins/:id', who, { params: { id }, body });
+
   it('changes the roles, and the permissions follow the roles', async () => {
-    const { status, body } = await run('PUT /api/admin/admins/:id', 'root', {
-      params: { id: '1005' },
-      body: { roleIds: ['2', '6'] },
+    const { status, body } = await put('root', '1005', {
+      username: 'newhire',
+      roleIds: ['2', '6'],
     });
     expect(status).toBe(200);
     expect(body.data.roles.map((r: { id: string }) => r.id).sort()).toEqual(['2', '6']);
@@ -203,36 +212,113 @@ describe('PUT /admins/:id', () => {
     expect(adminOf('newhire').permissions).not.toContain('USER:VIEW');
   });
 
-  it('refuses the own roles and the own super administrator flag, even with the same values', async () => {
-    withCodes('support', ['ADMIN:MANAGE']);
-    for (const body of [
-      { roleIds: ['1'] },
-      { superAdmin: false },
-      { roleIds: [], superAdmin: true },
-    ]) {
-      const refused = await run('PUT /api/admin/admins/:id', 'support', {
-        params: { id: '1002' },
-        body,
-      });
-      expect([JSON.stringify(body), refused.status, refused.body.code]).toEqual([
-        JSON.stringify(body),
-        403,
-        'ADMIN_FORBIDDEN',
-      ]);
-    }
-    expect(adminOf('support').superAdmin).toBe(false);
+  it('needs the user name and the list of roles on every update: a missing one is 400 EMPTY_NOT_ALLOWED, not "keep it"', async () => {
+    const before = adminOf('newhire').permissions;
+    const noName = await put('root', '1005', { roleIds: ['1'] });
+    expect([noName.status, noName.body.code, noName.body.data.details]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      [{ ref: 'username', reason: 'EMPTY_NOT_ALLOWED' }],
+    ]);
+    const blankName = await put('root', '1005', { username: '   ', roleIds: ['1'] });
+    expect(blankName.body.data.details).toEqual([{ ref: 'username', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const noRoles = await put('root', '1005', { username: 'newhire' });
+    expect([noRoles.status, noRoles.body.data.details]).toEqual([
+      400,
+      [{ ref: 'roleIds', reason: 'EMPTY_NOT_ALLOWED' }],
+    ]);
+    const nullRoles = await put('root', '1005', { username: 'newhire', roleIds: null });
+    expect(nullRoles.body.data.details).toEqual([{ ref: 'roleIds', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const unknown = await put('root', '1005', { username: 'newhire', roleIds: ['404'] });
+    expect(unknown.body.data.details).toEqual([{ ref: 'roleIds', reason: 'OUT_OF_RANGE' }]);
+    expect(adminOf('newhire').permissions).toEqual(before);
   });
 
-  it('lets only a super administrator set or clear the flag', async () => {
+  it('takes every role away only for [] sent on purpose, and keeps the flag when it is not sent', async () => {
+    const { status } = await put('root', '1005', { username: 'newhire', roleIds: [] });
+    expect(status).toBe(200);
+    expect(adminOf('newhire').permissions).toEqual([]);
+    expect(adminOf('newhire').superAdmin).toBe(false);
+  });
+
+  it('renames the administrator with the update, and refuses a name that is taken (409 DUPLICATE_RESOURCE) without changing anything', async () => {
+    const taken = await put('root', '1005', { username: 'REVIEWER', roleIds: ['1'] });
+    expect([taken.status, taken.body.code]).toEqual([409, 'DUPLICATE_RESOURCE']);
+    expect(adminOf('newhire').username).toBe('newhire');
+    const renamed = await put('root', '1005', { username: 'newhire2', roleIds: ['1'] });
+    expect([renamed.status, renamed.body.data.username]).toEqual([200, 'newhire2']);
+  });
+
+  it('lets the own row be updated when the roles are the same set (in any order) and the flag is not sent or the same: a rename works', async () => {
     withCodes('support', ['ADMIN:MANAGE']);
-    const refused = await run('PUT /api/admin/admins/:id', 'support', {
-      params: { id: '1005' },
-      body: { superAdmin: true },
+    const sameRoles = await put('support', '1002', { username: 'support', roleIds: ['1'] });
+    expect(sameRoles.status).toBe(200);
+    const sameFlag = await put('support', '1002', {
+      username: 'support',
+      roleIds: ['1'],
+      superAdmin: false,
     });
-    expect(refused.status).toBe(403);
-    const ok = await run('PUT /api/admin/admins/:id', 'root', {
-      params: { id: '1005' },
-      body: { superAdmin: true },
+    expect(sameFlag.status).toBe(200);
+    const renamed = await put('support', '1002', { username: 'soporte', roleIds: ['1'] });
+    expect([renamed.status, renamed.body.data.username]).toEqual([200, 'soporte']);
+    // a super administrator too: the same flag is not a change
+    const root = await put('root', '1001', {
+      username: 'root',
+      roleIds: adminRoleIds('root'),
+      superAdmin: true,
+    });
+    expect(root.status).toBe(200);
+  });
+
+  it('refuses a change of the own roles or the own flag with 409 INVALID_STATE and data.status, not 403 (answer 22), and changes nothing', async () => {
+    withCodes('support', ['ADMIN:MANAGE']);
+    const taken = await put('support', '1002', { username: 'support', roleIds: [] });
+    expect([taken.status, taken.body.code, taken.body.data]).toEqual([
+      409,
+      'INVALID_STATE',
+      { status: 'ACTIVE' },
+    ]);
+    expect(systemState.extras.get('1002')?.roleIds).toEqual(['1']);
+    for (const body of [
+      { username: 'root', roleIds: ['1'], superAdmin: true },
+      { username: 'root', roleIds: adminRoleIds('root'), superAdmin: false },
+      { username: 'root', roleIds: ['1', ...adminRoleIds('root')] },
+    ]) {
+      const refused = await put('root', '1001', body);
+      expect([JSON.stringify(body), refused.status, refused.body.code, refused.body.data]).toEqual([
+        JSON.stringify(body),
+        409,
+        'INVALID_STATE',
+        { status: 'ACTIVE' },
+      ]);
+    }
+    expect(adminOf('root').superAdmin).toBe(true);
+  });
+
+  it('lets only a super administrator set or clear the flag (a flag with the same value is not a change)', async () => {
+    withCodes('support', ['ADMIN:MANAGE', 'USER:VIEW', 'STATS:VIEW']);
+    const rolesOf = adminRoleIds('newhire');
+    const refused = await put('support', '1005', {
+      username: 'newhire',
+      roleIds: rolesOf,
+      superAdmin: true,
+    });
+    expect([refused.status, refused.body.code, refused.body.message]).toEqual([
+      403,
+      'ADMIN_FORBIDDEN',
+      'Only a super administrator sets or clears the super administrator flag',
+    ]);
+    expect(adminOf('newhire').superAdmin).toBe(false);
+    const same = await put('support', '1005', {
+      username: 'newhire',
+      roleIds: rolesOf,
+      superAdmin: false,
+    });
+    expect(same.status).toBe(200);
+    const ok = await put('root', '1005', {
+      username: 'newhire',
+      roleIds: rolesOf,
+      superAdmin: true,
     });
     expect(ok.body.data.superAdmin).toBe(true);
     // the other fields stay open to the administrator with ADMIN:MANAGE, within what they hold
@@ -246,34 +332,30 @@ describe('PUT /admins/:id', () => {
       'USER:VIEW',
       'STATS:VIEW',
     ]);
-    const roles = await run('PUT /api/admin/admins/:id', 'support', {
-      params: { id: '1004' },
-      body: { roleIds: ['4'] },
-    });
+    const roles = await put('support', '1004', { username: 'reviewer', roleIds: ['4'] });
     expect(roles.status).toBe(200);
   });
 
-  it('lets a super administrator clear the flag of another one, but never their own', async () => {
+  it('lets a super administrator clear the flag of another one; for the own row it is 409 INVALID_STATE', async () => {
     adminOf('finance').superAdmin = true;
-    const other = await run('PUT /api/admin/admins/:id', 'root', {
-      params: { id: '1003' },
-      body: { superAdmin: false },
+    const other = await put('root', '1003', {
+      username: 'finance',
+      roleIds: adminRoleIds('finance'),
+      superAdmin: false,
     });
     expect(other.status).toBe(200);
     expect(other.body.data.superAdmin).toBe(false);
-    const own = await run('PUT /api/admin/admins/:id', 'root', {
-      params: { id: '1001' },
-      body: { superAdmin: false },
+    const own = await put('root', '1001', {
+      username: 'root',
+      roleIds: adminRoleIds('root'),
+      superAdmin: false,
     });
-    expect([own.status, own.body.code]).toEqual([403, 'ADMIN_FORBIDDEN']);
+    expect([own.status, own.body.code]).toEqual([409, 'INVALID_STATE']);
     expect(adminOf('root').superAdmin).toBe(true);
   });
 
   it('answers 404 RESOURCE_NOT_FOUND for an unknown administrator', async () => {
-    const { status, body } = await run('PUT /api/admin/admins/:id', 'root', {
-      params: { id: '31337' },
-      body: {},
-    });
+    const { status, body } = await put('root', '31337', { username: 'x', roleIds: [] });
     expect([status, body.code]).toEqual([404, 'RESOURCE_NOT_FOUND']);
   });
 });
@@ -291,9 +373,16 @@ describe('POST /admins/:id/status', () => {
     expect((await setStatus('root', '1004', 'ACTIVE')).body.data.status).toBe('ACTIVE');
   });
 
-  it('refuses to disable oneself (403) and the last enabled super administrator (409)', async () => {
-    const self = await setStatus('root', '1001', 'DISABLED');
-    expect([self.status, self.body.code]).toEqual([403, 'ADMIN_FORBIDDEN']);
+  it('refuses to change the status of oneself, either way (409 INVALID_STATE with data.status, answer 22), and to disable the last enabled super administrator (409)', async () => {
+    for (const status of ['DISABLED', 'ACTIVE']) {
+      const self = await setStatus('root', '1001', status);
+      expect([status, self.status, self.body.code, self.body.data]).toEqual([
+        status,
+        409,
+        'INVALID_STATE',
+        { status: 'ACTIVE' },
+      ]);
+    }
     withCodes('support', ['ADMIN:MANAGE']);
     // a super administrator holds every code: only someone who holds them all reaches the rule of the last one
     withCodes('support', [...PERMISSION_CODES]);
@@ -305,8 +394,10 @@ describe('POST /admins/:id/status', () => {
     expect((await setStatus('support', '1001', 'DISABLED')).status).toBe(200);
   });
 
-  it('refuses a status that is not ACTIVE or DISABLED', async () => {
+  it('refuses a status that is not ACTIVE or DISABLED, before it looks for the administrator', async () => {
     expect((await setStatus('root', '1004', 'GONE')).status).toBe(400);
+    expect((await setStatus('root', '31337', 'GONE')).status).toBe(400);
+    expect((await setStatus('root', '31337', 'DISABLED')).status).toBe(404);
   });
 });
 
@@ -341,7 +432,11 @@ describe('reset password, reset authenticator, delete', () => {
 
   it('deletes an administrator but never oneself or the last enabled super administrator, and keeps the audit rows', async () => {
     const self = await run('DELETE /api/admin/admins/:id', 'root', { params: { id: '1001' } });
-    expect([self.status, self.body.code]).toEqual([403, 'ADMIN_FORBIDDEN']);
+    expect([self.status, self.body.code, self.body.data]).toEqual([
+      409,
+      'INVALID_STATE',
+      { status: 'ACTIVE' },
+    ]);
     withCodes('support', [...PERMISSION_CODES]);
     const last = await run('DELETE /api/admin/admins/:id', 'support', { params: { id: '1001' } });
     expect([last.status, last.body.code]).toEqual([409, 'INVALID_STATE']);
@@ -430,7 +525,10 @@ describe('the permission tree', () => {
     });
   const update = (code: string, body: Record<string, unknown>) =>
     run('PUT /api/admin/permissions/:code', 'root', { params: { code }, body });
+  // An update always carries the parent: absent is null (backend answer 87), not "unchanged".
   const rename = { nameZh: '名', nameEn: 'name', sortOrder: 5 };
+  const parentOf = (code: string) => systemState.nodes.get(code)?.parent ?? null;
+  const renameKeepingParent = (code: string) => ({ ...rename, parent: parentOf(code) });
 
   it('is read with ROLE:MANAGE or PERMISSION:MANAGE and with nothing else', async () => {
     for (const [codes, status] of [
@@ -466,7 +564,7 @@ describe('the permission tree', () => {
   });
 
   it('lets a built-in node change its names and order, and refuses a new parent', async () => {
-    const done = await update('USER:BAN', rename);
+    const done = await update('USER:BAN', renameKeepingParent('USER:BAN'));
     expect(done.body.data).toMatchObject({
       code: 'USER:BAN',
       nameEn: 'name',
@@ -489,7 +587,7 @@ describe('the permission tree', () => {
       ['CUSTOM:T', 'MENU'],
     ]) {
       const before = JSON.stringify(systemState.nodes.get(code));
-      const refused = await update(code, { ...rename, type });
+      const refused = await update(code, { ...renameKeepingParent(code), type });
       expect([code, refused.status, refused.body.code, refused.body.data.details]).toEqual([
         code,
         400,
@@ -498,8 +596,9 @@ describe('the permission tree', () => {
       ]);
       expect(JSON.stringify(systemState.nodes.get(code))).toBe(before);
     }
-    expect((await update('CUSTOM:T', { ...rename, type: 'FUNCTION' })).status).toBe(200);
-    expect((await update('CUSTOM:T', rename)).status).toBe(200);
+    const keep = renameKeepingParent('CUSTOM:T');
+    expect((await update('CUSTOM:T', { ...keep, type: 'FUNCTION' })).status).toBe(200);
+    expect((await update('CUSTOM:T', keep)).status).toBe(200);
   });
 
   it('lets a custom node change its parent, and refuses a loop: under itself or under a descendant', async () => {
@@ -517,6 +616,126 @@ describe('the permission tree', () => {
     expect(systemState.nodes.get('CUSTOM:A')?.parent).toBe(null);
     expect((await update('CUSTOM:C', { ...rename, parent: 'CUSTOM:A' })).status).toBe(200);
     expect((await update('CUSTOM:A', { ...rename, parent: null })).status).toBe(200);
+  });
+
+  it('takes an update without parent as parent null (backend answer 87): a custom node goes to the root, a built-in node with a parent is refused on parent', async () => {
+    await create({ code: 'CUSTOM:A' });
+    await create({ code: 'CUSTOM:B', parent: 'CUSTOM:A' });
+    const moved = await update('CUSTOM:B', rename);
+    expect([moved.status, moved.body.data.parent]).toEqual([200, null]);
+    const builtin = await update('USER:BAN', rename);
+    expect([builtin.status, builtin.body.code, builtin.body.data.details]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      [{ ref: 'parent', reason: 'OUT_OF_RANGE' }],
+    ]);
+    expect(parentOf('USER:BAN')).toBe('USER:VIEW');
+    // with the parent it was read with, the same update is fine; a built-in node that is a root needs null
+    expect((await update('USER:BAN', renameKeepingParent('USER:BAN'))).status).toBe(200);
+    const root = [...systemState.nodes.values()].find((n) => n.builtin && n.parent === null);
+    expect(root).toBeDefined();
+    expect((await update(String(root?.code), rename)).status).toBe(200);
+  });
+
+  it('needs both names on an update: a missing or blank one is 400 on that name; the order stays when it is not sent', async () => {
+    await create({ code: 'CUSTOM:A', sortOrder: 77 });
+    const noZh = await update('CUSTOM:A', { nameEn: 'x', parent: null });
+    expect([noZh.status, noZh.body.data.details]).toEqual([
+      400,
+      [{ ref: 'nameZh', reason: 'EMPTY_NOT_ALLOWED' }],
+    ]);
+    const blankEn = await update('CUSTOM:A', { nameZh: 'x', nameEn: '  ', parent: null });
+    expect(blankEn.body.data.details).toEqual([{ ref: 'nameEn', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const kept = await update('CUSTOM:A', { nameZh: 'x', nameEn: 'y', parent: null });
+    expect([kept.status, kept.body.data.sortOrder]).toEqual([200, 77]);
+  });
+
+  it('takes the code and the type of the body as no change when they are the path / the current type, and refuses another code on code', async () => {
+    await create({ code: 'CUSTOM:A' });
+    expect(
+      (await update('CUSTOM:A', { ...renameKeepingParent('CUSTOM:A'), code: 'CUSTOM:A' })).status,
+    ).toBe(200);
+    for (const code of ['CUSTOM:A', 'USER:BAN']) {
+      const other = await update(code, { ...renameKeepingParent(code), code: 'CUSTOM:Z' });
+      expect([code, other.status, other.body.data.details]).toEqual([
+        code,
+        400,
+        [{ ref: 'code', reason: 'OUT_OF_RANGE' }],
+      ]);
+    }
+    expect(systemState.nodes.has('CUSTOM:Z')).toBe(false);
+  });
+
+  it('answers the cycle, the unknown parent and the parent of a built-in node on the parent field, one detail each (backend answer 88)', async () => {
+    await create({ code: 'CUSTOM:A' });
+    await create({ code: 'CUSTOM:B', parent: 'CUSTOM:A' });
+    for (const [code, parent] of [
+      ['CUSTOM:A', 'CUSTOM:A'],
+      ['CUSTOM:A', 'CUSTOM:B'],
+      ['CUSTOM:B', 'NO:SUCH'],
+      ['USER:BAN', 'CUSTOM:A'],
+    ] as const) {
+      const refused = await update(code, { ...rename, parent });
+      expect([code, parent, refused.status, refused.body.code, refused.body.data.details]).toEqual([
+        code,
+        parent,
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'parent', reason: 'OUT_OF_RANGE' }],
+      ]);
+    }
+  });
+
+  it('accepts a code of ASCII letters, digits and _ : # / . - (1 to 128, case sensitive, a dot anywhere) and refuses the rest on code (backend answer 87)', async () => {
+    for (const code of [
+      'a.b/c#d_e:f-g',
+      'A'.repeat(128),
+      '.x',
+      'x.',
+      '.',
+      '..',
+      'custom:group',
+      'CUSTOM:GROUP',
+    ]) {
+      const made = await create({ code });
+      expect([code, made.status]).toEqual([code, 200]);
+    }
+    for (const [code, reason] of [
+      ['has space', 'OUT_OF_RANGE'],
+      ['ก:ไทย', 'OUT_OF_RANGE'],
+      ['a,b', 'OUT_OF_RANGE'],
+      ['a\u200bb', 'OUT_OF_RANGE'],
+      ['a%b', 'OUT_OF_RANGE'],
+      ['', 'EMPTY_NOT_ALLOWED'],
+      ['A'.repeat(129), 'TOO_LONG'],
+    ] as const) {
+      const refused = await create({ code });
+      expect([
+        code.length > 20 ? code.length : code,
+        refused.status,
+        refused.body.data.details,
+      ]).toEqual([code.length > 20 ? code.length : code, 400, [{ ref: 'code', reason }]]);
+    }
+  });
+
+  it('gives only the first failing check on a create, in the order code, type, parent, nameZh, nameEn', async () => {
+    const all = await create({
+      code: 'bad code',
+      type: 'X',
+      parent: 'NO:SUCH',
+      nameZh: '',
+      nameEn: '',
+    });
+    expect(all.body.data.details).toEqual([{ ref: 'code', reason: 'OUT_OF_RANGE' }]);
+    const noType = await create({ type: 'X', parent: 'NO:SUCH', nameZh: '', nameEn: '' });
+    expect(noType.body.data.details).toEqual([{ ref: 'type', reason: 'OUT_OF_RANGE' }]);
+    const noParent = await create({ parent: 'NO:SUCH', nameZh: '', nameEn: '' });
+    expect(noParent.body.data.details).toEqual([{ ref: 'parent', reason: 'OUT_OF_RANGE' }]);
+    const noZh = await create({ nameZh: '', nameEn: '' });
+    expect(noZh.body.data.details).toEqual([{ ref: 'nameZh', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const longEn = await create({ nameEn: 'ก'.repeat(101) });
+    expect(longEn.body.data.details).toEqual([{ ref: 'nameEn', reason: 'TOO_LONG' }]);
+    expect((await create({ nameEn: 'ก'.repeat(100) })).status).toBe(200);
   });
 
   it('deletes a custom node without children and clears its grants from the roles', async () => {
@@ -544,8 +763,11 @@ describe('the permission tree', () => {
     const builtin = await run('DELETE /api/admin/permissions/:code', 'root', {
       params: { code: 'USER:BAN' },
     });
-    expect([builtin.status, builtin.body.code]).toEqual([400, 'INVALID_REQUEST']);
-    expect(Array.isArray(builtin.body.data.details)).toBe(true);
+    expect([builtin.status, builtin.body.code, builtin.body.data.details]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      [{ ref: 'code', reason: 'OUT_OF_RANGE' }],
+    ]);
     expect(systemState.nodes.has('USER:BAN')).toBe(true);
     // a node the application checks by code is built in too, whatever its flag says
     const node = systemState.nodes.get('CUSTOM:B');
@@ -793,14 +1015,14 @@ describe('what an administrator may grant: only what they hold', () => {
       refused(
         await run('PUT /api/admin/admins/:id', 'support', {
           params: { id: '1005' },
-          body: { roleIds: ['2'] },
+          body: { username: 'newhire', roleIds: ['2'] },
         }),
         MESSAGES.grant,
       );
       expect(adminOf('newhire').permissions).toEqual(['STATS:VIEW', 'USER:VIEW']);
       const done = await run('PUT /api/admin/admins/:id', 'support', {
         params: { id: '1005' },
-        body: { roleIds: ['6'] },
+        body: { username: 'newhire', roleIds: ['6'] },
       });
       expect(done.status).toBe(200);
     });
@@ -810,7 +1032,10 @@ describe('what an administrator may grant: only what they hold', () => {
       const target = { params: { id: '1003' } };
       const before = JSON.stringify([adminOf('finance'), systemState.extras.get('1003')]);
       const answers = [
-        await run('PUT /api/admin/admins/:id', 'support', { ...target, body: { roleIds: ['6'] } }),
+        await run('PUT /api/admin/admins/:id', 'support', {
+          ...target,
+          body: { username: 'finance', roleIds: ['6'] },
+        }),
         await run('POST /api/admin/admins/:id/status', 'support', {
           ...target,
           body: { status: 'DISABLED' },

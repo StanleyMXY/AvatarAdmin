@@ -190,7 +190,7 @@ export default function SessionListPage() {
       ...(accountId ? { accountId } : {}),
       ...(guestFlag === undefined ? {} : { guest: guestFlag }),
       ...(range ?? {}),
-      ...(ongoingFlag === undefined ? {} : { ongoing: ongoingFlag }),
+      ...(ongoingFlag === undefined ? {} : { inProgress: ongoingFlag }),
       ...(deadline === 'DEADLINE' ? { endReason: 'DEADLINE' as const } : {}),
     });
   };

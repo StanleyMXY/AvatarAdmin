@@ -22,15 +22,19 @@ export function parseAccountIds(text: string): string[] {
 
 export type ContentValues = { title: string; body: string; link: LinkTargetValue };
 
-/** The words and the link of a push as the request wants them; the picture is its upload id, never an address. */
-export function contentFields(values: ContentValues, uploadId?: string): ContentFields {
+/**
+ * The words and the link of a push as the request wants them; the picture is its upload id, never an
+ * address (the backend refuses one). A new upload id replaces the picture, `null` removes it, and
+ * nothing keeps it. The `imageUrl` that a read gave is never sent back.
+ */
+export function contentFields(values: ContentValues, uploadId?: string | null): ContentFields {
   const linkType = values.link.linkType;
   return {
     title: trimSpec(values.title),
     body: trimSpec(values.body),
     linkType,
     linkTarget: linkType === 'NONE' ? '' : values.link.linkTarget,
-    ...(uploadId ? { uploadId } : {}),
+    ...(uploadId === null ? { uploadId: null } : uploadId ? { uploadId } : {}),
   };
 }
 
@@ -76,7 +80,7 @@ export type ScheduleValues = ContentValues &
   };
 
 /** The request body of a periodic push: only the day field of the chosen repeat is sent. */
-export function scheduleFields(values: ScheduleValues, uploadId?: string): ScheduleFields {
+export function scheduleFields(values: ScheduleValues, uploadId?: string | null): ScheduleFields {
   return {
     repeat: values.repeat,
     ...(values.repeat === 'WEEKLY'

@@ -48,3 +48,22 @@ export function languageName(tag: string, locale: string): string {
     return tag;
   }
 }
+
+/** The text of one language of a texts field, trimmed with the contract's set ('' when there is none). */
+export const textOf = (value: Texts | undefined, tag: string): string =>
+  trimSpec(value?.[tag] ?? '');
+
+/**
+ * Where the backend's refusals of a texts field go in a form: `names.en`, `names.th` and the like
+ * are about the field `names`, so they are given as aliases of it for `failureToForm`.
+ */
+export function tagAliases(error: unknown, field: string): Record<string, string> {
+  const details = (error as { details?: { ref?: unknown }[] } | null)?.details;
+  const aliases: Record<string, string> = {};
+  for (const detail of Array.isArray(details) ? details : []) {
+    if (typeof detail?.ref === 'string' && detail.ref.startsWith(`${field}.`)) {
+      aliases[detail.ref] = field;
+    }
+  }
+  return aliases;
+}

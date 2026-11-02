@@ -34,3 +34,7 @@
 **请求（任选其一）：** `GET /me` 增加 `roleIds`（字符串数组），或 `GET /roles` 的每行增加 `heldByMe`（布尔）。有了它，页面可以对这一行的“编辑”直接禁用并写明原因（和管理员页对自己那一行的做法一致）。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：17、18、19）。
+
+核对于 2026-11-02

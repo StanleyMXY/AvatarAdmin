@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { App, Typography } from 'antd';
 import { useCallback } from 'react';
+import { ApiError } from '../../request/errors';
 import { listConfig } from '../../services/config';
 import { describeFailure } from '../../session/describe';
 import type { Translator } from '../../utils/displayText';
@@ -28,17 +29,32 @@ export async function readPhoneSignIn(): Promise<boolean | null> {
   }
 }
 
+/** The detail the backend gives when a channel write would leave no enabled OTP channel, or a country without one: its `ref` is the entity, not a field of a form. */
+const CHANNEL_ENTITY = 'SmsChannel';
+const OUT_OF_RANGE = 'OUT_OF_RANGE';
+
 /**
- * The words of a failed write. When the write was one that the question was asked for and the
- * backend answers INVALID_REQUEST, a line follows the words of the code that says what the refusal
- * means: the backend refuses while phone sign-in is on or phone-number accounts exist (contract
- * 23.4). The backend's own message is never shown.
+ * True when the backend refused a channel write because it would remove the last enabled OTP
+ * channel, or leave a country without one, while phone sign-in is on or phone-number accounts exist
+ * (contract 23.4). The two cases have the same `ref` and `reason` (answers 41); the page does not
+ * judge this beforehand beyond the question it asks: the answer is the only source.
  */
-export function guardedFailureText(intl: Translator, error: unknown, guarded: boolean): string {
-  const { error: failure, text } = describeFailure(intl, error);
-  return guarded && failure.code === 'INVALID_REQUEST'
-    ? `${text} ${intl.formatMessage({ id: 'sms.guard.refused' })}`
-    : text;
+export function isLastChannelRefusal(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.code === 'INVALID_REQUEST' &&
+    error.details.some((d) => d.ref === CHANNEL_ENTITY && d.reason === OUT_OF_RANGE)
+  );
+}
+
+/**
+ * The words of a failed channel write. The refusal above has one fixed text that covers both of its
+ * cases; anything else is the words of the code. The backend's own message is never shown.
+ */
+export function guardedFailureText(intl: Translator, error: unknown): string {
+  return isLastChannelRefusal(error)
+    ? intl.formatMessage({ id: 'sms.channels.lastRefused' })
+    : describeFailure(intl, error).text;
 }
 
 /**

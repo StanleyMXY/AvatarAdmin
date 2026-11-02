@@ -50,7 +50,7 @@ const messages: Record<string, string> = {
 
   'avatar.key.required': '请填写键。',
   'avatar.key.fixed': '条目创建后，键不能再改。',
-  'avatar.names.required': '至少填一种语言的名称。',
+  'avatar.names.required': '请填写英文（en）名称；其他语言可不填。',
   'avatar.sortOrder.whole': '排序必须是整数。',
   'avatar.spec.required': '请填写生成描述。',
   'avatar.spec.length': '生成描述必须是 1 到 {max} 个字符。',
@@ -67,6 +67,10 @@ const messages: Record<string, string> = {
   // ---- cosmetics ----
   'avatar.cosmetics.note':
     '用户可以给形象选的服装和背景。用户不能自己输入描述。每种类型有一个免费的默认条目。',
+  'avatar.cosmetics.pageFilterNote':
+    '“是否上架”和“适用风格”筛选只是把本页里不符合的行隐藏。后端只能按类型筛选，所以页数和总数仍然包含该类型的所有条目。',
+  'avatar.cosmetics.pageFilter':
+    '本页 {onPage} 个条目中有 {shown} 个符合所选的上架状态和适用风格。页数和总数（{total}）包含该类型的所有条目；要看更多请翻到其他页。',
   'avatar.cosmetics.kind': '类型',
   'avatar.cosmetics.kind.OUTFIT': '服装',
   'avatar.cosmetics.kind.BACKGROUND': '背景',
@@ -77,7 +81,8 @@ const messages: Record<string, string> = {
   'avatar.cosmetics.saved': '已保存。',
   'avatar.cosmetics.priceWhole': '价格必须是 0 或更大的整数。',
   'avatar.creditPrice.hint': '留空表示不能用额度兑换。',
-  'avatar.isDefault.hint': '该类型唯一的免费默认条目。',
+  'avatar.isDefault.hint': '保存后，同一种类的其他默认条目会自动取消。',
+  'avatar.cosmetics.defaultKept': '该种类必须保留一个启用、免费、两种风格都适用的默认条目。',
   'avatar.preview.required': '请先上传预览图。',
   'avatar.preview.rejected': '服务器没有接受上传的图片，请重新上传。',
 
@@ -113,7 +118,7 @@ const messages: Record<string, string> = {
   'avatar.declarations.notRequired': '当前部署不要求勾选声明。',
   'avatar.declarations.texts': '文案',
   'avatar.declarations.textsHint': '文字由律师定，有几种语言就填几种。',
-  'avatar.declarations.textsRequired': '至少填一种语言的文案。',
+  'avatar.declarations.textsRequired': '请填写英文（en）文案；其他语言可不填。',
   'avatar.declarations.versionRequired': '请填写版本。',
 
   // ---- renderer models ----

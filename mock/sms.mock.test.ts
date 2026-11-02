@@ -361,38 +361,125 @@ describe('updating a channel', () => {
     expect(channelBy('gw_th_otp').credentials).toEqual({ token: 'fresh-one' });
   });
 
-  // 400 EMPTY_NOT_ALLOWED on credentials: a null value, a null or empty name, and anything that is
-  // not a map of text values. Nothing is changed by the refused request.
+  // What the real backend does with `credentials` (answers 5): a null value is 400 EMPTY_NOT_ALLOWED
+  // on credentials; a body that cannot be read as a map of text is 400 INVALID_REQUEST without
+  // details; null, {} and an absent key mean "unchanged" and succeed; an empty name and an empty
+  // value are accepted. Nothing is changed by a refused request.
+  it('refuses a null value as 400 EMPTY_NOT_ALLOWED on credentials, on a create and on an update', async () => {
+    const id = channelBy('gw_th_otp').id;
+    const before = JSON.stringify(smsState.channels.get(id));
+    const { channelCode: _code, enabled: _e, ...patch } = goodChannel();
+    const credentials = { apiKey: null };
+    const updated = await send(CHANNEL_UPDATE, { ...patch, credentials }, { id });
+    expect([updated.status, updated.body.code, updated.body.data.details]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }],
+    ]);
+    expect(JSON.stringify(smsState.channels.get(id))).toBe(before);
+    const count = smsState.channels.size;
+    const created = await send(CHANNEL_CREATE, goodChannel({ credentials }));
+    expect([created.status, created.body.data.details]).toEqual([
+      400,
+      [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }],
+    ]);
+    expect(smsState.channels.size).toBe(count);
+  });
+
+  // The old way of writing it (one string) cannot be read as a map: 400 INVALID_REQUEST with no details.
   it.each([
-    ['a null value', { apiKey: null }],
-    ['a value that is not text', { apiKey: 5 }],
-    ['an empty name', { '': 'v' }],
-    ['a name of blanks', { '   ': 'v' }],
     ['text instead of a map', 'a-single-secret'],
     ['a list', ['a']],
-    ['null', null],
   ])(
-    'refuses credentials with %s: 400 on credentials, on a create and on an update',
+    'refuses credentials with %s: 400 INVALID_REQUEST without details',
     async (_name, credentials) => {
       const id = channelBy('gw_th_otp').id;
       const before = JSON.stringify(smsState.channels.get(id));
       const { channelCode: _code, enabled: _e, ...patch } = goodChannel();
       const updated = await send(CHANNEL_UPDATE, { ...patch, credentials }, { id });
-      expect([updated.status, updated.body.code, updated.body.data.details]).toEqual([
+      expect([updated.status, updated.body.code, updated.body.data]).toEqual([
         400,
         'INVALID_REQUEST',
-        [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }],
+        null,
       ]);
       expect(JSON.stringify(smsState.channels.get(id))).toBe(before);
       const count = smsState.channels.size;
       const created = await send(CHANNEL_CREATE, goodChannel({ credentials }));
-      expect([created.status, created.body.data.details]).toEqual([
+      expect([created.status, created.body.code, created.body.data]).toEqual([
         400,
-        [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }],
+        'INVALID_REQUEST',
+        null,
       ]);
       expect(smsState.channels.size).toBe(count);
     },
   );
+
+  it('takes credentials: null as "unchanged" and succeeds, on an update and on a create', async () => {
+    const id = channelBy('gw_th_otp').id;
+    const { channelCode: _code, enabled: _e, ...patch } = goodChannel({ name: 'Kept secrets' });
+    const updated = await send(CHANNEL_UPDATE, { ...patch, credentials: null }, { id });
+    expect(updated.status).toBe(200);
+    expect(updated.body.data.name).toBe('Kept secrets');
+    expect(channelBy('gw_th_otp').credentials).toEqual({ apiKey: 'seed-secret-1' });
+    const created = await send(CHANNEL_CREATE, goodChannel({ credentials: null }));
+    expect([created.status, created.body.data.hasCredentials]).toEqual([200, false]);
+  });
+
+  it('accepts an empty name and an empty value, and stores them', async () => {
+    const id = channelBy('gw_th_otp').id;
+    const { channelCode: _code, enabled: _e, ...patch } = goodChannel();
+    expect(
+      (await send(CHANNEL_UPDATE, { ...patch, credentials: { '': 'v', key: '' } }, { id })).status,
+    ).toBe(200);
+    expect(channelBy('gw_th_otp').credentials).toEqual({ '': 'v', key: '' });
+    const created = await send(CHANNEL_CREATE, goodChannel({ credentials: { '   ': '' } }));
+    expect([created.status, created.body.data.hasCredentials]).toEqual([200, true]);
+  });
+
+  it('keeps what the body leaves out or sends as null (answers 78); {} replaces the extension, [] clears the countries', async () => {
+    const id = channelBy('gw_th_otp').id;
+    const before = { ...smsState.channels.get(id) } as MockChannel;
+    await send(CHANNEL_UPDATE, { name: 'Only the name', extConfig: null, countries: null }, { id });
+    expect(smsState.channels.get(id)).toMatchObject({
+      name: 'Only the name',
+      providerCode: before.providerCode,
+      apiUrl: before.apiUrl,
+      extConfig: before.extConfig,
+      countries: before.countries,
+      smsType: before.smsType,
+      priority: before.priority,
+    });
+    const cleared = await send(CHANNEL_UPDATE, { extConfig: {}, countries: [] }, { id });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.extConfig).toEqual({});
+    expect(cleared.body.data.countries).toEqual([]);
+  });
+
+  it('answers the extension as an object always, also for a channel that has none', async () => {
+    const created = await send(CHANNEL_CREATE, goodChannel({ extConfig: null }));
+    expect(created.body.data.extConfig).toEqual({});
+    const many = await get(CHANNELS, { pageSize: 200 });
+    for (const row of many.body.data.items as { extConfig: unknown }[]) {
+      expect(typeof row.extConfig).toBe('object');
+      expect(row.extConfig).not.toBeNull();
+    }
+  });
+
+  it('compares the host of the address with the host list of the provider without regard to case', async () => {
+    const provider = SMS_PROVIDERS.find((p) => p.code === 'gateway-a');
+    if (!provider) throw new Error('no provider');
+    const listed = [...provider.allowedHosts];
+    provider.allowedHosts.push('Mixed.Case.Example.com');
+    try {
+      const answer = await send(
+        CHANNEL_CREATE,
+        goodChannel({ apiUrl: 'https://MIXED.case.example.COM/v1/send' }),
+      );
+      expect(answer.status).toBe(200);
+    } finally {
+      provider.allowedHosts.splice(0, provider.allowedHosts.length, ...listed);
+    }
+  });
 
   it('accepts a value of any language and an empty map on a create (no credentials then)', async () => {
     const created = await send(
@@ -429,6 +516,14 @@ describe('the switch of a channel', () => {
       'enabled:NOT_BOOLEAN',
     ]);
   });
+
+  it('answers the bare channel, not wrapped with warnings (answers 78)', async () => {
+    const id = channelBy('gw_es_promo').id;
+    const answer = await send(CHANNEL_ENABLED, { enabled: true }, { id });
+    expect(answer.body.data).toMatchObject({ id, channelCode: 'gw_es_promo', enabled: true });
+    expect('warnings' in answer.body.data).toBe(false);
+    expect('channel' in answer.body.data).toBe(false);
+  });
 });
 
 describe('the last enabled OTP channel (contract 23.4)', () => {
@@ -448,6 +543,22 @@ describe('the last enabled OTP channel (contract 23.4)', () => {
     const narrow = await send(CHANNEL_UPDATE, goodChannel({ countries: ['VN'] }), { id });
     expect(narrow.body.code).toBe('INVALID_REQUEST');
     expect(smsState.channels.get(id)).toMatchObject({ smsType: 'OTP', countries: ['TH'] });
+  });
+
+  it('refuses with the detail SmsChannel / OUT_OF_RANGE, for the case of no channel left and for a country left without one (answers 41)', async () => {
+    phoneLoginOn();
+    smsState.phoneAccounts = 0;
+    const id = channelBy('gw_th_otp').id;
+    const off = await send(CHANNEL_ENABLED, { enabled: false }, { id });
+    expect([off.status, off.body.code, off.body.data]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      { details: [{ ref: 'SmsChannel', reason: 'OUT_OF_RANGE' }] },
+    ]);
+    const narrow = await send(CHANNEL_UPDATE, goodChannel({ countries: ['VN'] }), { id });
+    expect(refsOf(narrow)).toEqual(['SmsChannel:OUT_OF_RANGE']);
+    const del = await send(CHANNEL_DELETE, {}, { id });
+    expect(refsOf(del)).toEqual(['SmsChannel:OUT_OF_RANGE']);
   });
 
   it('is protected also when phone sign-in is off but there are phone-number accounts', async () => {
@@ -726,7 +837,7 @@ describe('the templates', () => {
       ).toBe(200);
     });
 
-    it('answers the old rule of the last OTP template first, with its own message and no SmsTemplate detail', async () => {
+    it('answers the rule of the last OTP template first, with its own message, and the same detail SmsTemplate / OUT_OF_RANGE as the other case (answers 41)', async () => {
       for (const t of smsState.templates.values())
         if (t.templateCode !== 'otp_en') t.enabled = false;
       const answer = await send(
@@ -737,7 +848,9 @@ describe('the templates', () => {
       expect(answer.body.message).toBe(
         'The last enabled OTP template cannot be removed while phone sign-in is on or phone-number accounts exist',
       );
-      expect(answer.body.data).toBeNull();
+      expect(answer.body.data).toEqual({
+        details: [{ ref: 'SmsTemplate', reason: 'OUT_OF_RANGE' }],
+      });
     });
   });
 

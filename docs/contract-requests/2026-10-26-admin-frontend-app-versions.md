@@ -47,3 +47,7 @@
 `src/components/UploadField.tsx` 不把上传失败告诉页面，也不能藏掉表单里重新露出来的原生"选择文件"框，本任务在自己目录里放了一份 `ApkUpload`；`src/services/channels/getChannels.ts` 和 `mock/channels.mock.ts` 的字段名见第一节第 1 条。这不是契约的问题，不需要后端回复。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：23、47、67、89、90、91、92）。
+
+核对于 2026-11-02

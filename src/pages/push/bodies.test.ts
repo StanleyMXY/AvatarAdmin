@@ -56,6 +56,38 @@ describe('contentFields', () => {
   });
 });
 
+describe('contentFields: the picture of an object that has one (answers 34)', () => {
+  const values = { title: 't', body: 'b', link: { linkType: 'NONE' as const, linkTarget: '' } };
+  it('says nothing about the picture when nothing was chosen, a new id when one was, and null to remove it', () => {
+    expect('uploadId' in contentFields(values)).toBe(false);
+    expect('uploadId' in contentFields(values, undefined)).toBe(false);
+    expect(contentFields(values, 'up-2')).toMatchObject({ uploadId: 'up-2' });
+    expect(contentFields(values, null)).toHaveProperty('uploadId', null);
+  });
+  it('treats an empty id as nothing, never as a removal', () => {
+    expect('uploadId' in contentFields(values, '')).toBe(false);
+  });
+  it('scheduleFields carries the same: null removes, nothing keeps', () => {
+    const schedule = {
+      ...values,
+      repeat: 'DAILY' as const,
+      daysOfWeek: [],
+      dayOfMonth: null,
+      timeOfDay: '09:00',
+      timezone: 'UTC',
+      startDate: '2026-01-01',
+      endDate: null,
+      enabled: true,
+      audience: 'ALL' as const,
+      accountIdsText: '',
+      platforms: [],
+      locales: [],
+    };
+    expect(scheduleFields(schedule, null)).toHaveProperty('uploadId', null);
+    expect('uploadId' in scheduleFields(schedule)).toBe(false);
+  });
+});
+
 describe('audienceFields', () => {
   it('sends the account list alone for ACCOUNT_IDS, even if platforms and languages were chosen before', () => {
     const fields = audienceFields({

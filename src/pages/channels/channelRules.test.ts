@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import enUS from '../../locales/en-US';
 import zhCN from '../../locales/zh-CN';
-import { checkChannelCode, checkPackageName, distributionsFor } from './channelRules';
+import {
+  checkChannelCode,
+  checkChannelName,
+  checkPackageName,
+  distributionsFor,
+} from './channelRules';
 
 const reason = (c: { ok: boolean; reasonKey?: string }) => (c.ok ? null : c.reasonKey);
 
@@ -44,6 +49,35 @@ describe('checkChannelCode: ^[a-z0-9_-]{2,32}$, not unknown, not one that exists
   });
   it('puts the pattern before the rest, so an invalid code is not reported as taken', () => {
     expect(reason(checkChannelCode('Play', ['Play']))).toBe('channels.rule.code');
+  });
+});
+
+describe('checkChannelName: 1 to 64 code points after the ends are cut (answers 90)', () => {
+  it('accepts a name of 1 to 64 code points, of any script and with emoji, and counts code points, not UTF-16 units', () => {
+    for (const name of ['a', 'ก'.repeat(64), '字'.repeat(64), '😀'.repeat(64), 'ñ'.repeat(64)]) {
+      expect(checkChannelName(name).ok, name.slice(0, 4)).toBe(true);
+    }
+    // 64 emoji are 128 UTF-16 units: a count of units would refuse them
+    expect('😀'.repeat(64).length).toBe(128);
+  });
+  it('refuses an empty or blank name and a name of 65 code points', () => {
+    expect(reason(checkChannelName(''))).toBe('channels.rule.nameRequired');
+    expect(reason(checkChannelName(`${String.fromCharCode(0x3000)} `))).toBe(
+      'channels.rule.nameRequired',
+    );
+    for (const name of ['a'.repeat(65), '😀'.repeat(65), 'ع'.repeat(65)]) {
+      expect(reason(checkChannelName(name)), name.slice(0, 4)).toBe('channels.rule.nameTooLong');
+    }
+  });
+  it('cuts the ends first: 64 letters between blanks are fine', () => {
+    expect(checkChannelName(`  ${'a'.repeat(64)}  `).ok).toBe(true);
+  });
+});
+
+describe('checkPackageName: at most 255 characters', () => {
+  it('accepts 255 and refuses 256', () => {
+    expect(checkPackageName('a'.repeat(255)).ok).toBe(true);
+    expect(reason(checkPackageName('a'.repeat(256)))).toBe('channels.rule.packageTooLong');
   });
 });
 

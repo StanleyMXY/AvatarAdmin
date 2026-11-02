@@ -128,7 +128,9 @@ describe('the funnel page: saved funnels', { timeout: 40000 }, () => {
     const url = lastFunnel(calls);
     expect(url.searchParams.get('steps')).toBe(second.steps.join(','));
     expect(url.searchParams.get('windowHours')).toBe(String(second.windowHours));
-    expect(url.searchParams.get('to')).toBe(new Date().toISOString().slice(0, 10));
+    expect(url.searchParams.get('to')).toBe(
+      `${new Date(Date.now() + 86400000).toISOString().slice(0, 10)}T00:00:00Z`,
+    );
     expect(await screen.findByTestId('funnel-result')).toBeInTheDocument();
   });
 
@@ -391,11 +393,13 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
       'register_completed,avatar_created,voice_cloned,session_started',
     );
     expect(url.searchParams.get('windowHours')).toBe('24');
-    const today = new Date().toISOString().slice(0, 10);
-    expect(url.searchParams.get('to')).toBe(today);
-    expect(
-      Date.parse(`${today}T00:00:00Z`) - Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
-    ).toBe(6 * 86400000);
+    // 7 UTC days, today included: [start of the 7th day back, start of tomorrow) as instants ending in Z
+    const tomorrow = `${new Date(Date.now() + 86400000).toISOString().slice(0, 10)}T00:00:00Z`;
+    expect(url.searchParams.get('to')).toBe(tomorrow);
+    expect(url.searchParams.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00Z$/);
+    expect(Date.parse(tomorrow) - Date.parse(url.searchParams.get('from') as string)).toBe(
+      7 * 86400000,
+    );
     expect(screen.getByText(/UTC days/)).toBeInTheDocument();
   });
 
@@ -407,8 +411,8 @@ describe('the funnel page: the query', { timeout: 40000 }, () => {
       await choose(user, presetName(0));
       await waitFor(() => expect(stepTags().length).toBe(2));
       await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
-      expect(lastFunnel(calls).searchParams.get('to')).toBe('2026-10-26');
-      expect(lastFunnel(calls).searchParams.get('from')).toBe('2026-10-20');
+      expect(lastFunnel(calls).searchParams.get('to')).toBe('2026-10-27T00:00:00Z');
+      expect(lastFunnel(calls).searchParams.get('from')).toBe('2026-10-20T00:00:00Z');
     });
   });
 
@@ -810,10 +814,30 @@ describe('the funnel page: the first range', { timeout: 40000 }, () => {
     await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
     const url = lastFunnel(calls);
     expect(
-      Date.parse(`${url.searchParams.get('to')}T00:00:00Z`) -
-        Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
-    ).toBe(2 * 86400000);
+      Date.parse(url.searchParams.get('to') as string) -
+        Date.parse(url.searchParams.get('from') as string),
+    ).toBe(3 * 86400000);
   });
+});
+
+describe('the funnel page: a read that could not be finished', { timeout: 40000 }, () => {
+  it.each([
+    ['TOO_MANY_EVENTS', 'There are too many events in this range to compute the funnel'],
+    ['TOO_SLOW', 'The query took too long'],
+  ] as const)(
+    'says %s in the words of the language, with a shorter range to choose, and no backend words',
+    async (reason, words) => {
+      analyticsStore.readFailure = reason;
+      const { user, calls } = await openPage();
+      await addStep(user, 'a');
+      await addStep(user, 'b');
+      await user.click(queryButton());
+      await waitFor(() => expect(funnelCalls(calls)).toHaveLength(1));
+      const alert = await screen.findByText(new RegExp(words));
+      expect(alert.textContent).toContain(enUS['error.INVALID_REQUEST']);
+      expect(alert.textContent).not.toContain('The events could not be read');
+    },
+  );
 });
 
 describe('the funnel page: the explanation', { timeout: 40000 }, () => {

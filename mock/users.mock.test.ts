@@ -278,6 +278,28 @@ describe('sessions, devices and authentication events', () => {
     expect(times).toEqual([...times].sort().reverse());
   });
 
+  it('gives each session the nine columns of a call row and no end reason (answer 59): the account id is the account asked for and the device is null', async () => {
+    const { body } = await get(SESSIONS, 'root', { pageSize: '50' }, { id: USER.rich });
+    expect(body.data.items.length).toBeGreaterThan(2);
+    for (const row of body.data.items) {
+      expect(Object.keys(row).sort()).toEqual(
+        [
+          'accountId',
+          'deviceId',
+          'durationSeconds',
+          'endedAt',
+          'id',
+          'language',
+          'modelTier',
+          'requestedAt',
+          'startedAt',
+        ].sort(),
+      );
+      expect(row.accountId).toBe(USER.rich);
+      expect(row.deviceId).toBeNull();
+    }
+  });
+
   it('gives the last six characters of the push token, never the token, and no paging', async () => {
     const { body } = await get(DEVICES, 'root', {}, { id: USER.rich });
     expect(body.data.total).toBeUndefined();

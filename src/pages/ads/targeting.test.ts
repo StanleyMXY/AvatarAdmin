@@ -81,40 +81,42 @@ describe('toTargeting', () => {
     });
   });
 
-  it('writes null for a key that the unit had and the form emptied, so that a merge patch removes it, and for no other key', () => {
-    const before = { geo: ['TH'], languages: ['th'], app_version_min: '1.0' };
-    expect(toTargeting({ ...emptyTargetingForm(), languages: ['th'] }, before)).toEqual({
+  // Answers 77: the update replaces the whole targeting. An emptied key is simply not sent; nothing is
+  // removed with null, so there is no null in what is sent, for any of the six keys.
+  it('writes the whole object and leaves an emptied key out, with no null for any of the six keys', () => {
+    const full = {
+      platforms: ['IOS' as const],
+      geo: ['TH'],
+      osVersionMin: '13',
+      appVersionMin: '1.0',
       languages: ['th'],
-      geo: null,
-      app_version_min: null,
-    });
-    expect(toTargeting(emptyTargetingForm(), {})).toEqual({});
-    expect(toTargeting(emptyTargetingForm(), null)).toEqual({});
-  });
-
-  it('writes null for every one of the six keys when the form emptied it, under the name the backend uses', () => {
-    const before = {
+      dayParts: [{ start: '8:00', end: '9:00' }],
+    };
+    expect(toTargeting(full)).toEqual({
       platforms: ['IOS'],
       geo: ['TH'],
       os_version_min: '13',
       app_version_min: '1.0',
       languages: ['th'],
       day_parts: [{ start: '8:00', end: '9:00' }],
-    };
-    expect(toTargeting(emptyTargetingForm(), before)).toEqual({
-      platforms: null,
-      geo: null,
-      os_version_min: null,
-      app_version_min: null,
-      languages: null,
-      day_parts: null,
     });
-    // The last time row removed: the key `day_parts` (not `dayParts`) goes as null.
-    const withoutParts = { ...emptyTargetingForm(), platforms: ['IOS'] };
-    const sent = toTargeting(withoutParts, before);
-    expect(Object.keys(sent)).toContain('day_parts');
-    expect(sent.day_parts).toBeNull();
-    expect(Object.keys(sent)).not.toContain('dayParts');
+    expect(toTargeting({ ...emptyTargetingForm(), languages: ['th'] })).toEqual({
+      languages: ['th'],
+    });
+    expect(toTargeting(emptyTargetingForm())).toEqual({});
+    for (const key of [
+      'platforms',
+      'geo',
+      'osVersionMin',
+      'appVersionMin',
+      'languages',
+      'dayParts',
+    ] as const) {
+      const emptied = { ...full, [key]: emptyTargetingForm()[key] };
+      const sent = toTargeting(emptied as typeof full);
+      expect(Object.values(sent).includes(null as never), key).toBe(false);
+      expect(Object.keys(sent).length, key).toBe(5);
+    }
   });
 
   it('does not send a row of the time list that is half filled in', () => {

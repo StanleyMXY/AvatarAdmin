@@ -23,6 +23,9 @@ const lastEvents = (calls: { url: string }[]) =>
 const dataRows = () =>
   Array.from(document.querySelectorAll('tbody tr.ant-table-row')) as HTMLElement[];
 
+/** A row of the mock event log as the backend sends it in the event list: the name is `name`. */
+const asSent = ({ eventName, ...rest }: AnalyticsEventRow) => ({ ...rest, name: eventName });
+
 const event = (over: Partial<AnalyticsEventRow>): AnalyticsEventRow => ({
   id: '1',
   eventName: 'app_open',
@@ -46,7 +49,7 @@ const answer = (items: AnalyticsEventRow[], total = items.length) =>
         '200',
         c.url.includes('event-names')
           ? { items: ['app_open', 'session_started', 'register_completed'] }
-          : { items: items.map(({ source: _s, seq: _q, ...rest }) => rest), total },
+          : { items: items.map(asSent), total },
       ),
     ),
   );
@@ -58,10 +61,11 @@ describe('the event detail page', { timeout: 30000 }, () => {
     renderPage(<DetailPage />);
     await waitFor(() => expect(eventCalls(calls)).toHaveLength(1));
     const url = lastEvents(calls);
+    // two days, today and yesterday: the start of yesterday to the start of tomorrow
     expect(
-      Date.parse(`${url.searchParams.get('to')}T00:00:00Z`) -
-        Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
-    ).toBe(86400000);
+      Date.parse(url.searchParams.get('to') as string) -
+        Date.parse(url.searchParams.get('from') as string),
+    ).toBe(2 * 86400000);
   });
 
   it('writes in the header itself that the client time is self-reported, not only in a hint that a keyboard or a finger cannot open', async () => {
@@ -93,11 +97,17 @@ describe('the event detail page', { timeout: 30000 }, () => {
     const url = lastEvents(calls);
     expect(url.searchParams.get('page')).toBe('1');
     expect(url.searchParams.get('pageSize')).toBe('20');
-    const today = new Date().toISOString().slice(0, 10);
-    expect(url.searchParams.get('to')).toBe(today);
-    expect(
-      Date.parse(`${today}T00:00:00Z`) - Date.parse(`${url.searchParams.get('from')}T00:00:00Z`),
-    ).toBe(6 * 86400000);
+    // the last 7 UTC days, today included: [start of the 7th day back, start of tomorrow), as instants
+    const tomorrow = new Date(
+      Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`) + 86400000,
+    )
+      .toISOString()
+      .replace('.000Z', 'Z');
+    expect(url.searchParams.get('to')).toBe(tomorrow);
+    expect(url.searchParams.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}T00:00:00Z$/);
+    expect(Date.parse(tomorrow) - Date.parse(url.searchParams.get('from') as string)).toBe(
+      7 * 86400000,
+    );
     expect(screen.getByText(/UTC days/)).toBeInTheDocument();
   });
 
@@ -108,7 +118,8 @@ describe('the event detail page', { timeout: 30000 }, () => {
       const calls = useMockBackend(analyticsMock);
       renderPage(<DetailPage />);
       await waitFor(() => expect(eventCalls(calls)).toHaveLength(1));
-      expect(lastEvents(calls).searchParams.get('to')).toBe('2026-10-26');
+      expect(lastEvents(calls).searchParams.get('to')).toBe('2026-10-27T00:00:00Z');
+      expect(lastEvents(calls).searchParams.get('from')).toBe('2026-10-20T00:00:00Z');
     });
   });
 
@@ -223,7 +234,9 @@ describe('the event detail page', { timeout: 30000 }, () => {
     const url = lastEvents(calls);
     expect(url.searchParams.get('accountId')).toBe('2001');
     expect(url.searchParams.get('deviceId')).toBe('dev-1');
-    expect(url.searchParams.get('eventName')).toBe('session_started');
+    expect(url.searchParams.get('name')).toBe('session_started');
+    // the backend calls the parameter `name`; `eventName` is not a parameter of this endpoint
+    expect(url.searchParams.has('eventName')).toBe(false);
     expect(url.searchParams.get('page')).toBe('1');
   });
 
@@ -264,10 +277,7 @@ describe('the event detail page', { timeout: 30000 }, () => {
     stubFetch((c) =>
       c.url.includes('event-names')
         ? jsonResponse(500, envelope('INTERNAL_ERROR'))
-        : jsonResponse(
-            200,
-            envelope('200', { items: [{ ...event({}), source: undefined }], total: 1 }),
-          ),
+        : jsonResponse(200, envelope('200', { items: [asSent(event({}))], total: 1 })),
     );
     renderPage(<DetailPage />);
     expect(await screen.findByText('203.0.113.*')).toBeInTheDocument();
@@ -298,5 +308,77 @@ describe('the event detail page', { timeout: 30000 }, () => {
     renderPage(<DetailPage />);
     await screen.findByText('zzz', { selector: 'td *, td' });
     expect(dataRows().map((r) => r.querySelectorAll('td')[1]?.textContent)).toEqual(['zzz', 'aaa']);
+  });
+
+  it('reads the platform and the app version from context.platform and context.appVersion', async () => {
+    answer([
+      event({
+        id: '1',
+        eventName: 'app_open',
+        context: { platform: 'IOS', appVersion: '2.7.1', osVersion: '17.5' },
+      }),
+    ]);
+    renderPage(<DetailPage />);
+    const row = (await screen.findByText('app_open', { selector: 'td *, td' })).closest('tr');
+    const cells = Array.from((row as HTMLElement).querySelectorAll('td')).map(
+      (td) => td.textContent,
+    );
+    expect(cells).toContain('IOS');
+    expect(cells).toContain('2.7.1');
+  });
+
+  it('shows dashes for the device, the platform and the version of an event of the backend itself (source SERVER), which has no device and no context', async () => {
+    answer([
+      event({
+        id: '9',
+        eventName: 'subscription_started',
+        source: 'SERVER',
+        deviceId: null,
+        context: null,
+        clientTime: null,
+        ip: null,
+        country: null,
+      }),
+    ]);
+    renderPage(<DetailPage />);
+    const row = (await screen.findByText('subscription_started', { selector: 'td *, td' })).closest(
+      'tr',
+    ) as HTMLElement;
+    const headers = screen.getAllByRole('columnheader').map((th) => th.textContent ?? '');
+    const cells = Array.from(row.querySelectorAll('td')).map((td) => td.textContent);
+    const at = (title: RegExp) => cells[headers.findIndex((h) => title.test(h))];
+    expect(at(/^Device/)).toBe('—');
+    expect(at(/^Platform/)).toBe('—');
+    expect(at(/^App version/)).toBe('—');
+    expect(document.body.textContent).not.toMatch(/null|undefined/);
+  });
+
+  it('keys the rows by the id of the backend: two rows with the same time and name stay two rows', async () => {
+    answer([
+      event({ id: 'a1', eventName: 'dup_evt', seq: 1 }),
+      event({ id: 'a2', eventName: 'dup_evt', seq: 0 }),
+    ]);
+    renderPage(<DetailPage />);
+    await screen.findAllByText('dup_evt', { selector: 'td *, td' });
+    expect(dataRows()).toHaveLength(2);
+  });
+
+  it('names the reason when the read took too long, in the words of the language, and not the backend message', async () => {
+    stubFetch((c) =>
+      c.url.includes('event-names')
+        ? jsonResponse(200, envelope('200', { items: [] }))
+        : jsonResponse(
+            400,
+            envelope(
+              'INVALID_REQUEST',
+              { details: [{ ref: 'from', reason: 'TOO_SLOW' }] },
+              'raw backend words',
+            ),
+          ),
+    );
+    renderPage(<DetailPage />);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('The query took too long. Choose a shorter time range');
+    expect(alert.textContent).not.toContain('raw backend words');
   });
 });

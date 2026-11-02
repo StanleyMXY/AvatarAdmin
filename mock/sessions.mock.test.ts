@@ -106,9 +106,19 @@ describe('the session endpoints of the mock backend', () => {
     const accounts = (await list({ guest: 'false', pageSize: '200' })).body.data.items as Row[];
     expect(accounts.length).toBeGreaterThan(0);
     expect(accounts.every((r) => r.accountId !== null)).toBe(true);
-    const bad = await list({ guest: 'maybe' });
-    expect(bad.status).toBe(400);
-    expect(bad.body.data.details).toEqual([{ ref: 'guest', reason: 'NOT_BOOLEAN' }]);
+    // only the lower-case words are known (answer 54): anything else is 400 OUT_OF_RANGE on the parameter
+    for (const value of ['maybe', 'TRUE', 'True', '1', 'yes']) {
+      const bad = await list({ guest: value });
+      expect([value, bad.status, bad.body.data.details]).toEqual([
+        value,
+        400,
+        [{ ref: 'guest', reason: 'OUT_OF_RANGE' }],
+      ]);
+    }
+    // an empty value is the same as not sent
+    expect((await list({ guest: '', pageSize: '200' })).body.data.total).toBe(
+      sessionsState.sessions.length,
+    );
   });
 
   it('filters by the account id, matched whole', async () => {
@@ -116,9 +126,18 @@ describe('the session endpoints of the mock backend', () => {
       .items as Row[];
     expect(mine.length).toBeGreaterThan(1);
     expect(mine.every((r) => r.accountId === SESSION.registeredAccount)).toBe(true);
-    const part = await list({ accountId: SESSION.registeredAccount.slice(0, 12) });
-    expect(part.body.data.items).toHaveLength(0);
-    expect(part.body.data.total).toBe(0);
+    // an account id that is not a UUID is refused, not looked for (answer 54)
+    for (const value of [SESSION.registeredAccount.slice(0, 12), '2005', 'x']) {
+      const part = await list({ accountId: value });
+      expect([value, part.status, part.body.data.details]).toEqual([
+        value,
+        400,
+        [{ ref: 'accountId', reason: 'INVALID_FORMAT' }],
+      ]);
+    }
+    const none = await list({ accountId: '00000000-0000-4000-8000-0000000000ff' });
+    expect(none.status).toBe(200);
+    expect(none.body.data.total).toBe(0);
   });
 
   it('filters by the requested time: from is included, to is not', async () => {
@@ -131,23 +150,54 @@ describe('the session endpoints of the mock backend', () => {
     expect(inside.some((r) => r.requestedAt === from)).toBe(true);
   });
 
-  it('refuses a time that is not an instant, and a range that ends before it starts', async () => {
+  it('refuses a time that is not an instant ending in Z as INVALID_FORMAT on its own parameter', async () => {
     const bad = await list({ from: '2026-10-01' });
     expect(bad.status).toBe(400);
-    expect(bad.body.data.details).toEqual([{ ref: 'from', reason: 'INVALID_INSTANT' }]);
-    const reversed = await list({ from: '2026-10-02T00:00:00Z', to: '2026-10-01T00:00:00Z' });
-    expect(reversed.status).toBe(400);
-    expect(reversed.body.data.details).toEqual([{ ref: 'to', reason: 'OUT_OF_RANGE' }]);
+    expect(bad.body.data.details).toEqual([{ ref: 'from', reason: 'INVALID_FORMAT' }]);
+    const badTo = await list({ to: 'today' });
+    expect(badTo.body.data.details).toEqual([{ ref: 'to', reason: 'INVALID_FORMAT' }]);
+    // an offset is not known to be accepted (answer 54, item 4): only the Z form is
+    const offset = await list({ from: '2026-10-01T08:00:00+08:00' });
+    expect(offset.body.data.details).toEqual([{ ref: 'from', reason: 'INVALID_FORMAT' }]);
   });
 
-  it('filters the sessions that are still going (no end) and the ones that ended', async () => {
-    const going = (await list({ ongoing: 'true', pageSize: '200' })).body.data.items as Row[];
+  it('does not check that from is before to and has no longest range: a backwards range finds nothing, it is not an error', async () => {
+    const reversed = await list({ from: '2026-10-02T00:00:00Z', to: '2026-10-01T00:00:00Z' });
+    expect(reversed.status).toBe(200);
+    expect(reversed.body.data.total).toBe(0);
+    const wide = await list({ from: '2000-01-01T00:00:00Z', to: '2100-01-01T00:00:00Z' });
+    expect(wide.status).toBe(200);
+    expect(wide.body.data.total).toBe(sessionsState.sessions.length);
+    // either end can be sent alone
+    expect((await list({ from: '2000-01-01T00:00:00Z' })).status).toBe(200);
+    expect((await list({ to: '2100-01-01T00:00:00Z' })).status).toBe(200);
+  });
+
+  it('filters the sessions that are still going (no end) and the ones that ended, with inProgress', async () => {
+    const going = (await list({ inProgress: 'true', pageSize: '200' })).body.data.items as Row[];
     expect(going.length).toBeGreaterThan(1);
     expect(going.every((r) => r.endedAt === null && r.durationSeconds === null)).toBe(true);
-    const ended = (await list({ ongoing: 'false', pageSize: '200' })).body.data.items as Row[];
+    const ended = (await list({ inProgress: 'false', pageSize: '200' })).body.data.items as Row[];
     expect(ended.every((r) => r.endedAt !== null)).toBe(true);
     expect(going.length + ended.length).toBe(sessionsState.sessions.length);
-    expect((await list({ ongoing: 'x' })).status).toBe(400);
+    for (const value of ['x', '1', 'TRUE']) {
+      const bad = await list({ inProgress: value });
+      expect([value, bad.status, bad.body.data.details]).toEqual([
+        value,
+        400,
+        [{ ref: 'inProgress', reason: 'OUT_OF_RANGE' }],
+      ]);
+    }
+    // an empty value is the same as not sent
+    expect((await list({ inProgress: '', pageSize: '200' })).body.data.total).toBe(
+      sessionsState.sessions.length,
+    );
+  });
+
+  it('ignores a parameter it does not know, as the backend does: `ongoing` filters nothing and is no error', async () => {
+    const all = await list({ ongoing: 'true', pageSize: '200' });
+    expect(all.status).toBe(200);
+    expect(all.body.data.total).toBe(sessionsState.sessions.length);
   });
 
   it('filters the sessions ended by the deadline with endReason=DEADLINE, and refuses an unknown reason', async () => {
@@ -164,7 +214,7 @@ describe('the session endpoints of the mock backend', () => {
 
   it('combines the filters', async () => {
     const rows = (
-      await list({ guest: 'false', ongoing: 'false', endReason: 'DEADLINE', pageSize: '200' })
+      await list({ guest: 'false', inProgress: 'false', endReason: 'DEADLINE', pageSize: '200' })
     ).body.data.items as Row[];
     expect(rows.length).toBeGreaterThan(0);
     for (const r of rows) {

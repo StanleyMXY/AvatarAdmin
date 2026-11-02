@@ -85,8 +85,9 @@ export function refusalTexts(
 ): RefusalTexts {
   const has = (id: string) => Boolean(intl.messages[id]);
   const rows = new Map<string, string>();
-  const notKeys: string[] = [];
-  const hiddenKeys: string[] = [];
+  // The words that go to the top, in the order of the details: those of a ref that is no setting
+  // key always, those of a key the form does not show only when the saved row has none of its own.
+  const top: { text: string; hiddenKey: boolean }[] = [];
   error.details.forEach((detail) => {
     const isKey = specOf(detail.ref) !== undefined;
     if (isKey && OWN_VALUE_WORDS.has(detail.ref) && detail.ref !== origin) return;
@@ -109,12 +110,13 @@ export function refusalTexts(
       if (languages.length > 0)
         text = `${text} ${intl.formatMessage({ id: 'config.refusal.missingLanguages' }, { languages: languages.join(', ') })}`;
     }
-    if (!isKey) notKeys.push(text);
+    if (!isKey) top.push({ text, hiddenKey: false });
     else if (shown.has(detail.ref)) {
       if (!rows.has(detail.ref)) rows.set(detail.ref, text);
-    } else hiddenKeys.push(text);
+    } else top.push({ text, hiddenKey: true });
   });
   // A key the form does not show is spoken for by the words of the row that was saved; only when
   // that row has none of its own do the words of the others go to the top.
-  return { rows, top: rows.has(origin) ? notKeys : [...notKeys, ...hiddenKeys] };
+  const saved = rows.has(origin);
+  return { rows, top: top.filter((x) => !(x.hiddenKey && saved)).map((x) => x.text) };
 }

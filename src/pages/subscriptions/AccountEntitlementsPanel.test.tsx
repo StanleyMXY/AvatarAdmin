@@ -333,26 +333,59 @@ describe('granting a limited-time entitlement', { timeout: 30000 }, () => {
     expect((writes(calls)[0].body as { reason: string }).reason).toBe('😀'.repeat(500));
   });
 
-  it('refuses a number of days that is not a whole number of 1 or more, without sending', async () => {
+  it('refuses a number of days below 1 or above 3650 (ten years) without sending, and sends 3650', async () => {
     const calls = useMockBackend(subscriptionsMock);
     const { user, dialog } = await open();
     await fill(user, dialog, '0', 'ok');
+    for (const days of ['0', '3651', '99999']) {
+      fireEvent.change(within(dialog).getByLabelText('Duration (days)'), {
+        target: { value: days },
+      });
+      await user.click(within(dialog).getByRole('button', { name: /Submit|提 交/ }));
+      expect(
+        await within(dialog).findByText('The value is outside the allowed range.'),
+        days,
+      ).toBeInTheDocument();
+      expect(writes(calls), days).toHaveLength(0);
+    }
+    fireEvent.change(within(dialog).getByLabelText('Duration (days)'), {
+      target: { value: '3650' },
+    });
     await user.click(within(dialog).getByRole('button', { name: /Submit|提 交/ }));
-    expect(
-      await within(dialog).findByText('The value is outside the allowed range.'),
-    ).toBeInTheDocument();
-    expect(writes(calls)).toHaveLength(0);
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect((writes(calls)[0].body as { durationDays: number }).durationDays).toBe(3650);
   });
 
   it('shows the refusal of the backend and keeps the dialog open', async () => {
     const calls = useMockBackend(subscriptionsMock);
     const { user, dialog } = await open();
-    await fill(user, dialog, '99999', 'ok');
+    const fetchMock = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? jsonResponse(
+            400,
+            envelope('INVALID_REQUEST', {
+              details: [{ ref: 'durationDays', reason: 'OUT_OF_RANGE' }],
+            }),
+          )
+        : fetchMock(input, init),
+    );
+    await fill(user, dialog, '30', 'ok');
     await user.click(within(dialog).getByRole('button', { name: /Submit|提 交/ }));
     expect(
       await within(dialog).findByText('The value is outside the allowed range.'),
     ).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(calls.length).toBeGreaterThan(0);
+  });
+
+  it('says that an entitlement that does not exist any more is not found (404), in the dialog, and keeps it open', async () => {
+    const calls = useMockBackend(subscriptionsMock);
+    const { user, dialog } = await open();
+    await fill(user, dialog, '5', 'ok');
+    subscriptionsState().defs = subscriptionsState().defs.filter((d) => d.key !== 'plus_th');
+    await user.click(within(dialog).getByRole('button', { name: /Submit|提 交/ }));
+    expect(await within(dialog).findByText('The item was not found.')).toBeInTheDocument();
     expect(writes(calls)).toHaveLength(1);
   });
 

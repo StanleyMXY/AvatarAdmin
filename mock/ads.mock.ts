@@ -238,13 +238,19 @@ const COUNTRY = /^[A-Z]{2}$/;
 const LANGUAGE_TAG = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 const CLOCK = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
+/**
+ * The targeting is checked as the backend does (answers 77): an object whose keys are the six known
+ * ones; a key whose value is null is skipped, whatever the key, and is kept as null.
+ */
 function checkTargeting(value: unknown, details: Detail[]): void {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     details.push({ ref: 'targeting', reason: 'OUT_OF_RANGE' });
     return;
   }
-  const targeting = value as Record<string, unknown>;
-  for (const key of Object.keys(targeting)) {
+  const targeting = Object.fromEntries(
+    Object.entries(value).filter(([, v]) => v !== null),
+  ) as Record<string, unknown>;
+  for (const key of Object.keys(value)) {
     if (!(TARGETING_KEYS as readonly string[]).includes(key)) {
       details.push({ ref: `targeting.${key}`, reason: 'OUT_OF_RANGE' });
     }
@@ -292,19 +298,43 @@ function checkTargeting(value: unknown, details: Detail[]): void {
   }
 }
 
-/** The targeting after a Merge Patch: a key sent as `null` is removed, the others replace. */
-function mergeTargeting(current: Record<string, unknown>, patch: unknown): Record<string, unknown> {
-  if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) return patch as never;
-  const merged: Record<string, unknown> = { ...current };
-  for (const [key, value] of Object.entries(patch)) {
-    if (value === null) delete merged[key];
-    else merged[key] = value;
-  }
-  return merged;
-}
+/** The targeting a request leaves the unit with: the object sent, whole; null or {} is {}. */
+const targetingOf = (value: unknown): Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
 
-const withoutNulls = (value: Record<string, unknown>): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null));
+// ---- the surfaces (answers 39) ----
+
+const SURFACE_CHANNEL = /^[a-z0-9_-]{2,32}$/;
+
+/**
+ * `surfaces` of a unit: absent is "not named", null and [] are every end. It must be an array of
+ * items with exactly the keys `platform` (ANDROID or IOS) and `channel` (null, or a channel code of
+ * 2 to 32 of a-z, 0-9, - and _); repeats are merged. Anything else: 400 with ref surfaces, OUT_OF_RANGE.
+ */
+function readSurfaces(value: unknown, details: Detail[]): MockUnit['surfaces'] | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return [];
+  const refuse = () => {
+    details.push({ ref: 'surfaces', reason: 'OUT_OF_RANGE' });
+    return undefined;
+  };
+  if (!Array.isArray(value)) return refuse();
+  const out: MockUnit['surfaces'] = [];
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return refuse();
+    const keys = Object.keys(item).sort().join(',');
+    const { platform, channel } = item as { platform?: unknown; channel?: unknown };
+    if (keys !== 'channel,platform') return refuse();
+    if (platform !== 'ANDROID' && platform !== 'IOS') return refuse();
+    if (channel !== null && !(isText(channel) && SURFACE_CHANNEL.test(channel))) return refuse();
+    if (!out.some((x) => x.platform === platform && x.channel === channel)) {
+      out.push({ platform, channel: channel as string | null });
+    }
+  }
+  return out;
+}
 
 // ---- the placements ----
 
@@ -650,8 +680,9 @@ export default {
       body.dailyImpressionCap === undefined
         ? 0
         : whole(body.dailyImpressionCap, 'dailyImpressionCap', details, 0);
-    const targeting = body.targeting === undefined ? {} : body.targeting;
+    const targeting = body.targeting === undefined || body.targeting === null ? {} : body.targeting;
     checkTargeting(targeting, details);
+    const surfaces = readSurfaces(body.surfaces, details);
     throwIf(details);
     const campaign = adsState.campaigns.get(text(body.campaignId));
     if (!campaign) throw notFound('campaign');
@@ -665,7 +696,8 @@ export default {
       placementId: text(body.placementId),
       name,
       status: 'DRAFT',
-      targeting: withoutNulls(targeting as Record<string, unknown>),
+      targeting: targetingOf(targeting) as MockUnit['targeting'],
+      surfaces: surfaces ?? [],
       weight: weight ?? 100,
       dailyImpressionCap: cap ?? 0,
       createdBy: req.admin.id,
@@ -691,11 +723,15 @@ export default {
     if ('dailyImpressionCap' in body) {
       out.dailyImpressionCap = whole(body.dailyImpressionCap, 'dailyImpressionCap', details, 0);
     }
+    // The targeting sent replaces the whole old one, with no merge of keys (answers 77); null or {} clears it.
     if ('targeting' in body) {
-      const merged = mergeTargeting(current.targeting as Record<string, unknown>, body.targeting);
-      checkTargeting(merged, details);
-      out.targeting = merged as MockUnit['targeting'];
+      const next = body.targeting === null ? {} : body.targeting;
+      checkTargeting(next, details);
+      out.targeting = targetingOf(next) as MockUnit['targeting'];
     }
+    // The surfaces too: not named is unchanged, null or [] is every end (answers 39).
+    const surfaces = readSurfaces(body.surfaces, details);
+    if (surfaces !== undefined) out.surfaces = surfaces;
     throwIf(details);
     Object.assign(current, out, { updatedBy: req.admin.id, updatedAt: nowIso() });
     return ok(unitRow(current));

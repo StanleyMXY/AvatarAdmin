@@ -9,7 +9,9 @@ import { useLatestRead } from '../../hooks/useLatestRead';
 import { type EventSummaryRow, getEventSummary } from '../../services/analytics';
 import { useAdminMeta } from '../../session/useSession';
 import { formatCount } from '../../utils/ratio';
+import { utcDayRangeToInstants } from '../../utils/utcDay';
 import { defaultRange } from './defaultRange';
+import { rangeFailureText } from './rangeFailure';
 
 const PAGE_SIZE = 50;
 
@@ -26,8 +28,13 @@ export default function EventSummaryPage() {
   const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.analyticsLiveMaxRangeDays));
   // `asked` is a new object at every press of Query, so pressing it again reads again.
   const [asked, setAsked] = useState<DayRange>(draft);
-  const fetcher = useCallback(() => getEventSummary(asked), [asked]);
-  const { data, failure, loading, reload } = useLatestRead(fetcher);
+  // The days are asked as the instants [start of `from`, start of the day after `to`): both always sent.
+  const fetcher = useCallback(
+    () => getEventSummary(utcDayRangeToInstants(asked.from, asked.to)),
+    [asked],
+  );
+  const { data, error, loading, reload } = useLatestRead(fetcher);
+  const failure = error === null ? null : rangeFailureText(intl, error);
 
   const number = (n: number) => formatCount(n, intl.locale);
   const rows = data?.items ?? [];

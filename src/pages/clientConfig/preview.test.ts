@@ -60,6 +60,15 @@ describe('resolvePreview: the value the client gets for one requested language (
     expect(resolvePreview(regional, 'pt-BR-1996')).toMatchObject({ matched: 'pt-BR', value: 'BR' });
   });
 
+  it('when nothing else decides, takes the first of the saved tags in the order of their code units: capitals before small letters, case kept, the default row left out', () => {
+    // 'EN-GB' comes before 'en-AU' as written, though 'en-au' comes before 'en-gb' in lower case
+    const cased = item({ '': 'D', 'en-AU': 'AU', 'EN-GB': 'GB' });
+    expect(resolvePreview(cased, 'en-NZ')).toMatchObject({ matched: 'EN-GB', value: 'GB' });
+    // the same written tags, saved in the other order, give the same answer
+    const reversed = item({ 'EN-GB': 'GB', 'en-AU': 'AU', '': 'D' });
+    expect(resolvePreview(reversed, 'en-NZ')).toMatchObject({ matched: 'EN-GB' });
+  });
+
   it('among several entries of Chinese, picks the script the request implies', () => {
     const many = item({ 'zh-Hant': 'ZT', 'zh-Hans': 'ZS' });
     expect(resolvePreview(many, 'zh-TW')).toMatchObject({ matched: 'zh-Hant' });

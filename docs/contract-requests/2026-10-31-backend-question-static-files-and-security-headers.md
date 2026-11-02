@@ -24,3 +24,7 @@
 没有阻塞：管理端前端的代码不依赖答案；`docs/deploy.md` 的示例在"后端自己加了安全头、后端的 admin 应用不提供前端文件"这两个假设下是对的，已经写明。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：15、16）。
+
+核对于 2026-11-02

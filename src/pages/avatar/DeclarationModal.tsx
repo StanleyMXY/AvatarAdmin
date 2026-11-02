@@ -7,7 +7,7 @@ import { createDeclaration } from '../../services/avatar';
 import { failureToForm } from '../../utils/failureToForm';
 import { trimSpec } from '../../utils/trimSpec';
 import { LocalizedTextsField } from './LocalizedTextsField';
-import { cleanTexts, type Texts } from './localized';
+import { cleanTexts, type Texts, tagAliases, textOf } from './localized';
 
 type Values = { version: string; texts: Texts };
 
@@ -32,7 +32,7 @@ export function DeclarationModal({ open, onClose, onSaved }: Props) {
         texts: cleanTexts(values.texts),
       });
     } catch (error) {
-      failureToForm(intl, form, error, FIELDS);
+      failureToForm(intl, form, error, FIELDS, tagAliases(error, 'texts'));
       fail(error);
       return;
     }
@@ -90,7 +90,7 @@ export function DeclarationModal({ open, onClose, onSaved }: Props) {
           rules={[
             {
               validator: async (_, value: Texts | undefined) => {
-                if (Object.keys(cleanTexts(value)).length === 0) {
+                if (textOf(value, 'en') === '') {
                   throw new Error(t('avatar.declarations.textsRequired'));
                 }
               },

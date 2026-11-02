@@ -8,6 +8,7 @@ import { PagedListTable } from '../../components/PagedListTable';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import {
   type CreditProduct,
+  creditProductKey,
   listAllCreditProducts,
   updateCreditProduct,
 } from '../../services/credits';
@@ -24,12 +25,7 @@ function SaleSwitch({ pack, onChanged }: { pack: CreditProduct; onChanged: () =>
   const { run, pending } = useSingleFlight(async (enabled: boolean) => {
     try {
       await assertPackUnchanged(pack);
-      await updateCreditProduct(pack.id, {
-        credits: pack.credits,
-        enabled,
-        sortOrder: pack.sortOrder,
-        ...(pack.surfaces ? { surfaces: pack.surfaces } : {}),
-      });
+      await updateCreditProduct({ ...pack, enabled });
     } catch (error) {
       if (error instanceof PackChangedError)
         message.warning(t('credits.products.changedMeanwhile'));
@@ -101,7 +97,7 @@ export default function CreditProductsPage() {
   return (
     <>
       <PagedListTable<CreditProduct>
-        rowKey="id"
+        rowKey={creditProductKey}
         columns={columns}
         actionRef={actionRef}
         // A small table of settings: every pack is read (page after page when the backend pages it) and the page is cut here.

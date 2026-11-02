@@ -3,6 +3,7 @@ import type { FeatureGate, FeatureValue, TimelineEvent } from '../../services/su
 import {
   allowUnlimitedFor,
   allowUnsetForDefault,
+  CREDIT_COST_KEYS,
   creditCostEditable,
   hiddenInEntitlement,
   quotaBanners,
@@ -69,10 +70,14 @@ describe('which states a feature value may take', () => {
     expect(hiddenInEntitlement('call.daily_minutes')).toBe(false);
   });
 
-  it('lets only a permanent LIMIT have a credit price, and not avatar.looks_max or credits.period_grant', () => {
+  it('lets only assets.avatar_max and assets.voice_max have a credit price: not every permanent limit, and not avatar.looks_max (also a permanent limit) or credits.period_grant', () => {
     expect(creditCostEditable(gate({ key: 'assets.avatar_max', limitScope: 'PERMANENT' }))).toBe(
       true,
     );
+    expect(creditCostEditable(gate({ key: 'assets.voice_max', limitScope: 'PERMANENT' }))).toBe(
+      true,
+    );
+    // permanent too, and refused by the backend
     expect(creditCostEditable(gate({ key: 'avatar.looks_max', limitScope: 'PERMANENT' }))).toBe(
       false,
     );
@@ -88,10 +93,14 @@ describe('which states a feature value may take', () => {
     expect(
       creditCostEditable(gate({ key: 'ads.removed', kind: 'BOOLEAN', limitScope: null })),
     ).toBe(false);
-    // even if a permanent switch were named credits.period_grant it stays disabled
     expect(creditCostEditable(gate({ key: 'credits.period_grant', limitScope: 'PERMANENT' }))).toBe(
       false,
     );
+    // a permanent limit that is not one of the two is not offered: the rule is the two keys
+    expect(creditCostEditable(gate({ key: 'assets.scene_max', limitScope: 'PERMANENT' }))).toBe(
+      false,
+    );
+    expect(CREDIT_COST_KEYS).toEqual(['assets.avatar_max', 'assets.voice_max']);
   });
 });
 

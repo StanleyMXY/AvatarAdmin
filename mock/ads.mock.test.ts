@@ -474,25 +474,132 @@ describe('the units', () => {
     expect(fine.status).toBe(200);
   });
 
-  it('updates name, targeting, weight and cap only; a null in the targeting removes that key; the campaign and the placement stay', async () => {
+  // Answers 77: `targeting` in a PUT replaces the whole object (no nested merge); null or {} clears it
+  // to {}; a key whose value is null is not checked and is kept as null; the key is checked by name.
+  it('updates name, targeting, weight and cap only; the targeting sent replaces the old one whole; the campaign and the placement stay', async () => {
     const before = (await get(UNIT_ONE, {}, { id: '1' })).body.data;
     expect(before.targeting.geo).toEqual(['TH', 'ID']);
     const after = await send(
       UNIT_UPDATE,
       {
         name: 'New name',
-        targeting: { geo: null, app_version_min: '2.0' },
+        targeting: { app_version_min: '2.0' },
         campaignId: '99',
         placementId: '99',
       },
       { id: '1' },
     );
     expect(after.body.data.name).toBe('New name');
-    expect(after.body.data.targeting).not.toHaveProperty('geo');
-    expect(after.body.data.targeting.app_version_min).toBe('2.0');
-    expect(after.body.data.targeting.platforms).toEqual(before.targeting.platforms);
+    expect(after.body.data.targeting).toEqual({ app_version_min: '2.0' });
     expect(after.body.data.campaignId).toBe(before.campaignId);
     expect(after.body.data.placementId).toBe(before.placementId);
+  });
+
+  it('leaves the targeting alone when the PUT does not name it, and clears it with null or {}', async () => {
+    const before = (await get(UNIT_ONE, {}, { id: '1' })).body.data.targeting;
+    const same = await send(UNIT_UPDATE, { name: 'Only the name' }, { id: '1' });
+    expect(same.body.data.targeting).toEqual(before);
+    expect((await send(UNIT_UPDATE, { targeting: null }, { id: '1' })).body.data.targeting).toEqual(
+      {},
+    );
+    await send(UNIT_UPDATE, { targeting: { geo: ['TH'] } }, { id: '1' });
+    expect((await send(UNIT_UPDATE, { targeting: {} }, { id: '1' })).body.data.targeting).toEqual(
+      {},
+    );
+  });
+
+  it('skips the check of a key whose value is null and keeps it as null, but refuses a key it does not know and an empty version', async () => {
+    const kept = await send(
+      UNIT_UPDATE,
+      { targeting: { geo: null, platforms: ['IOS'] } },
+      { id: '1' },
+    );
+    expect(kept.status).toBe(200);
+    expect(kept.body.data.targeting).toEqual({ geo: null, platforms: ['IOS'] });
+    expect(refs(await send(UNIT_UPDATE, { targeting: { nope: null } }, { id: '1' }))).toEqual([
+      'targeting.nope:OUT_OF_RANGE',
+    ]);
+    expect(
+      refs(await send(UNIT_UPDATE, { targeting: { os_version_min: '' } }, { id: '1' })),
+    ).toEqual(['targeting.os_version_min:OUT_OF_RANGE']);
+  });
+
+  // Answers 39: every unit answers `surfaces`, an array of {platform, channel}; [] means every end.
+  describe('surfaces', () => {
+    it('answers surfaces in the list and in one unit, an array, [] for every end', async () => {
+      const all = await findBy<{ id: string; surfaces: unknown }>(UNITS, {});
+      expect(all.length).toBeGreaterThan(0);
+      for (const u of all) expect(Array.isArray(u.surfaces)).toBe(true);
+      expect(all.some((u) => (u.surfaces as unknown[]).length === 0)).toBe(true);
+      expect(all.some((u) => (u.surfaces as unknown[]).length > 0)).toBe(true);
+      const one = await get(UNIT_ONE, {}, { id: all[0].id });
+      expect(Array.isArray(one.body.data.surfaces)).toBe(true);
+    });
+
+    it('takes surfaces on a create: absent, null and [] are every end; a list is kept, repeats merged', async () => {
+      for (const surfaces of [undefined, null, []]) {
+        const made = await send(UNIT_CREATE, unitBody(surfaces === undefined ? {} : { surfaces }));
+        expect(made.body.data.surfaces).toEqual([]);
+      }
+      const made = await send(
+        UNIT_CREATE,
+        unitBody({
+          surfaces: [
+            { platform: 'ANDROID', channel: 'play' },
+            { platform: 'IOS', channel: null },
+            { platform: 'ANDROID', channel: 'play' },
+          ],
+        }),
+      );
+      expect(made.status).toBe(200);
+      expect(made.body.data.surfaces).toEqual([
+        { platform: 'ANDROID', channel: 'play' },
+        { platform: 'IOS', channel: null },
+      ]);
+    });
+
+    it.each([
+      ['not an array', 'ANDROID'],
+      ['an item with a key more', [{ platform: 'ANDROID', channel: null, extra: 1 }]],
+      ['an item without channel', [{ platform: 'ANDROID' }]],
+      ['an item without platform', [{ channel: 'play' }]],
+      ['a platform that is not ANDROID or IOS', [{ platform: 'WEB', channel: null }]],
+      ['a channel in capitals', [{ platform: 'ANDROID', channel: 'Play' }]],
+      ['a channel of one letter', [{ platform: 'ANDROID', channel: 'p' }]],
+      ['a channel of 33 letters', [{ platform: 'ANDROID', channel: 'a'.repeat(33) }]],
+      ['a channel that is not text', [{ platform: 'ANDROID', channel: 5 }]],
+      ['an item that is not an object', ['ANDROID']],
+    ])(
+      'refuses surfaces that are %s: 400 INVALID_REQUEST with ref surfaces and OUT_OF_RANGE',
+      async (_n, surfaces) => {
+        const r = await send(UNIT_CREATE, unitBody({ surfaces }));
+        expect([r.status, r.body.code, refs(r)]).toEqual([
+          400,
+          'INVALID_REQUEST',
+          ['surfaces:OUT_OF_RANGE'],
+        ]);
+        const u = await send(UNIT_UPDATE, { surfaces }, { id: '1' });
+        expect([u.status, refs(u)]).toEqual([400, ['surfaces:OUT_OF_RANGE']]);
+      },
+    );
+
+    it('keeps them when a PUT does not name them, replaces them with a list, and makes them every end with null or []', async () => {
+      const id = (
+        await send(UNIT_CREATE, unitBody({ surfaces: [{ platform: 'IOS', channel: 'appstore' }] }))
+      ).body.data.id;
+      expect((await send(UNIT_UPDATE, { name: 'Same ends' }, { id })).body.data.surfaces).toEqual([
+        { platform: 'IOS', channel: 'appstore' },
+      ]);
+      const replaced = await send(
+        UNIT_UPDATE,
+        { surfaces: [{ platform: 'ANDROID', channel: null }] },
+        { id },
+      );
+      expect(replaced.body.data.surfaces).toEqual([{ platform: 'ANDROID', channel: null }]);
+      expect((await send(UNIT_UPDATE, { surfaces: null }, { id })).body.data.surfaces).toEqual([]);
+      await send(UNIT_UPDATE, { surfaces: [{ platform: 'IOS', channel: null }] }, { id });
+      expect((await send(UNIT_UPDATE, { surfaces: [] }, { id })).body.data.surfaces).toEqual([]);
+    });
   });
 
   it('moves between states: DRAFT to ACTIVE, ACTIVE and PAUSED both ways; never back to DRAFT, never to ENDED', async () => {

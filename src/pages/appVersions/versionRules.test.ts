@@ -96,6 +96,38 @@ describe('checkVersionCode: a whole number from 1, strictly above the version th
   });
 });
 
+// Answers 91: the numbers are 32-bit integers in the backend, so the top is 2147483647, not 2^53 - 1.
+describe('the top of the numbers: 2147483647', () => {
+  it('takes 2147483647 and refuses the next number and the numbers up to 2^53 - 1, for the version number and the minimum', () => {
+    expect(checkVersionCode(2_147_483_647, null).ok).toBe(true);
+    expect(checkMinVersionCode(2_147_483_647, null).ok).toBe(true);
+    expect(checkMinVersionCode(2_147_483_647, 2_147_483_647).ok).toBe(true);
+    for (const value of [2_147_483_648, 4_294_967_296, Number.MAX_SAFE_INTEGER]) {
+      expect(reason(checkVersionCode(value, null)), String(value)).toBe(
+        'appVersions.rule.versionCodeWhole',
+      );
+      expect(reason(checkMinVersionCode(value, null)), String(value)).toBe(
+        'appVersions.rule.minWhole',
+      );
+    }
+  });
+  it('says the range in the words of both languages', () => {
+    expect(enUS['appVersions.rule.versionCodeWhole']).toContain('2147483647');
+    expect(zhCN['appVersions.rule.versionCodeWhole']).toContain('2147483647');
+    expect(enUS['appVersions.rule.minWhole']).toContain('2147483647');
+    expect(zhCN['appVersions.rule.minWhole']).toContain('2147483647');
+  });
+});
+
+describe('checkVersionName: at most 32 characters', () => {
+  it('accepts 32 and refuses 33', () => {
+    const name = (length: number) => `1.2.${'3'.repeat(length - 4)}`;
+    expect(name(32)).toHaveLength(32);
+    expect(checkVersionName(name(32)).ok).toBe(true);
+    expect(reason(checkVersionName(name(33)))).toBe('appVersions.rule.versionName');
+  });
+});
+
 describe('checkMinVersionCode: from 1, and not above the version number', () => {
   it('accepts 1 up to the version number', () => {
     expect(checkMinVersionCode(1, 120).ok).toBe(true);
@@ -140,6 +172,62 @@ describe('the update notes: English is needed', () => {
     expect(reason(checkChangelog({ 'en-US': 'Fixes' }))).toBe('appVersions.rule.changelogEn');
     expect(reason(checkChangelog(undefined))).toBe('appVersions.rule.changelogEn');
   });
+  // Answers 91: an object of at most 30 languages; a key is [A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*, at most 35
+  // characters; a text has 1 to 4000 code points; any language is taken, the list of supported ones is not asked.
+  it('takes a text of 4000 code points of any script and refuses 4001, naming the language', () => {
+    for (const ch of ['a', 'ก', '字', '😀']) {
+      expect(checkChangelog({ en: ch.repeat(4000) }).ok, ch).toBe(true);
+    }
+    const long = checkChangelog({ en: 'ok', th: 'ก'.repeat(4001) });
+    expect(long).toEqual({
+      ok: false,
+      reasonKey: 'appVersions.rule.changelogTooLong',
+      values: { tag: 'th' },
+    });
+    expect(reason(checkChangelog({ en: '😀'.repeat(4001) }))).toBe(
+      'appVersions.rule.changelogTooLong',
+    );
+  });
+  it('counts the text after the ends are cut, the way it is sent', () => {
+    expect(checkChangelog({ en: ` ${'a'.repeat(4000)} ` }).ok).toBe(true);
+  });
+  it('takes 30 languages and refuses 31; a language left empty is not counted', () => {
+    const tags = (n: number) =>
+      Object.fromEntries(
+        Array.from({ length: n }, (_, i) => [
+          `x${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26))}`,
+          'text',
+        ]),
+      );
+    const thirty = { en: 'a', ...tags(29) };
+    expect(Object.keys(thirty)).toHaveLength(30);
+    expect(checkChangelog(thirty).ok).toBe(true);
+    expect(reason(checkChangelog({ ...thirty, ...tags(30), zz: 'one more' }))).toBe(
+      'appVersions.rule.changelogTooMany',
+    );
+    expect(checkChangelog({ ...thirty, yy: '   ' }).ok).toBe(true);
+  });
+  it('refuses a language key that is not of the form, or longer than 35 characters, naming it', () => {
+    for (const tag of [
+      'e',
+      'english',
+      'en_US',
+      'en-',
+      'en--US',
+      '1en',
+      'en-U',
+      `en-${'a'.repeat(33)}`,
+    ]) {
+      expect(checkChangelog({ en: 'a', [tag]: 'text' }), tag).toEqual({
+        ok: false,
+        reasonKey: 'appVersions.rule.changelogKey',
+        values: { tag },
+      });
+    }
+    for (const tag of ['th', 'zh-Hans', 'es-419', 'fil', 'ar-EG', 'sr-Latn-RS', 'de-CH-1996']) {
+      expect(checkChangelog({ en: 'a', [tag]: 'text' }).ok, tag).toBe(true);
+    }
+  });
   it('accepts notes with en', () => {
     expect(checkChangelog({ en: 'Fixes' }).ok).toBe(true);
     expect(checkChangelog({ en: '修复', th: '' }).ok).toBe(true);
@@ -175,6 +263,9 @@ describe('the texts of the rules', () => {
       'appVersions.rule.minWhole',
       'appVersions.rule.minAbove',
       'appVersions.rule.changelogEn',
+      'appVersions.rule.changelogTooLong',
+      'appVersions.rule.changelogTooMany',
+      'appVersions.rule.changelogKey',
     ];
     for (const key of keys) {
       expect(zhCN[key], key).toBeTruthy();

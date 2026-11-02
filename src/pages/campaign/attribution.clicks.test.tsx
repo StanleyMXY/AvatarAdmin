@@ -93,15 +93,15 @@ describe('the click details', { timeout: 30000 }, () => {
     ]);
   });
 
-  it('reads the last seven UTC days as instants, the end being the start of the day after, newest first, 20 to a page, also where the local date is the next day', async () => {
+  it('reads the last seven UTC days as the days themselves (YYYY-MM-DD, the last day included, not the start of the day after), newest first, 20 to a page, also where the local date is the next day', async () => {
     await withTimeZone('Pacific/Auckland', async () => {
       vi.setSystemTime(new Date('2026-10-26T20:00:00Z'));
       // the token of the administrator is good for eight hours from when it was made
       signIn('root');
       const { calls } = await load();
       const read = clickReads(calls)[0];
-      expect(read.get('from')).toBe('2026-10-20T00:00:00Z');
-      expect(read.get('to')).toBe('2026-10-27T00:00:00Z');
+      expect(read.get('from')).toBe('2026-10-20');
+      expect(read.get('to')).toBe('2026-10-26');
       expect(read.get('page')).toBe('1');
       expect(read.get('pageSize')).toBe('20');
       for (const key of ['campaignId', 'status', 'keyword']) expect(read.has(key), key).toBe(false);
@@ -233,7 +233,8 @@ describe('the click details', { timeout: 30000 }, () => {
     await user.click(document.querySelector('.ant-pagination-item-2') as HTMLElement);
     await waitFor(() => expect(clickReads(calls).some((r) => r.get('page') === '2')).toBe(true));
     const second = clickReads(calls).find((r) => r.get('page') === '2') as URLSearchParams;
-    expect(second.get('from')).toBe('2026-10-20T00:00:00Z');
+    expect(second.get('from')).toBe('2026-10-20');
+    expect(second.get('to')).toBe('2026-10-26');
   });
 
   it('disables the campaign filter and says which permission is missing when the list of campaigns is refused (403), and still shows the clicks with the campaign name from the click', async () => {

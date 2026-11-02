@@ -193,7 +193,7 @@ const messages: Record<string, string> = {
   'config.voice.transcript_max_chars.desc':
     '语音转写文字允许的最大字符数，必须在 1 到 1000 之间（合成服务只接受 1 到 1000 个字符）。保存后客户端配置缓存同时失效。',
   'config.generation.poll_interval_seconds.label': '生成结果轮询间隔',
-  'config.generation.poll_interval_seconds.desc': '查询生成任务结果的轮询间隔，单位秒。',
+  'config.generation.poll_interval_seconds.desc': '后端检查未完成生成任务的间隔，单位秒。',
   'config.generation.voice_timeout_seconds.label': '声音生成超时',
   'config.generation.voice_timeout_seconds.desc':
     '声音生成任务的最长等待时间，单位秒，超过后任务失败。',
@@ -252,7 +252,8 @@ const messages: Record<string, string> = {
   'config.retry.max_attempts.desc':
     '客服转发连续失败多少次后标记为失败。账号删除不受这个限制：不会放弃，只告警。',
   'config.chat.history_max_limit.label': '聊天记录单次最多条数',
-  'config.chat.history_max_limit.desc': '拉取聊天记录时单次最多返回的消息条数。',
+  'config.chat.history_max_limit.desc':
+    '拉取聊天记录时单次最多返回的消息条数。请求里的条数超过它会被拒绝（400），不会被截成它；不带条数时取 50 与它的较小者。',
   'config.chat.messages_max_batch.label': '消息单次写入条数上限',
   'config.chat.messages_max_batch.desc': '一次写入请求最多包含的消息条数。',
   'config.chat.message_max_chars.label': '单条消息字数上限',
@@ -311,14 +312,16 @@ const messages: Record<string, string> = {
   'config.ratelimit.invite_event_per_ip_per_hour.desc':
     '同一 IP 每小时最多提交几次邀请事件，超出后被限流。',
   'config.events.max_batch.label': '事件单次上报条数上限',
-  'config.events.max_batch.desc': '一次事件上报请求最多包含的事件条数。',
+  'config.events.max_batch.desc':
+    '一次事件上报请求最多包含的事件条数。超过时整个请求被拒（413 BATCH_TOO_LARGE）。',
   'config.export.max_rows.label': '导出最大行数',
   'config.export.max_rows.desc': '一次导出最多包含的行数。',
   'config.ratelimit.export_per_admin_per_hour.label': '导出每管理员每小时上限',
   'config.ratelimit.export_per_admin_per_hour.desc':
     '每个管理员每小时最多发起几次导出，超出后被限流。',
   'config.events.max_body_kb.label': '事件上报请求体上限',
-  'config.events.max_body_kb.desc': '一次事件上报请求体的大小上限，单位 KB。',
+  'config.events.max_body_kb.desc':
+    '一次事件上报请求体的大小上限，单位 KB（1 KB = 1024 字节）。超过时整个请求被拒（413 BATCH_TOO_LARGE）。',
   'config.events.rate_limit_per_min.label': '事件上报每分钟上限',
   'config.events.rate_limit_per_min.desc': '事件上报每分钟允许的请求数，按设备和按账号各自计算。',
   'config.events.ttl_days.label': '事件保留天数',
@@ -333,10 +336,11 @@ const messages: Record<string, string> = {
   'config.recall.min_gap_hours.label': '召回推送最小间隔',
   'config.recall.min_gap_hours.desc': '与上一次召回推送的最小间隔，单位小时。故意设得小于 24。',
   'config.recall.inactive_hours.label': '召回未活跃小时数',
-  'config.recall.inactive_hours.desc': '用户连续多少小时没有活跃就进入召回范围，单位小时。',
+  'config.recall.inactive_hours.desc':
+    '用户多少小时没有互动就进入每日召回范围，单位小时。从账号最后一次互动（文字对话或通话）起算；从没互动过的账号从账号创建时起算；超过这个小时数才算（不含刚好等于）。',
   'config.recall.streak_min_days.label': '召回连续天数下限',
   'config.recall.streak_min_days.desc':
-    '用户的连续使用天数达到多少天才触发连续使用类召回，单位天。',
+    '用户当前的连续天数大于或等于这个值（等于也算），并且最后一次互动在用户所在地的昨天，就触发“连续记录有断掉风险”的召回，优先于每日召回。单位天。',
   'config.app.display_name.label': '应用显示名称',
   'config.app.display_name.desc':
     '邮件模板里应用名称占位符的取值。保存时去掉首尾空白后必须是 1 到 100 个字符，否则保存失败。产品名尚未确定，先用工作名。',
@@ -390,10 +394,10 @@ const messages: Record<string, string> = {
     '陪伴纪念日的天数清单，用 JSON 数组表示，例如满 7、30、100 天时触发纪念日。',
   'config.moderation.block_score.label': '审核拦截分数',
   'config.moderation.block_score.desc':
-    '把审核服务返回的分数映射为“拦截”级别的阈值，复核分数是比它低的那个阈值。取值随审核服务选型确定，没有默认值。生产环境未配置时，依赖审核的用户端接口不可用，生成任务也不处理；管理端不受影响，应先在管理端配置，再让用户端上线。',
+    '审核服务返回的分数（0 到 1）大于或等于这个阈值就拦截；调高它，拦截更少。取值大于 0、不超过 1，最多三位小数，并且必须大于复核分数（两个都保存时检查）。取值随审核服务选型确定，没有默认值。任一分数没保存时不会调用审核服务。生产环境未配置时，依赖审核的用户端接口不可用，生成任务也不处理；管理端不受影响，应先在管理端配置，再让用户端上线。',
   'config.moderation.review_score.label': '审核复核分数',
   'config.moderation.review_score.desc':
-    '把审核服务返回的分数映射为“复核”级别的阈值，必须小于拦截分数。取值随审核服务选型确定，没有默认值。未配置时的后果与拦截分数相同。',
+    '分数大于或等于这个阈值、但低于拦截分数时进入人工复核；低于它则通过。调高它，进入复核的更少。取值大于 0、不超过 1，最多三位小数，并且必须小于拦截分数（两个都保存时检查）。取值随审核服务选型确定，没有默认值。未配置时的后果与拦截分数相同。',
   'config.moderation.call_timeout_seconds.label': '审核调用超时',
   'config.moderation.call_timeout_seconds.desc':
     '一次调用审核服务的超时时间，单位秒，超时按中风险处理（伴侣名字除外）。',
@@ -426,9 +430,11 @@ const messages: Record<string, string> = {
   'config.complaint.retention_days.desc':
     '投诉记录（含投诉人的邮箱和证据）及其处理记录，从结案起保留多少天，单位天，到期由每天一次的清理任务一起删除。没有结案的投诉不会删除。',
   'config.support.rate_limit_per_hour.label': '客服请求每小时上限',
-  'config.support.rate_limit_per_hour.desc': '客服相关请求每小时允许的次数，超出后被限流。',
+  'config.support.rate_limit_per_hour.desc':
+    '每个账号每小时最多提交的客服反馈次数（按账号，不是按 IP）。超过后被拒绝（429 RATE_LIMITED）。',
   'config.export.min_interval_hours.label': '导出最小间隔',
-  'config.export.min_interval_hours.desc': '同一用户两次数据导出之间的最小间隔，单位小时。',
+  'config.export.min_interval_hours.desc':
+    '同一用户账号两次数据导出之间的最小间隔，单位小时（指用户自己的数据导出，不是管理员的统计导出）。从该账号上一次成功导出的创建时刻起算，失败或进行中的不算。间隔内再申请会被拒绝（429 RATE_LIMITED）。',
   'config.export.ttl_hours.label': '导出文件有效期',
   'config.export.ttl_hours.desc': '导出文件可供下载的时间，单位小时，到期后清理。',
   'config.export.job_timeout_minutes.label': '导出任务超时',
@@ -766,6 +772,12 @@ const messages: Record<string, string> = {
     '没有保存。事件保留天数必须不小于 30 加统计回溯天数（stats.land_window_days）。',
   'config.stats.land_window_days.reject.OUT_OF_RANGE':
     '没有保存。回溯天数不能小于 1，并且要小于依赖它的几项：事件保留天数（不小于 30 加回溯天数）、聊天消息保留天数（大于回溯天数）、游客设备记录保留天数（不小于 91 加回溯天数）。',
+  'config.sms.allowed_country_codes.reject.EMPTY_NOT_ALLOWED':
+    '还不能开启手机号登录：没有保存短信允许的国家码（sms.allowed_country_codes）。先保存至少一个国家码，再重试。',
+  'config.sms.daily_global_cap.reject.EMPTY_NOT_ALLOWED':
+    '还不能开启手机号登录：没有保存每日短信总量上限（sms.daily_global_cap）。先保存一个上限，再重试。',
+  'config.refusal.SmsChannel.EMPTY_NOT_ALLOWED':
+    '还不能开启手机号登录：至少需要一个已启用的验证码（OTP）短信渠道。请先在“短信渠道”里新增或启用一个，再重试。',
   'config.refusal.SmsTemplate.EMPTY_NOT_ALLOWED':
     '还不能开启手机号登录：必须至少有一个启用的验证码短信模板，语言为 en（en-GB、en-US 不算），且不限国家。请先在“短信模板”里新增或启用一个，再重试。',
   'config.push.default_locale.reject.OUT_OF_RANGE':

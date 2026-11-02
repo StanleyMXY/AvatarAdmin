@@ -222,8 +222,13 @@ export default {
       if (body.bands !== undefined && body.bands !== null)
         problems.push({ ref: 'bands', reason: 'OUT_OF_RANGE' });
     }
+    // The backend gives a message and no details for a price it refuses (reply 111): no ref, no reason.
     if (problems.length > 0)
-      throw invalidRequest(`invalid price: ${problems.map((p) => p.ref).join(', ')}`, problems);
+      throw new MockHttpError(
+        400,
+        'INVALID_REQUEST',
+        `invalid price: ${problems.map((p) => p.ref).join(', ')}`,
+      );
 
     const created: MockBatch = {
       batchId: newBatchId(),
@@ -248,7 +253,8 @@ export default {
     };
     supersedeSameDay(created);
     costState.batches.push(created);
-    return ok({ batchId: created.batchId });
+    // the answer is the new batch, in the shape of an item of the list
+    return ok(viewOf(created));
   }),
 
   // Checked in this order, the first that fails answers: the batch (404), the date, the currency the
@@ -272,8 +278,9 @@ export default {
         { ref: 'currency', reason: 'OUT_OF_RANGE' },
       ]);
     // The bands are checked again on confirm (contract 14.2).
+    // a gap, an overlap or a bad price in the bands: a message and no details (backend reply 111)
     if (target.bands && bandsProblem(target.bands))
-      throw invalidRequest('cannot confirm: bands', [{ ref: 'bands', reason: 'OUT_OF_RANGE' }]);
+      throw new MockHttpError(400, 'INVALID_REQUEST', 'cannot confirm: bands');
     requireStatus(target, 'PENDING_REVIEW');
     target.effectiveFrom = effectiveFrom;
     target.currency = currency as string;

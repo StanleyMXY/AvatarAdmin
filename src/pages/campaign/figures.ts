@@ -1,3 +1,4 @@
+import type { PerformanceRow } from '../../services/campaign';
 import { plainText } from '../../utils/plainText';
 import { DASH, formatPercent } from '../../utils/ratio';
 
@@ -83,4 +84,20 @@ export function costsText(costs: unknown, locale: string): string {
       : [`${plainText(currency)} ${moneyText(amount, locale)}`.trim()];
   });
   return parts.length > 0 ? parts.join(' / ') : DASH;
+}
+
+/**
+ * The row of the installs that matched no campaign. By campaign it is `campaignId` 0 (a number; a
+ * "0" written as text is read the same, the page does not rely on the type). By day it is the last
+ * row, which has no day and no campaign but an `unattributedInstalls` count.
+ */
+export function isUnattributedRow(row: PerformanceRow): boolean {
+  const id: unknown = row.campaignId;
+  if ((typeof id === 'number' || typeof id === 'string') && id !== '') return Number(id) === 0;
+  return (
+    (id === undefined || id === null) &&
+    (row.statDate === undefined || row.statDate === null) &&
+    row.unattributedInstalls !== undefined &&
+    row.unattributedInstalls !== null
+  );
 }

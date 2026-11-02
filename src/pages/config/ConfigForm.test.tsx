@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { App } from 'antd';
 import { IntlProvider } from 'react-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetConfigStore } from '../../../mock/_core/configStore';
+import { resetConfigStore, saved } from '../../../mock/_core/configStore';
 import { resetSmsStore, smsState } from '../../../mock/_core/smsData';
 import { resetStore } from '../../../mock/_core/store';
 import { adminOf } from '../../../mock/_core/testing';
@@ -23,6 +23,21 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 const row = (key: string) => screen.findByTestId(`config-row-${key}`);
+
+/** The two settings that phone sign-in needs besides a channel and a template, as if saved. */
+const saveSmsSettings = () => {
+  for (const [key, value] of [
+    ['sms.allowed_country_codes', ['TH', 'ID', 'VN']],
+    ['sms.daily_global_cap', 5000],
+  ] as const) {
+    saved.set(key, {
+      value,
+      updatedAt: '2026-11-01T00:00:00Z',
+      updatedBy: '1',
+      updatedByUsername: 'root',
+    });
+  }
+};
 
 describe('ConfigForm: what is shown', { timeout: 30000 }, () => {
   it('shows every key the server sends, grouped by prefix, with label and description', {
@@ -284,6 +299,7 @@ describe('ConfigForm: saving', () => {
   it('shows the warnings of a save in the warning style without blocking it', async () => {
     signInAs('root');
     useMockBackend(configMock);
+    saveSmsSettings();
     renderPage(<ConfigForm keys={['auth.phone_login_enabled']} />);
     const r = await row('auth.phone_login_enabled');
     // it is off by default; turn it on, save, then off again, which carries the warning
@@ -641,6 +657,7 @@ describe('ConfigForm: a refusal for something that is not a row', { timeout: 300
   it('puts the words of the code at the top of the form when the detail names SmsTemplate, not a setting key', async () => {
     signInAs('root');
     useMockBackend(configMock);
+    saveSmsSettings();
     smsState.templates.clear();
     renderPage(<ConfigForm keys={['auth.phone_login_enabled', 'auth.access_ttl_minutes']} />);
     const r = await row('auth.phone_login_enabled');
@@ -662,6 +679,7 @@ describe('ConfigForm: a refusal for something that is not a row', { timeout: 300
   it('says it in Chinese, and takes it away at the next attempt', async () => {
     signInAs('root');
     useMockBackend(configMock);
+    saveSmsSettings();
     smsState.templates.clear();
     renderPage(<ConfigForm keys={['auth.phone_login_enabled']} />, 'zh-CN');
     const r = await row('auth.phone_login_enabled');
@@ -673,6 +691,89 @@ describe('ConfigForm: a refusal for something that is not a row', { timeout: 300
     resetSmsStore();
     fireEvent.click(within(r).getByRole('button', { name: /保\s?存/ }));
     await waitFor(() => expect(screen.queryByTestId('config-refusals')).toBeNull());
+  });
+
+  const COUNTRIES_EN =
+    'Phone sign-in cannot be turned on yet: no allowed SMS country codes are saved (sms.allowed_country_codes). Save at least one country code, then try again.';
+  const CAP_EN =
+    'Phone sign-in cannot be turned on yet: the daily SMS cap is not saved (sms.daily_global_cap). Save a cap, then try again.';
+  const CHANNEL_EN =
+    'Phone sign-in cannot be turned on yet. At least one enabled SMS channel for verification codes (OTP) is needed. Add or enable one under SMS channels, then try again.';
+  const TEMPLATE_EN =
+    'Phone sign-in cannot be turned on yet. There must be at least one enabled OTP SMS template in language en (not en-GB or en-US) with no country set. Add or enable one under SMS templates, then try again.';
+
+  it('says one sentence for each missing item, in the order of the details, when the form shows only the phone sign-in row', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    smsState.templates.clear();
+    smsState.channels.clear();
+    renderPage(<ConfigForm keys={['auth.phone_login_enabled']} />);
+    const r = await row('auth.phone_login_enabled');
+    fireEvent.click(within(r).getByRole('switch'));
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    const top = await screen.findByTestId('config-refusals');
+    const lines = [...top.querySelectorAll('.ant-alert-title span, .ant-alert-message span')].map(
+      (e) => e.textContent,
+    );
+    expect(lines).toEqual([COUNTRIES_EN, CAP_EN, CHANNEL_EN, TEMPLATE_EN]);
+    expect(top.textContent).not.toContain('missing:');
+  });
+
+  it('says only the item that is missing', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    saveSmsSettings();
+    smsState.channels.clear();
+    renderPage(<ConfigForm keys={['auth.phone_login_enabled']} />);
+    const r = await row('auth.phone_login_enabled');
+    fireEvent.click(within(r).getByRole('switch'));
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    const top = await screen.findByTestId('config-refusals');
+    expect(top).toHaveTextContent(CHANNEL_EN);
+    expect(top.textContent).not.toContain('sms.allowed_country_codes');
+    expect(top.textContent).not.toContain('sms.daily_global_cap');
+    expect(top.textContent).not.toContain('SMS templates');
+  });
+
+  it('puts the words of a setting detail on its own row when the form shows it, and the rest at the top', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    smsState.channels.clear();
+    renderPage(
+      <ConfigForm
+        keys={['auth.phone_login_enabled', 'sms.allowed_country_codes', 'sms.daily_global_cap']}
+      />,
+    );
+    const r = await row('auth.phone_login_enabled');
+    fireEvent.click(within(r).getByRole('switch'));
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    const top = await screen.findByTestId('config-refusals');
+    expect(top).toHaveTextContent(CHANNEL_EN);
+    expect(top.textContent).not.toContain('SMS templates');
+    expect(top.textContent).not.toContain('sms.allowed_country_codes');
+    expect(top.textContent).not.toContain('sms.daily_global_cap');
+    expect(
+      within(screen.getByTestId('config-row-sms.allowed_country_codes')).getByRole('alert'),
+    ).toHaveTextContent(COUNTRIES_EN);
+    expect(
+      within(screen.getByTestId('config-row-sms.daily_global_cap')).getByRole('alert'),
+    ).toHaveTextContent(CAP_EN);
+  });
+
+  it('says the four items in Chinese', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    smsState.templates.clear();
+    smsState.channels.clear();
+    renderPage(<ConfigForm keys={['auth.phone_login_enabled']} />, 'zh-CN');
+    const r = await row('auth.phone_login_enabled');
+    fireEvent.click(within(r).getByRole('switch'));
+    fireEvent.click(within(r).getByRole('button', { name: /保\s?存/ }));
+    const top = await screen.findByTestId('config-refusals');
+    expect(top).toHaveTextContent('没有保存短信允许的国家码（sms.allowed_country_codes）');
+    expect(top).toHaveTextContent('没有保存每日短信总量上限（sms.daily_global_cap）');
+    expect(top).toHaveTextContent('至少需要一个已启用的验证码（OTP）短信渠道');
+    expect(top).toHaveTextContent('至少有一个启用的验证码短信模板');
   });
 
   it('shows no top box when the refusal names only rows', async () => {

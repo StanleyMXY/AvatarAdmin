@@ -315,32 +315,23 @@ describe('the template page: the list', { timeout: 30000 }, () => {
     expect(screen.getByText(/object title/)).toBeInTheDocument();
   });
 
-  it('pages with the sizes of every table: page 1, 20 rows', async () => {
+  // Answers 33: the list is not paged, so it is asked for once, with no page, no size, and never again for a second page.
+  it('reads the list once for the matrix and the table together, with no paging in the request', async () => {
     const calls = backend();
     renderPage(<TemplatesPage />);
     await rowOf('Hello, how are you today?');
-    expect(
-      calls.some((c) => c.url.startsWith('/api/admin/push/templates?page=1&pageSize=20')),
-    ).toBe(true);
-    // the matrix reads every template in pages of 200
-    expect(
-      calls.some((c) => c.url.startsWith('/api/admin/push/templates?page=1&pageSize=200')),
-    ).toBe(true);
+    await screen.findByTestId('coverage-matrix');
+    await new Promise((r) => setTimeout(r, 200));
+    const reads = calls.filter((c) => c.url.startsWith('/api/admin/push/templates'));
+    expect(reads.map((c) => c.url)).toEqual(['/api/admin/push/templates']);
   });
-});
 
-describe('the template page: an answer without total', { timeout: 60000 }, () => {
-  const grow = (count: number) => {
+  it('pages the table by what was read: 20 to a page, the next page from the same list', async () => {
     const base = pushState.templates.find((t) => t.triggerReason === 'streak_at_risk');
     if (!base) throw new Error('no sample');
-    for (let n = 0; n < count; n += 1) {
+    for (let n = 0; n < 34; n += 1) {
       pushState.templates.push({ ...base, id: `x${n}`, locale: `x${String(n).padStart(2, '0')}` });
     }
-  };
-
-  it('pages the table by what was read, and reads no more than it needs, when the backend pages but sends no total', async () => {
-    pushState.templateList = 'paged-without-total';
-    grow(34);
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<TemplatesPage />);
@@ -348,21 +339,28 @@ describe('the template page: an answer without total', { timeout: 60000 }, () =>
     expect(await screen.findByText(/1-20\D+45/)).toBeInTheDocument();
     await user.click(screen.getByTitle('2'));
     await waitFor(() => expect(screen.getAllByText(/21-40\D+45/).length).toBeGreaterThan(0));
-    const reads = calls.filter((c) => c.url.startsWith('/api/admin/push/templates?'));
-    expect(reads.length).toBeLessThanOrEqual(8);
-    expect(await cell('streak_at_risk', 'th')).toBeInTheDocument();
+    const reads = calls.filter((c) => c.url.startsWith('/api/admin/push/templates'));
+    expect(reads.every((c) => c.url === '/api/admin/push/templates')).toBe(true);
+    expect(reads.length).toBeLessThanOrEqual(3);
   });
 
-  it('does not loop and shows every template when the backend does not page at all', async () => {
-    pushState.templateList = 'unpaged-without-total';
-    grow(34);
-    const calls = backend();
+  it('does not loop when the backend answers the whole list whatever the request says', async () => {
+    const rows = pushState.templates.map((t) => ({
+      ...t,
+      imageUrl: null,
+      imageUploadId: null,
+    }));
+    const calls = stubFetch((call) =>
+      call.url.startsWith('/api/admin/push/templates')
+        ? jsonResponse(200, envelope('200', { items: rows, missingLocales: {} }))
+        : jsonResponse(404, envelope('RESOURCE_NOT_FOUND', null)),
+    );
     renderPage(<TemplatesPage />);
     await rowOf('Hello, how are you today?');
-    expect(await screen.findByText(/1-20\D+45/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 300));
-    const reads = calls.filter((c) => c.url.startsWith('/api/admin/push/templates?'));
-    expect(reads.length).toBeLessThanOrEqual(6);
+    expect(
+      calls.filter((c) => c.url.startsWith('/api/admin/push/templates')).length,
+    ).toBeLessThanOrEqual(2);
   });
 });
 
@@ -455,6 +453,41 @@ describe('the template page: new template', { timeout: 60000 }, () => {
     expect(within(dialog).getByText('Enter the body')).toBeInTheDocument();
     expect(within(dialog).getByText('Enter the language tag')).toBeInTheDocument();
     expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  // Answers 34: the title has at most 100 and the body at most 500 code points, after the ends are cut.
+  it('counts code points, not UTF-16 units: 100 emoji in the title and 500 in the body go, one more of either is refused with its count, and nothing is sent', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<TemplatesPage />);
+    const dialog = await openNew(user);
+    await fillNew(user, dialog);
+    const emoji = String.fromCodePoint(0x1f600);
+    fireEvent.change(within(dialog).getByLabelText('Title'), {
+      target: { value: emoji.repeat(101) },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Body'), {
+      target: { value: `  ${emoji.repeat(501)}  ` },
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText('The title has at most 100 characters; it has 101'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('The body has at most 500 characters; it has 501'),
+    ).toBeInTheDocument();
+    // the counters beside the boxes show the same numbers
+    expect(dialog.textContent).toContain('101 / 100');
+    expect(dialog.textContent).toContain('501 / 500');
+    expect(writesOf(calls)).toHaveLength(0);
+    fireEvent.change(within(dialog).getByLabelText('Title'), {
+      target: { value: emoji.repeat(100) },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Body'), {
+      target: { value: emoji.repeat(500) },
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
   });
 
   it('does not send a second template for a reason and language that has one, and says to edit it', async () => {
@@ -936,7 +969,7 @@ describe('the template page: the rule of the default language', { timeout: 60000
 });
 
 describe('the template page: edit and delete', { timeout: 60000 }, () => {
-  it('fills the dialog with the template, keeps the reason and the language fixed, and sends a PUT by id without them', async () => {
+  it('fills the dialog with the template, keeps the reason and the language fixed on screen, and still sends them in the PUT with the whole row (answers 35)', async () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<TemplatesPage />);
@@ -952,10 +985,110 @@ describe('the template page: edit and delete', { timeout: 60000 }, () => {
     const put = writesOf(calls)[0];
     expect(put.method).toBe('PUT');
     expect(put.url).toMatch(/^\/api\/admin\/push\/templates\/\d+$/);
-    expect(put.body).toMatchObject({ title: 'Tiêu đề mới', enabled: true });
-    expect(Object.keys(put.body as object)).not.toContain('triggerReason');
-    expect(Object.keys(put.body as object)).not.toContain('locale');
+    expect(put.body).toEqual({
+      triggerReason: 'daily_recall',
+      locale: 'vi',
+      title: 'Tiêu đề mới',
+      body: expect.any(String),
+      linkType: 'NONE',
+      linkTarget: '',
+      enabled: true,
+    });
     expect(await screen.findByText('Tiêu đề mới')).toBeInTheDocument();
+  });
+
+  describe('the picture of a template that has one (answers 34)', () => {
+    const ZH = '你好，今天过得怎么样？';
+    const zh = () =>
+      pushState.templates.find((t) => t.triggerReason === 'daily_recall' && t.locale === 'zh-Hans');
+    const openZh = async (user: ReturnType<typeof userEvent.setup>) => {
+      const row = await rowOf(ZH);
+      await user.click(within(row).getByRole('button', { name: 'Edit' }));
+      return screen.findByRole('dialog');
+    };
+
+    it('keeps the picture when nothing is said about it: the PUT has no uploadId, no imageUploadId and no imageUrl, though the row read all of them', async () => {
+      const calls = backend();
+      const user = userEvent.setup();
+      renderPage(<TemplatesPage />);
+      const dialog = await openZh(user);
+      expect(within(dialog).getByText('Current picture')).toBeInTheDocument();
+      await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      const keys = Object.keys(writesOf(calls)[0].body as object);
+      expect(keys).not.toContain('uploadId');
+      expect(keys).not.toContain('imageUploadId');
+      expect(keys).not.toContain('imageUrl');
+      expect(zh()?.imageFile).not.toBeNull();
+    });
+
+    it('removes it with uploadId null when "Remove the picture" is pressed, and the list shows none after', async () => {
+      const calls = backend();
+      const user = userEvent.setup();
+      renderPage(<TemplatesPage />);
+      const dialog = await openZh(user);
+      await user.click(within(dialog).getByRole('button', { name: 'Remove the picture' }));
+      expect(within(dialog).getByText('The picture is removed when you save.')).toBeInTheDocument();
+      await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect(writesOf(calls)[0].body).toHaveProperty('uploadId', null);
+      expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('imageUrl');
+      await dialogsClosed();
+      await waitFor(() => expect(zh()?.imageFile).toBeNull());
+      await waitFor(async () => expect((await rowOf(ZH)).querySelector('img')).toBeNull());
+    });
+
+    it('takes the removal back with "Keep the picture": nothing is sent about the picture', async () => {
+      const calls = backend();
+      const user = userEvent.setup();
+      renderPage(<TemplatesPage />);
+      const dialog = await openZh(user);
+      await user.click(within(dialog).getByRole('button', { name: 'Remove the picture' }));
+      await user.click(within(dialog).getByRole('button', { name: 'Keep the picture' }));
+      await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('uploadId');
+    });
+
+    it('replaces it by a new upload even if "Remove the picture" was pressed before: the new upload id is sent, not null', async () => {
+      const calls = backend();
+      const user = userEvent.setup();
+      renderPage(<TemplatesPage />);
+      const dialog = await openZh(user);
+      await user.click(within(dialog).getByRole('button', { name: 'Remove the picture' }));
+      choose(png());
+      await within(dialog).findByText(/Uploaded: banner\.png/);
+      await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect(String((writesOf(calls)[0].body as { uploadId: string }).uploadId)).toMatch(
+        /^up-img-/,
+      );
+    });
+
+    it('offers no removal for a template that has no picture, and nothing to remove in a new one', async () => {
+      backend();
+      const user = userEvent.setup();
+      renderPage(<TemplatesPage />);
+      const row = await rowOf('Xin chào, hôm nay bạn thế nào?');
+      await user.click(within(row).getByRole('button', { name: 'Edit' }));
+      const dialog = await screen.findByRole('dialog');
+      expect(
+        within(dialog).queryByRole('button', { name: 'Remove the picture' }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('the switch in the list sends the whole row in the PUT, the key included (answers 35), and no picture field', async () => {
+    const calls = backend();
+    renderPage(<TemplatesPage />);
+    const row = await rowOf('ขอบคุณสำหรับความช่วยเหลือของคุณ');
+    fireEvent.click(within(row).getByRole('switch'));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    const body = writesOf(calls)[0].body as Record<string, unknown>;
+    expect(body).toMatchObject({ triggerReason: 'streak_at_risk', locale: 'th', enabled: true });
+    expect(Object.keys(body).sort()).toEqual(
+      ['body', 'enabled', 'linkTarget', 'linkType', 'locale', 'title', 'triggerReason'].sort(),
+    );
   });
 
   it('asks in the row before it deletes a template of another language, then deletes and reads the list and the matrix again', async () => {

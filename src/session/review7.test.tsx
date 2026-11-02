@@ -90,7 +90,7 @@ describe('the authenticator setup does not end the session', () => {
     expect(getPendingEnroll()).toBeUndefined();
   });
 
-  it('tells how long to wait when the setup is locked, as the sign-in page does', async () => {
+  it('tells how long to wait when a 429 with seconds reaches the setup page (the backend never answers 429 at this step), as the sign-in page does', async () => {
     setPendingEnroll({ enrollToken: 'e', otpauthUri: 'otpauth://x' });
     stubFetch(() => jsonResponse(429, envelope('RATE_LIMITED', { retryAfterSeconds: 60 })));
     const user = userEvent.setup();
@@ -103,8 +103,8 @@ describe('the authenticator setup does not end the session', () => {
   });
 });
 
-describe('the lock of the setup without a waiting time', () => {
-  it('shows the text of the code, with no countdown, as the contract gives none for this lock', async () => {
+describe('a 429 without a waiting time on the setup page', () => {
+  it('shows the text of the code, with no countdown (the backend never answers 429 at this step; a gateway can)', async () => {
     setPendingEnroll({ enrollToken: 'e', otpauthUri: 'otpauth://x' });
     stubFetch(() => jsonResponse(429, envelope('RATE_LIMITED')));
     const user = userEvent.setup();

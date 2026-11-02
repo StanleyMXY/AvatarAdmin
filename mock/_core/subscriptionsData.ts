@@ -26,7 +26,8 @@ export type Product = {
   entitlementKey: string;
   enabled: boolean;
   sortOrder: number;
-  surfaces: string[];
+  /** [] is every end; each item is a platform and a channel (null is every channel of it). */
+  surfaces: { platform: 'ANDROID' | 'IOS'; channel: string | null }[];
 };
 
 export type SubscriptionRow = {
@@ -219,7 +220,7 @@ const seedProducts = (): Product[] => [
     entitlementKey: 'plus_th',
     enabled: false,
     sortOrder: 3,
-    surfaces: ['ANDROID'],
+    surfaces: [{ platform: 'ANDROID', channel: null }],
   },
 ];
 

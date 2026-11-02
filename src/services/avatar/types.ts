@@ -44,9 +44,8 @@ export type CosmeticItem = {
 export type CosmeticQuery = {
   page: number;
   pageSize: number;
+  /** The only filter the backend has; it ignores any other parameter. */
   kind?: CosmeticKind;
-  enabled?: boolean;
-  style?: AvatarStyle;
 };
 
 /** The fields a cosmetic is written with; the picture goes as `previewUploadId`, never as an address. */
@@ -62,11 +61,19 @@ export type CosmeticFields = {
   previewUploadId?: string;
 };
 
+/** A new cosmetic: `enabled` has to be in the request. */
 export type CosmeticCreate = CosmeticFields & {
   key: string;
   kind: CosmeticKind;
-  enabled?: boolean;
+  enabled: boolean;
 };
+
+/**
+ * The whole cosmetic is sent to update it: `kind` and `enabled` too, with the values it has now
+ * (the kind is never changed from here; the key is left out, the backend takes it only if it is
+ * the one the item has).
+ */
+export type CosmeticUpdate = CosmeticFields & { kind: CosmeticKind; enabled: boolean };
 
 // ---- actions (ACTION:MANAGE) ----
 
@@ -98,7 +105,11 @@ export type ActionFields = {
   iconUploadId?: string;
 };
 
-export type ActionCreate = ActionFields & { key: string; enabled?: boolean };
+/** A new action: `enabled` has to be in the request. */
+export type ActionCreate = ActionFields & { key: string; enabled: boolean };
+
+/** The whole action is sent to update it, `enabled` included, with the value it has now. */
+export type ActionUpdate = ActionFields & { enabled: boolean };
 
 // ---- declarations (DECLARATION:MANAGE) ----
 

@@ -92,6 +92,10 @@ const messages: Record<string, string> = {
   'subscriptions.entitlements.edit': '编辑',
   'subscriptions.entitlements.featureValues': '功能值',
   'subscriptions.entitlements.key': '键',
+  'subscriptions.entitlements.keyRule':
+    '1 到 64 个字母、数字、点、下划线或连字符，且以字母或数字开头。',
+  'subscriptions.entitlements.keyHint':
+    '1 到 64 个字母、数字、点、下划线或连字符，且以字母或数字开头。权益创建后，标识不能再改。',
   'subscriptions.entitlements.name': '名称',
   'subscriptions.entitlements.priority': '优先级',
   'subscriptions.entitlements.priorityHint': '权益的文本值冲突时取优先级高的；优先级不能重复。',

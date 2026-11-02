@@ -25,20 +25,12 @@ type Detail = { ref: string; reason: string };
 
 const STATUSES = ['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'BLOCKED'];
 const SOURCES = ['AUTO', 'REPORT', 'COMPLAINT'];
-const CONTENT_TYPES = [
-  'AVATAR',
-  'VOICE',
-  'MESSAGE',
-  'PERSONA',
-  'COMPANION_NAME',
-  'AVATAR_IMAGE',
-  'ACTION_CLIP',
-];
 const MATCH_MODES = ['SUBSTRING', 'WORD', 'REGEX'];
 const LEVELS = ['REVIEW', 'BLOCK'];
 const PATTERN_MAX = 200;
 const NOTE_MAX = 200;
-const DECISION_NOTE_MAX = 500;
+/** The note of a decision: at most 1000 code points once the ends are trimmed. */
+const DECISION_NOTE_MAX = 1000;
 const RULES_MAX_DEFAULT = 200;
 
 const usernameOf = (adminId: string | null): string | null =>
@@ -59,13 +51,10 @@ function enumParam(req: MockReq, name: string, allowed: readonly string[]): stri
   return value;
 }
 
-/** Waiting ones first, the longest waiting first; then the others, the newest first. */
+/** The backend's order: the oldest first (created_at, then id, ascending), whatever the status. */
 function byQueueOrder(a: MockRecord, b: MockRecord): number {
-  const aWaits = a.status === 'PENDING_REVIEW';
-  const bWaits = b.status === 'PENDING_REVIEW';
-  if (aWaits !== bWaits) return aWaits ? -1 : 1;
-  if (aWaits) return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0;
-  return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0;
+  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
 const notFound = () => new MockHttpError(404, 'RESOURCE_NOT_FOUND', 'There is no such record');
@@ -184,14 +173,13 @@ const rulesMax = (): number => {
 };
 
 export default {
+  // Only `status` and `source` filter (and the paging); any other query parameter is ignored, not a 400 (the backend's answer of 2026-11-02, question 61).
   'GET /api/admin/moderation/records': guard('MODERATION:VIEW', (req) => {
     const status = enumParam(req, 'status', STATUSES);
     const source = enumParam(req, 'source', SOURCES);
-    const contentType = enumParam(req, 'contentType', CONTENT_TYPES);
     const rows = moderationState.records
       .filter((r) => (status === '' ? true : r.status === status))
       .filter((r) => (source === '' ? true : r.source === source))
-      .filter((r) => (contentType === '' ? true : r.contentType === contentType))
       .sort(byQueueOrder);
     const page = paginateQuery(rows, req);
     return ok({ items: page.items.map(recordRow), total: page.total });
@@ -226,17 +214,19 @@ export default {
 
   'POST /api/admin/moderation/records/:id/decision': guard('MODERATION:REVIEW', (req) => {
     const body = bodyOf(req);
-    const details: Detail[] = [];
-    if (body.decision !== 'APPROVE' && body.decision !== 'REJECT') {
-      details.push({ ref: 'decision', reason: 'OUT_OF_RANGE' });
-    }
+    // The backend reports the first error only, in this order: the decision (missing or empty is
+    // EMPTY_NOT_ALLOWED, anything but APPROVE or REJECT, case included, is OUT_OF_RANGE), then the
+    // note (a rejection needs one; the limit is on the trimmed text), all before the record is read.
     const note = typeof body.note === 'string' ? trimSpec(body.note) : '';
-    if (body.decision === 'REJECT' && note === '') {
-      details.push({ ref: 'note', reason: 'EMPTY_NOT_ALLOWED' });
-    } else if (countCodePoints(note) > DECISION_NOTE_MAX) {
-      details.push({ ref: 'note', reason: 'TOO_LONG' });
-    }
-    if (details.length > 0) throw invalidRequest('invalid decision', details);
+    const refuse = (ref: string, reason: string) => {
+      throw invalidRequest('invalid decision', [{ ref, reason }]);
+    };
+    if (body.decision === undefined || body.decision === null || body.decision === '')
+      refuse('decision', 'EMPTY_NOT_ALLOWED');
+    if (body.decision !== 'APPROVE' && body.decision !== 'REJECT')
+      refuse('decision', 'OUT_OF_RANGE');
+    if (body.decision === 'REJECT' && note === '') refuse('note', 'EMPTY_NOT_ALLOWED');
+    if (countCodePoints(note) > DECISION_NOTE_MAX) refuse('note', 'TOO_LONG');
 
     const found = findRecord(req.params.id);
     if (!found) throw notFound();

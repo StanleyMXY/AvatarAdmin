@@ -181,6 +181,10 @@ function FeaturesDrawer({
 }
 
 type DefForm = { key: string; name: string; priority: number | null };
+
+/** The key of an entitlement: 1 to 64 letters, digits, dots, underscores or hyphens, a letter or a digit first. */
+const DEF_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const DEF_NAME_MAX = 100;
 const DEF_FIELDS: (keyof DefForm)[] = ['key', 'name', 'priority'];
 
 /** The dialog that creates an entitlement, or changes the name and the priority of one (the key stays). */
@@ -206,6 +210,19 @@ function DefDialog({
       value === undefined ||
       (typeof value === 'string' && countCodePoints(trimSpec(value)) === 0);
     if (empty) throw new Error(t('reason.EMPTY_NOT_ALLOWED'));
+  };
+
+  // The rule of a key (backend reply 104): checked for a new entitlement only, the key of an existing
+  // one is the path and is not sent again. A rule that is wrong would only show as a 400 afterwards.
+  const keyRule = async (_: unknown, value: unknown) => {
+    await required(_, value);
+    if (!DEF_KEY.test(trimSpec(String(value))))
+      throw new Error(t('subscriptions.entitlements.keyRule'));
+  };
+  const nameRule = async (_: unknown, value: unknown) => {
+    await required(_, value);
+    if (countCodePoints(trimSpec(String(value))) > DEF_NAME_MAX)
+      throw new Error(t('reason.TOO_LONG'));
   };
 
   const { run, pending } = useSingleFlight(async (values: DefForm) => {
@@ -266,14 +283,15 @@ function DefDialog({
         <Form.Item
           name="key"
           label={t('subscriptions.entitlements.key')}
-          rules={[{ validator: required }]}
+          extra={def === null ? t('subscriptions.entitlements.keyHint') : undefined}
+          rules={def === null ? [{ validator: keyRule }] : []}
         >
           <Input disabled={def !== null} dir="auto" />
         </Form.Item>
         <Form.Item
           name="name"
           label={t('subscriptions.entitlements.name')}
-          rules={[{ validator: required }]}
+          rules={[{ validator: nameRule }]}
         >
           <Input dir="auto" />
         </Form.Item>

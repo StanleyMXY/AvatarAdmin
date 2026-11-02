@@ -63,9 +63,16 @@ const cosmeticBody = (over: Record<string, unknown> = {}) => ({
   creditPrice: null,
   isFree: false,
   isDefault: false,
+  enabled: false,
   sortOrder: 5,
   ...over,
 });
+
+/** The body of an update: the whole item, and no key (it may be sent, but only the one the item has). */
+const putBody = (over: Record<string, unknown> = {}) => {
+  const { key: _key, ...rest } = cosmeticBody(over);
+  return rest;
+};
 
 describe('permissions (contract 17.4, the 形象与装扮 row)', () => {
   const cases: [string, string][] = [
@@ -119,33 +126,67 @@ describe('uploads and the cosmetic catalog', () => {
     }
   });
 
-  it('lists with the filters, in the order of sortOrder, with an address per preview that changes each time', async () => {
+  it('lists in the order of kind, sortOrder and key, with an address per preview that changes each time', async () => {
     const first = await get(COSMETICS, 'root', { pageSize: '200' });
-    const all = first.body.data.items;
+    const all = first.body.data.items as {
+      kind: string;
+      sortOrder: number;
+      key: string;
+      previewUrl: string | null;
+    }[];
     expect(first.body.data.total).toBe(avatarState.cosmetics.length);
-    expect(all.map((c: { sortOrder: number }) => c.sortOrder)).toEqual(
-      [...all.map((c: { sortOrder: number }) => c.sortOrder)].sort((a, b) => a - b),
-    );
+    const order = (a: (typeof all)[number], b: (typeof all)[number]) =>
+      a.kind < b.kind
+        ? -1
+        : a.kind > b.kind
+          ? 1
+          : a.sortOrder - b.sortOrder || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+    expect(all.map((c) => c.key)).toEqual([...all].sort(order).map((c) => c.key));
+    // the backgrounds come before the outfits
+    expect(all[0].kind).toBe('BACKGROUND');
     const second = await get(COSMETICS, 'root', { pageSize: '200' });
     expect(second.body.data.items[0].previewUrl).not.toBe(all[0].previewUrl);
-    expect(all.find((c: { key: string }) => c.key === 'bg_night_city').previewUrl).toBeNull();
+    expect(all.find((c) => c.key === 'bg_night_city')?.previewUrl).toBeNull();
     expect('previewRef' in all[0]).toBe(false);
-
-    const outfits = await get(COSMETICS, 'root', { kind: 'OUTFIT', pageSize: '200' });
-    expect(outfits.body.data.items.every((c: { kind: string }) => c.kind === 'OUTFIT')).toBe(true);
-    const off = await get(COSMETICS, 'root', { enabled: 'false', pageSize: '200' });
-    expect(off.body.data.items.map((c: { key: string }) => c.key)).toContain('bg_night_city');
-    expect(off.body.data.items.every((c: { enabled: boolean }) => !c.enabled)).toBe(true);
-    const real = await get(COSMETICS, 'root', { style: 'REALISTIC', pageSize: '200' });
-    expect(
-      real.body.data.items.every((c: { compatibleStyles: string[] }) =>
-        c.compatibleStyles.includes('REALISTIC'),
-      ),
-    ).toBe(true);
     expect((await get(COSMETICS, 'root', { kind: 'HAT' })).status).toBe(400);
     expect((await get(COSMETICS, 'root', { pageSize: '0' })).body.data.details[0].ref).toBe(
       'pageSize',
     );
+  });
+
+  it('filters by kind only: enabled and style are ignored like any parameter the backend does not know, whatever their value', async () => {
+    const outfits = await get(COSMETICS, 'root', { kind: 'OUTFIT', pageSize: '200' });
+    expect(outfits.body.data.items.every((c: { kind: string }) => c.kind === 'OUTFIT')).toBe(true);
+    expect(outfits.body.data.total).toBeLessThan(avatarState.cosmetics.length);
+    const plain = await get(COSMETICS, 'root', { pageSize: '200' });
+    for (const query of [
+      { enabled: 'false' },
+      { enabled: 'maybe' },
+      { style: 'REALISTIC' },
+      { style: 'x' },
+    ]) {
+      const answer = await get(COSMETICS, 'root', { pageSize: '200', ...query });
+      expect(answer.status, JSON.stringify(query)).toBe(200);
+      expect(answer.body.data.total).toBe(plain.body.data.total);
+      expect(answer.body.data.items).toHaveLength(plain.body.data.items.length);
+    }
+  });
+
+  it('needs English among the names of an item: the detail is names.en, and names for a missing or empty object', async () => {
+    const detailsOf = async (names: unknown) =>
+      (await send(COSMETIC_UPDATE, putBody({ names }), { id: '3' })).body.data.details;
+    expect(await detailsOf({ th: 'ชุดนอน', ar: 'ثوب' })).toEqual([
+      { ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect(await detailsOf({ en: '  ', th: 'ชุดนอน' })).toEqual([
+      { ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect(await detailsOf({})).toEqual([{ ref: 'names', reason: 'EMPTY_NOT_ALLOWED' }]);
+    expect(await detailsOf(undefined)).toEqual([{ ref: 'names', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const fine = await send(COSMETIC_UPDATE, putBody({ names: { en: 'Pyjamas', th: 'ชุดนอน' } }), {
+      id: '3',
+    });
+    expect(fine.status).toBe(200);
   });
 
   it('creates an item with the picture named by its uploadId and keeps the key', async () => {
@@ -191,7 +232,7 @@ describe('uploads and the cosmetic catalog', () => {
 
   it('checks the generation text in code points after trimming: Arabic and emoji count one each', async () => {
     const make = (generationSpec: string) =>
-      send(COSMETIC_UPDATE, cosmeticBody({ generationSpec }), { id: '3' });
+      send(COSMETIC_UPDATE, putBody({ generationSpec }), { id: '3' });
     expect((await make('')).body.data.details).toEqual([
       { ref: 'generationSpec', reason: 'EMPTY_NOT_ALLOWED' },
     ]);
@@ -201,33 +242,147 @@ describe('uploads and the cosmetic catalog', () => {
     expect(long.body.data.details).toEqual([{ ref: 'generationSpec', reason: 'TOO_LONG' }]);
   });
 
-  it('updates by id without touching the key, clears the price with null, and answers 404 for an unknown id', async () => {
+  it('updates by id, clears the price with null, and answers 404 for an unknown id', async () => {
     const before = avatarState.cosmetics.find((c) => c.id === '3');
     const updated = await send(
       COSMETIC_UPDATE,
-      cosmeticBody({ key: 'ignored', creditPrice: null }),
+      { ...putBody({ creditPrice: null }), key: before?.key },
       { id: '3' },
     );
     expect(updated.body.data.key).toBe(before?.key);
     expect(updated.body.data.creditPrice).toBeNull();
-    expect((await send(COSMETIC_UPDATE, cosmeticBody(), { id: 'zz' })).status).toBe(404);
+    expect((await send(COSMETIC_UPDATE, putBody(), { id: 'zz' })).status).toBe(404);
   });
 
-  it('switches an item on and off, and the default of a kind moves to the item that is made the default', async () => {
+  it('needs the whole item to update it: kind and enabled among the fields, 400 on the ref of each one that is missing', async () => {
+    const full = putBody({ enabled: true });
+    for (const field of [
+      'kind',
+      'enabled',
+      'names',
+      'generationSpec',
+      'compatibleStyles',
+      'isFree',
+      'isDefault',
+      'sortOrder',
+    ]) {
+      const { [field]: _left, ...rest } = full as Record<string, unknown>;
+      const answer = await send(COSMETIC_UPDATE, rest, { id: '3' });
+      expect(answer.status, field).toBe(400);
+      expect(
+        answer.body.data.details.map((d: { ref: string }) => d.ref),
+        field,
+      ).toContain(field);
+    }
+    // the key and the picture can stay out, and so can the surfaces (they become none)
+    const { key: _key, surfaces: _surfaces, ...lean } = full as Record<string, unknown>;
+    const lean200 = await send(COSMETIC_UPDATE, lean, { id: '3' });
+    expect(lean200.status).toBe(200);
+    expect(lean200.body.data.surfaces).toEqual([]);
+  });
+
+  it('writes the kind and the enabled state it is sent, and refuses a key that is not the key of the item', async () => {
+    const answer = await send(
+      COSMETIC_UPDATE,
+      { ...putBody({ kind: 'BACKGROUND', enabled: false }), key: 'outfit_red_dress' },
+      { id: '3' },
+    );
+    expect(answer.body.data).toMatchObject({ kind: 'BACKGROUND', enabled: false });
+    const other = await send(
+      COSMETIC_UPDATE,
+      { ...putBody({ enabled: true }), key: 'other_key' },
+      {
+        id: '3',
+      },
+    );
+    expect(other.status).toBe(400);
+    expect(other.body.data.details).toEqual([{ ref: 'key', reason: 'OUT_OF_RANGE' }]);
+    expect(avatarState.cosmetics.find((c) => c.id === '3')?.key).toBe('outfit_red_dress');
+    const wrongKind = await send(COSMETIC_UPDATE, putBody({ kind: 'HAT', enabled: true }), {
+      id: '3',
+    });
+    expect(wrongKind.body.data.details).toEqual([{ ref: 'kind', reason: 'OUT_OF_RANGE' }]);
+  });
+
+  it('needs enabled to create an item or an action, on the ref enabled', async () => {
+    const { enabled: _enabled, ...noEnabled } = cosmeticBody({
+      previewUploadId: await upload(UPLOAD_IMAGE),
+    }) as Record<string, unknown>;
+    const created = await send(COSMETIC_CREATE, noEnabled);
+    expect(created.status).toBe(400);
+    expect(created.body.data.details).toEqual([{ ref: 'enabled', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const action = await send(ACTION_CREATE, {
+      key: 'spin',
+      names: { en: 'Spin' },
+      description: 'Spins once',
+      generationSpec: 'The person turns around once.',
+      compatibleStyles: ['STYLIZED_3D'],
+      triggerableBy: 'AGENT',
+      sortOrder: 70,
+      iconUploadId: await upload(UPLOAD_IMAGE),
+    });
+    expect(action.status).toBe(400);
+    expect(action.body.data.details).toEqual([{ ref: 'enabled', reason: 'EMPTY_NOT_ALLOWED' }]);
+  });
+
+  it('needs the whole action to update it: description, triggerableBy, enabled, sortOrder, names, generationSpec and compatibleStyles', async () => {
+    const full = {
+      names: { en: 'Wave' },
+      description: 'Waves',
+      generationSpec: 'The person waves.',
+      compatibleStyles: ['REALISTIC'],
+      triggerableBy: 'BOTH',
+      enabled: true,
+      sortOrder: 3,
+    };
+    for (const field of Object.keys(full)) {
+      const { [field]: _left, ...rest } = full as Record<string, unknown>;
+      const answer = await send('PUT /api/admin/actions/:id', rest, { id: '1' });
+      expect(answer.status, field).toBe(400);
+      expect(
+        answer.body.data.details.map((d: { ref: string }) => d.ref),
+        field,
+      ).toContain(field);
+    }
+    const ok = await send('PUT /api/admin/actions/:id', { ...full, enabled: false }, { id: '1' });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.enabled).toBe(false);
+    const wrongKey = await send('PUT /api/admin/actions/:id', { ...full, key: 'zz' }, { id: '1' });
+    expect(wrongKey.body.data.details).toEqual([{ ref: 'key', reason: 'OUT_OF_RANGE' }]);
+  });
+
+  it('refuses a price on a free item, and a price outside 1 to 1000000000', async () => {
+    const detailsOf = async (over: Record<string, unknown>) =>
+      (await send(COSMETIC_UPDATE, putBody({ enabled: true, ...over }), { id: '3' })).body.data
+        .details;
+    expect(await detailsOf({ isFree: true, creditPrice: 10 })).toEqual([
+      { ref: 'creditPrice', reason: 'OUT_OF_RANGE' },
+    ]);
+    expect(await detailsOf({ creditPrice: 0 })).toEqual([
+      { ref: 'creditPrice', reason: 'OUT_OF_RANGE' },
+    ]);
+    expect(await detailsOf({ creditPrice: 1_000_000_001 })).toEqual([
+      { ref: 'creditPrice', reason: 'OUT_OF_RANGE' },
+    ]);
+    const fine = await send(
+      COSMETIC_UPDATE,
+      putBody({ enabled: true, creditPrice: 1_000_000_000 }),
+      { id: '3' },
+    );
+    expect(fine.status).toBe(200);
+  });
+
+  it('switches an item on and off', async () => {
     const off = await send(COSMETIC_ENABLED, { enabled: false }, { id: '3' });
     expect(off.body.data.enabled).toBe(false);
     expect((await send(COSMETIC_ENABLED, { enabled: 'yes' }, { id: '3' })).status).toBe(400);
-    await send(COSMETIC_UPDATE, cosmeticBody({ isFree: true, isDefault: true }), { id: '3' });
-    const defaults = avatarState.cosmetics.filter((c) => c.kind === 'OUTFIT' && c.isDefault);
-    expect(defaults.map((c) => c.id)).toEqual(['3']);
   });
 
-  it('refuses a default that is not free, a surface of a platform that does not exist, and a price that is not whole', async () => {
+  it('refuses a surface of a platform that does not exist and a price that is not whole', async () => {
     const bad = await send(
       COSMETIC_UPDATE,
-      cosmeticBody({
-        isDefault: true,
-        isFree: false,
+      putBody({
+        enabled: true,
         surfaces: [{ platform: 'WEB', channel: null }],
         creditPrice: 1.5,
       }),
@@ -235,12 +390,131 @@ describe('uploads and the cosmetic catalog', () => {
     );
     expect(bad.status).toBe(400);
     expect(bad.body.data.details.map((d: { ref: string }) => d.ref).sort()).toEqual(
-      ['creditPrice', 'isDefault', 'surfaces'].sort(),
+      ['creditPrice', 'surfaces'].sort(),
     );
+  });
+
+  it('cancels the default of the kind by itself when another item that qualifies is made the default', async () => {
+    // an item that qualifies: free, on sale, fits both styles
+    const answer = await send(
+      COSMETIC_UPDATE,
+      putBody({
+        isFree: true,
+        isDefault: true,
+        enabled: true,
+        compatibleStyles: ['STYLIZED_3D', 'REALISTIC'],
+      }),
+      { id: '3' },
+    );
+    expect(answer.status).toBe(200);
+    const defaults = avatarState.cosmetics.filter((c) => c.kind === 'OUTFIT' && c.isDefault);
+    expect(defaults.map((c) => c.id)).toEqual(['3']);
+    // the default of the other kind is not touched
+    expect(avatarState.cosmetics.find((c) => c.id === '2')?.isDefault).toBe(true);
+  });
+
+  describe('a kind keeps one default item that is on sale, free and fits both styles', () => {
+    const snapshot = () => JSON.stringify(avatarState.cosmetics);
+    const keptOnly = (answer: { status: number; body: { code: string; data: unknown } }): void => {
+      expect(answer.status).toBe(409);
+      expect(answer.body.code).toBe('INVALID_STATE');
+      expect(answer.body.data).toEqual({ kind: 'OUTFIT' });
+    };
+
+    it('does not take an item as the default that does not qualify, when the kind had a default that did: 409 with data.kind, and nothing changed', async () => {
+      const before = snapshot();
+      keptOnly(
+        await send(
+          COSMETIC_UPDATE,
+          putBody({ isFree: false, isDefault: true, enabled: true, creditPrice: 10 }),
+          { id: '3' },
+        ),
+      );
+      keptOnly(
+        await send(COSMETIC_UPDATE, putBody({ isFree: true, isDefault: true, enabled: true }), {
+          id: '3',
+        }),
+      ); // fits one style only
+      expect(snapshot()).toBe(before);
+    });
+
+    it('refuses to cancel, switch off, make paid or narrow the only default that qualifies', async () => {
+      const before = snapshot();
+      const base = {
+        names: { en: 'Everyday outfit' },
+        generationSpec: 'a plain white t-shirt',
+        compatibleStyles: ['STYLIZED_3D', 'REALISTIC'],
+        isFree: true,
+        isDefault: true,
+        enabled: true,
+        sortOrder: 0,
+      };
+      const put = (over: Record<string, unknown>) =>
+        send(
+          COSMETIC_UPDATE,
+          { kind: 'OUTFIT', surfaces: [], creditPrice: null, ...base, ...over },
+          {
+            id: '1',
+          },
+        );
+      keptOnly(await put({ isDefault: false }));
+      keptOnly(await put({ enabled: false }));
+      keptOnly(await put({ isFree: false, creditPrice: 5 }));
+      keptOnly(await put({ compatibleStyles: ['REALISTIC'] }));
+      keptOnly(await send(COSMETIC_ENABLED, { enabled: false }, { id: '1' }));
+      expect(snapshot()).toBe(before);
+      expect((await put({ names: { en: 'Renamed' } })).status).toBe(200);
+    });
+
+    it('accepts a default that does not qualify when the kind had none that did, and a new item taken as the default the same way', async () => {
+      const first = avatarState.cosmetics.find((c) => c.id === '1');
+      if (first) first.enabled = false;
+      const answer = await send(
+        COSMETIC_UPDATE,
+        putBody({ isFree: false, isDefault: true, enabled: true, creditPrice: 10 }),
+        { id: '3' },
+      );
+      expect(answer.status).toBe(200);
+      expect(
+        avatarState.cosmetics.filter((c) => c.kind === 'OUTFIT' && c.isDefault).map((c) => c.id),
+      ).toEqual(['3']);
+    });
+
+    it('also stops the creation of an item that is taken as the default without qualifying', async () => {
+      const before = snapshot();
+      const created = await send(
+        COSMETIC_CREATE,
+        cosmeticBody({
+          previewUploadId: await upload(UPLOAD_IMAGE),
+          isFree: false,
+          isDefault: true,
+          creditPrice: 5,
+        }),
+      );
+      keptOnly(created);
+      expect(snapshot()).toBe(before);
+    });
   });
 });
 
 describe('actions', () => {
+  it('lists in the order of sortOrder and then key, not of the id', async () => {
+    // nod (id 4) gets the sortOrder of smile (id 2): the key puts nod first, the id would put it last
+    const smile = avatarState.actions.find((a) => a.key === 'smile');
+    const nod = avatarState.actions.find((a) => a.key === 'nod');
+    if (!smile || !nod) throw new Error('the seed has smile and nod');
+    nod.sortOrder = smile.sortOrder;
+    const answer = await get(ACTIONS, 'root', { pageSize: '200' });
+    const rows = answer.body.data.items as { sortOrder: number; key: string }[];
+    expect(rows.map((r) => `${r.sortOrder}:${r.key}`)).toEqual(
+      [...rows]
+        .sort((a, b) => a.sortOrder - b.sortOrder || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+        .map((r) => `${r.sortOrder}:${r.key}`),
+    );
+    const keys = rows.map((r) => r.key);
+    expect(keys.indexOf('nod')).toBeLessThan(keys.indexOf('smile'));
+  });
+
   it('lists, creates with iconUploadId and starts the new action disabled', async () => {
     expect((await get(ACTIONS)).body.data.total).toBe(avatarState.actions.length);
     const body = {
@@ -251,6 +525,7 @@ describe('actions', () => {
       compatibleStyles: ['STYLIZED_3D'],
       surfaces: [{ platform: 'IOS', channel: null }],
       triggerableBy: 'AGENT',
+      enabled: false,
       sortOrder: 70,
     };
     expect((await send(ACTION_CREATE, body)).status).toBe(400);
@@ -267,6 +542,29 @@ describe('actions', () => {
     ).toBe(409);
   });
 
+  it('needs English among the names of an action, on create and update', async () => {
+    const body = {
+      names: { th: 'หมุน' },
+      description: 'Spins once',
+      generationSpec: 'The person turns around once.',
+      compatibleStyles: ['STYLIZED_3D'],
+      surfaces: [],
+      triggerableBy: 'AGENT',
+      enabled: false,
+      sortOrder: 70,
+    };
+    const updated = await send('PUT /api/admin/actions/:id', body, { id: '1' });
+    expect(updated.body.data.details).toEqual([{ ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const created = await send(ACTION_CREATE, {
+      ...body,
+      key: 'spin',
+      iconUploadId: await upload(UPLOAD_IMAGE),
+    });
+    expect(created.body.data.details).toEqual([{ ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' }]);
+    const none = await send('PUT /api/admin/actions/:id', { ...body, names: {} }, { id: '1' });
+    expect(none.body.data.details).toEqual([{ ref: 'names', reason: 'EMPTY_NOT_ALLOWED' }]);
+  });
+
   it('takes all three values of triggerableBy and refuses another', async () => {
     for (const [n, triggerableBy] of ['USER', 'AGENT', 'BOTH'].entries()) {
       const r = await send(
@@ -278,6 +576,7 @@ describe('actions', () => {
           compatibleStyles: ['REALISTIC'],
           surfaces: [],
           triggerableBy,
+          enabled: true,
           sortOrder: n,
         },
         { id: '1' },
@@ -294,6 +593,7 @@ describe('actions', () => {
         compatibleStyles: [],
         surfaces: [],
         triggerableBy: 'ROBOT',
+        enabled: true,
         sortOrder: 0,
       },
       { id: '1' },
@@ -309,10 +609,28 @@ describe('actions', () => {
     const disabled = await send(BACKFILL, undefined, { id: '5' });
     expect(disabled.status).toBe(409);
     expect(disabled.body.code).toBe('INVALID_STATE');
+    expect(disabled.body.data).toBeNull();
   });
 });
 
 describe('declarations', () => {
+  it('needs English among the texts of a declaration: the detail is texts.en, and texts for a missing or empty object', async () => {
+    const made = (texts: unknown) => send(DECLARATION_CREATE, { version: '2028-v1', texts });
+    expect((await made({ th: 'ยอมรับ' })).body.data.details).toEqual([
+      { ref: 'texts.en', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect((await made({ en: ' ', th: 'ยอมรับ' })).body.data.details).toEqual([
+      { ref: 'texts.en', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect((await made({})).body.data.details).toEqual([
+      { ref: 'texts', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect((await made(undefined)).body.data.details).toEqual([
+      { ref: 'texts', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    expect((await made({ en: 'Agree' })).status).toBe(200);
+  });
+
   it('lists the versions, creates one that is not active, and makes exactly one active', async () => {
     const listed = await get(DECLARATIONS);
     expect(listed.body.data.items.filter((d: { isActive: boolean }) => d.isActive)).toHaveLength(1);
@@ -480,8 +798,9 @@ describe('default avatars', () => {
     const again = await send(GENERATE, undefined, { id: 'da-3' });
     expect(again.status).toBe(409);
     expect(again.body.code).toBe('INVALID_STATE');
-    expect(again.body.data.status).toBe('GENERATING');
-    expect((await send(GENERATE, undefined, { id: 'da-4' })).body.data.status).toBe('READY');
+    // the backend says nothing about the state in the 409 of the default avatars
+    expect(again.body.data).toBeNull();
+    expect((await send(GENERATE, undefined, { id: 'da-4' })).body.data).toBeNull(); // READY: 409 too
     settleGenerations(Date.now() + GENERATION_MS + 1);
     const row = avatarState.defaultAvatars.find((d) => d.id === 'da-3');
     expect(row).toMatchObject({ status: 'READY', failureReason: null });
@@ -508,7 +827,7 @@ describe('default avatars', () => {
   it('activates only a READY avatar, one at a time: the earlier one stays but is no longer active', async () => {
     const refused = await send(ACTIVATE, undefined, { id: 'da-3' });
     expect(refused.status).toBe(409);
-    expect(refused.body.data.status).toBe('DRAFT');
+    expect(refused.body.data).toBeNull();
     const ok = await send(ACTIVATE, undefined, { id: 'da-4' });
     expect(ok.body.data.isActive).toBe(true);
     expect(avatarState.defaultAvatars.filter((d) => d.isActive).map((d) => d.id)).toEqual(['da-4']);
@@ -518,10 +837,10 @@ describe('default avatars', () => {
   it('deletes only an avatar that is neither active nor generating', async () => {
     const active = await send(REMOVE, undefined, { id: 'da-5' });
     expect(active.status).toBe(409);
-    expect(active.body.data.status).toBe('READY');
+    expect(active.body.data).toBeNull();
     const running = await send(REMOVE, undefined, { id: 'da-2' });
     expect(running.status).toBe(409);
-    expect(running.body.data.status).toBe('GENERATING');
+    expect(running.body.data).toBeNull();
     expect((await send(REMOVE, undefined, { id: 'da-3' })).status).toBe(200);
     expect(avatarState.defaultAvatars.some((d) => d.id === 'da-3')).toBe(false);
     expect((await send(REMOVE, undefined, { id: 'da-3' })).status).toBe(404);
@@ -563,18 +882,23 @@ describe("an account's avatars and the grant of a cosmetic", () => {
     expect(systemState.audit.length).toBe(sizeAfterRead);
   });
 
-  it('grants a cosmetic with a reason, once, and then the account owns it with source ADMIN_GRANT', async () => {
+  it('grants a cosmetic with a reason, answers null, and then the account owns it with source ADMIN_GRANT; granting it again succeeds and changes nothing', async () => {
     const granted = await send(
       GRANT,
       { itemId: '4', reason: ' Compensation ' },
       { id: ACCOUNT.empty },
     );
     expect(granted.status).toBe(200);
+    expect(granted.body.data).toBeNull();
     const read = await get(ACCOUNT_AVATARS, 'root', {}, { id: ACCOUNT.empty });
     expect(read.body.data.cosmetics).toMatchObject([{ itemId: '4', source: 'ADMIN_GRANT' }]);
+    // the same item again is a success that changes nothing: no second row, no 409
     const twice = await send(GRANT, { itemId: '4', reason: 'again' }, { id: ACCOUNT.empty });
-    expect(twice.status).toBe(409);
-    expect(twice.body.code).toBe('DUPLICATE_RESOURCE');
+    expect(twice.status).toBe(200);
+    expect(twice.body.data).toBeNull();
+    const again = await get(ACCOUNT_AVATARS, 'root', {}, { id: ACCOUNT.empty });
+    expect(again.body.data.cosmetics).toHaveLength(1);
+    expect(again.body.data.cosmetics[0].grantedAt).toBe(read.body.data.cosmetics[0].grantedAt);
     expect((await send(GRANT, { itemId: '999', reason: 'x' }, { id: ACCOUNT.empty })).status).toBe(
       404,
     );

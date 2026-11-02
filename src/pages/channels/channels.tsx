@@ -37,11 +37,8 @@ function EnabledSwitch({
     intl.formatMessage({ id }, values);
   const { run, pending } = useSingleFlight(async (next: boolean) => {
     try {
-      await updateChannelPackage(row.code, {
-        name: row.name,
-        packageName: row.packageName,
-        enabled: next,
-      });
+      // Only the switch is named: the name and the package name that the list read are not sent back.
+      await updateChannelPackage(row.code, { enabled: next });
       message.success(t('channels.saved'));
     } catch (error) {
       message.error(describeFailure(intl, error).text);

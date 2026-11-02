@@ -60,16 +60,21 @@ export const listEntitlementDefs = (): Promise<{ items: EntitlementDef[] }> =>
 
 export type EntitlementDefInput = { key: string; name: string; priority: number };
 
-/** `POST /entitlement-defs` (`SUBSCRIPTION:CONFIG`); the key or the priority taken is 409 DUPLICATE_RESOURCE. */
-export const createEntitlementDef = (input: EntitlementDefInput): Promise<EntitlementDef> =>
-  apiRequest<EntitlementDef>({ method: 'POST', url: '/entitlement-defs', body: input });
+/**
+ * `POST /entitlement-defs` (`SUBSCRIPTION:CONFIG`): answers `{ key }`. The key is 1 to 64 letters,
+ * digits, `.`, `_` or `-` starting with a letter or a digit, and cannot be changed afterwards; the
+ * name is 1 to 100 code points. A key or a priority that is taken is 409 DUPLICATE_RESOURCE with
+ * `data.field` `key` or `priority`.
+ */
+export const createEntitlementDef = (input: EntitlementDefInput): Promise<{ key: string }> =>
+  apiRequest<{ key: string }>({ method: 'POST', url: '/entitlement-defs', body: input });
 
-/** `PUT /entitlement-defs/{key}` (`SUBSCRIPTION:CONFIG`): the name and the priority. */
+/** `PUT /entitlement-defs/{key}` (`SUBSCRIPTION:CONFIG`): the name and the priority; answers `data: null`. */
 export const updateEntitlementDef = (
   key: string,
   input: { name: string; priority: number },
-): Promise<EntitlementDef> =>
-  apiRequest<EntitlementDef>({ method: 'PUT', url: `/entitlement-defs/${enc(key)}`, body: input });
+): Promise<null> =>
+  apiRequest<null>({ method: 'PUT', url: `/entitlement-defs/${enc(key)}`, body: input });
 
 /**
  * `PUT /entitlement-defs/{key}/features` (`SUBSCRIPTION:CONFIG`): the switches that are listed are
@@ -102,9 +107,13 @@ export const saveGateDefault = (key: string, value: FeatureValue): Promise<Featu
     body: featureValueBody(value),
   });
 
-/** `PUT /feature-gates/{key}/credit-cost`: credits for one more unit; null means it cannot be bought. */
-export const saveGateCreditCost = (key: string, creditCost: number | null): Promise<FeatureGate> =>
-  apiRequest<FeatureGate>({
+/**
+ * `PUT /feature-gates/{key}/credit-cost`: credits for one more unit (a whole number from 1); null
+ * means it cannot be bought. Only `assets.avatar_max` and `assets.voice_max` take a price; the
+ * answer is `data: null`, so the switches are read again.
+ */
+export const saveGateCreditCost = (key: string, creditCost: number | null): Promise<null> =>
+  apiRequest<null>({
     method: 'PUT',
     url: `/feature-gates/${enc(key)}/credit-cost`,
     body: { creditCost },
@@ -116,9 +125,14 @@ export const saveGateCreditCost = (key: string, creditCost: number | null): Prom
 export const listSubscriptionProducts = (): Promise<{ items: SubscriptionProduct[] }> =>
   apiRequest<{ items: SubscriptionProduct[] }>({ method: 'GET', url: '/subscription-products' });
 
-/** `PUT /subscription-products`: one mapping, by (store, productId): changed if it exists, else added. */
-export const saveSubscriptionProduct = (input: SubscriptionProduct): Promise<SubscriptionProduct> =>
-  apiRequest<SubscriptionProduct>({ method: 'PUT', url: '/subscription-products', body: input });
+/**
+ * `PUT /subscription-products`: the body is a list, `{ items }`; each item is changed if its
+ * (store, productId) exists, else added, and the ones not listed stay. The mapping that is saved goes
+ * in as the only item. The answer is `data: null`, so the caller reads the list again. All six fields
+ * are required; `surfaces: []` means every end, a missing one is refused, not kept.
+ */
+export const saveSubscriptionProduct = (input: SubscriptionProduct): Promise<null> =>
+  apiRequest<null>({ method: 'PUT', url: '/subscription-products', body: { items: [input] } });
 
 // ---- events ----
 
@@ -152,7 +166,11 @@ export const getAccountEntitlements = (accountId: string): Promise<AccountEntitl
     url: `/accounts/${enc(accountId)}/entitlements`,
   });
 
-/** `POST /accounts/{id}/promo-entitlements` (`SUBSCRIPTION:GRANT`): a limited-time entitlement; the store subscription is not touched. */
+/**
+ * `POST /accounts/{id}/promo-entitlements` (`SUBSCRIPTION:GRANT`): a limited-time entitlement; the
+ * store subscription is not touched. `durationDays` is 1 to 3650, `reason` 1 to 500 code points; an
+ * entitlement that does not exist is 404.
+ */
 export const grantPromoEntitlement = (
   accountId: string,
   input: { entitlementKey: string; durationDays: number; reason: string },
@@ -163,6 +181,6 @@ export const grantPromoEntitlement = (
     body: input,
   });
 
-/** `POST /promo-entitlements/{id}/revoke` (`SUBSCRIPTION:GRANT`). */
-export const revokePromoEntitlement = (promoId: string): Promise<unknown> =>
-  apiRequest<unknown>({ method: 'POST', url: `/promo-entitlements/${enc(promoId)}/revoke` });
+/** `POST /promo-entitlements/{id}/revoke` (`SUBSCRIPTION:GRANT`): no body; answers `data: null`. */
+export const revokePromoEntitlement = (promoId: string): Promise<null> =>
+  apiRequest<null>({ method: 'POST', url: `/promo-entitlements/${enc(promoId)}/revoke` });

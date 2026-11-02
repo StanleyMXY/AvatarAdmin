@@ -1,5 +1,8 @@
 import { describeFailure } from '../../session/describe';
 
+/** How many nodes the backend returns for one chain at most; beyond that it answers `truncated: true` (answer 73). */
+export const CHAIN_NODE_LIMIT = 10000;
+
 /** The depth the chain query starts at when nothing else is chosen. */
 export const DEFAULT_CHAIN_DEPTH = 3;
 

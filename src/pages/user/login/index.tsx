@@ -14,6 +14,11 @@ import { AuthFrame } from '../AuthFrame';
 
 type Values = { username: string; password: string; totp?: string };
 
+// The wrong codes in a row after which the backend locks the user name (its default of
+// `admin.totp_max_failures`; the page is not told the configured value). The fifth wrong code is still
+// answered 401, so the page warns then: another wrong code is a lock (backend answer 10).
+const WRONG_CODES_BEFORE_LOCK = 5;
+
 export default function Login() {
   const intl = useIntl();
   const [form] = Form.useForm<Values>();
@@ -24,6 +29,8 @@ export default function Login() {
   const [needTotp, setNeedTotp] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const totpRef = useRef<{ focus: () => void } | null>(null);
+  // The wrong codes in a row on this page, for one user name.
+  const wrongCodes = useRef<{ username: string; count: number }>({ username: '', count: 0 });
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
 
@@ -41,12 +48,15 @@ export default function Login() {
   const submit = (values: Values) =>
     run(async () => {
       setNotice(null);
+      const username = trimSpec(values.username);
+      if (wrongCodes.current.username !== username) wrongCodes.current = { username, count: 0 };
       try {
         const result = await login({
-          username: trimSpec(values.username),
+          username,
           password: values.password,
           totp: needTotp ? trimSpec(values.totp ?? '') : undefined,
         });
+        wrongCodes.current.count = 0;
         if (!hasToken(result)) {
           setPendingEnroll({
             enrollToken: result.enrollToken,
@@ -70,8 +80,17 @@ export default function Login() {
           setTimeout(() => totpRef.current?.focus(), 0);
         } else if (error.code === 'ADMIN_TOTP_INVALID') {
           form.setFieldValue('totp', '');
+          wrongCodes.current.count += 1;
           // The same answer also means the stored secret cannot be read: its own words say so.
-          setNotice({ type: 'error', content: { id: 'auth.login.totpInvalid' } });
+          setNotice({
+            type: 'error',
+            content: {
+              id:
+                wrongCodes.current.count === WRONG_CODES_BEFORE_LOCK
+                  ? 'auth.login.totpInvalidLast'
+                  : 'auth.login.totpInvalid',
+            },
+          });
           setTimeout(() => totpRef.current?.focus(), 0);
         } else {
           setNotice(failureNotice(failure));

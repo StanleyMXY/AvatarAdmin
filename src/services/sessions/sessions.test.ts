@@ -25,12 +25,12 @@ describe('the session functions', () => {
       guest: false,
       from: '2026-10-01T00:00:00Z',
       to: '2026-10-02T00:00:00Z',
-      ongoing: true,
+      inProgress: true,
       endReason: 'DEADLINE',
     });
     expect(calls[0].url).toBe('/api/admin/sessions?page=2&pageSize=50');
     expect(calls[1].url).toBe(
-      '/api/admin/sessions?page=1&pageSize=20&accountId=acc+1%2F2&guest=false&from=2026-10-01T00%3A00%3A00Z&to=2026-10-02T00%3A00%3A00Z&ongoing=true&endReason=DEADLINE',
+      '/api/admin/sessions?page=1&pageSize=20&accountId=acc+1%2F2&guest=false&from=2026-10-01T00%3A00%3A00Z&to=2026-10-02T00%3A00%3A00Z&inProgress=true&endReason=DEADLINE',
     );
     expect(calls[0].init.method).toBe('GET');
   });
@@ -47,15 +47,13 @@ describe('the end reasons', () => {
     expect(END_REASONS).toContain('BANNED');
   });
 
-  it.each([
-    ['sessions.endReason', 'Account banned', '账号被封禁'],
-    ['users.endReason', 'The account was banned', '账号被封禁'],
-  ])('are all written in words in both languages under %s', (prefix, bannedEn, bannedZh) => {
+  it('are all written in words in both languages under sessions.endReason (the sessions list of an account has no end reason, so users.endReason is gone)', () => {
     for (const reason of END_REASONS) {
-      expect(enUS[`${prefix}.${reason}`], `${prefix}.${reason} en`).toBeTruthy();
-      expect(zhCN[`${prefix}.${reason}`], `${prefix}.${reason} zh`).toBeTruthy();
+      expect(enUS[`sessions.endReason.${reason}`], `${reason} en`).toBeTruthy();
+      expect(zhCN[`sessions.endReason.${reason}`], `${reason} zh`).toBeTruthy();
     }
-    expect(enUS[`${prefix}.BANNED`]).toBe(bannedEn);
-    expect(zhCN[`${prefix}.BANNED`]).toBe(bannedZh);
+    expect(enUS['sessions.endReason.BANNED']).toBe('Account banned');
+    expect(zhCN['sessions.endReason.BANNED']).toBe('账号被封禁');
+    expect(Object.keys(enUS).filter((key) => key.startsWith('users.endReason.'))).toEqual([]);
   });
 });

@@ -26,3 +26,7 @@
 只显示 `error.MEMORY_MODEL_CONFLICT` 的译文，`data.detail` 不读、不显示。这不是阻塞：技术人员能从模型列表里看到已登记的维度。
 
 核对于 2026-11-01
+
+后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：137）。
+
+核对于 2026-11-02

@@ -123,12 +123,18 @@ describe('creating and changing a channel package', () => {
     });
   });
 
-  it('changes only the three fields the contract allows, on the code in the path', async () => {
+  // Answers 89: the fields that are named change, the others stay. null would mean "not named", so a
+  // package name is cleared with an empty text.
+  it('sends what it is given, on the code in the path: the three fields, or one of them', async () => {
     const calls = answer(row('play'));
-    await updateChannelPackage('a/b', { name: 'New', packageName: null, enabled: false });
+    await updateChannelPackage('a/b', { name: 'New', packageName: '', enabled: false });
     expect(calls[0].init.method).toBe('PUT');
     expect(new URL(calls[0].url, 'http://x').pathname).toBe('/api/admin/channels/a%2Fb');
-    expect(body(calls[0])).toEqual({ name: 'New', packageName: null, enabled: false });
+    expect(body(calls[0])).toEqual({ name: 'New', packageName: '', enabled: false });
+    await updateChannelPackage('play', { enabled: true });
+    expect(body(calls[1])).toEqual({ enabled: true });
+    await updateChannelPackage('play', { name: 'ชื่อใหม่' });
+    expect(body(calls[2])).toEqual({ name: 'ชื่อใหม่' });
   });
 
   it('has no way to delete', async () => {

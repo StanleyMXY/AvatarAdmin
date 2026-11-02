@@ -79,27 +79,37 @@ export const createAdmin = (input: AdminCreateInput): Promise<AdminUser> =>
   });
 
 /**
- * The body of `PUT /admins/{id}`. A person cannot change their own roles or super administrator flag
- * (contract 17.4), so for the own row nothing of them is in the body, whatever the form held; the
- * form disables the controls, this is the second line.
+ * The body of `PUT /admins/{id}`. The backend does not read a missing field as "keep it" for two of
+ * them (its answer 44): the user name and the whole list of roles are sent on every update, with the
+ * current values when the patch does not change them (a missing `username` or `roleIds` is a 400, and
+ * `[]` takes every role away). The flag is optional: it goes only when the patch holds it. A person
+ * cannot change their own roles or flag (contract 17.4), so for the own row the body holds the user
+ * name and the current roles, whatever the form held; the form disables the controls, this is the
+ * second line.
  */
-export function adminPatchBody(patch: AdminPatch, own: boolean): AdminPatch {
-  const body: AdminPatch = {};
-  if (own) return body;
-  if (patch.roleIds !== undefined) body.roleIds = [...patch.roleIds];
-  if (patch.superAdmin !== undefined) body.superAdmin = patch.superAdmin;
+export function adminPatchBody(
+  target: { username: string; roleIds: readonly string[] },
+  patch: AdminPatch,
+  own: boolean,
+): { username: string; roleIds: string[]; superAdmin?: boolean } {
+  const body: { username: string; roleIds: string[]; superAdmin?: boolean } = {
+    username: target.username,
+    roleIds: [...(own ? target.roleIds : (patch.roleIds ?? target.roleIds))],
+  };
+  if (!own && patch.superAdmin !== undefined) body.superAdmin = patch.superAdmin;
   return body;
 }
 
+/** `target` is the row as the page read it: its user name and the ids of its roles are what an update repeats. */
 export function updateAdmin(
-  target: { id: string; username?: string },
+  target: { id: string; username: string; roleIds: readonly string[] },
   patch: AdminPatch,
   me: { id?: string; username?: string } | undefined,
 ): Promise<AdminUser> {
   return apiRequest({
     method: 'PUT',
     url: `/admins/${enc(target.id)}`,
-    body: adminPatchBody(patch, isOwnAccount(me, target)),
+    body: adminPatchBody(target, patch, isOwnAccount(me, target)),
   });
 }
 
@@ -145,18 +155,22 @@ export async function listPermissions(): Promise<PermissionNode[]> {
 export const createPermission = (input: PermissionCreateInput): Promise<PermissionNode> =>
   apiRequest({ method: 'POST', url: '/permissions', body: input });
 
-/** The code and the type never change; a built-in node does not get a new parent either. */
+/**
+ * The code and the type never change. The parent is always in the body (the backend reads a missing
+ * one as null: a custom node would go to the root, a built-in node would be refused). A built-in node
+ * does not get a new parent: its own is sent, whatever the patch holds.
+ */
 export const updatePermission = (
   code: string,
   patch: PermissionPatch,
-  node: { builtin: boolean },
+  node: { builtin: boolean; parent: string | null },
 ): Promise<PermissionNode> => {
   const body: PermissionPatch = {
     nameZh: patch.nameZh,
     nameEn: patch.nameEn,
     sortOrder: patch.sortOrder,
+    parent: node.builtin ? node.parent : (patch.parent ?? null),
   };
-  if (!node.builtin && patch.parent !== undefined) body.parent = patch.parent;
   return apiRequest({ method: 'PUT', url: `/permissions/${enc(code)}`, body });
 };
 

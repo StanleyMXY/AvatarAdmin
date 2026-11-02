@@ -7,7 +7,8 @@ export type AnalyticsEventRow = {
   id: string;
   eventName: string;
   accountId: string | null;
-  deviceId: string;
+  /** Null for a `SERVER` event. */
+  deviceId: string | null;
   /** `CLIENT` events came through `POST /api/events`, `SERVER` events were written by the backend. */
   source: 'CLIENT' | 'SERVER';
   params: unknown;
@@ -36,6 +37,12 @@ type AnalyticsStore = {
   funnels: SavedFunnelRow[];
   /** How many funnels the (imagined) admin instance is computing now; the mock answers at once, so a test or a hand sets it. */
   funnelInFlight: number;
+  /**
+   * Makes the four live endpoints answer as when the read could not be finished: `TOO_SLOW` (the
+   * database did not answer within 30 seconds; all four) or `TOO_MANY_EVENTS` (a funnel had to
+   * read more than 200,000 events; funnel only). Both are 400 on `from`. A test or a hand sets it.
+   */
+  readFailure: 'TOO_SLOW' | 'TOO_MANY_EVENTS' | null;
 };
 
 /**
@@ -49,7 +56,12 @@ export const FUNNEL_RATE_LIMIT_STEP = 'mock:rate-limited';
 
 const holder = globalThis as { __avatarAdminMockAnalytics?: AnalyticsStore };
 const isFirstLoad = holder.__avatarAdminMockAnalytics === undefined;
-holder.__avatarAdminMockAnalytics ??= { events: [], funnels: [], funnelInFlight: 0 };
+holder.__avatarAdminMockAnalytics ??= {
+  events: [],
+  funnels: [],
+  funnelInFlight: 0,
+  readFailure: null,
+};
 
 export const analyticsStore: AnalyticsStore = holder.__avatarAdminMockAnalytics;
 
@@ -104,7 +116,8 @@ export function resetAnalyticsStore(): void {
     const platform = who.device % 3 === 0 ? 'IOS' : 'ANDROID';
     const receivedAt = new Date(now - Math.max(0, hoursAgo) * 3600000 - counter).toISOString();
     events.push({
-      id: String(70000 + counter),
+      // the 24 hexadecimal characters of a document id of the event log
+      id: (0x6540a0000000 + counter).toString(16).padStart(24, '0'),
       eventName,
       accountId: who.account,
       deviceId: uuid(who.device),
@@ -183,6 +196,7 @@ export function resetAnalyticsStore(): void {
         { account, device: i },
         {
           source: 'SERVER',
+          deviceId: null,
           ip: null,
           country: null,
           context: null,
@@ -261,6 +275,7 @@ export function resetAnalyticsStore(): void {
   );
   analyticsStore.events = events;
   analyticsStore.funnelInFlight = 0;
+  analyticsStore.readFailure = null;
 
   const created = daysAgoIso(30);
   analyticsStore.funnels = PRESETS.map((preset, i) => ({

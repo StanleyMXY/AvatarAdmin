@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { Button, Flex, Spin, Table, Tooltip, Typography } from 'antd';
+import { Button, Flex, Select, Spin, Table, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
@@ -21,16 +21,27 @@ import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { lastNDaysUtc } from '../../utils/utcDay';
 import { CampaignSelect } from './CampaignSelect';
-import { moneyText, numberOf, rateText, shareText, unitCostText } from './figures';
+import {
+  isUnattributedRow,
+  moneyText,
+  numberOf,
+  rateText,
+  shareText,
+  unitCostText,
+} from './figures';
 import { useCampaigns } from './useCampaigns';
 
 type Filter = { range: DayRange; campaignId: string | undefined };
-type Row = PerformanceRow & { rowKey: string; unattributed?: boolean };
+type Row = PerformanceRow & {
+  rowKey: string;
+  unattributed?: boolean;
+  /** The unattributed row of the daily table: the count is of the whole range, not of a day. */
+  inDays?: boolean;
+};
 
 const DAILY_PAGE_SIZE = 20;
 const initialFilter = (): Filter => ({ range: lastNDaysUtc(7), campaignId: undefined });
-/** The campaign id 0 is not a campaign: it is the row of the installs that matched none. */
-const isUnattributedRow = (row: PerformanceRow) => String(row.campaignId ?? '') === '0';
+const EXPORT_GROUPS = ['campaign', 'day'] as const;
 
 /**
  * 投放效果 (`ATTRIBUTION:VIEW`): the funnel of the own attribution for each campaign and for each
@@ -53,6 +64,8 @@ export default function CampaignStatsPage() {
   const [applied, setApplied] = useState<Filter>(initialFilter);
   const [campaignRows, setCampaignRows] = useState<PerformanceRow[] | null>(null);
   const [dayRows, setDayRows] = useState<PerformanceRow[] | null>(null);
+  // How the export is grouped; the backend takes `campaign` (its default) or `day`.
+  const [exportGroup, setExportGroup] = useState<(typeof EXPORT_GROUPS)[number]>('campaign');
   // The failed read itself (boxed: a thrown value can be anything); its words, and what the backend
   // refused about the dates, are made when the page is drawn, so they follow the language.
   const [failed, setFailed] = useState<{ error: unknown } | null>(null);
@@ -127,12 +140,26 @@ export default function CampaignStatsPage() {
     return count === null ? DASH : shareText(count, matched + count, locale);
   }, [summary, locale]);
 
+  // The day grouping has the unattributed installs as its last row too, without a day: it is kept
+  // out of the days (and the chart) and shown at the end of the daily table.
   const days = useMemo<(PerformanceRow & { statDate: string; rowKey: string })[]>(
     () =>
       (dayRows ?? [])
-        .filter((r): r is PerformanceRow & { statDate: string } => typeof r.statDate === 'string')
+        .filter(
+          (r): r is PerformanceRow & { statDate: string } =>
+            !isUnattributedRow(r) && typeof r.statDate === 'string',
+        )
         .map((r) => ({ ...r, rowKey: r.statDate })),
     [dayRows],
+  );
+  const dayTable = useMemo<Row[]>(
+    () => [
+      ...days,
+      ...(dayRows ?? [])
+        .filter(isUnattributedRow)
+        .map((r, i) => ({ ...r, rowKey: `u|day|${i}`, unattributed: true, inDays: true })),
+    ],
+    [days, dayRows],
   );
 
   const series = [
@@ -189,18 +216,20 @@ export default function CampaignStatsPage() {
         render: (_: unknown, row: Row) =>
           row.unattributed ? (
             <Flex vertical align="end">
-              <span data-testid="unattributed-count">
+              <span data-testid={row.inDays ? 'unattributed-day-count' : 'unattributed-count'}>
                 {countText(locale, row.unattributedInstalls)}
               </span>
-              <Tooltip title={t('campaign.stats.unattributed.share', { share })}>
-                <Typography.Text
-                  type="secondary"
-                  data-testid="unattributed-share"
-                  style={{ whiteSpace: 'nowrap' }}
-                >
-                  {t('campaign.stats.unattributed.shareShort', { share })}
-                </Typography.Text>
-              </Tooltip>
+              {row.inDays ? null : (
+                <Tooltip title={t('campaign.stats.unattributed.share', { share })}>
+                  <Typography.Text
+                    type="secondary"
+                    data-testid="unattributed-share"
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    {t('campaign.stats.unattributed.shareShort', { share })}
+                  </Typography.Text>
+                </Tooltip>
+              )}
             </Flex>
           ) : (
             countText(locale, row.installs)
@@ -278,7 +307,14 @@ export default function CampaignStatsPage() {
       title: t('campaign.stats.col.date'),
       key: 'date',
       fixed: 'left',
-      render: (_: unknown, row) => orDash(row.statDate),
+      render: (_: unknown, row) =>
+        row.unattributed ? (
+          <Tooltip title={t('campaign.stats.unattributed.dayTip')}>
+            <span>{t('campaign.stats.unattributed')}</span>
+          </Tooltip>
+        ) : (
+          orDash(row.statDate)
+        ),
     },
     ...metricColumns(),
   ];
@@ -288,7 +324,7 @@ export default function CampaignStatsPage() {
     from: applied.range.from,
     to: applied.range.to,
     campaignId: applied.campaignId,
-    groupBy: 'campaign',
+    groupBy: exportGroup,
   };
 
   return (
@@ -321,6 +357,16 @@ export default function CampaignStatsPage() {
           name="attribution-performance"
           viewCode="ATTRIBUTION:VIEW"
           params={exportParams}
+        />
+        <Select
+          aria-label={t('campaign.stats.exportBy')}
+          value={exportGroup}
+          onChange={setExportGroup}
+          style={{ minWidth: 160 }}
+          options={EXPORT_GROUPS.map((group) => ({
+            value: group,
+            label: t(`campaign.stats.exportBy.${group}`),
+          }))}
         />
       </Flex>
       {rangeRefusals.length > 0 ? (
@@ -361,7 +407,12 @@ export default function CampaignStatsPage() {
             size="small"
             rowKey="rowKey"
             columns={dayColumns}
-            dataSource={days}
+            dataSource={dayTable}
+            onRow={(row) =>
+              row.unattributed
+                ? ({ 'data-testid': 'unattributed-day-row' } as React.HTMLAttributes<HTMLElement>)
+                : {}
+            }
             pagination={{
               pageSize: DAILY_PAGE_SIZE,
               showSizeChanger: false,

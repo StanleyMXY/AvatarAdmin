@@ -1,5 +1,9 @@
 // The rules of a channel package that the browser can check before it asks (contract 24.7). The
-// backend checks them all again and has the last word.
+// backend checks them all again and has the last word. Its 400 for a channel has no `ref` and no
+// reason code (answers 90), so these are the only place a field gets its own words.
+
+import { countCodePoints } from '../../utils/codePoints';
+import { trimSpec } from '../../utils/trimSpec';
 
 export type RuleCheck = { ok: true } | { ok: false; reasonKey: string };
 
@@ -19,8 +23,20 @@ export function checkChannelCode(code: string, existing: readonly string[]): Rul
   return existing.includes(code) ? bad('channels.rule.codeExists') : ok;
 }
 
-/** None (an empty text), or letters, digits, dots, hyphens and underscores. */
+/** The most code points a name has (answers 90) and the most characters a package name has. */
+export const NAME_MAX = 64;
+export const PACKAGE_NAME_MAX = 255;
+
+/** 1 to 64 code points after the ends are cut (the way the backend counts), not blank. */
+export function checkChannelName(name: string): RuleCheck {
+  const cut = trimSpec(name);
+  if (cut === '') return bad('channels.rule.nameRequired');
+  return countCodePoints(cut) > NAME_MAX ? bad('channels.rule.nameTooLong') : ok;
+}
+
+/** None (an empty text), or at most 255 letters, digits, dots, hyphens and underscores. */
 export function checkPackageName(name: string): RuleCheck {
+  if (name.length > PACKAGE_NAME_MAX) return bad('channels.rule.packageTooLong');
   return name === '' || PACKAGE_NAME.test(name) ? ok : bad('channels.rule.packageName');
 }
 

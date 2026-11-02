@@ -74,6 +74,10 @@ const messages: Record<string, string> = {
     'Distinct counts are not added up across days: for a range of several days, the result is the number of distinct accounts in the whole range.',
   'analytics.funnel.help.anonymous':
     'Who is counted: the account of the event; when the event has none, the account of the events of the same device within the window; when there is still none, the device itself.',
+  'analytics.range.reason.TOO_SLOW':
+    'The query took too long. Choose a shorter time range and try again.',
+  'analytics.range.reason.TOO_MANY_EVENTS':
+    'There are too many events in this range to compute the funnel. Choose a shorter time range.',
 };
 
 export default messages;

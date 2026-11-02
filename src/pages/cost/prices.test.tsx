@@ -440,7 +440,7 @@ describe('pending prices', () => {
       expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')).toHaveLength(1);
     });
 
-    it('keeps the dialog open and shows why the backend refused (the bands have a gap), in the words of the codes only', async () => {
+    it('keeps the dialog open and shows the general sentence when the backend refused (the bands have a gap): it gives no details and its own words are not shown', async () => {
       const { user } = await open();
       const card = await cardOf(BATCH.pendingGap);
       await user.click(card.getByRole('button', { name: 'Confirm' }));
@@ -455,7 +455,8 @@ describe('pending prices', () => {
           'Some input is not valid. Please check the fields and try again.',
         ),
       );
-      expect(dialog.textContent).toContain('The value is outside the allowed range.');
+      // the backend gives no details for the bands: the general sentence is all there is
+      expect(dialog.textContent).not.toContain('The value is outside the allowed range.');
       expect(dialog.textContent).not.toContain('cannot confirm');
       expect(costState.batches.find((b) => b.batchId === BATCH.pendingGap)?.status).toBe(
         'PENDING_REVIEW',
@@ -1322,7 +1323,7 @@ describe('enter a price by hand', () => {
       expect(callsTo(calls, 'POST', '/api/admin/usage/prices')).toHaveLength(1);
     });
 
-    it('keeps the dialog and the entered values when the backend refuses, and shows only the words of the code and of the reasons', async () => {
+    it('keeps the dialog and the entered values when the backend refuses, and shows only the general sentence: the backend gives no details for a price, so there is no reason to show', async () => {
       const { user } = await open(ALL, {
         tab: 'Enter by hand',
         meta: { allowedCurrencies: ['USD', 'EUR'] },
@@ -1336,8 +1337,9 @@ describe('enter a price by hand', () => {
           'Some input is not valid. Please check the fields and try again.',
         ),
       );
-      expect(dialog.textContent).toContain('The value is outside the allowed range.');
-      expect(dialog.textContent).not.toMatch(/invalid price/);
+      // no details came, so no field and no reason is named, and the English words of the backend are not shown
+      expect(dialog.textContent).not.toContain('The value is outside the allowed range.');
+      expect(dialog.textContent).not.toMatch(/invalid price|allowed_currencies|currency/i);
       expect(costState.batches.some((b) => b.model === 'model-z')).toBe(false);
       await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
       expect((field('Model') as HTMLInputElement).value).toBe('model-z');

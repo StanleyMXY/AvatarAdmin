@@ -16,6 +16,8 @@ import { buildCostTemplate, TEMPLATE_FILE_NAME } from './costTemplate';
 import { holdWrites, jsonAnswer, NOW, overrideFetch, signIn, writesOf } from './testSetup';
 
 const BOM = String.fromCharCode(0xfeff);
+const IMPORTED = (count: number) =>
+  `Imported ${count} rows (days that already had a cost are overwritten)`;
 
 beforeEach(() => {
   signIn('root');
@@ -145,7 +147,7 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
         remark: null,
       },
     ]);
-    expect(await screen.findByText('Imported 3 rows: 3 added, 0 overwritten')).toBeInTheDocument();
+    expect(await screen.findByText(IMPORTED(3))).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(
       campaignState.costs.filter((c) => c.statDate >= '2026-09-01' && c.statDate <= '2026-09-03'),
@@ -166,7 +168,7 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
     );
   });
 
-  it('writes after the import how many rows were added and how many overwrote a cost', async () => {
+  it('writes the number of rows the backend counted and says that days that had a cost are overwritten: it cannot say how many (count is all the answer has)', async () => {
     const { user } = await open();
     const [first, second] = campaignState.costs;
     const codeOf = (campaignId: string) =>
@@ -181,10 +183,37 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
       ]),
     );
     await user.click(await importButton());
-    expect(await screen.findByText('Imported 5 rows: 3 added, 2 overwritten')).toBeInTheDocument();
+    expect(await screen.findByText(IMPORTED(5))).toBeInTheDocument();
+    // the backend has no split of added and overwritten rows (that is a request to it), so the page writes none
+    expect(screen.queryByText(/added/)).not.toBeInTheDocument();
   });
 
-  it('writes only the number of rows when the backend does not say how many were overwritten', async () => {
+  it('reads the count of the answer, not the number of rows sent', async () => {
+    const { user } = await open();
+    overrideFetch(({ url, method }) =>
+      url.pathname.endsWith('/attribution/costs/batch') && method === 'POST'
+        ? jsonAnswer(200, '200', { count: 7 })
+        : undefined,
+    );
+    await putJson(jsonRows([row(), row({ statDate: '2026-01-05' })]));
+    await user.click(await importButton());
+    expect(await screen.findByText(IMPORTED(7))).toBeInTheDocument();
+  });
+
+  it('does not wait for { imported, overwritten }: an answer in that shape is not read as counts, the number of rows sent is written', async () => {
+    const { user } = await open();
+    overrideFetch(({ url, method }) =>
+      url.pathname.endsWith('/attribution/costs/batch') && method === 'POST'
+        ? jsonAnswer(200, '200', { imported: 9, overwritten: 4 })
+        : undefined,
+    );
+    await putJson(jsonRows([row(), row({ statDate: '2026-01-05' })]));
+    await user.click(await importButton());
+    expect(await screen.findByText(IMPORTED(2))).toBeInTheDocument();
+    expect(screen.queryByText(/overwritten, /)).not.toBeInTheDocument();
+  });
+
+  it('writes the number of rows sent when the answer has no count', async () => {
     const { user } = await open();
     overrideFetch(({ url, method }) =>
       url.pathname.endsWith('/attribution/costs/batch') && method === 'POST'
@@ -193,8 +222,7 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
     );
     await putJson(jsonRows([row(), row({ statDate: '2026-01-05' })]));
     await user.click(await importButton());
-    expect(await screen.findByText('Imported 2 rows')).toBeInTheDocument();
-    expect(screen.queryByText(/overwritten/)).not.toBeInTheDocument();
+    expect(await screen.findByText(IMPORTED(2))).toBeInTheDocument();
   });
 
   it('lists each bad row with its place in the array and the reason in words, imports nothing, and keeps the button off', async () => {
@@ -275,9 +303,8 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
     expect(
       await box.findByText('The backend refused the batch, and nothing was imported:'),
     ).toBeInTheDocument();
-    expect(
-      box.getByText('1.campaignCode: The value is outside the allowed range.'),
-    ).toBeInTheDocument();
+    // index is a field of its own, counted from 0: the second row is "Row 2"; an unknown campaign is NOT_FOUND
+    expect(box.getByText('Row 2, Campaign ID: There is no such campaign.')).toBeInTheDocument();
     expect(await messagesIn()).not.toContain('some rows are not valid');
     expect(writesOf(calls)).toHaveLength(1);
     expect(campaignState.costs.some((c) => c.statDate === '2026-09-01')).toBe(false);
@@ -285,6 +312,63 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
     expect(within(await dialog()).getByLabelText('Rows as JSON')).toHaveValue(
       jsonRows([row(), row({ campaignCode: 'no_such_code', statDate: '2026-09-02' })]),
     );
+  });
+
+  it('lists a campaign and day that comes twice once for each of its rows (DUPLICATE), a negative cost, and a cost with too many decimals, each with its row', async () => {
+    const { user } = await open();
+    // the page lets four different rows through; the answer below is what a backend that found
+    // a campaign and day twice would say (the page itself refuses a repeat before sending)
+    await putJson(
+      jsonRows([
+        row({ statDate: '2026-09-04' }),
+        row(),
+        row({ statDate: '2026-09-06' }),
+        row({ statDate: '2026-09-05' }),
+      ]),
+    );
+    overrideFetch(({ url, method }) =>
+      url.pathname.endsWith('/attribution/costs/batch') && method === 'POST'
+        ? jsonAnswer(400, 'INVALID_REQUEST', {
+            details: [
+              { index: 0, ref: 'campaignCode', reason: 'DUPLICATE' },
+              { index: 2, ref: 'campaignCode', reason: 'DUPLICATE' },
+              { index: 1, ref: 'amount', reason: 'NEGATIVE' },
+              { index: 3, ref: 'amount', reason: 'TOO_MANY_DECIMALS' },
+            ],
+          })
+        : undefined,
+    );
+    await user.click(await importButton());
+    const box = within(await dialog());
+    const duplicate = 'The same campaign and day is in the batch more than once.';
+    expect(await box.findByText(`Row 1, Campaign ID: ${duplicate}`)).toBeInTheDocument();
+    expect(box.getByText(`Row 3, Campaign ID: ${duplicate}`)).toBeInTheDocument();
+    expect(box.getByText('Row 2, Cost: The cost is below 0.')).toBeInTheDocument();
+    expect(box.getByText('Row 4, Cost: The cost has more than two decimals.')).toBeInTheDocument();
+  });
+
+  it('does not split the ref: it is the name of the field, and the row comes from index', async () => {
+    const { user } = await open();
+    await putJson(jsonRows([row()]));
+    overrideFetch(({ url, method }) =>
+      url.pathname.endsWith('/attribution/costs/batch') && method === 'POST'
+        ? jsonAnswer(400, 'INVALID_REQUEST', {
+            details: [
+              { index: 4, ref: 'currency', reason: 'CURRENCY_MISMATCH' },
+              { ref: 'body', reason: 'OUT_OF_RANGE' },
+              { index: 0, ref: 'remark', reason: 'SOMETHING_NEW' },
+            ],
+          })
+        : undefined,
+    );
+    await user.click(await importButton());
+    const box = within(await dialog());
+    expect(await box.findByText(/^Row 5, Currency: /)).toBeInTheDocument();
+    // no row: the whole batch
+    expect(box.getByText(/^The batch: /)).toBeInTheDocument();
+    // a reason the page has no words for is shown as the code, not as the backend message
+    expect(box.getByText('Row 1, Remark: SOMETHING_NEW')).toBeInTheDocument();
+    expect(await messagesIn()).not.toMatch(/\d\.currency/);
   });
 
   it('shows the words of the error code and not the backend words for a refusal without details', async () => {

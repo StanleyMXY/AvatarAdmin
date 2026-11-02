@@ -28,9 +28,6 @@ import { TestSendModal } from './TestSendModal';
 import { guardedFailureText, useLastOtpPrompt } from './useLastOtpPrompt';
 
 const NO_FILTERS: Record<string, never> = {};
-/** An enabled OTP row: when the backend refuses to delete or switch it off, the reason is the rule of contract 23.4, last or not (the page may not have known that it was the last). */
-const servesCodes = (row: { enabled?: unknown; smsType?: unknown }): boolean =>
-  row.enabled === true && plainText(row.smsType) === 'OTP';
 const isRecord = (row: unknown): row is SmsChannel => typeof row === 'object' && row !== null;
 
 /**
@@ -75,12 +72,12 @@ export default function ChannelsPage() {
     return isLastOtpChannel(asCoverage(row), all.map(asCoverage));
   };
 
-  const remove = async (row: SmsChannel, guarded: boolean) => {
+  const remove = async (row: SmsChannel) => {
     try {
       await deleteChannel(plainText(row.id));
       message.success(t('sms.common.deleted'));
     } catch (error) {
-      message.error(guardedFailureText(intl, error, guarded));
+      message.error(guardedFailureText(intl, error));
     }
     refresh();
   };
@@ -96,14 +93,14 @@ export default function ChannelsPage() {
             key: 'delete',
             label: t('sms.common.delete'),
             onClick: async () => {
-              if (await ask('delete', 'channel')) await remove(row, servesCodes(row));
+              if (await ask('delete', 'channel')) await remove(row);
             },
           }
         : {
             key: 'delete',
             label: t('sms.common.delete'),
             confirmText: t('sms.channels.deleteAsk'),
-            onClick: () => remove(row, servesCodes(row)),
+            onClick: () => remove(row),
           },
     ];
   };
@@ -181,7 +178,7 @@ export default function ChannelsPage() {
             if (!next && isLast(row) && !(await ask('disable', 'channel'))) return;
             await setChannelEnabled(plainText(row.id), next);
           }}
-          failureText={(error, next) => guardedFailureText(intl, error, !next && servesCodes(row))}
+          failureText={(error) => guardedFailureText(intl, error)}
           onDone={refresh}
         />
       ),

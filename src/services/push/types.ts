@@ -41,6 +41,9 @@ export type PushTemplate = {
   body: string;
   linkType: LinkType;
   linkTarget: string | null;
+  /** The upload record of the picture, which `imageUrl` is made from; the request names it `uploadId`. */
+  imageUploadId?: string | null;
+  /** To show the picture. It is never sent back: a request carries `uploadId` only. */
   imageUrl: string | null;
   enabled: boolean;
 };
@@ -48,27 +51,30 @@ export type PushTemplate = {
 /** The supported languages without an enabled template, for each recall reason (they fall back to the default language). */
 export type MissingLocales = Record<string, string[]>;
 
-/** The answer of `GET /push/templates`; `missingLocales` is read with `readMissingLocales`, not trusted. */
-export type TemplatePage = Omit<Page<PushTemplate>, 'total'> & {
-  /** Not in the answer of the backend (contract a14); a number in the fake one. */
-  total?: unknown;
-  missingLocales?: unknown;
-};
-
+/**
+ * What `GET /push/templates` gives: the backend does not page it, so there is no `total`, and the
+ * list is read once. `missingLocales` is read with `readMissingLocales`, not trusted.
+ */
 export type TemplateOverview = { items: PushTemplate[]; missingLocales: MissingLocales | null };
 
-/** What a template can change after it exists (the reason and the language are its key). */
+/** What a template writes: the whole row (a `PUT` replaces it, and a missing `enabled` would mean off). */
 export type TemplateFields = {
   title: string;
   body: string;
   linkType: LinkType;
   linkTarget: string;
   enabled: boolean;
-  /** The id of the picture uploaded first. Leave out to keep the picture; an address is never sent. */
-  uploadId?: string;
+  /**
+   * The id of the picture uploaded first. Left out keeps the picture; `null` removes it. Never an
+   * address: the backend refuses `imageUrl`, so the one a read gave is not sent back.
+   */
+  uploadId?: string | null;
 };
 
 export type TemplateCreate = TemplateFields & { triggerReason: string; locale: string };
+
+/** The reason and the language are required in every `PUT` (it replaces the whole row); this page keeps them as they are. */
+export type TemplateUpdate = TemplateCreate;
 
 // ---- what a task and a schedule share ----
 
@@ -86,7 +92,8 @@ export type ContentFields = {
   body: string;
   linkType: LinkType;
   linkTarget: string;
-  uploadId?: string;
+  /** Left out keeps the picture of an object that has one; `null` removes it (a template or a periodic push). */
+  uploadId?: string | null;
 };
 
 // ---- manual tasks (PUSH:SEND) ----
@@ -103,6 +110,7 @@ export type PushTask = {
   body: string;
   linkType: LinkType;
   linkTarget: string | null;
+  imageUploadId?: string | null;
   imageUrl: string | null;
   scheduledAt: string;
   scheduleId: string | null;
@@ -110,6 +118,7 @@ export type PushTask = {
   note: string | null;
   sentCount: number;
   failedCount: number;
+  finishedAt?: string | null;
 };
 
 /** `scheduledAt` (a UTC instant) is left out for a task that goes out at once. */
@@ -138,6 +147,7 @@ export type PushSchedule = {
   body: string;
   linkType: LinkType;
   linkTarget: string | null;
+  imageUploadId?: string | null;
   imageUrl: string | null;
 };
 
@@ -173,5 +183,8 @@ export type PushDelivery = {
   result: string;
   sentAt: string;
 };
+
+/** The filters of the list of records: an account id and a trigger reason, exact, together or alone. The backend has no filter by local date. */
+export type RecordFilters = { accountId?: string; triggerReason?: TriggerReason };
 
 export type PushRecordDetail = PushRecord & { deliveries: PushDelivery[] };

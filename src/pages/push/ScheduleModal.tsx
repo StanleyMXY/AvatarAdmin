@@ -108,6 +108,8 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
   const [form] = Form.useForm<Values>();
   const { text: failure, fail, clear } = useFailure();
   const [rejected, setRejected] = useState(false);
+  // The picture is to be taken away on save (a new upload wins over it).
+  const [removeImage, setRemoveImage] = useState(false);
   const picture = useUploadSlot();
   const editing = schedule !== null;
   const repeat = Form.useWatch('repeat', form) ?? schedule?.repeat ?? 'DAILY';
@@ -152,7 +154,7 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
         startDate: values.startDate ? pickedDay(values.startDate) : '',
         endDate: values.endDate ? pickedDay(values.endDate) : null,
       },
-      picture.uploadId,
+      picture.uploadId ?? (removeImage ? null : undefined),
     );
     try {
       if (schedule) await updateSchedule(schedule.id, body);
@@ -184,6 +186,7 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
         picture.reset();
         clear();
         setRejected(false);
+        setRemoveImage(false);
       }}
       okText={t('pages.common.submit')}
       cancelText={t('pages.common.cancel')}
@@ -297,7 +300,13 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
           <DatePicker format="YYYY-MM-DD" allowClear />
         </Form.Item>
         <AudienceFields form={form} locales={locales} />
-        <ContentFields slot={picture} currentImageUrl={schedule?.imageUrl} rejected={rejected} />
+        <ContentFields
+          slot={picture}
+          currentImageUrl={schedule?.imageUrl}
+          rejected={rejected}
+          removeImage={removeImage}
+          onRemoveChange={editing ? setRemoveImage : undefined}
+        />
         <Form.Item name="enabled" label={t('push.schedules.enabled')} valuePropName="checked">
           <Switch />
         </Form.Item>

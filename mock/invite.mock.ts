@@ -9,6 +9,7 @@ import {
   funnelRow,
   type InviteAccount,
   inviteData,
+  inviteLimits,
   landedDays,
 } from './_core/inviteData';
 import { paginateQuery } from './_core/paginate';
@@ -129,7 +130,8 @@ export default {
     return ok({
       depthDistribution: depths.map((depth) => ({ depth, count: counts.get(depth) as number })),
       avgDepth: inRange.length === 0 ? null : sum / inRange.length,
-      maxDepth: depths.length === 0 ? null : depths[depths.length - 1],
+      // no invitee in the range: 0, a number, not null (answer 116)
+      maxDepth: depths.length === 0 ? 0 : depths[depths.length - 1],
       totalChains: roots.size,
     });
   }),
@@ -152,32 +154,50 @@ export default {
       if (account.inviterId === null) continue;
       kids.set(account.inviterId, [...(kids.get(account.inviterId) ?? []), account]);
     }
+    // The whole tree down to maxDepth first (its size is totalDescendants), then the nodes the
+    // backend would return: level by level from the shallowest, the earliest invited first under
+    // one inviter, at most `inviteLimits.chainNodes` of them (answer 73).
+    type Whole = { account: InviteAccount; depth: number; children: Whole[] };
+    const wholeOf = (account: InviteAccount, depth: number): Whole => ({
+      account,
+      depth,
+      children:
+        depth < maxDepth
+          ? [...(kids.get(account.id) ?? [])]
+              .sort((a, b) => (redeemed.get(a.id) ?? '').localeCompare(redeemed.get(b.id) ?? ''))
+              .map((child) => wholeOf(child, depth + 1))
+          : [],
+    });
+    const whole = wholeOf(root, 0);
+    const kept = new Set<Whole>();
+    let level: Whole[] = [whole];
     let descendants = 0;
     let reached = 0;
-    const nodeOf = (account: InviteAccount, depth: number): Node => {
-      if (depth > 0) {
+    while (level.length > 0) {
+      const next: Whole[] = [];
+      for (const node of level) next.push(...node.children);
+      for (const node of next) {
         descendants += 1;
-        reached = Math.max(reached, depth);
+        if (kept.size < inviteLimits.chainNodes) {
+          kept.add(node);
+          reached = Math.max(reached, node.depth);
+        }
       }
-      const children =
-        depth < maxDepth
-          ? (kids.get(account.id) ?? [])
-              .sort((a, b) => (redeemed.get(a.id) ?? '').localeCompare(redeemed.get(b.id) ?? ''))
-              .map((child) => nodeOf(child, depth + 1))
-          : [];
-      return {
-        accountId: account.id,
-        label: account.label,
-        joinedAt: redeemed.get(account.id) ?? account.createdAt,
-        children,
-      };
-    };
-    const tree = nodeOf(root, 0);
+      level = next;
+    }
+    const nodeOf = (node: Whole): Node => ({
+      accountId: node.account.id,
+      label: node.account.label,
+      joinedAt: redeemed.get(node.account.id) ?? node.account.createdAt,
+      children: node.children.filter((child) => kept.has(child)).map(nodeOf),
+    });
+    const tree = nodeOf(whole);
     return ok({
       root: { accountId: tree.accountId, label: tree.label, joinedAt: tree.joinedAt },
       children: tree.children,
       totalDescendants: descendants,
       maxDepth: reached,
+      truncated: kept.size < descendants,
     });
   }),
 
@@ -186,7 +206,7 @@ export default {
     const { records } = inviteData();
     return ok({
       items: landedDays(daysIn(from, to), today).map((day) =>
-        funnelRow(day, records.filter((r) => dayOf(r.redeemedAt) === day).length),
+        funnelRow(day, records.filter((r) => dayOf(r.redeemedAt) === day).length, today),
       ),
     });
   }),

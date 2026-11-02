@@ -426,27 +426,69 @@ describe('PUT /config: retention days against the statistics landing window', ()
   });
 });
 
-describe('PUT /config/auth.phone_login_enabled: needs an enabled English OTP template for every country', () => {
+describe('PUT /config/auth.phone_login_enabled: refused with one detail for each missing item, in the backend order', () => {
   const refused = async () => put('root', 'auth.phone_login_enabled', true);
+  const refsOf = (answer: { body: { data: { details: { ref: string; reason: string }[] } } }) =>
+    answer.body.data.details.map((d) => `${d.ref}:${d.reason}`);
+  const setUp = async () => {
+    expect((await put('root', 'sms.allowed_country_codes', ['TH', 'SG'])).status).toBe(200);
+    expect((await put('root', 'sms.daily_global_cap', 5000)).status).toBe(200);
+  };
 
-  it('passes with the seeded template, and turning it off never needs one', async () => {
+  it('passes when the two settings are saved and an OTP channel and the English template are enabled, and turning it off never needs them', async () => {
+    await setUp();
     expect((await refused()).status).toBe(200);
     smsState.templates.clear();
+    smsState.channels.clear();
     expect((await put('root', 'auth.phone_login_enabled', false)).status).toBe(200);
   });
 
-  it('refuses with ref SmsTemplate, not a setting key, and says what is missing in the message', async () => {
+  it('names all four missing items, one detail each, in the order of the backend, and says them in the message', async () => {
     smsState.templates.clear();
-    const { status, body } = await refused();
-    expect(status).toBe(400);
-    expect(body.code).toBe('INVALID_REQUEST');
-    expect(body.data.details).toEqual([{ ref: 'SmsTemplate', reason: 'EMPTY_NOT_ALLOWED' }]);
-    expect(body.message).toContain(
-      'an enabled OTP SMS template in language en for every country (no country set)',
-    );
+    smsState.channels.clear();
+    const answer = await refused();
+    expect(answer.status).toBe(400);
+    expect(answer.body.code).toBe('INVALID_REQUEST');
+    expect(refsOf(answer)).toEqual([
+      'sms.allowed_country_codes:EMPTY_NOT_ALLOWED',
+      'sms.daily_global_cap:EMPTY_NOT_ALLOWED',
+      'SmsChannel:EMPTY_NOT_ALLOWED',
+      'SmsTemplate:EMPTY_NOT_ALLOWED',
+    ]);
+    expect(answer.body.message).toMatch(/^Phone login cannot be enabled; missing: /);
+    expect(answer.body.data.missing).toBeUndefined();
+  });
+
+  it('names only what is missing: the country list empty counts as missing, a disabled or non-OTP channel does not count', async () => {
+    expect((await put('root', 'sms.allowed_country_codes', [])).status).toBe(200);
+    expect((await put('root', 'sms.daily_global_cap', 5000)).status).toBe(200);
+    for (const c of smsState.channels.values()) {
+      c.enabled = false;
+    }
+    expect(refsOf(await refused())).toEqual([
+      'sms.allowed_country_codes:EMPTY_NOT_ALLOWED',
+      'SmsChannel:EMPTY_NOT_ALLOWED',
+    ]);
+    for (const c of smsState.channels.values()) {
+      c.enabled = true;
+      c.smsType = 'MARKETING';
+    }
+    expect(refsOf(await refused())).toEqual([
+      'sms.allowed_country_codes:EMPTY_NOT_ALLOWED',
+      'SmsChannel:EMPTY_NOT_ALLOWED',
+    ]);
+  });
+
+  it('refuses with only SmsTemplate when the template is the one thing missing', async () => {
+    await setUp();
+    smsState.templates.clear();
+    const answer = await refused();
+    expect(answer.status).toBe(400);
+    expect(refsOf(answer)).toEqual(['SmsTemplate:EMPTY_NOT_ALLOWED']);
   });
 
   it('counts EN, and does not count en-GB, a template of one country, a disabled one or a non-OTP one', async () => {
+    await setUp();
     const english = [...smsState.templates.values()].find((t) => t.locale === 'en');
     if (!english) throw new Error('the seed has an English template');
     const variants = [

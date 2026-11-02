@@ -53,6 +53,8 @@ export type MockUnit = {
   name: string;
   status: UnitStatus;
   targeting: Targeting;
+  /** Where the unit is served: [] is every end (answers 39). */
+  surfaces: { platform: 'ANDROID' | 'IOS'; channel: string | null }[];
   weight: number;
   dailyImpressionCap: number;
   createdBy: string | null;
@@ -255,6 +257,7 @@ function seedUnits(ms: number): MockUnit[] {
     targeting: Targeting,
     weight: number,
     dailyImpressionCap: number,
+    surfaces: MockUnit['surfaces'] = [],
   ): MockUnit => ({
     id,
     campaignId,
@@ -262,6 +265,7 @@ function seedUnits(ms: number): MockUnit[] {
     name,
     status,
     targeting,
+    surfaces,
     weight,
     dailyImpressionCap,
     createdBy: ROOT,
@@ -308,8 +312,13 @@ function seedUnits(ms: number): MockUnit[] {
       100,
       200,
     ),
-    row('5', '3', '1', sampleText('id', 2), 'PAUSED', { platforms: ['IOS'] }, 100, 0),
-    row('6', '1', '2', sampleText('zh', 2), 'DRAFT', {}, 100, 0),
+    row('5', '3', '1', sampleText('id', 2), 'PAUSED', { platforms: ['IOS'] }, 100, 0, [
+      { platform: 'IOS', channel: null },
+    ]),
+    row('6', '1', '2', sampleText('zh', 2), 'DRAFT', {}, 100, 0, [
+      { platform: 'ANDROID', channel: 'play' },
+      { platform: 'ANDROID', channel: 'playdirect' },
+    ]),
     row(
       '7',
       '4',

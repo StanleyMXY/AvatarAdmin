@@ -241,7 +241,8 @@ describe('a built-in node', () => {
     expect(writesOf(calls)[0]).toEqual({
       method: 'PUT',
       url: '/api/admin/permissions/USER%3ABAN',
-      body: { nameZh: '封禁与解封用户', nameEn: 'Ban a user', sortOrder: 2 },
+      // the parent it was read with, also for a built-in node (a missing one is read as null: 400)
+      body: { nameZh: '封禁与解封用户', nameEn: 'Ban a user', sortOrder: 2, parent: 'USER:VIEW' },
     });
     await dialogsClosed();
     await waitFor(async () => expect(cellsOf(await rowOf('USER:BAN'))[0]).toContain('Ban a user'));
@@ -369,7 +370,7 @@ describe('a custom node', () => {
     expect((writesOf(calls)[0].body as { parent: string | null }).parent).toBeNull();
   });
 
-  it('leaves the parent out of the body when it was not changed', async () => {
+  it('sends the current parent in the body when it was not changed: a missing parent would move the node to the root (backend answer 87)', async () => {
     seedChain();
     const { user, calls } = await load();
     const box = await openEdit(user, 'CUSTOM:B');
@@ -381,7 +382,9 @@ describe('a custom node', () => {
       nameZh: 'CUSTOM:B 中文名',
       nameEn: 'CUSTOM:B English',
       sortOrder: 77,
+      parent: 'CUSTOM:A',
     });
+    expect(systemState.nodes.get('CUSTOM:B')?.parent).toBe('CUSTOM:A');
   });
 
   it('opens with the node that was clicked, not with the values of the dialog before', async () => {
@@ -540,7 +543,7 @@ describe('a new node', () => {
     await user.click(save(box));
     expect(
       await box.findByText(
-        'The code cannot contain spaces or control characters, and is at most 100 characters.',
+        'Use 1 to 128 of letters A-Z, digits and the characters _ : # / . - (no spaces, no other letters).',
       ),
     ).toBeInTheDocument();
     await user.clear(box.getByLabelText('Permission code'));
@@ -550,16 +553,40 @@ describe('a new node', () => {
     expect(writesOf(calls)).toHaveLength(0);
   });
 
-  it.each(['.', '..', '.hidden', 'trailing.'])(
-    'refuses the code %j (a dot at the start or the end), before anything is sent',
+  it.each(['ผู้ใช้:ดู', 'مستخدم', 'José:ver', `${'x'.repeat(129)}`, 'a,b'])(
+    "refuses the code %j: only ASCII letters, digits and _ : # / . - are the backend's set, so nothing is sent",
     async (code) => {
       const { user, calls } = await load();
       const box = await openNew(user);
       await fill(user, box, { code });
       await user.click(save(box));
-      expect(await box.findByText('The code cannot start or end with a dot.')).toBeInTheDocument();
+      expect(await box.findByText(/Use 1 to 128 of letters A-Z/)).toBeInTheDocument();
+      expect(writesOf(calls)).toHaveLength(0);
+    },
+  );
+
+  it.each(['.', '..'])(
+    'refuses the code %j (only dots: its address would be read as a folder), before anything is sent',
+    async (code) => {
+      const { user, calls } = await load();
+      const box = await openNew(user);
+      await fill(user, box, { code });
+      await user.click(save(box));
+      expect(await box.findByText('A code made only of dots cannot be used.')).toBeInTheDocument();
       expect(writesOf(calls)).toHaveLength(0);
       expect(screen.getByRole('dialog')).toBeInTheDocument();
+    },
+  );
+
+  it.each(['.hidden', 'trailing.', 'a.b/c#d_e:f-g', 'custom:lower'])(
+    'sends the code %j as it is: a dot at the ends and the other characters of the set are fine',
+    async (code) => {
+      const { user, calls } = await load();
+      const box = await openNew(user);
+      await fill(user, box, { code });
+      await user.click(save(box));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect((writesOf(calls)[0].body as { code: string }).code).toBe(code);
     },
   );
 

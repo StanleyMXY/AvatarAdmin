@@ -267,7 +267,13 @@ describe('POST /app-versions: a version of a STORE channel', () => {
     expect(refs(await create({ ...STORE_BODY, versionName: '1.3' }))).toEqual(['versionName']);
     expect(refs(await create({ ...STORE_BODY, versionName: 'v1.3.0' }))).toEqual(['versionName']);
     expect(refs(await create({ ...STORE_BODY, changelog: { th: 'x' } }))).toEqual(['changelog']);
-    expect(refs(await create({ ...STORE_BODY, changelog: { en: '  ' } }))).toEqual(['changelog']);
+    // a text that is blank is refused as a text, with a message and no details (answers 91)
+    const blank = await create({ ...STORE_BODY, changelog: { en: '  ' } });
+    expect([blank.status, blank.body.code, blank.body.data]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      null,
+    ]);
     expect(refs(await create({ ...STORE_BODY, changelog: 'text' }))).toEqual(['changelog']);
     expect(refs(await create({ ...STORE_BODY, storeUrl: undefined }))).toEqual(['storeUrl']);
     expect(
@@ -313,6 +319,91 @@ describe('POST /app-versions: a version of a STORE channel', () => {
     ).toBe(200);
   });
 
+  // Answers 91: the numbers are 32-bit integers (1 to 2147483647); a number beyond reads as a
+  // malformed body (400, no details). The reading of the number beyond is not verified against the
+  // backend (the answer says it was not run).
+  it('takes 2147483647 for the version number and the minimum, and reads a number beyond as a malformed body', async () => {
+    const top = 2_147_483_647;
+    const made = await create({ ...STORE_BODY, versionCode: top, minVersionCode: top });
+    expect(made.status).toBe(200);
+    const byCode = await create({ ...STORE_BODY, versionCode: top + 1, minVersionCode: 1 });
+    expect([byCode.status, byCode.body.code, byCode.body.data]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      null,
+    ]);
+    const byMin = await create({ ...STORE_BODY, versionCode: 140, minVersionCode: top + 1 });
+    expect([byMin.status, byMin.body.code, byMin.body.data]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      null,
+    ]);
+  });
+
+  it('takes a version name of 32 characters and refuses 33', async () => {
+    const name = (length: number) => `1.2.${'3'.repeat(length - 4)}`;
+    expect((await create({ ...STORE_BODY, versionName: name(32) })).status).toBe(200);
+    expect(refs(await create({ ...STORE_BODY, versionCode: 131, versionName: name(33) }))).toEqual([
+      'versionName',
+    ]);
+  });
+
+  // The notes: at most 30 languages, a key of the form [A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})* of at most
+  // 35 characters, each text 1 to 4000 code points, en needed, any language taken. A bad key has the
+  // detail changelog.<key> with INVALID_LANGUAGE_TAG; the other faults have a message only.
+  describe('the update notes (answers 91)', () => {
+    const notes = (n: number) =>
+      Object.fromEntries(
+        Array.from({ length: n }, (_, i) => [
+          `x${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26))}`,
+          'text',
+        ]),
+      );
+
+    it('names a language key that is not of the form, with INVALID_LANGUAGE_TAG', async () => {
+      for (const tag of ['e', 'english', 'en_US', 'en-', 'en--US', '1en', `en-${'a'.repeat(33)}`]) {
+        const answer = await create({ ...STORE_BODY, changelog: { en: 'x', [tag]: 'y' } });
+        expect([answer.status, answer.body.data], tag).toEqual([
+          400,
+          { details: [{ ref: `changelog.${tag}`, reason: 'INVALID_LANGUAGE_TAG' }] },
+        ]);
+      }
+    });
+
+    it('takes any language that has the form, whether the deployment supports it or not', async () => {
+      const answer = await create({
+        ...STORE_BODY,
+        changelog: { en: 'x', xx: 'y', 'sr-Latn-RS': 'z', fil: 'w' },
+      });
+      expect(answer.status).toBe(200);
+    });
+
+    it('takes 30 languages and refuses 31, without details', async () => {
+      expect((await create({ ...STORE_BODY, changelog: { en: 'a', ...notes(29) } })).status).toBe(
+        200,
+      );
+      const many = await create({
+        ...STORE_BODY,
+        versionCode: 131,
+        changelog: { en: 'a', ...notes(30) },
+      });
+      expect([many.status, many.body.code, many.body.data]).toEqual([400, 'INVALID_REQUEST', null]);
+    });
+
+    it('takes a text of 4000 code points and refuses 4001, without details; an empty text is refused too', async () => {
+      const emoji = String.fromCodePoint(0x1f600);
+      expect((await create({ ...STORE_BODY, changelog: { en: emoji.repeat(4000) } })).status).toBe(
+        200,
+      );
+      const long = await create({
+        ...STORE_BODY,
+        versionCode: 131,
+        changelog: { en: 'a', th: 'ก'.repeat(4001) },
+      });
+      expect([long.status, long.body.code, long.body.data]).toEqual([400, 'INVALID_REQUEST', null]);
+    });
+  });
+
   it('refuses an upload id for a STORE channel', async () => {
     const up = (await upload()).body.data.uploadId;
     const answer = await create({ ...STORE_BODY, apkUploadId: up });
@@ -329,6 +420,8 @@ describe('POST /app-versions: a version of a STORE channel', () => {
     const off = await create(STORE_BODY);
     expect(off.status).toBe(409);
     expect(off.body.code).toBe('INVALID_STATE');
+    // Answers 47: a channel that is off has no data in its 409, so the page cannot take it for the upload
+    expect(off.body.data).toBeNull();
   });
 
   it('refuses a version number the channel has already (409 DUPLICATE_RESOURCE naming the field)', async () => {
@@ -412,6 +505,8 @@ describe('POST /uploads/apk and a version of a DIRECT channel', () => {
     const used = await create({ ...DIRECT_BODY, versionCode: 131, apkUploadId: up });
     expect(used.status).toBe(409);
     expect(used.body.code).toBe('INVALID_STATE');
+    // Answers 47: the only 409 with data is the used upload, and its status is CONSUMED
+    expect(used.body.data).toEqual({ status: 'CONSUMED' });
     const unknown = await create({ ...DIRECT_BODY, versionCode: 132, apkUploadId: 'nothing' });
     expect(unknown.status).toBe(404);
     expect(unknown.body.code).toBe('RESOURCE_NOT_FOUND');
@@ -449,7 +544,7 @@ describe('PUT /app-versions/{id}: editing a draft', () => {
     });
   });
 
-  it('refuses a version that is not a draft with 409 INVALID_STATE and its state', async () => {
+  it('refuses a version that is not a draft with 409 INVALID_STATE and no data', async () => {
     const active = activeOf('play') as MockVersion;
     const answer = await update(active.id, {
       versionName: '1.0.0',
@@ -460,9 +555,10 @@ describe('PUT /app-versions/{id}: editing a draft', () => {
     });
     expect(answer.status).toBe(409);
     expect(answer.body.code).toBe('INVALID_STATE');
-    expect(answer.body.data).toEqual({ status: 'ACTIVE' });
+    // Answers 47: the backend gives this 409 no data (only the 409 of a used upload has a status).
+    expect(answer.body.data).toBeNull();
     const archived = versionBy('play', 100);
-    expect((await update(archived.id, {})).body.data).toEqual({ status: 'ARCHIVED' });
+    expect((await update(archived.id, {})).body.data).toBeNull();
   });
 
   it('answers 404 for a version that is not there and wants APPVERSION:MANAGE', async () => {
@@ -589,6 +685,7 @@ describe('PUT /app-versions/{id}/status: activating and taking down', () => {
     const answer = await status(draft.id, { status: 'ACTIVE', confirmStoreLive: true });
     expect(answer.status).toBe(409);
     expect(answer.body.code).toBe('INVALID_STATE');
+    expect(answer.body.data).toBeNull();
   });
 
   it('takes the active version down (ARCHIVED) and never back', async () => {
@@ -598,7 +695,7 @@ describe('PUT /app-versions/{id}/status: activating and taking down', () => {
     expect(down.body.data.status).toBe('ARCHIVED');
     const again = await status(active.id, { status: 'ARCHIVED' });
     expect(again.status).toBe(409);
-    expect(again.body.data).toEqual({ status: 'ARCHIVED' });
+    expect(again.body.data).toBeNull();
     const back = await status(active.id, { status: 'ACTIVE', confirmStoreLive: true });
     expect(back.status).toBe(409);
   });
@@ -607,7 +704,7 @@ describe('PUT /app-versions/{id}/status: activating and taking down', () => {
     const draft = draftOf('play');
     const a = await status(draft.id, { status: 'ARCHIVED' });
     expect(a.status).toBe(409);
-    expect(a.body.data).toEqual({ status: 'DRAFT' });
+    expect(a.body.data).toBeNull();
     const active = activeOf('play') as MockVersion;
     expect((await status(active.id, { status: 'ACTIVE', confirmStoreLive: true })).status).toBe(
       409,
@@ -649,8 +746,8 @@ describe('DELETE /app-versions/{id}', () => {
     const active = activeOf('play') as MockVersion;
     const refused = await remove(active.id);
     expect(refused.status).toBe(409);
-    expect(refused.body.data).toEqual({ status: 'ACTIVE' });
-    expect((await remove(versionBy('play', 100).id)).body.data).toEqual({ status: 'ARCHIVED' });
+    expect(refused.body.data).toBeNull();
+    expect((await remove(versionBy('play', 100).id)).body.data).toBeNull();
     expect((await remove('nope')).status).toBe(404);
   });
 

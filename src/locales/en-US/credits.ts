@@ -95,6 +95,7 @@ const messages: Record<string, string> = {
   'credits.form.deltaWhole': 'Enter a whole number',
   'credits.form.deltaPositive': 'A grant needs a whole number above zero',
   'credits.form.deltaNonzero': 'Enter a whole number other than zero',
+  'credits.form.deltaMax': 'The number can be at most {max}, up or down.',
   'credits.form.deltaHint':
     'A grant must be above zero. An adjustment may be positive or negative; a negative one can take the balance below zero.',
 

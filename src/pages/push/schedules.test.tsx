@@ -6,6 +6,7 @@ import pushMock from '../../../mock/push.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { fileOf, pngBytes } from '../../../tests/imageBytes';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { jsonAnswer, overrideFetch } from '../../../tests/pageHelpers';
 import { renderPage } from '../../../tests/renderPage';
 import { setTestAccess } from '../../../tests/stubs/umi-max';
 import access from '../../access';
@@ -449,12 +450,23 @@ describe('the periodic push page: new schedule', { timeout: 60000 }, () => {
 
   it('keeps the dialog and what was typed, and shows the translated text, when the backend refuses', async () => {
     backend();
+    // The page stops a title over 100 itself; here the backend refuses one anyway (another limit than the page knows).
+    overrideFetch(async ({ method }) =>
+      method === 'POST'
+        ? jsonAnswer(
+            400,
+            'INVALID_REQUEST',
+            { details: [{ ref: 'title', reason: 'TOO_LONG' }] },
+            'SECRET BACKEND WORDS',
+          )
+        : undefined,
+    );
     const user = userEvent.setup();
     renderPage(<SchedulesPage />);
     const dialog = await openNew(user);
     fill(dialog);
     fireEvent.change(within(dialog).getByLabelText('Title'), {
-      target: { value: 'x'.repeat(201) },
+      target: { value: 'x'.repeat(100) },
     });
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     expect(
@@ -462,7 +474,8 @@ describe('the periodic push page: new schedule', { timeout: 60000 }, () => {
         'Some input is not valid. Please check the fields and try again.',
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('Title')).toHaveValue('x'.repeat(201));
+    expect(within(dialog).getByLabelText('Title')).toHaveValue('x'.repeat(100));
+    expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
 });
 
@@ -494,6 +507,70 @@ describe('the periodic push page: edit', { timeout: 60000 }, () => {
     });
     expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('uploadId');
     await dialogsClosed();
+  });
+});
+
+describe('the periodic push page: the picture and the length of the words (answers 34)', {
+  timeout: 60000,
+}, () => {
+  const withPicture = () => {
+    const row = pushState.schedules.find((x) => x.id === '2');
+    if (!row) throw new Error('no sample');
+    row.imageFile = 'push-recall.svg';
+    row.imageUploadId = 'up-sample-2';
+    return row;
+  };
+
+  it('removes the picture with uploadId null, and sends no uploadId when nothing is said about it', async () => {
+    const row = withPicture();
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<SchedulesPage />);
+    await user.click(within(await rowOf(WEEKLY)).getByRole('button', { name: 'Edit' }));
+    let dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('uploadId');
+    expect(row.imageFile).not.toBeNull();
+    await dialogsClosed();
+    await user.click(within(await rowOf(WEEKLY)).getByRole('button', { name: 'Edit' }));
+    dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Remove the picture' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
+    expect(writesOf(calls)[1].body).toHaveProperty('uploadId', null);
+    expect(Object.keys(writesOf(calls)[1].body as object)).not.toContain('imageUrl');
+    await waitFor(() => expect(row.imageFile).toBeNull());
+  });
+
+  it('the switch in the list sends no picture field though the row has a picture and an address', async () => {
+    withPicture();
+    const calls = backend();
+    renderPage(<SchedulesPage />);
+    fireEvent.click(within(await rowOf(WEEKLY)).getByRole('switch'));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    const keys = Object.keys(writesOf(calls)[0].body as object);
+    for (const name of ['uploadId', 'imageUploadId', 'imageUrl']) expect(keys).not.toContain(name);
+  });
+
+  it('refuses a title of 101 code points and a body of 501, and sends nothing', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<SchedulesPage />);
+    const dialog = await openNew(user);
+    fill(dialog);
+    fireEvent.change(within(dialog).getByLabelText('Title'), {
+      target: { value: 'ก'.repeat(101) },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Body'), { target: { value: 'ع'.repeat(501) } });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText('The title has at most 100 characters; it has 101'),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('The body has at most 500 characters; it has 501'),
+    ).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
   });
 });
 

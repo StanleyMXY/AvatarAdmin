@@ -47,12 +47,15 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
     try {
       if (pack) {
         await assertPackUnchanged(pack);
-        await updateCreditProduct(pack.id, {
+        await updateCreditProduct({
+          store: pack.store,
+          productId: pack.productId,
           credits: values.credits as number,
           enabled: values.enabled,
           sortOrder: values.sortOrder as number,
-          // The surfaces are not edited here; they go back as they came so that a save cannot clear them.
-          ...(pack.surfaces ? { surfaces: pack.surfaces } : {}),
+          // The surfaces are not edited here; they go back as they came (the backend refuses a save
+          // without them, and a save with [] would clear them).
+          surfaces: pack.surfaces,
         });
       } else {
         await createCreditProduct({
@@ -61,6 +64,7 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
           credits: values.credits as number,
           enabled: values.enabled,
           sortOrder: values.sortOrder as number,
+          surfaces: [],
         });
       }
     } catch (error) {

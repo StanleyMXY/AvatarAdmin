@@ -67,6 +67,9 @@ export type LinkQuery = {
 export type AttributionCost = {
   id: string;
   campaignId: string;
+  /** The campaign's code and name, in the row (backend reply 75); null if the backend could not read them. */
+  campaignCode?: string | null;
+  campaignName?: string | null;
   /** A UTC day, `YYYY-MM-DD`. */
   statDate: string;
   /** A number; a decimal written as text is read as well. */
@@ -99,8 +102,11 @@ export type CostQuery = {
 
 export type { CostRow } from './parseCostBatch';
 
-/** What a batch import did: the rows written, and how many of them overwrote a cost (the others were added). */
-export type BatchCostsResult = { imported: number; overwritten: number };
+/**
+ * What a batch import did: `count`, the rows written (added and overwritten together; the backend
+ * does not say how many of each, `overwritten` is a request to it and not read).
+ */
+export type BatchCostsResult = { count: number };
 
 // ---- performance (投放效果, ATTRIBUTION:VIEW) ----
 
@@ -108,12 +114,16 @@ export const PERFORMANCE_GROUPS = ['campaign', 'day'] as const;
 export type PerformanceGroup = (typeof PERFORMANCE_GROUPS)[number];
 
 /**
- * A row of `GET /attribution/performance` (contract 10.5): the columns of `StatAttributionDaily` and
- * the rates. A campaign is named by `campaignId` (0 is the row of the installs that matched no
- * campaign); `campaignCode` and `campaignName` are read when the backend sends them.
+ * A row of `GET /attribution/performance` (contract 10.5, backend reply 38). By campaign a row has
+ * `campaignId` (a number), `campaignCode` and `campaignName`; by day it has `statDate` and no campaign.
+ * The last row of either reading (when no campaign is asked for) is the installs that matched no
+ * campaign: `{ campaignId: 0, unattributedInstalls }` and nothing else, also by day, where it has no
+ * `statDate`. `cost`, `cpa` and `cpi` are JSON numbers (a rate or a per-unit cost with a denominator
+ * of 0 is null); the backend's own tests show it, but no raw answer has been looked at, so the page
+ * still reads a decimal written as text, and does not rely on it.
  */
 export type PerformanceRow = {
-  campaignId?: string | number | null;
+  campaignId?: number | null;
   campaignCode?: string | null;
   campaignName?: string | null;
   statDate?: string | null;
@@ -124,10 +134,10 @@ export type PerformanceRow = {
   installRate?: number | null;
   registered?: number | null;
   registerRate?: number | null;
-  cost?: number | string | null;
-  cpa?: number | string | null;
-  cpi?: number | string | null;
-  /** Only on the row of campaign 0. */
+  cost?: number | null;
+  cpa?: number | null;
+  cpi?: number | null;
+  /** Only on the row of the unattributed installs. */
   unattributedInstalls?: number | null;
 };
 
@@ -212,7 +222,11 @@ export type SummaryGroup = (typeof SUMMARY_GROUPS)[number];
 
 export type SummaryCost = { currency: string; amount: number | string };
 
-/** `GET /attribution/summary` (backend note 5): not paged; `costs` is empty when there is no cost. */
+/**
+ * `GET /attribution/summary` (backend note 5): not paged; `costs` is empty when there is no cost.
+ * `key` is the group; for installs with no media source or campaign it is the empty text (backend
+ * reply 76), never null (a null is read as the same).
+ */
 export type SummaryRow = {
   source: RecordSource;
   key: string | null;

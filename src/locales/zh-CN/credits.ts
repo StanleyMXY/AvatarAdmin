@@ -93,6 +93,7 @@ const messages: Record<string, string> = {
   'credits.form.deltaWhole': '请填写整数',
   'credits.form.deltaPositive': '发放的额度必须是大于 0 的整数',
   'credits.form.deltaNonzero': '请填写不为 0 的整数',
+  'credits.form.deltaMax': '数值的绝对值不能超过 {max}。',
   'credits.form.deltaHint': '发放必须大于 0；调整可以是正数或负数，负数可能让余额低于 0。',
 
   'credits.accounts.balanceMin': '余额从',

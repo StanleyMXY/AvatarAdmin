@@ -211,7 +211,7 @@ const messages: Record<string, string> = {
     'Longest voice transcript allowed, in characters. It must be between 1 and 1000, because the speech synthesis service accepts only 1 to 1000 characters. Saving also invalidates the client config cache.',
   'config.generation.poll_interval_seconds.label': 'Generation poll interval',
   'config.generation.poll_interval_seconds.desc':
-    'How often the result of a generation job is polled, in seconds.',
+    'How often the backend checks unfinished generation jobs, in seconds.',
   'config.generation.voice_timeout_seconds.label': 'Voice generation timeout',
   'config.generation.voice_timeout_seconds.desc':
     'Longest wait for a voice generation job, in seconds. After that the job fails.',
@@ -271,7 +271,7 @@ const messages: Record<string, string> = {
     'How many consecutive failures mark a support forwarding as failed. Account deletion is not limited by this: it never gives up and only raises an alert.',
   'config.chat.history_max_limit.label': 'Chat history page size limit',
   'config.chat.history_max_limit.desc':
-    'Maximum number of messages returned in one request for chat history.',
+    'Maximum number of messages returned in one request for chat history. A request with a limit above it is rejected (400), not cut down to it; a request without a limit gets 50 or this value, whichever is smaller.',
   'config.chat.messages_max_batch.label': 'Messages per write batch',
   'config.chat.messages_max_batch.desc': 'Maximum number of messages in a single write request.',
   'config.chat.message_max_chars.label': 'Maximum message length',
@@ -331,14 +331,16 @@ const messages: Record<string, string> = {
   'config.ratelimit.invite_event_per_ip_per_hour.desc':
     'Maximum number of invite events from one IP address per hour. Requests above it are rate limited.',
   'config.events.max_batch.label': 'Events per upload batch',
-  'config.events.max_batch.desc': 'Maximum number of events in a single event upload request.',
+  'config.events.max_batch.desc':
+    'Maximum number of events in a single event upload request. An upload with more events is rejected as a whole (413 BATCH_TOO_LARGE).',
   'config.export.max_rows.label': 'Maximum export rows',
   'config.export.max_rows.desc': 'Maximum number of rows in a single export.',
   'config.ratelimit.export_per_admin_per_hour.label': 'Exports per admin per hour',
   'config.ratelimit.export_per_admin_per_hour.desc':
     'Maximum number of exports one administrator can start per hour. Requests above it are rate limited.',
   'config.events.max_body_kb.label': 'Event upload size limit',
-  'config.events.max_body_kb.desc': 'Largest request body for one event upload, in KB.',
+  'config.events.max_body_kb.desc':
+    'Largest request body for one event upload, in KB (1 KB = 1024 bytes). A larger upload is rejected as a whole (413 BATCH_TOO_LARGE).',
   'config.events.rate_limit_per_min.label': 'Event uploads per minute',
   'config.events.rate_limit_per_min.desc':
     'Number of event upload requests allowed per minute, counted separately per device and per account.',
@@ -359,10 +361,10 @@ const messages: Record<string, string> = {
     'Minimum time since the previous recall push, in hours. It is deliberately set below 24.',
   'config.recall.inactive_hours.label': 'Recall inactivity threshold',
   'config.recall.inactive_hours.desc':
-    'How many hours of inactivity put a user in the recall group, in hours.',
+    'How many hours without interaction put a user in the daily recall group, in hours. Counted from the last interaction (text chat or call), or from account creation for an account that never interacted; the user is in the group when more than this many hours have passed.',
   'config.recall.streak_min_days.label': 'Recall minimum streak days',
   'config.recall.streak_min_days.desc':
-    'Number of consecutive days of use a user needs before streak-based recall applies, in days.',
+    'A user whose current streak is at least this many days (this value counts) and who last interacted yesterday, by the date where the user is, gets the streak-at-risk recall, which comes before the daily recall. In days.',
   'config.app.display_name.label': 'App display name',
   'config.app.display_name.desc':
     'The value used for the app name placeholder in email templates. After trimming spaces it must be 1 to 100 characters, or the save is rejected. The product name is not final, so a working name is used for now.',
@@ -422,10 +424,10 @@ const messages: Record<string, string> = {
     'Days of companionship that count as milestones, as a JSON array, for example the 7th, 30th and 100th day.',
   'config.moderation.block_score.label': 'Moderation block score',
   'config.moderation.block_score.desc':
-    'The threshold that maps the score returned by the moderation service to the block level; the review score is the lower threshold. The value depends on the chosen moderation service and has no default. In production, if it is not set, user-facing endpoints that depend on moderation are unavailable and generation jobs are not processed; the admin site is not affected, so configure it here first and then bring the user side online.',
+    'The threshold on the score (0 to 1) returned by the moderation service: a score at or above it is blocked. A higher value means fewer blocks. It must be above 0 and at most 1, with up to three decimals, and higher than the review score (checked when both are saved). The value depends on the chosen moderation service and has no default. If either score is not saved the moderation service is not called. In production, if it is not set, user-facing endpoints that depend on moderation are unavailable and generation jobs are not processed; the admin site is not affected, so configure it here first and then bring the user side online.',
   'config.moderation.review_score.label': 'Moderation review score',
   'config.moderation.review_score.desc':
-    'The threshold that maps the score returned by the moderation service to the review level. It must be lower than the block score. The value depends on the chosen moderation service and has no default. If it is not set the consequences are the same as for the block score.',
+    'A score at or above this threshold but below the block score goes to manual review; a score below it passes. A higher value means fewer reviews. It must be above 0 and at most 1, with up to three decimals, and lower than the block score (checked when both are saved). The value depends on the chosen moderation service and has no default. If it is not set the consequences are the same as for the block score.',
   'config.moderation.call_timeout_seconds.label': 'Moderation call timeout',
   'config.moderation.call_timeout_seconds.desc':
     'Timeout for one call to the moderation service, in seconds. A timeout is treated as medium risk (companion names are the exception).',
@@ -461,10 +463,10 @@ const messages: Record<string, string> = {
     'How many days a complaint record (including the complainant email and evidence) and its handling history are kept after the case is closed, in days. A daily cleanup job deletes them together when they expire. Complaints that are not closed are never deleted.',
   'config.support.rate_limit_per_hour.label': 'Support requests per hour',
   'config.support.rate_limit_per_hour.desc':
-    'Number of support requests allowed per hour. Requests above it are rate limited.',
+    'Number of support feedback submissions allowed per hour for each account (per account, not per IP). Submissions above it are rejected with 429 RATE_LIMITED.',
   'config.export.min_interval_hours.label': 'Export minimum interval',
   'config.export.min_interval_hours.desc':
-    'Minimum time between two data exports for the same user, in hours.',
+    "Minimum time between two data exports of the same user account (the user's own data export, not an administrator's statistics export), in hours. Counted from the creation of that account's last successful export; failed or running exports do not count. A request inside the interval is rejected with 429 RATE_LIMITED.",
   'config.export.ttl_hours.label': 'Export file lifetime',
   'config.export.ttl_hours.desc':
     'How long an export file is available for download, in hours. It is cleaned up after that.',
@@ -848,6 +850,12 @@ const messages: Record<string, string> = {
     'Not saved. Event retention must be at least 30 days plus the statistics look-back days (stats.land_window_days).',
   'config.stats.land_window_days.reject.OUT_OF_RANGE':
     'Not saved. The look-back must be at least 1 and must stay below what depends on it: event retention (at least 30 plus the look-back), chat message retention (more than the look-back) and guest device retention (at least 91 plus the look-back).',
+  'config.sms.allowed_country_codes.reject.EMPTY_NOT_ALLOWED':
+    'Phone sign-in cannot be turned on yet: no allowed SMS country codes are saved (sms.allowed_country_codes). Save at least one country code, then try again.',
+  'config.sms.daily_global_cap.reject.EMPTY_NOT_ALLOWED':
+    'Phone sign-in cannot be turned on yet: the daily SMS cap is not saved (sms.daily_global_cap). Save a cap, then try again.',
+  'config.refusal.SmsChannel.EMPTY_NOT_ALLOWED':
+    'Phone sign-in cannot be turned on yet. At least one enabled SMS channel for verification codes (OTP) is needed. Add or enable one under SMS channels, then try again.',
   'config.refusal.SmsTemplate.EMPTY_NOT_ALLOWED':
     'Phone sign-in cannot be turned on yet. There must be at least one enabled OTP SMS template in language en (not en-GB or en-US) with no country set. Add or enable one under SMS templates, then try again.',
   'config.push.default_locale.reject.OUT_OF_RANGE':

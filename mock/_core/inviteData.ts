@@ -237,8 +237,15 @@ export function inviteData(now: Date = new Date()): InviteData {
   return cached;
 }
 
+/**
+ * Limits of the backend that a test can lower to see the case without building a huge tree:
+ * `chainNodes` is how many nodes `GET /invites/chain` returns at most (10000, answer 73).
+ */
+export const inviteLimits = { chainNodes: 10000 };
+
 export function resetInviteStore(): void {
   cached = null;
+  inviteLimits.chainNodes = 10000;
 }
 
 // ---- the share tables (contract 17.6, StatShareFunnelDaily and StatShareChannelDaily) ----
@@ -260,27 +267,44 @@ export const SHARE_CHANNELS = [
 export const landedDays = (days: string[], today: string): string[] =>
   days.filter((day) => day < today && day >= addDays(today, -60));
 
-export function funnelRow(day: string, registered: number) {
+/** How many days back the events the share funnel is counted from are kept; a day older than that was landed without them. */
+export const EVENT_SOURCE_DAYS = 30;
+
+/** The six numbers of a day that come from the events. */
+function fullFunnelNumbers(day: string) {
   const sharePv = between(300, 900, 'share', day);
   const shareUv = Math.floor(sharePv * (0.55 + unit('shareUv', day) * 0.25));
   const linkClickPv = Math.floor(sharePv * (0.4 + unit('link', day) * 0.2));
   const linkClickUv = Math.floor(linkClickPv * (0.6 + unit('linkUv', day) * 0.3));
   const downloadClickPv = Math.floor(linkClickPv * (0.3 + unit('dl', day) * 0.2));
   const downloadClickUv = Math.floor(downloadClickPv * (0.6 + unit('dlUv', day) * 0.3));
+  return { sharePv, shareUv, linkClickPv, linkClickUv, downloadClickPv, downloadClickUv };
+}
+
+/**
+ * One day of the share funnel. For a day whose events are past the event log (answer 36) the six
+ * numbers that come from the events are `null` and only `registered` has a value.
+ */
+export function funnelRow(day: string, registered: number, today: string = todayOf(new Date())) {
+  const expired = day < addDays(today, -EVENT_SOURCE_DAYS);
   return {
     statDate: day,
-    sharePv,
-    shareUv,
-    linkClickPv,
-    linkClickUv,
-    downloadClickPv,
-    downloadClickUv,
+    ...(expired
+      ? {
+          sharePv: null,
+          shareUv: null,
+          linkClickPv: null,
+          linkClickUv: null,
+          downloadClickPv: null,
+          downloadClickUv: null,
+        }
+      : fullFunnelNumbers(day)),
     registered,
   };
 }
 
 export function channelRows(day: string) {
-  const total = funnelRow(day, 0).sharePv;
+  const total = fullFunnelNumbers(day).sharePv;
   const rows: { statDate: string; shareChannel: string; sharePv: number; shareUv: number }[] = [];
   for (const [shareChannel, weight] of SHARE_CHANNELS) {
     // the small channels are absent on some days, as a channel nobody shared to has no row

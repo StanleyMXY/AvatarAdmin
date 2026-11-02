@@ -103,33 +103,76 @@ describe('the cosmetic catalog page: the list', { timeout: 30000 }, () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<CosmeticsPage />);
-    await rowOf('outfit_default');
-    expect(screen.queryByText('bulk_item_18')).not.toBeInTheDocument();
+    // the order is kind, sortOrder, key: the backgrounds first, so the last outfit is on page 2
+    await rowOf('bg_default');
+    expect(screen.queryByText('bulk_item_17')).not.toBeInTheDocument();
     await user.click(await screen.findByTitle('2'));
-    expect(await screen.findByText('bulk_item_18')).toBeInTheDocument();
+    expect(await screen.findByText('bulk_item_17')).toBeInTheDocument();
     expect(calls.some((c) => c.url.includes('page=2&pageSize=20'))).toBe(true);
   });
 
-  it('asks the backend for the type, the on-sale state and the style that were chosen', async () => {
+  it('asks the backend for the type only, and applies the on-sale state and the style to the page that was read, saying so', async () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<CosmeticsPage />);
     await rowOf('outfit_default');
+    expect(screen.getByText(/only hide rows of the page that is shown/)).toBeVisible();
+    expect(screen.queryByTestId('cosmetics-page-filter')).toBeNull();
     await expandSearch(user);
     await chooseOption(user, 'Type', 'Background');
     await chooseOption(user, 'Fits style', 'Realistic');
     await chooseOption(user, 'On', 'Off sale');
     await user.click(screen.getByRole('button', { name: /查\s*询/ }));
-    await waitFor(() =>
-      expect(
-        calls.some(
-          (c) =>
-            c.url.includes('kind=BACKGROUND') &&
-            c.url.includes('style=REALISTIC') &&
-            c.url.includes('enabled=false'),
-        ),
-      ).toBe(true),
-    );
+    const note = await screen.findByTestId('cosmetics-page-filter', undefined, { timeout: 10000 });
+    await waitFor(() => expect(screen.queryByText('outfit_default')).not.toBeInTheDocument(), {
+      timeout: 10000,
+    });
+    const lists = calls.filter((c) => c.url.startsWith('/api/admin/cosmetics?'));
+    expect(lists.length).toBeGreaterThan(0);
+    for (const call of lists) {
+      expect(call.url).not.toContain('style=');
+      expect(call.url).not.toContain('enabled=');
+    }
+    expect(lists.at(-1)?.url).toContain('kind=BACKGROUND');
+    // every row left is a background that is off sale and fits the realistic style
+    const keys = [...document.querySelectorAll('tbody tr')]
+      .map((r) => r.textContent ?? '')
+      .filter((text) => /bg_|bulk_item/.test(text));
+    for (const text of keys) {
+      expect(text).toContain('Background');
+      expect(text).toContain('Realistic');
+    }
+    for (const row of document.querySelectorAll('tbody tr')) {
+      const toggle = row.querySelector('[role="switch"]');
+      if (toggle) expect(toggle.getAttribute('aria-checked')).toBe('false');
+    }
+    expect(note).toHaveTextContent(/of the \d+ items on this page/);
+    expect(note).toHaveTextContent(/every item of the type/);
+  });
+
+  it('sends only the type and no filter of the page when none of the two is chosen, and says nothing about a page filter', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    await rowOf('outfit_default');
+    await expandSearch(user);
+    await chooseOption(user, 'Type', 'Outfit');
+    await user.click(screen.getByRole('button', { name: /查\s*询/ }));
+    await waitFor(() => expect(calls.some((c) => c.url.includes('kind=OUTFIT'))).toBe(true));
+    expect(screen.queryByTestId('cosmetics-page-filter')).toBeNull();
+  });
+
+  it('says it in Chinese', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />, 'zh-CN');
+    await rowOf('outfit_default');
+    expect(screen.getByText(/只是把本页里不符合的行隐藏/)).toBeVisible();
+    await expandSearch(user);
+    await chooseOption(user, '适用风格', '写实');
+    await user.click(screen.getByRole('button', { name: /查\s*询/ }));
+    const note = await screen.findByTestId('cosmetics-page-filter', undefined, { timeout: 10000 });
+    expect(note).toHaveTextContent(/本页 \d+ 个条目中有 \d+ 个/);
   });
 });
 
@@ -293,9 +336,60 @@ describe('the cosmetic catalog page: new item', { timeout: 60000 }, () => {
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     expect(await within(dialog).findByText('Enter a key.')).toBeInTheDocument();
-    expect(within(dialog).getByText('Enter a name in at least one language.')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('Enter the name in English (en). The other languages are optional.'),
+    ).toBeInTheDocument();
     expect(within(dialog).getByText('Enter the generation text.')).toBeInTheDocument();
     expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('does not send a name in Thai only: English is needed, and the field says so', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New item' }));
+    const dialog = await screen.findByRole('dialog');
+    fillBasics(dialog);
+    fireEvent.change(within(dialog).getByLabelText('en'), { target: { value: '  ' } });
+    choose(png());
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    await within(dialog).findByText(/preview\.png/);
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText(
+        'Enter the name in English (en). The other languages are optional.',
+      ),
+    ).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('puts the refusal names.en of the backend under the names, in the words of the reason', async () => {
+    backend();
+    const real = globalThis.fetch;
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New item' }));
+    const dialog = await screen.findByRole('dialog');
+    fillBasics(dialog);
+    choose(png());
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    await within(dialog).findByText(/preview\.png/);
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) =>
+      init?.method === 'POST' && String(input) === '/api/admin/cosmetics'
+        ? new Response(
+            JSON.stringify({
+              code: 'INVALID_REQUEST',
+              message: 'm',
+              data: { details: [{ ref: 'names.en', reason: 'EMPTY_NOT_ALLOWED' }] },
+            }),
+            { status: 400, headers: { 'content-type': 'application/json' } },
+          )
+        : real(input, init),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    const names = (await within(dialog).findAllByText('It must not be empty.'))[0];
+    expect(names.closest('.ant-form-item')?.textContent).toContain('Names');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('counts the generation text in code points after trimming: 2000 emoji pass, 2001 Arabic letters do not, spaces only is empty', async () => {
@@ -450,7 +544,7 @@ describe('the cosmetic catalog page: new item', { timeout: 60000 }, () => {
 });
 
 describe('the cosmetic catalog page: edit', { timeout: 60000 }, () => {
-  it('shows the key and the type but does not let them change, and sends neither', async () => {
+  it('shows the key and the type but does not let them change, sends no key and sends the kind and the enabled state it has', async () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<CosmeticsPage />);
@@ -471,7 +565,7 @@ describe('the cosmetic catalog page: edit', { timeout: 60000 }, () => {
     expect(writesOf(calls)[0]).toMatchObject({ method: 'PUT', url: '/api/admin/cosmetics/3' });
     const body = writesOf(calls)[0].body as Record<string, unknown>;
     expect('key' in body).toBe(false);
-    expect('kind' in body).toBe(false);
+    expect(body).toMatchObject({ kind: 'OUTFIT', enabled: true });
     expect('previewUploadId' in body).toBe(false);
     expect(body).toMatchObject({ generationSpec: 'a green evening dress', creditPrice: 150 });
     await dialogsClosed();
@@ -495,18 +589,93 @@ describe('the cosmetic catalog page: edit', { timeout: 60000 }, () => {
     expect(String(body.previewUploadId)).toMatch(/^upl-/);
   });
 
-  it('shows the backend text for a field when it refuses: a default item must be free', async () => {
+  const DEFAULT_KEPT_EN =
+    'The type must keep one default item that is on sale, free and fits both styles.';
+
+  it('says in the hint of the Default switch that saving cancels the other default items of the type', async () => {
     backend();
     const user = userEvent.setup();
     renderPage(<CosmeticsPage />);
     const row = await rowOf('outfit_red_dress');
     await user.click(within(row).getByRole('button', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(
+        'Saving makes this the default of its type; any other default item of the type is cancelled automatically.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/must be free/i)).toBeNull();
+  });
+
+  it('says the type must keep a default item when the backend answers 409 with data.kind, keeps the dialog open and sends nothing twice', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    const row = await rowOf('outfit_red_dress');
+    await user.click(within(row).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    // a paid item taken as the default: the backend refuses and says the kind
     await user.click(within(dialog).getByRole('switch', { name: 'Default' }));
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
-    expect(
-      await within(dialog).findAllByText('The value is outside the allowed range.'),
-    ).not.toHaveLength(0);
+    expect(await within(dialog).findByText(DEFAULT_KEPT_EN)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/outside the allowed range/)).toBeNull();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(1);
+    expect(avatarState.cosmetics.find((c) => c.id === '3')?.isDefault).toBe(false);
+  });
+
+  it('says it in Chinese', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />, 'zh-CN');
+    const row = await rowOf('outfit_red_dress');
+    await user.click(within(row).getByRole('button', { name: /编\s?辑/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText('保存后，同一种类的其他默认条目会自动取消。'),
+    ).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('switch', { name: '默认' }));
+    await user.click(within(dialog).getByRole('button', { name: /提\s?交/ }));
+    expect(
+      await within(dialog).findByText('该种类必须保留一个启用、免费、两种风格都适用的默认条目。'),
+    ).toBeInTheDocument();
+  });
+
+  it('says the same when the switch of the list would leave the type without its default, and reads the list again', async () => {
+    backend();
+    renderPage(<CosmeticsPage />);
+    const row = await rowOf('outfit_default');
+    fireEvent.click(within(row).getByRole('switch'));
+    expect(await screen.findByText(DEFAULT_KEPT_EN)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        within(screen.getByText('outfit_default').closest('tr') as HTMLElement)
+          .getByRole('switch')
+          .getAttribute('aria-checked'),
+      ).toBe('true'),
+    );
+  });
+
+  it('falls back to the words of the code for a 409 that does not say the kind', async () => {
+    backend();
+    const real = globalThis.fetch;
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    const row = await rowOf('outfit_red_dress');
+    await user.click(within(row).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) =>
+      init?.method === 'PUT'
+        ? new Response(
+            JSON.stringify({ code: 'INVALID_STATE', message: 'm', data: { status: 'X' } }),
+            { status: 409, headers: { 'content-type': 'application/json' } },
+          )
+        : real(input, init),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText('The current state of the item does not allow this action.'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(DEFAULT_KEPT_EN)).toBeNull();
   });
 });
