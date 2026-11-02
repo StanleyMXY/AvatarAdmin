@@ -61,7 +61,7 @@ export default function DailyReportPage() {
   // The UTC day that was today when the rows were read: the rows are as they were then, so what is
   // marked provisional follows that day and not the clock of every later drawing of the page.
   const [today, setToday] = useState<string>(() => todayUtc());
-  const { text: failure, fail, clear } = useFailure();
+  const { text: failure, error: refusal, fail, clear } = useFailure();
   const begin = useLatestCall();
 
   const load = useCallback(async () => {
@@ -164,6 +164,7 @@ export default function DailyReportPage() {
       <UtcNotice />
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={draft.range}
           onChange={(range) => setDraft((d) => ({ ...d, range }))}
           maxDays={meta.statsMaxRangeDays ?? undefined}

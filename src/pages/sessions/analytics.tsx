@@ -11,7 +11,7 @@ import { fillMissingDays } from '../../services/stats/fillMissingDays';
 import { getDaily } from '../../services/stats/reports';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import { brokenDays, type CallDay, emptyCallDay, toCallDay } from './analyticsRows';
 import { DayLineChart, type LinePoint } from './charts';
 import { formatDecimal } from './format';
@@ -40,13 +40,13 @@ export default function CallAnalyticsPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
-  const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(
     () => getDaily({ from: applied.from, to: applied.to, platform: 'ALL' }),
     [applied],
   );
-  const { data, failure, reload } = useLatestRead(fetcher);
+  const { data, error: refusal, failure, reload } = useLatestRead(fetcher);
 
   const days = useMemo<CallDay[] | null>(
     () =>
@@ -116,6 +116,7 @@ export default function CallAnalyticsPage() {
       <Typography.Text type="secondary">{t('sessions.analytics.note')}</Typography.Text>
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={draft}
           onChange={setDraft}
           maxDays={meta.statsMaxRangeDays ?? undefined}

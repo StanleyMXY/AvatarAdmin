@@ -27,7 +27,8 @@ import type { SessionQualityRow } from '../../services/stats/types';
 import { useAdminMeta } from '../../session/useSession';
 import { DASH, formatCount, formatPercent } from '../../utils/ratio';
 import { hasProvisionalDay, isProvisionalDay } from '../../utils/settledDay';
-import { daysBetween, lastNDaysUtc, todayUtc } from '../../utils/utcDay';
+import { daysBetween, todayUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import { type ColumnPoint, DayLineChart, type LinePoint, StackedDayChart } from './charts';
 import { formatDecimal } from './format';
 import {
@@ -114,7 +115,7 @@ export default function SessionQualityPage() {
   const t: T = (id, values) => intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
   // What is being edited, and what was asked for with Search (the cards, the charts, the export).
-  const [draft, setDraft] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [applied, setApplied] = useState<DayRange>(draft);
   // The UTC day that was today when the rows were asked for goes with them: they are as they were
   // then, so what is provisional follows that day and not the clock of every later drawing.
@@ -122,7 +123,7 @@ export default function SessionQualityPage() {
     const askedOn = todayUtc();
     return { ...(await getSessionQuality(applied)), askedOn };
   }, [applied]);
-  const { data, failure, reload } = useLatestRead(fetcher);
+  const { data, error: refusal, failure, reload } = useLatestRead(fetcher);
   const rows = useMemo(() => (data ? [...data.items].sort(byDate) : null), [data]);
 
   const limits = {
@@ -256,6 +257,7 @@ export default function SessionQualityPage() {
       <ReportHelper pageKey="sessionQuality" />
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={draft}
           onChange={setDraft}
           maxDays={meta.statsMaxRangeDays ?? undefined}

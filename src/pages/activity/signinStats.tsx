@@ -97,6 +97,7 @@ export default function SigninStatsPage() {
   return (
     <Flex vertical gap={16}>
       <StatsBar
+        refused={daily.error ?? streak.error}
         draft={draft}
         onDraft={setDraft}
         onQuery={apply}

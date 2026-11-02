@@ -35,12 +35,6 @@ const messages: Record<string, string> = {
   'campaign.stats.col.registerRate': '注册转化率',
   'campaign.stats.col.registerRate.tip': '注册数 ÷ 安装数。',
   'campaign.stats.col.cost': '总花费',
-  'campaign.stats.range.line': '{field}：{reason}。{hint}',
-  'campaign.stats.range.from': '起始日期',
-  'campaign.stats.range.from.hint': '起始日期必须是有效的一天，并且不能晚于结束日期。',
-  'campaign.stats.range.to': '结束日期',
-  'campaign.stats.range.to.hint':
-    '结束日期必须是有效的一天，并且范围不能超过统计允许的最大天数（stats.max_range_days）。',
   'campaign.stats.col.cost.in': '总花费（{currency}）',
   'campaign.stats.col.cost.tip': '所选日期内为该投放账户录入的花费总和，系统只有一种币种。',
   'campaign.stats.col.cpa': 'CPA',

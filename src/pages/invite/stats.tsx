@@ -6,7 +6,7 @@ import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc'
 import { UtcNotice } from '../../components/stat/UtcNotice';
 import { useAdminMeta } from '../../session/useSession';
 import { trimSpec } from '../../utils/trimSpec';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import { checkDepth, defaultDepth, depthLimit } from './chainRules';
 import { type ChainForm, FissionTab } from './FissionTab';
 import { InviteOverview, type StatsQuery } from './InviteOverview';
@@ -29,14 +29,16 @@ export default function InviteStatsPage() {
   const meta = useAdminMeta();
   const limit = depthLimit(meta.inviteChainMaxDepth);
 
-  const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [range, setRange] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [size, setSize] = useState<number | null>(DEFAULT_LIMIT);
   const [sizeWrong, setSizeWrong] = useState(false);
   const [query, setQuery] = useState<StatsQuery>(() => ({
-    ...lastNDaysUtc(7),
+    ...defaultRange(meta.statsMaxRangeDays, 7),
     limit: DEFAULT_LIMIT,
   }));
   const [tab, setTab] = useState('overview');
+  // The error of the read of the overview, which a refused date goes under the picker from.
+  const [refused, setRefused] = useState<unknown>(null);
   const [chain, setChain] = useState<ChainForm>(() => ({
     accountId: '',
     depth: defaultDepth(limit),
@@ -73,6 +75,7 @@ export default function InviteStatsPage() {
     <Flex vertical gap={16}>
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refused}
           value={range}
           onChange={setRange}
           maxDays={meta.statsMaxRangeDays ?? undefined}
@@ -111,7 +114,9 @@ export default function InviteStatsPage() {
           {
             key: 'overview',
             label: t('invite.stats.tab.overview'),
-            children: <InviteOverview query={query} onViewFission={viewFission} />,
+            children: (
+              <InviteOverview query={query} onViewFission={viewFission} onRefused={setRefused} />
+            ),
           },
           {
             key: 'fission',

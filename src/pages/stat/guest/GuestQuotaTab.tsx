@@ -34,7 +34,7 @@ export function GuestQuotaTab() {
   const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getGuestQuota(applied), [applied]);
-  const { data: quota, failure, reload } = useLatestRead(fetcher);
+  const { data: quota, error: refusal, failure, reload } = useLatestRead(fetcher);
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const minutes = (n: number | null) =>
@@ -114,6 +114,7 @@ export function GuestQuotaTab() {
     <Flex vertical gap={16}>
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={draft}
           onChange={setDraft}
           maxDays={meta.statsMaxRangeDays ?? undefined}

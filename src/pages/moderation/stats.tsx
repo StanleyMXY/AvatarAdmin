@@ -12,7 +12,7 @@ import {
 } from '../../services/moderation';
 import { useAdminMeta } from '../../session/useSession';
 import { formatCount } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import { formatDuration } from './duration';
 import { labelOf } from './options';
 
@@ -22,9 +22,9 @@ export default function ModerationStatsPage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
-  const [range, setRange] = useState<DayRange>(() => lastNDaysUtc(7));
+  const [range, setRange] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [data, setData] = useState<ModerationStats | null>(null);
-  const { text: failure, fail, clear } = useFailure();
+  const { text: failure, error: refusal, fail, clear } = useFailure();
   const begin = useLatestCall();
 
   const load = useCallback(async () => {
@@ -51,6 +51,7 @@ export default function ModerationStatsPage() {
     <Flex vertical gap={16}>
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={range}
           onChange={setRange}
           maxDays={meta.statsMaxRangeDays ?? undefined}

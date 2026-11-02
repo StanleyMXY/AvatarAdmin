@@ -54,13 +54,19 @@ export function GuestRetentionTab({
       }),
     [applied],
   );
-  const { data, failure, reload } = useLatestRead(fetcher, { refreshKey: landedTick });
+  const {
+    data,
+    error: refusal,
+    failure,
+    reload,
+  } = useLatestRead(fetcher, { refreshKey: landedTick });
   const chosen = [...days].sort((a, b) => a - b);
 
   return (
     <Flex vertical gap={16}>
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={draft.range}
           onChange={(range) => setDraft((d) => ({ ...d, range }))}
           maxDays={meta.statsMaxRangeDays ?? undefined}

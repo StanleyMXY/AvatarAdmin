@@ -34,7 +34,12 @@ export function GuestCohortTab({
   const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 30));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getGuestCohort(applied), [applied]);
-  const { data, failure, reload } = useLatestRead(fetcher, { refreshKey: landedTick });
+  const {
+    data,
+    error: refusal,
+    failure,
+    reload,
+  } = useLatestRead(fetcher, { refreshKey: landedTick });
   const t = (id: string) => intl.formatMessage({ id });
 
   const ring = useMemo(
@@ -58,6 +63,7 @@ export function GuestCohortTab({
     <Flex vertical gap={16}>
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={draft}
           onChange={setDraft}
           maxDays={meta.statsMaxRangeDays ?? undefined}

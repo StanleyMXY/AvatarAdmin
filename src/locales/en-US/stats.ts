@@ -7,6 +7,12 @@ const messages: Record<string, string> = {
   'stat.common.last7': 'Last 7 days',
   'stat.common.last30': 'Last 30 days',
   'stat.common.rangeTooLong': 'At most {days} days at a time',
+  'stat.common.range.line': '{field}: {reason} {hint}',
+  'stat.common.range.from': 'Start date',
+  'stat.common.range.from.hint': 'The start date must be a valid day and not after the end date.',
+  'stat.common.range.to': 'End date',
+  'stat.common.range.to.hint':
+    'The end date must be a valid day, and the range must not be longer than statistics allow (stats.max_range_days).',
   'stat.common.platform': 'Platform',
   'stat.common.platform.ALL': 'All',
   'stat.common.platform.ANDROID': 'Android',

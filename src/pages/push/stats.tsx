@@ -17,13 +17,16 @@ import { useAdminMeta } from '../../session/useSession';
 import { codeText, countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH, formatPercent } from '../../utils/ratio';
-import { lastNDaysUtc } from '../../utils/utcDay';
+import { defaultRange } from '../analytics/defaultRange';
 import { openRate, sumByDay } from './pushStats';
 
 type Filter = { range: DayRange; reason: string };
 
 const ALL = '';
-const initialFilter = (): Filter => ({ range: lastNDaysUtc(7), reason: ALL });
+const initialFilter = (maxDays: number | null | undefined): Filter => ({
+  range: defaultRange(maxDays, 7),
+  reason: ALL,
+});
 
 /** A column title with a hint icon; the tip text is the language key `<id>.tip`. */
 function HeaderTip({ id, testId }: { id: string; testId: string }) {
@@ -53,10 +56,10 @@ export default function PushStatsPage() {
     intl.formatMessage({ id }, values);
   const meta = useAdminMeta();
   // What is being edited, and what was asked for with Search (the report, the chart and the export).
-  const [draft, setDraft] = useState<Filter>(initialFilter);
-  const [applied, setApplied] = useState<Filter>(initialFilter);
+  const [draft, setDraft] = useState<Filter>(() => initialFilter(meta.statsMaxRangeDays));
+  const [applied, setApplied] = useState<Filter>(() => initialFilter(meta.statsMaxRangeDays));
   const [rows, setRows] = useState<PushStatRow[] | null>(null);
-  const { text: failure, fail, clear } = useFailure();
+  const { text: failure, error: refusal, fail, clear } = useFailure();
   const begin = useLatestCall();
 
   const load = useCallback(async () => {
@@ -136,6 +139,7 @@ export default function PushStatsPage() {
       <UtcNotice />
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={draft.range}
           onChange={(range) => setDraft((d) => ({ ...d, range }))}
           maxDays={meta.statsMaxRangeDays ?? undefined}

@@ -48,7 +48,12 @@ export function GuestDailyTab({
   const [draft, setDraft] = useState<DayRange>(() => defaultRange(meta.statsMaxRangeDays, 7));
   const [applied, setApplied] = useState<DayRange>(draft);
   const fetcher = useCallback(() => getGuestDaily(applied), [applied]);
-  const { data, failure, reload } = useLatestRead(fetcher, { refreshKey: landedTick });
+  const {
+    data,
+    error: refusal,
+    failure,
+    reload,
+  } = useLatestRead(fetcher, { refreshKey: landedTick });
 
   const columns: ColumnsType<GuestDailyRow> = [
     {
@@ -83,6 +88,7 @@ export function GuestDailyTab({
     <Flex vertical gap={16}>
       <Flex gap={12} wrap align="center">
         <DateRangeUtc
+          refused={refusal}
           value={draft}
           onChange={setDraft}
           maxDays={meta.statsMaxRangeDays ?? undefined}

@@ -1,7 +1,7 @@
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Button, Card, Flex, Statistic, Table, Tooltip } from 'antd';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { ACTIONS_COLUMN } from '../../components/actionsColumn';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { ReadState } from '../../components/ReadState';
@@ -17,15 +17,18 @@ export type StatsQuery = { from: string; to: string; limit: number };
 type Props = {
   query: StatsQuery;
   onViewFission: (accountId: string) => void;
+  /** Told the error of every read (null when it went well): the page writes a refused date under its picker. */
+  onRefused?: (error: unknown) => void;
 };
 
 /** The first tab: six numbers, the daily trend (two series in one chart) and the ranking of inviters. */
-export function InviteOverview({ query, onViewFission }: Props) {
+export function InviteOverview({ query, onViewFission, onRefused }: Props) {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const fetcher = useCallback(() => getInviteStats(query), [query]);
-  const { data, failure, loading, reload } = useLatestRead(fetcher);
+  const { data, error, failure, loading, reload } = useLatestRead(fetcher);
+  useEffect(() => onRefused?.(error), [error, onRefused]);
 
   const daily = useMemo(
     () =>

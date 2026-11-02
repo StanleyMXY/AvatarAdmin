@@ -93,6 +93,7 @@ export default function TaskStatsPage() {
   return (
     <Flex vertical gap={16}>
       <StatsBar
+        refused={daily.error ?? summary.error}
         draft={draft}
         onDraft={setDraft}
         onQuery={apply}

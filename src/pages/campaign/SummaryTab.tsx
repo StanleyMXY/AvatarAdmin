@@ -147,7 +147,7 @@ export function SummaryTab({ kept }: { kept: Kept }) {
         </Flex>
         <Flex gap={8} align="center" wrap>
           <Typography.Text>{t('campaign.summary.time')}</Typography.Text>
-          <DateRangeUtc value={draft} onChange={setDraft} />
+          <DateRangeUtc value={draft} onChange={setDraft} refused={read.error} />
         </Flex>
         <Button type="primary" onClick={() => setApplied({ ...draft })}>
           {t('stat.common.query')}
