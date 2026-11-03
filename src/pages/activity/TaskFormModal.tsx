@@ -36,6 +36,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  /** The backend said the task has records although the row did not: the list is read again. */
+  onRefreshed: () => void;
 };
 
 const FIELDS = [
@@ -58,10 +60,11 @@ const numberOrNull = (value: unknown): number | null =>
 /**
  * New or edit daily task. The target is at least 1 (fixed to 1 for the login task, in seconds for the
  * call task); the claim time is empty for "any time on the same day". A task that has records keeps
- * its type and target: the backend says so with TASK_HAS_RECORDS (a row that says `hasRecords` has
- * them read only from the start), and from then on the two fields show the old values and cannot change.
+ * its type and target: a row that says `hasRecords` has the two fields read only from the start, with
+ * the reason, and the PUT carries them as stored (which is not a change). A record that came after the
+ * row was read is told by TASK_HAS_RECORDS (409): from then on the fields show the old values too.
  */
-export function TaskFormModal({ target, open, onClose, onSaved }: Props) {
+export function TaskFormModal({ target, open, onClose, onSaved, onRefreshed }: Props) {
   const intl = useIntl();
   const { message } = App.useApp();
   const t = (id: string, values?: Record<string, string | number>) =>
@@ -120,8 +123,10 @@ export function TaskFormModal({ target, open, onClose, onSaved }: Props) {
     } catch (error) {
       const result = failureToForm(intl, form, error, FIELDS);
       if (row && result.code === 'TASK_HAS_RECORDS') {
-        // The backend refuses to change the type or the target: they go back to what the task has.
+        // The backend refuses to change the type or the target (a record came after the row was read):
+        // they go back to what the task has, and the list is read again, which now says `hasRecords`.
         setLockedByBackend(true);
+        onRefreshed();
         form.setFieldsValue({ taskType: initial.taskType, targetValue: initial.targetValue });
       } else {
         fail(error);

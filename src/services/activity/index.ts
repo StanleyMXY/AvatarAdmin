@@ -139,7 +139,7 @@ export const updateTaskConfig = (id: string, body: TaskBody): Promise<TaskConfig
 export const deleteTaskConfig = (id: string): Promise<unknown> =>
   apiRequest({ method: 'DELETE', url: `/tasks/configs/${enc(id)}` });
 
-export const setTaskConfigStatus = (id: string, status: TaskStatus): Promise<unknown> =>
+export const setTaskConfigStatus = (id: string, status: TaskStatus): Promise<TaskConfig> =>
   apiRequest({ method: 'PUT', url: `/tasks/configs/${enc(id)}/status`, body: { status } });
 
 export const listTaskRecords = (

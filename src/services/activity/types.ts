@@ -85,6 +85,12 @@ export type TaskConfig = {
   claimTimeoutSeconds: number | null;
   sortOrder: number;
   status: TaskStatus;
+  /**
+   * Whether the configuration already has task records. True: it cannot be deleted and `taskType` and
+   * `targetValue` cannot change (a PUT that sends them as stored is not a change). Every list item, the
+   * single read and the answers of the three writes carry it.
+   */
+  hasRecords: boolean;
   createdAt: string;
   updatedAt: string;
 };

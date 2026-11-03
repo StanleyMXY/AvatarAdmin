@@ -43,6 +43,29 @@ const dialogOf = (title: string | RegExp) =>
     return found;
   });
 
+/** The first read of the list is from before a record appeared: these tasks say `hasRecords: false` although the backend now has records. */
+const staleFlags = (ids: string[]) => {
+  const real = globalThis.fetch;
+  let reads = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const answer = await real(input, init);
+      if (!String(input).includes('/tasks/configs?')) return answer;
+      reads += 1;
+      if (reads > 1) return answer;
+      const json = await answer.json();
+      json.data.items = json.data.items.map((c: { id: string }) =>
+        ids.includes(c.id) ? { ...c, hasRecords: false } : c,
+      );
+      return new Response(JSON.stringify(json), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }),
+  );
+};
+
 const query = (user: ReturnType<typeof userEvent.setup>) =>
   user.click(screen.getByRole('button', { name: /查\s*询|Query|Search/ }));
 
@@ -240,7 +263,7 @@ describe('stopping, enabling and deleting', { timeout: 30000 }, () => {
     const calls = useMockBackend(mock);
     const user = userEvent.setup();
     renderPage(<TaskConfigPage />);
-    await user.click(within(await rowOf(OPEN)).getByRole('button', { name: 'Delete' }));
+    await user.click(within(await rowOf(INDONESIAN_NAME)).getByRole('button', { name: 'Delete' }));
     await user.click(await screen.findByRole('button', { name: 'Cancel' }));
     expect(writesOf(calls)).toHaveLength(0);
   });
@@ -265,8 +288,25 @@ describe('stopping, enabling and deleting', { timeout: 30000 }, () => {
     await waitFor(() => expect(screen.queryByText(INDONESIAN_NAME)).toBeNull());
   });
 
-  it('a task that has records is not deleted: TASK_HAS_RECORDS is shown in words, telling to stop it instead, and the row stays', async () => {
+  it('a task that has records has Delete switched off with the reason written in the row, and nothing is sent', async () => {
+    const calls = useMockBackend(mock);
+    const user = userEvent.setup();
+    renderPage(<TaskConfigPage />);
+    const row = await rowOf(OPEN);
+    expect(within(row).getByRole('button', { name: 'Delete' })).toBeDisabled();
+    expect(
+      within(row).getByText('Has records: it cannot be deleted, stop it instead'),
+    ).toBeInTheDocument();
+    await user.click(within(row).getByRole('button', { name: 'Delete' }));
+    expect(writesOf(calls)).toHaveLength(0);
+    const free = await rowOf(INDONESIAN_NAME);
+    expect(within(free).getByRole('button', { name: 'Delete' })).toBeEnabled();
+    expect(within(free).queryByText(/Has records/)).toBeNull();
+  });
+
+  it('a record that appeared after the list was read: the delete is refused with TASK_HAS_RECORDS, shown in words telling to stop it instead, and the row stays', async () => {
     useMockBackend(mock);
+    staleFlags(['1']);
     const user = userEvent.setup();
     renderPage(<TaskConfigPage />);
     await user.click(within(await rowOf(OPEN)).getByRole('button', { name: 'Delete' }));
@@ -539,8 +579,8 @@ describe('the form: editing', { timeout: 30000 }, () => {
   const num = (dialog: HTMLElement, name: string) =>
     within(dialog).getByRole('spinbutton', { name });
 
-  it('is filled from the row, and always says that a task with records keeps its type and target', async () => {
-    useMockBackend(mock);
+  it('is filled from the row; a task with records has the type and the target read only with the reason from the start, one without records has no such note', async () => {
+    const calls = useMockBackend(mock);
     const user = userEvent.setup();
     renderPage(<TaskConfigPage />);
     const dialog = await edit(user, THAI_NAME);
@@ -548,11 +588,19 @@ describe('the form: editing', { timeout: 30000 }, () => {
     expect(num(dialog, 'Target')).toHaveValue('600');
     expect(num(dialog, 'Claim time limit (seconds)')).toHaveValue('3600');
     expect(num(dialog, 'Order')).toHaveValue('2');
+    expect(num(dialog, 'Target')).toBeDisabled();
+    expect(within(dialog).getByRole('combobox', { name: 'Task type' })).toBeDisabled();
     expect(
-      within(dialog).getByText(
-        /For a task that has records, the type and the target cannot be changed/,
-      ),
+      within(dialog).getByText(/This task has records, so its type and target cannot be changed/),
     ).toBeInTheDocument();
+    // Nothing was refused to find this out.
+    expect(writesOf(calls)).toHaveLength(0);
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await dialogsClosed();
+    const free = await edit(user, INDONESIAN_NAME);
+    expect(num(free, 'Target')).not.toBeDisabled();
+    expect(within(free).getByRole('combobox', { name: 'Task type' })).not.toBeDisabled();
+    expect(within(free).queryByText(/cannot be changed/)).toBeNull();
   });
 
   it('changes the name and the reward of a task that has records with one PUT that carries the old type and target', async () => {
@@ -573,8 +621,9 @@ describe('the form: editing', { timeout: 30000 }, () => {
     expect(config('2')?.rewardCredits).toBe(9);
   });
 
-  it('when the backend says the task has records (409), the type and target become read only with their old values and the page says why', async () => {
+  it('when a record appeared after the list was read, the backend says so with 409 and the type and target become read only with their old values and the page says why', async () => {
     const calls = useMockBackend(mock);
+    staleFlags(['2']);
     const user = userEvent.setup();
     renderPage(<TaskConfigPage />);
     const dialog = await edit(user, THAI_NAME);
@@ -592,6 +641,14 @@ describe('the form: editing', { timeout: 30000 }, () => {
     expect(num(dialog, 'Target')).toHaveValue('600');
     expect(within(dialog).getByRole('combobox', { name: 'Task type' })).toBeDisabled();
     expect(config('2')?.targetValue).toBe(600);
+    // The list was read again, so the row now says it has records too: Delete is off in it.
+    await waitFor(() =>
+      expect(calls.filter((c) => c.url.includes('/tasks/configs?')).length).toBeGreaterThan(1),
+    );
+    await waitFor(() => {
+      const row = screen.getByText(THAI_NAME).closest('tr') as HTMLElement;
+      expect(within(row).getByRole('button', { name: 'Delete' })).toBeDisabled();
+    });
     // The rest can still be saved, with the old type and target.
     await user.clear(num(dialog, 'Reward credits'));
     await user.type(num(dialog, 'Reward credits'), '8');
@@ -605,36 +662,22 @@ describe('the form: editing', { timeout: 30000 }, () => {
     });
   });
 
-  it('when the backend row says it has records, the type and the target are read only from the start', async () => {
-    useMockBackend(mock);
-    const real = globalThis.fetch;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string | URL, init?: RequestInit) => {
-        const answer = await real(input, init);
-        if (String(input).includes('/tasks/configs?')) {
-          const json = await answer.json();
-          json.data.items = json.data.items.map((c: { id: string }) => ({
-            ...c,
-            hasRecords: c.id === '3',
-          }));
-          return new Response(JSON.stringify(json), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          });
-        }
-        return answer;
-      }),
-    );
+  it('a task with records is saved with its type and target as they are stored and does not get 409', async () => {
+    const calls = useMockBackend(mock);
     const user = userEvent.setup();
     renderPage(<TaskConfigPage />);
     const dialog = await edit(user, ARABIC_NAME);
     expect(num(dialog, 'Target')).toBeDisabled();
-    expect(within(dialog).getByRole('combobox', { name: 'Task type' })).toBeDisabled();
-    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-    await dialogsClosed();
-    const other = await edit(user, THAI_NAME);
-    expect(num(other, 'Target')).not.toBeDisabled();
+    await user.clear(num(dialog, 'Reward credits'));
+    await user.type(num(dialog, 'Reward credits'), '3');
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(await screen.findByText('Task saved')).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(1);
+    expect(writesOf(calls)[0].body).toMatchObject({
+      taskType: 'text_messages',
+      targetValue: 20,
+      rewardCredits: 3,
+    });
   });
 
   it('changes the type and the target of a task without records', async () => {
@@ -688,6 +731,7 @@ describe('the form: editing', { timeout: 30000 }, () => {
 
   it('the type and target that a refusal made read only are open again in the next form', async () => {
     useMockBackend(mock);
+    staleFlags(['2']);
     const user = userEvent.setup();
     renderPage(<TaskConfigPage />);
     const first = await edit(user, THAI_NAME);

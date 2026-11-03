@@ -84,6 +84,8 @@ export default function TaskConfigPage() {
     {
       key: 'delete',
       label: t('activity.task.delete'),
+      // A task with records is only stopped: the row says so instead of waiting for the 409.
+      disabled: row.hasRecords === true,
       confirmText: t('activity.task.deleteConfirm'),
       onClick: async () => {
         try {
@@ -206,7 +208,17 @@ export default function TaskConfigPage() {
       title: t('activity.task.col.actions'),
       valueType: 'option',
       ...ACTIONS_COLUMN,
-      render: (_, row) => (canManage ? <RowActions actions={actionsOf(row)} /> : null),
+      render: (_, row) =>
+        canManage ? (
+          <Flex vertical gap={0}>
+            <RowActions actions={actionsOf(row)} />
+            {row.hasRecords === true ? (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {t('activity.task.hasRecordsRow')}
+              </Typography.Text>
+            ) : null}
+          </Flex>
+        ) : null,
     },
   ];
 
@@ -242,6 +254,7 @@ export default function TaskConfigPage() {
           open={formOpen}
           onClose={() => setFormOpen(false)}
           onSaved={reload}
+          onRefreshed={reload}
         />
       ) : null}
     </Flex>

@@ -155,15 +155,16 @@ const stop = (list: MockActivity[], now: string) => {
 
 // ---- daily tasks ----
 
-const configOut = (c: MockTaskConfig) => ({ ...c });
+const hasRecords = (taskId: string) => activityState.taskRecords.some((r) => r.taskId === taskId);
+
+/** Every configuration the backend answers carries `hasRecords`: whether a task record exists for it. */
+const configOut = (c: MockTaskConfig) => ({ ...c, hasRecords: hasRecords(c.id) });
 
 const findConfig = (id: string): MockTaskConfig => {
   const found = activityState.taskConfigs.find((c) => c.id === id);
   if (!found) throw notFound('task');
   return found;
 };
-
-const hasRecords = (taskId: string) => activityState.taskRecords.some((r) => r.taskId === taskId);
 
 /** The checks of a new or edited task configuration (contract 28.2). */
 function taskFields(body: Record<string, unknown>) {
@@ -349,6 +350,10 @@ export default {
     const page = paginateQuery(rows, req);
     return ok({ items: page.items.map(configOut), total: page.total });
   }),
+
+  'GET /api/admin/tasks/configs/:id': guard('TASK:VIEW', (req) =>
+    ok(configOut(findConfig(idOf(req)))),
+  ),
 
   'POST /api/admin/tasks/configs': guard('TASK:MANAGE', (req) => {
     const fields = taskFields(bodyOf(req));
