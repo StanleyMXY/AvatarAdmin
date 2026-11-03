@@ -14,6 +14,7 @@ import {
   mediaFile,
   moderationState,
   nextRuleId,
+  SIGNATURE_TTL_MS,
   signAddress,
 } from './_core/moderationData';
 import { paginateQuery } from './_core/paginate';
@@ -220,6 +221,8 @@ export default {
       kind: 'FILE',
       mediaType: MEDIA_TYPE[content.media],
       url: signAddress(content.media),
+      // The moment the address stops working, in UTC (backend answer 134); a text answer has no such field.
+      expiresAt: new Date(Date.now() + SIGNATURE_TTL_MS).toISOString(),
       ...(content.text ? { text: content.text } : {}),
     });
   }),

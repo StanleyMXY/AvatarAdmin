@@ -6,6 +6,7 @@ import {
   moderationState,
   RECORD_ID,
   resetModerationStore,
+  SIGNATURE_TTL_MS,
   simulateOtherRuleListEdit,
 } from './_core/moderationData';
 import { issueToken, resetStore } from './_core/store';
@@ -271,6 +272,8 @@ describe('GET /moderation/records/{id}/content', () => {
     expect(status).toBe(200);
     expect(body.data.kind).toBe('TEXT');
     expect(typeof body.data.text).toBe('string');
+    // only a file has an expiry: a text answer does not carry the field at all
+    expect(Object.keys(body.data).sort()).toEqual(['kind', 'text']);
   });
 
   it('answers a file as {kind: FILE, mediaType, url} and a voice sample with its transcript in text', async () => {
@@ -279,6 +282,10 @@ describe('GET /moderation/records/{id}/content', () => {
     expect(image.mediaType).toMatch(/^image\//);
     expect(image.url).toMatch(/^\/api\/admin\/moderation\/mock-media\/image\?sig=/);
     expect(image).not.toHaveProperty('text');
+    // the address stops working at expiresAt: the moment of signing plus the lifetime (UTC), backend answer 134
+    expect(image.expiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/);
+    expect(Date.parse(image.expiresAt) - Date.now()).toBeGreaterThan(SIGNATURE_TTL_MS - 5000);
+    expect(Date.parse(image.expiresAt) - Date.now()).toBeLessThanOrEqual(SIGNATURE_TTL_MS);
     const voice = (await get(CONTENT, 'reviewer', {}, { id: RECORD_ID.reportedVoice })).body.data;
     expect(voice.mediaType).toMatch(/^audio\//);
     expect(voice.text).toBeTruthy();

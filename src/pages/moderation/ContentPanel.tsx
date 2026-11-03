@@ -12,6 +12,28 @@ import { describeFailure, failureCode } from '../../session/describe';
 
 type Phase = 'loading' | 'ready' | 'notStored' | 'failed';
 
+/**
+ * A file's signed address is asked for again this long before it ends, so the player never meets an
+ * expired one (and never has to fail first). Every read writes an audit row, so a read is made once
+ * for each address, only while someone can see it, and not while a sound or a clip is playing.
+ */
+const RENEW_BEFORE_MS = 30_000;
+/** When a sound or a clip is playing at the moment of renewal, look again after this long. */
+const RENEW_RECHECK_MS = 5_000;
+/** The least wait before a renewal, so an address with little time left cannot make a loop of reads. */
+const RENEW_MIN_MS = 1_000;
+
+/** How long to wait before renewing an address that ends at `expiresAt`; null when there is nothing to plan. */
+function renewDelay(expiresAt: unknown, now: number): number | null {
+  if (typeof expiresAt !== 'string') return null;
+  const end = Date.parse(expiresAt);
+  if (Number.isNaN(end)) return null;
+  const left = end - now;
+  // Over already (a clock that is off): the player's own failure renews it once.
+  if (left <= 0) return null;
+  return Math.max(left - RENEW_BEFORE_MS, left / 2, RENEW_MIN_MS);
+}
+
 const WRAP = { overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' } as const;
 
 /** The player for a file; the address is only ever the `src` of this element. */
@@ -74,7 +96,9 @@ function Media({
  * without it no request is made. A blocked record has no original. The content is asked for
  * every time the page opens and again when the signed address stops working (the player fails once:
  * one new request; fails again: the person is told and can ask again); nothing is kept between
- * visits and the address is not written anywhere but the player's `src`.
+ * visits and the address is not written anywhere but the player's `src`. A file's answer says when
+ * its address ends (`expiresAt`): the panel asks again shortly before that, once per address, only
+ * while the tab is visible and nothing is playing; a failed renewal keeps what is shown.
  */
 export function ContentPanel({
   record,
@@ -98,6 +122,7 @@ export function ContentPanel({
   const retried = useRef(false);
   const begin = useLatestCall();
   const id = record.id;
+  const area = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const isCurrent = begin();
@@ -126,6 +151,57 @@ export function ContentPanel({
     };
   }, [active, load, begin]);
 
+  // The renewal of an address that is about to end. It keeps the answer on screen when it fails.
+  const renew = useCallback(async () => {
+    const isCurrent = begin();
+    try {
+      const answer = await getModerationContent(id);
+      if (!isCurrent()) return;
+      retried.current = false;
+      setContent(answer);
+    } catch (error) {
+      if (!isCurrent()) return;
+      if (failureCode(error) === 'CONTENT_NOT_STORED') {
+        setContent(null);
+        setFailed({ error });
+        setPhase('notStored');
+      }
+    }
+  }, [id, begin]);
+
+  const expiresAt = content?.kind === 'FILE' ? content.expiresAt : undefined;
+  useEffect(() => {
+    if (!active || phase !== 'ready') return undefined;
+    const delay = renewDelay(expiresAt, Date.now());
+    if (delay === null) return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const playing = () =>
+      [...(area.current?.querySelectorAll<HTMLMediaElement>('audio, video') ?? [])].some(
+        (media) => !media.paused && !media.ended,
+      );
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      document.removeEventListener('visibilitychange', onVisible);
+      attempt();
+    };
+    const attempt = () => {
+      if (document.visibilityState === 'hidden') {
+        document.addEventListener('visibilitychange', onVisible);
+        return;
+      }
+      if (playing()) {
+        timer = setTimeout(attempt, RENEW_RECHECK_MS);
+        return;
+      }
+      void renew();
+    };
+    timer = setTimeout(attempt, delay);
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [active, phase, expiresAt, renew]);
+
   const onMediaError = () => {
     if (!retried.current) {
       retried.current = true;
@@ -140,15 +216,15 @@ export function ContentPanel({
     void load();
   };
 
-  let body: ReactNode;
+  let bodyNode: ReactNode;
   if (!canReview) {
-    body = <Alert type="info" showIcon title={t('moderation.content.noPermission')} />;
+    bodyNode = <Alert type="info" showIcon title={t('moderation.content.noPermission')} />;
   } else if (blocked) {
-    body = <Alert type="info" showIcon title={t('moderation.content.blocked')} />;
+    bodyNode = <Alert type="info" showIcon title={t('moderation.content.blocked')} />;
   } else if (phase === 'notStored') {
-    body = <Alert type="info" showIcon title={failure} />;
+    bodyNode = <Alert type="info" showIcon title={failure} />;
   } else if (phase === 'failed') {
-    body = (
+    bodyNode = (
       <Alert
         type="error"
         showIcon
@@ -161,14 +237,14 @@ export function ContentPanel({
       />
     );
   } else if (phase === 'loading' || content === null) {
-    body = (
+    bodyNode = (
       <Flex gap={8} align="center">
         <Spin size="small" />
         <Typography.Text type="secondary">{t('moderation.content.loading')}</Typography.Text>
       </Flex>
     );
   } else if (content.kind === 'TEXT') {
-    body = (
+    bodyNode = (
       <Flex vertical gap={8}>
         <div
           dir="auto"
@@ -185,7 +261,7 @@ export function ContentPanel({
       </Flex>
     );
   } else {
-    body = (
+    bodyNode = (
       <Flex vertical gap={12}>
         <Media content={content} onError={onMediaError} />
         {mediaFailed ? (
@@ -218,7 +294,7 @@ export function ContentPanel({
         {canReview ? (
           <Typography.Text type="secondary">{t('moderation.content.audited')}</Typography.Text>
         ) : null}
-        {body}
+        <div ref={area}>{bodyNode}</div>
       </Flex>
     </Card>
   );
