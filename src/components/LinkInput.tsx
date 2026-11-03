@@ -38,8 +38,20 @@ type Props = {
   disabled?: boolean;
 };
 
-/** An input for a link the server will hand out; says what is wrong with it in the current language. */
-export function LinkInput({
+type BoxProps = Props & {
+  /**
+   * The form around the box refused it (a send pressed with the box empty). That counts as having
+   * been there: a rule that stays quiet because this box says the reason must not leave it unsaid.
+   */
+  refused?: boolean;
+};
+
+/**
+ * An input for a link the server will hand out; says what is wrong with it in the current
+ * language. It knows nothing about forms, so it may stand anywhere; inside a `Form.Item` use
+ * `LinkInput`, which tells it when the form refused the box.
+ */
+export function StandaloneLinkInput({
   value = '',
   onChange,
   maxLength,
@@ -47,15 +59,13 @@ export function LinkInput({
   placeholder,
   showError = true,
   disabled,
-}: Props) {
+  refused = false,
+}: BoxProps) {
   const intl = useIntl();
   // An empty required box is not marked before the person has typed in it or left it.
   const [touched, setTouched] = useState(false);
-  // A form that refused the box (a send pressed with the box empty) counts as having been there:
-  // a rule that stays quiet because this box says the reason must not leave it unsaid.
-  const { status } = Form.Item.useStatus();
   const check =
-    value === '' && (!required || !(touched || status === 'error'))
+    value === '' && (!required || !(touched || refused))
       ? ({ ok: true } as const)
       : validateServerLink(value, { maxLength });
   return (
@@ -80,4 +90,10 @@ export function LinkInput({
       ) : null}
     </div>
   );
+}
+
+/** The link box for a `Form.Item`: the same box, told when the form refused it. */
+export function LinkInput(props: Props) {
+  const { status } = Form.Item.useStatus();
+  return <StandaloneLinkInput {...props} refused={status === 'error'} />;
 }

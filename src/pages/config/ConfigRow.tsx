@@ -3,7 +3,7 @@ import { Alert, App, Button, Flex, Input, InputNumber, Switch, Tag, Typography }
 import { useMemo, useState } from 'react';
 import { DangerConfirmButton } from '../../components/DangerConfirmButton';
 import { JsonField, parseJson } from '../../components/JsonField';
-import { LinkInput } from '../../components/LinkInput';
+import { StandaloneLinkInput } from '../../components/LinkInput';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import type { ApiError } from '../../request/errors';
 import {
@@ -123,7 +123,7 @@ export function ConfigRow({
         return <Switch checked={draft === true} onChange={setDraft} />;
       case 'url':
         return (
-          <LinkInput
+          <StandaloneLinkInput
             value={typeof draft === 'string' ? draft : ''}
             onChange={setDraft}
             showError={false}

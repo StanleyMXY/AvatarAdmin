@@ -5,7 +5,7 @@ import { renderPage } from '../../tests/renderPage';
 import enUS from '../locales/en-US';
 import zhCN from '../locales/zh-CN';
 import { type LinkReasonKey, validateServerLink } from '../utils/linkRule';
-import { LinkInput, linkRule } from './LinkInput';
+import { LinkInput, linkRule, StandaloneLinkInput } from './LinkInput';
 
 const BAD: Record<LinkReasonKey, string> = {
   NOT_HTTPS: 'http://example.com/a',
@@ -63,6 +63,37 @@ describe('LinkInput', () => {
     );
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'http://a.com' } });
     await waitFor(() => expect(screen.getAllByText(enUS['reason.NOT_HTTPS'])).toHaveLength(1));
+  });
+
+  it('StandaloneLinkInput stands outside a form without a console error, and marks a refused empty required box', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { unmount } = renderPage(<StandaloneLinkInput value="" required />);
+      expect(screen.queryByRole('alert')).toBeNull();
+      unmount();
+      renderPage(<StandaloneLinkInput value="" required refused />);
+      expect(screen.getByRole('alert')).toHaveTextContent(enUS['reason.NOT_HTTPS']);
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('LinkInput marks an empty required box once the form refused it', async () => {
+    renderPage(
+      <Form>
+        <Form.Item
+          name="link"
+          rules={[linkRule({ formatMessage: ({ id }) => enUS[id] }, { required: true })]}
+        >
+          <LinkInput required showError />
+        </Form.Item>
+        <button type="submit">send</button>
+      </Form>,
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByText('send'));
+    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
   });
 
   it('accepts international host names only as the rule allows (punycode, not raw letters)', () => {
