@@ -1,49 +1,41 @@
-import { useAccess, useIntl } from '@umijs/max';
-import { Input, Select } from 'antd';
+import { useIntl } from '@umijs/max';
 import { useLatestRead } from '../../hooks/useLatestRead';
-import { loadAllAdmins } from '../../services/system';
+import { listAuditAdmins } from '../../services/system';
+import { plainText } from '../../utils/plainText';
+import { ChoiceOrTyped } from './ChoiceOrTyped';
 
 type Props = { value?: string; onChange?: (value: string | undefined) => void };
 
+// What the backend takes for an id: the most it accepts for a filter on text (the ids are far shorter).
+const MAX_ADMIN_ID = 255;
+
 /**
- * The filter "administrator" of the audit log. An administrator who may list the administrators
- * (ADMIN:MANAGE) picks one by name; the value is the id; when that list cannot be read they type the
- * id. Anyone else gets no filter at all (nothing is drawn). The log shows the name of the moment of
- * writing; the filter works on the id, which does not change when the administrator is renamed.
+ * The filter "administrator" of the audit log, for everyone who may read the log (`AUDIT:VIEW`): the
+ * names come from `GET /audit-logs/admins` (id and user name, nothing else), not from the list of
+ * administrators, which needs another permission. The value is the id; the log shows the name of the
+ * moment of writing, and the id does not change when the administrator is renamed. An administrator
+ * who was deleted is not in the list, the rows they wrote still are: "Other" opens a box for the id.
+ * When the list cannot be read only the box for the id is drawn.
  */
 export function AuditAdminFilter({ value, onChange }: Props) {
-  const access = useAccess() as unknown as { canAccess: (code?: string) => boolean };
-  if (!access.canAccess('ADMIN:MANAGE')) return null;
-  return <PickByName value={value} onChange={onChange} />;
-}
-
-function PickByName({ value, onChange }: Props) {
   const intl = useIntl();
-  const admins = useLatestRead(loadAllAdmins, { keepWhileReading: true });
-  if (admins.failure !== null) {
-    return (
-      <Input
-        aria-label={intl.formatMessage({ id: 'system.audit.filter.adminId' })}
-        value={value ?? ''}
-        allowClear
-        onChange={(event) => onChange?.(event.target.value)}
-      />
-    );
-  }
+  const admins = useLatestRead(listAuditAdmins, { keepWhileReading: true });
   return (
-    <Select
-      aria-label={intl.formatMessage({ id: 'system.audit.filter.admin' })}
-      showSearch
-      allowClear
-      optionFilterProp="label"
-      value={value === '' ? undefined : value}
-      loading={admins.loading}
-      placeholder={intl.formatMessage({ id: 'system.audit.filter.adminPick' })}
+    <ChoiceOrTyped
+      value={value}
+      onChange={onChange}
       options={(admins.data ?? []).map((admin) => ({
-        value: admin.id,
-        label: String(admin.username),
+        value: plainText(admin.id),
+        label: plainText(admin.username),
       }))}
-      onChange={(next) => onChange?.(next)}
+      loading={admins.loading}
+      unavailable={admins.failure !== null}
+      label={intl.formatMessage({ id: 'system.audit.filter.admin' })}
+      typedLabel={intl.formatMessage({ id: 'system.audit.filter.adminId' })}
+      unavailableLabel={intl.formatMessage({ id: 'system.audit.filter.adminId' })}
+      placeholder={intl.formatMessage({ id: 'system.audit.filter.adminPick' })}
+      otherText={intl.formatMessage({ id: 'system.audit.filter.otherAdmin' })}
+      maxLength={MAX_ADMIN_ID}
     />
   );
 }

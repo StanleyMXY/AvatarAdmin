@@ -1,19 +1,19 @@
 import type { ProColumns } from '@ant-design/pro-components';
-import { useAccess, useIntl } from '@umijs/max';
+import { useIntl } from '@umijs/max';
 import { Alert, Flex } from 'antd';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PagedListTable } from '../../components/PagedListTable';
-import { type AuditLog, listAuditLogs } from '../../services/system';
+import { useLatestRead } from '../../hooks/useLatestRead';
+import { type AuditLog, getAuditMeta, listAuditLogs } from '../../services/system';
 import { adminText, instantText, orDash } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 import { utcDayRangeToInstants } from '../../utils/utcDay';
 import { AuditAdminFilter } from './AuditAdminFilter';
+import { AuditValueFilter } from './AuditValueFilter';
 import { detailText } from './auditDetail';
 
-// What the backend takes in these filters; longer text is answered 400, so the boxes stop at the limit.
-const MAX_ACTION = 64;
-const MAX_TARGET_TYPE = 64;
+// What the backend takes in this filter; longer text is answered 400, so the box stops at the limit.
 const MAX_TARGET_ID = 255;
 
 type Filters = {
@@ -30,14 +30,15 @@ type Filters = {
  * changes or deletes a row. The administrator column shows the name written with the row, never the
  * current name of the account; when the row has no name the first eight characters of the id stand in.
  * The detail has no fixed type, so it goes through `plainText`, and a value that belongs to a credential
- * is hidden (auditDetail.ts); nothing of a row is written to the console. The filter by administrator is
- * only there for an administrator who may list the administrators (ADMIN:MANAGE); for anyone else it is
- * not drawn at all, not even as a box for an id.
+ * is hidden (auditDetail.ts); nothing of a row is written to the console. The filters by administrator,
+ * action and object type are choices for everyone who may read the log: the names come from
+ * `GET /audit-logs/admins` and the values from `GET /audit-logs/meta` (read once), each with an
+ * "Other" that opens a box to type in, for a deleted administrator or a value the backend dropped.
  */
 export default function AuditPage() {
   const intl = useIntl();
-  const access = useAccess() as unknown as { canAccess: (code?: string) => boolean };
-  const canFilterByAdmin = access.canAccess('ADMIN:MANAGE');
+  // The values of the action and object type filters; null when they could not be read (boxes to type in).
+  const meta = useLatestRead(getAuditMeta);
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
 
@@ -58,13 +59,18 @@ export default function AuditPage() {
       title: t('system.audit.col.admin'),
       dataIndex: 'adminId',
       hideInTable: true,
-      search: canFilterByAdmin ? undefined : false,
       formItemRender: () => <AuditAdminFilter />,
     },
     {
       title: t('system.audit.col.action'),
       dataIndex: 'action',
-      fieldProps: { maxLength: MAX_ACTION },
+      formItemRender: () => (
+        <AuditValueFilter
+          kind="action"
+          values={meta.data?.actions ?? null}
+          loading={meta.loading}
+        />
+      ),
       render: (_, row) => (
         <EllipsisPopoverText text={orDash(row.action)} lines={2} width={180} dir="ltr" />
       ),
@@ -72,7 +78,13 @@ export default function AuditPage() {
     {
       title: t('system.audit.col.targetType'),
       dataIndex: 'targetType',
-      fieldProps: { maxLength: MAX_TARGET_TYPE },
+      formItemRender: () => (
+        <AuditValueFilter
+          kind="targetType"
+          values={meta.data?.targetTypes ?? null}
+          loading={meta.loading}
+        />
+      ),
       render: (_, row) => (
         <EllipsisPopoverText text={orDash(row.targetType)} lines={2} width={160} dir="ltr" />
       ),

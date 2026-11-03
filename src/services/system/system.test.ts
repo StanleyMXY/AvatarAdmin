@@ -9,8 +9,10 @@ import {
   deleteAdmin,
   deletePermission,
   deleteRole,
+  getAuditMeta,
   isOwnAccount,
   listAdmins,
+  listAuditAdmins,
   listAuditLogs,
   listPermissions,
   listRoles,
@@ -308,9 +310,53 @@ describe('the audit log', () => {
     expect(query(calls[1])).toEqual({ page: '1', pageSize: '20' });
   });
 
+  it('reads the choices of the action and the object type from /audit-logs/meta, values as they came, case included', async () => {
+    const calls = answer({
+      actions: ['USER_BAN', 'ñandú', 'app_version_publish'],
+      targetTypes: ['NOTIFICATION', 'CosmeticItem', 'User'],
+    });
+    expect(await getAuditMeta()).toEqual({
+      actions: ['USER_BAN', 'ñandú', 'app_version_publish'],
+      targetTypes: ['NOTIFICATION', 'CosmeticItem', 'User'],
+    });
+    expect(calls[0].init.method).toBe('GET');
+    expect(path(calls[0])).toBe('/api/admin/audit-logs/meta');
+    expect(query(calls[0])).toEqual({});
+  });
+
+  it('reads an answer of the choices that is not what the contract says as empty lists, and drops what is not text', async () => {
+    answer({ actions: ['A', 3, null, '', 'B'], targetTypes: 'x' });
+    expect(await getAuditMeta()).toEqual({ actions: ['A', 'B'], targetTypes: [] });
+    answer(null);
+    expect(await getAuditMeta()).toEqual({ actions: [], targetTypes: [] });
+  });
+
+  it('reads the administrators to choose from at /audit-logs/admins, the id and the user name and nothing else, in the order they came', async () => {
+    const calls = answer({
+      items: [
+        { id: '3', username: 'ñandú', status: 'ACTIVE', roles: [] },
+        { id: 4, username: 'สมชาย' },
+        { username: 'no id' },
+        'x',
+      ],
+    });
+    expect(await listAuditAdmins()).toEqual([
+      { id: '3', username: 'ñandú' },
+      { id: '4', username: 'สมชาย' },
+    ]);
+    expect(path(calls[0])).toBe('/api/admin/audit-logs/admins');
+    expect(query(calls[0])).toEqual({});
+    answer({});
+    expect(await listAuditAdmins()).toEqual([]);
+  });
+
   it('has no function that writes: nothing to edit or delete an audit row', async () => {
     const all = await import('./index');
-    expect(Object.keys(all).filter((name) => /audit/i.test(name))).toEqual(['listAuditLogs']);
+    expect(
+      Object.keys(all)
+        .filter((name) => /audit/i.test(name))
+        .sort(),
+    ).toEqual(['getAuditMeta', 'listAuditAdmins', 'listAuditLogs']);
   });
 });
 

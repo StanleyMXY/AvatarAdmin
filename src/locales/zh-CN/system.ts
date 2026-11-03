@@ -183,6 +183,13 @@ const messages: Record<string, string> = {
   'system.audit.filter.admin': '管理员',
   'system.audit.filter.adminId': '管理员 ID',
   'system.audit.filter.adminPick': '选择管理员',
+  'system.audit.filter.action': '动作',
+  'system.audit.filter.actionTyped': '动作（手动输入）',
+  'system.audit.filter.targetType': '对象类型',
+  'system.audit.filter.targetTypeTyped': '对象类型（手动输入）',
+  'system.audit.filter.pick': '请选择',
+  'system.audit.filter.other': '其他（手动输入）',
+  'system.audit.filter.otherAdmin': '其他（输入管理员编号）',
   'system.audit.filter.range': '时间范围（UTC）',
 };
 

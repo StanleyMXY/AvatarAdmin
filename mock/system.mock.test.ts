@@ -42,6 +42,8 @@ describe('the endpoints and the permissions they ask for', () => {
         'DELETE /api/admin/roles/:id',
         'GET /api/admin/admins',
         'GET /api/admin/audit-logs',
+        'GET /api/admin/audit-logs/admins',
+        'GET /api/admin/audit-logs/meta',
         'GET /api/admin/roles',
         'POST /api/admin/admins',
         'POST /api/admin/admins/:id/reset-password',
@@ -73,6 +75,8 @@ describe('the endpoints and the permissions they ask for', () => {
       ['PUT /api/admin/permissions/:code', ['PERMISSION:MANAGE']],
       ['DELETE /api/admin/permissions/:code', ['PERMISSION:MANAGE']],
       ['GET /api/admin/audit-logs', ['AUDIT:VIEW']],
+      ['GET /api/admin/audit-logs/meta', ['AUDIT:VIEW']],
+      ['GET /api/admin/audit-logs/admins', ['AUDIT:VIEW']],
     ];
     for (const [key, codes] of needs) {
       expect((await call(system[key], {})).status, key).toBe(401);
@@ -835,6 +839,96 @@ describe('the permission tree', () => {
     });
     expect([flagged.status, flagged.body.code]).toEqual([400, 'INVALID_REQUEST']);
     expect(systemState.nodes.has('CUSTOM:B')).toBe(true);
+  });
+});
+
+// The choices of the audit filters (backend answers 45 and 46): the values the backend can write, and
+// the administrators that exist, for anyone who may read the log.
+describe('GET /audit-logs/meta and GET /audit-logs/admins', () => {
+  const META = 'GET /api/admin/audit-logs/meta' as const;
+  const ADMINS = 'GET /api/admin/audit-logs/admins' as const;
+
+  it('gives {actions, targetTypes}, each a list of text in the order of the character codes, without a duplicate', async () => {
+    const { status, body } = await run(META, 'root');
+    expect(status).toBe(200);
+    expect(Object.keys(body.data).sort()).toEqual(['actions', 'targetTypes']);
+    for (const list of [body.data.actions, body.data.targetTypes] as string[][]) {
+      expect(list.length).toBeGreaterThan(10);
+      expect(list.every((value) => typeof value === 'string' && value !== '')).toBe(true);
+      expect(new Set(list).size).toBe(list.length);
+      expect(list).toEqual([...list].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+    }
+  });
+
+  it('keeps the case of the object types as the backend writes it: four in capitals, the rest in camel case with a capital first letter', async () => {
+    const { targetTypes } = (await run(META, 'root')).body.data as { targetTypes: string[] };
+    for (const value of ['NOTIFICATION', 'PUSH_SCHEDULE', 'PUSH_TASK', 'PUSH_TEMPLATE']) {
+      expect(targetTypes, value).toContain(value);
+    }
+    expect(targetTypes.some((value) => /^[A-Z][a-z]+[A-Za-z]*$/.test(value))).toBe(true);
+    // the order is that of the character codes, not of a language: 'USER' before 'User'
+    expect(targetTypes.indexOf('USER')).toBeLessThan(targetTypes.indexOf('User'));
+  });
+
+  it('lists every value this mock writes into the log, in the seed and in the writes of its routes', async () => {
+    const { actions, targetTypes } = (await run(META, 'root')).body.data as {
+      actions: string[];
+      targetTypes: string[];
+    };
+    await run('POST /api/admin/roles', 'root', {
+      body: { name: 'Meta test', remark: null, permissionCodes: ['USER:VIEW'] },
+    });
+    await run('POST /api/admin/admins/:id/reset-totp', 'root', { params: { id: '1004' } });
+    await run('POST /api/admin/permissions', 'root', {
+      body: {
+        code: 'META:X',
+        parent: null,
+        type: 'MENU',
+        sortOrder: 900,
+        nameZh: '甲',
+        nameEn: 'X',
+      },
+    });
+    for (const row of systemState.audit) {
+      expect(actions, row.action).toContain(row.action);
+      expect(targetTypes, String(row.targetType)).toContain(String(row.targetType));
+    }
+  });
+
+  it('gives {items: [{id, username}]}: every administrator that exists, only those two fields, by username', async () => {
+    const { status, body } = await run(ADMINS, 'root');
+    expect(status).toBe(200);
+    expect(Object.keys(body.data)).toEqual(['items']);
+    const items = body.data.items as { id: string; username: string }[];
+    expect(items).toHaveLength(store.admins.size);
+    for (const item of items) expect(Object.keys(item).sort()).toEqual(['id', 'username']);
+    const names = items.map((item) => item.username);
+    expect(names).toEqual([...names].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+    expect(JSON.stringify(body)).not.toMatch(/password|status|roles|lastLoginAt|superAdmin/);
+  });
+
+  it('leaves out an administrator who was deleted, and shows one who was made', async () => {
+    await run('DELETE /api/admin/admins/:id', 'root', { params: { id: '1004' } });
+    await run('POST /api/admin/admins', 'root', {
+      body: { username: 'ñandú-สมชาย', password: GOOD_PASSWORD, roleIds: [], superAdmin: false },
+    });
+    const items = (await run(ADMINS, 'root')).body.data.items as { id: string; username: string }[];
+    expect(items.some((item) => item.id === '1004')).toBe(false);
+    expect(items.some((item) => item.username === 'ñandú-สมชาย')).toBe(true);
+  });
+
+  it('is open to AUDIT:VIEW alone, while GET /admins stays closed to it', async () => {
+    withCodes('support', ['AUDIT:VIEW']);
+    expect((await run(META, 'support')).status).toBe(200);
+    expect((await run(ADMINS, 'support')).status).toBe(200);
+    expect((await run('GET /api/admin/admins', 'support')).status).toBe(403);
+  });
+
+  it('writes no audit row for a read', async () => {
+    const before = systemState.audit.length;
+    await run(META, 'root');
+    await run(ADMINS, 'root');
+    expect(systemState.audit).toHaveLength(before);
   });
 });
 

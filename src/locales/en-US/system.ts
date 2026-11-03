@@ -200,6 +200,13 @@ const messages: Record<string, string> = {
   'system.audit.filter.admin': 'Administrator',
   'system.audit.filter.adminId': 'Administrator ID',
   'system.audit.filter.adminPick': 'Choose an administrator',
+  'system.audit.filter.action': 'Action',
+  'system.audit.filter.actionTyped': 'Action (typed)',
+  'system.audit.filter.targetType': 'Object type',
+  'system.audit.filter.targetTypeTyped': 'Object type (typed)',
+  'system.audit.filter.pick': 'Choose',
+  'system.audit.filter.other': 'Other (type it)',
+  'system.audit.filter.otherAdmin': 'Other (enter an ID)',
   'system.audit.filter.range': 'Time range (UTC)',
 };
 

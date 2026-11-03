@@ -1,6 +1,7 @@
 import { PERMISSION_CODES } from '../src/access/permissionCodes';
 import { countCodePoints } from '../src/utils/codePoints';
 import { trimSpec } from '../src/utils/trimSpec';
+import { AUDIT_ACTIONS, AUDIT_TARGET_TYPES } from './_core/auditMeta';
 import { guard } from './_core/auth';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
 import { paginateQuery } from './_core/paginate';
@@ -504,6 +505,21 @@ export default {
   }),
 
   // ---- the audit log (AUDIT:VIEW): read only ----
+  // The choices of the filters (backend answers 45 and 46): no paging, no audit row for the read.
+  // `GET /admins` stays closed to AUDIT:VIEW alone; this list has the two fields and nothing else,
+  // every administrator that exists (the deleted ones are not in it), by user name.
+  'GET /api/admin/audit-logs/meta': guard('AUDIT:VIEW', () =>
+    ok({ actions: [...AUDIT_ACTIONS], targetTypes: [...AUDIT_TARGET_TYPES] }),
+  ),
+
+  'GET /api/admin/audit-logs/admins': guard('AUDIT:VIEW', () =>
+    ok({
+      items: [...store.admins.values()]
+        .map((admin) => ({ id: admin.id, username: admin.username }))
+        .sort((a, b) => (a.username < b.username ? -1 : a.username > b.username ? 1 : 0)),
+    }),
+  ),
+
   'GET /api/admin/audit-logs': guard('AUDIT:VIEW', (req) => {
     const q = req.query;
     const text = (name: string): string | undefined =>
