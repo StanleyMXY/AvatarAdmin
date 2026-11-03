@@ -502,14 +502,14 @@ describe('deleting a draft and taking a version down', () => {
     ]);
   });
 
-  it('says why in the words of the error code when the backend refuses, and keeps the row', async () => {
+  it('says why in the words of the state of the version when the backend refuses, and keeps the row', async () => {
     const { user } = await load();
     const draft = versionBy('play', 120);
     const row = await rowOf(draft.id);
     // somebody else activated it meanwhile
     must(appVersionsState.versions.get(draft.id)).status = 'ARCHIVED';
     await confirmInline(user, row, 'Delete');
-    expect(await screen.findByText(txt('error.INVALID_STATE'))).toBeTruthy();
+    expect(await screen.findByText(/The state of this version is "Archived" now/)).toBeTruthy();
     expect(appVersionsState.versions.has(draft.id)).toBe(true);
   });
 });

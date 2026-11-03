@@ -79,6 +79,17 @@ const messages: Record<string, string> = {
   'appVersions.apk.wait': '文件还在上传，传完才能提交。',
   'appVersions.apk.required': '请先上传 APK',
   'appVersions.apk.rejected': '服务器没有接受这个文件，请重新上传。',
+  'appVersions.state.DISABLED':
+    '这个渠道包已停用，不能在其中新建、修改或上线版本；请先启用该渠道包。',
+  'appVersions.state.version':
+    '这个版本现在的状态是“{state}”，该状态下不能进行此操作；请刷新列表查看当前状态。',
+  'appVersions.state.CONSUMED': '这个 APK 上传已被其他版本使用，请重新上传文件。',
+  'appVersions.ref.status': '目标状态',
+  'appVersions.ref.confirmStoreLive': '商店上架确认',
+  'appVersions.refusalLine': '{field}：{reason}',
+  'appVersions.noteRefused': '这种语言的更新说明被拒绝，打开这个页签查看原因。',
+  'appVersions.changelogLanguageReason': '{language}：{reason}',
+  'appVersions.activate.confirmRequired': '请勾选确认：新版本已经在商店里对用户可见。',
   'appVersions.apk.unavailable': '先在系统配置里设置 upload.public_base_url。',
   'appVersions.apk.openConfig': '打开系统配置',
   'appVersions.rule.versionName': '版本名要写成 x.y.z，三个数字用点隔开，最多 32 个字符',

@@ -27,6 +27,11 @@ type AppVersionsStore = {
   next: { version: number; upload: number };
   /** False while `upload.public_base_url` is "not configured": the upload answers 503. */
   apkAvailable: boolean;
+  /**
+   * True makes the activation of a DIRECT version answer 400 with a message only (`data` is null):
+   * the stored file is missing, its size or SHA-256 differs from the record.
+   */
+  storedFileFault: boolean;
   /** True makes the next upload answer 400 INVALID_FILE (a file without a v2 signature, for example). */
   nextApkRefusal: boolean;
 };
@@ -210,6 +215,7 @@ function seed(now: Date): AppVersionsStore {
     next: { version: n + 1, upload: 1 },
     apkAvailable: true,
     nextApkRefusal: false,
+    storedFileFault: false,
   };
 }
 

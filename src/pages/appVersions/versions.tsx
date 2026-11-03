@@ -20,7 +20,6 @@ import {
   type VersionStatus,
 } from '../../services/appVersions';
 import { type ChannelPackage, listChannelPackages } from '../../services/channelPackages';
-import { describeFailure } from '../../session/describe';
 import { adminText, codeText, instantText, orDash } from '../../utils/displayText';
 import { formatBytes } from '../../utils/format';
 import { validateServerLink } from '../../utils/linkRule';
@@ -28,6 +27,7 @@ import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { ActivateModal } from './ActivateModal';
 import { distributionOf } from './distribution';
+import { describeVersionFailure } from './failureText';
 import { VersionModal } from './VersionModal';
 
 type Filters = { channelCode: string; platform: string; status: string };
@@ -136,7 +136,7 @@ export default function AppVersionsPage() {
       await change();
       message.success(done);
     } catch (error) {
-      message.error(describeFailure(intl, error).text);
+      message.error(describeVersionFailure(intl, error).text);
     }
     state.reload();
   };

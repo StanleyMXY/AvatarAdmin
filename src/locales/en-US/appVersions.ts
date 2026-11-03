@@ -87,6 +87,19 @@ const messages: Record<string, string> = {
   'appVersions.apk.required': 'Upload the APK first',
   'appVersions.apk.rejected':
     'The server did not accept this file for the version. Upload it again.',
+  'appVersions.state.DISABLED':
+    'This channel package is switched off, so versions cannot be added, edited or activated in it. Switch the channel package on first.',
+  'appVersions.state.version':
+    'The state of this version is "{state}" now, and this action is not possible in that state. Reload the list to see the current state.',
+  'appVersions.state.CONSUMED':
+    'This APK upload has already been used by another version. Upload the file again.',
+  'appVersions.ref.status': 'New state',
+  'appVersions.ref.confirmStoreLive': 'Store confirmation',
+  'appVersions.refusalLine': '{field}: {reason}',
+  'appVersions.noteRefused': 'The notes of this language were refused. Open the tab to see why.',
+  'appVersions.changelogLanguageReason': '{language}: {reason}',
+  'appVersions.activate.confirmRequired':
+    'Tick the box to confirm that the new version is already visible to users in the store.',
   'appVersions.apk.unavailable': 'Set upload.public_base_url in the system configuration first.',
   'appVersions.apk.openConfig': 'Open the system configuration',
   'appVersions.rule.versionName':

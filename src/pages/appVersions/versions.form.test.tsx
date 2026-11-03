@@ -654,13 +654,13 @@ describe('editing a draft', { timeout: 60000 }, () => {
     expect(within(active).queryByRole('button', { name: 'Edit' })).toBeNull();
   });
 
-  it('shows the words of the error code when the draft was activated meanwhile', async () => {
+  it('says the state of the version when the draft was activated meanwhile', async () => {
     const { user } = await load();
     const draft = versionBy('play', 120);
     const form = await openEdit(user, draft.id);
     must(appVersionsState.versions.get(draft.id)).status = 'ACTIVE';
     await user.click(submit(form));
-    expect(await form.findByText(enUS['error.INVALID_STATE'])).toBeTruthy();
+    expect(await form.findByText(/The state of this version is "Active" now/)).toBeTruthy();
   });
 });
 
@@ -854,6 +854,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     );
     await user.click(submit(form));
     expect(await form.findByText(enUS['appVersions.apk.rejected'])).toBeTruthy();
+    expect(form.getByText(enUS['appVersions.state.CONSUMED'])).toBeTruthy();
     expect(form.queryByTestId('apk-info')).toBeNull();
     const before = writesOf(calls).length;
     await user.click(submit(form));
@@ -861,14 +862,12 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     expect(writesOf(calls).length).toBe(before);
   });
 
-  // Answers 47: a 409 INVALID_STATE with no data is a channel that is off or a version in the wrong
-  // state, not the upload; the file is still good, and the words are those of the code. Only
-  // data.status === "CONSUMED" is the upload.
+  // Contract 24.2: only data.status === "CONSUMED" is the upload; a state of a version and DISABLED
+  // (a channel that is off) are told in their own words and the file is still good. Without a
+  // status that is one of those, the words are those of the code.
   it.each([
-    ['no data (a channel that is off)', null],
+    ['no data', null],
     ['an empty object', {}],
-    ['a state of a version', { status: 'DRAFT' }],
-    ['the state of the channel', { status: 'DISABLED' }],
     ['the old guess USED', { status: 'USED' }],
     ['a status that is not text', { status: 5 }],
     ['consumed in small letters', { status: 'consumed' }],
@@ -904,7 +903,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     await form.findByTestId('apk-info');
     must(channelsState.channels.get('direct')).enabled = false;
     await user.click(submit(form));
-    expect(await form.findByText(enUS['error.INVALID_STATE'])).toBeTruthy();
+    expect(await form.findByText(enUS['appVersions.state.DISABLED'])).toBeTruthy();
     expect(form.getByTestId('apk-info')).toBeTruthy();
   });
 

@@ -28,7 +28,6 @@ import {
   type VersionFields,
 } from '../../services/appVersions';
 import type { ChannelPackage } from '../../services/channelPackages';
-import { describeFailure } from '../../session/describe';
 import { codeText } from '../../utils/displayText';
 import {
   detailReason,
@@ -42,6 +41,7 @@ import { trimSpec } from '../../utils/trimSpec';
 import { isUploadIdRejection } from '../../utils/uploadErrors';
 import { ChangelogField } from './ChangelogField';
 import { distributionOf } from './distribution';
+import { describeVersionFailure, noteLanguageOf, refusalLine } from './failureText';
 import { validateStoreUrl } from './storeUrl';
 import { useChannelVersions } from './useChannelVersions';
 import {
@@ -122,15 +122,24 @@ function uploadRefused(error: unknown, carriedNewUpload: boolean): boolean {
   return carriedNewUpload;
 }
 
-/** What the backend refused, sorted by where it goes: under a form field or in the bar. */
-function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknown) {
-  const described = describeFailure(intl, error);
+/**
+ * What the backend refused, sorted by where it goes (contract 24.2: every 400 caused by a request
+ * field names it in `data.details`): the fields of the form get their reason under them, the notes
+ * of one language (`changelog.<language>`) go to that language's tab (`notes`), and the rest (the
+ * file, the state asked for) is a line in the bar with the name of the field. A 400 without details
+ * (the file checks of an activation, the upload address) is only the words of the code.
+ */
+function splitRefusal(intl: Parameters<typeof describeVersionFailure>[0], error: unknown) {
+  const described = describeVersionFailure(intl, error);
   const forForm: FieldReason[] = [];
   const more: string[] = [];
+  const notes: Record<string, string> = {};
   for (const [index, detail] of described.fields.entries()) {
-    if ((FIELDS as readonly string[]).includes(detail.ref) && detail.ref !== 'apkUploadId') {
+    const language = noteLanguageOf(detail.ref);
+    if (language !== null) notes[language] = detail.text;
+    else if ((FIELDS as readonly string[]).includes(detail.ref) && detail.ref !== 'apkUploadId') {
       forForm.push(detailReason(intl, error, detail.ref, index));
-    } else more.push(detail.text);
+    } else more.push(refusalLine(intl, detail.ref, detail.text));
   }
   // A duplicate names the field in `data.field`.
   if (error instanceof ApiError && error.code === 'DUPLICATE_RESOURCE') {
@@ -139,7 +148,7 @@ function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknow
       forForm.push(failureReason(field, error));
     }
   }
-  return { text: described.text, more, forForm };
+  return { text: described.text, more, forForm, notes };
 }
 
 /**
@@ -165,7 +174,13 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
   }>();
   // The save the backend refused, kept as the failure itself: its words are made when drawn.
   const [refusal, setRefusal] = useState<{ error: unknown } | null>(null);
-  const failure: FailureLines | null = refusal === null ? null : splitRefusal(intl, refusal.error);
+  const split = refusal === null ? null : splitRefusal(intl, refusal.error);
+  const failure: FailureLines | null = split;
+  // The languages whose reason the person has since answered by editing the text.
+  const [answered, setAnswered] = useState<string[]>([]);
+  const noteReasons = Object.fromEntries(
+    Object.entries(split?.notes ?? {}).filter(([tag]) => !answered.includes(tag)),
+  );
   const [rejected, setRejected] = useState(false);
   const [needFile, setNeedFile] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
@@ -246,6 +261,7 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
         slot.reset();
         setRejected(true);
       }
+      setAnswered([]);
       setRefusal({ error });
       return;
     }
@@ -438,7 +454,10 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
             },
           ]}
         >
-          <ChangelogField />
+          <ChangelogField
+            reasons={noteReasons}
+            onEdited={(tag) => setAnswered((before) => [...before, tag])}
+          />
         </Form.Item>
 
         {kind === 'STORE' ? (

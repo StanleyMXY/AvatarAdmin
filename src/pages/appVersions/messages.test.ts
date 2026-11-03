@@ -90,6 +90,7 @@ describe('the texts of the app version and channel package pages', () => {
       'appVersions.platform.',
       'appVersions.distribution.',
       'appVersions.status.',
+      'appVersions.state.',
       'channels.platform.',
       'channels.distribution.',
       'appVersions.storeUrl.',
