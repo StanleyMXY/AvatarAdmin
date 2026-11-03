@@ -33,7 +33,7 @@
 ## 5. `GET /meta` 新增的五个字段：页面里谁用、谁没用（第 2393 行）
 
 - 前端现状：`monitorMaxRangeDays` 用在管线监控页的时间范围按钮（只提供不超过它的几档，取不到时按原来写死的 7 天）；`taskTypes` 用在任务配置页的筛选和新建/编辑对话框（取不到或为空时按原来的三个类型；清单没有的类型、但任务自己有，仍可选）；`entitlementLimitMax` 用在额度类功能值（`LIMIT`）的输入（权益的功能值和功能开关的默认值）：输入框旁写最大值，超过时不发请求（取不到时不预检）。
-- 没有用的两个：`creativeAspectTolerancePercent`（素材宽高比预检在广告素材页，属于广告目录，本组不碰；该页现在读 `GET /config` 的 `ads.creative_aspect_tolerance_percent`，取不到时按 3%；可改成读 `useAdminMeta().creativeAspectTolerancePercent`，它对任一管理员可读）和 `googlePlayPackageName`（商店链接预检在应用版本目录的 `storeUrl.ts` 一带，属于应用版本，本组不碰；要改成预检用 `useAdminMeta().googlePlayPackageName`，它为 `null` 时没有可预检的包名，交给后端）。类型、`useAdminMeta`、假后端的 `GET /meta` 已提供这两个字段。
+- 没有用的两个：`creativeAspectTolerancePercent`（素材宽高比预检在广告素材页，属于广告目录，本组不碰；广告那一组的提交 b0954f9 已让它读 `GET /ads/meta` 的同名字段，`GET /meta` 里的这一个与它是同一个值，不必再改）和 `googlePlayPackageName`（商店链接预检在应用版本目录的 `storeUrl.ts` 一带，属于应用版本，本组不碰；要改成预检用 `useAdminMeta().googlePlayPackageName`，它为 `null` 时没有可预检的包名，交给后端）。类型、`useAdminMeta`、假后端的 `GET /meta` 已提供这两个字段。
 - 假后端：`monitorMaxRangeDays`、`entitlementLimitMax`、`creativeAspectTolerancePercent` 跟着 `PUT /config` 保存的 `monitor.max_range_days`、`entitlement.limit_max`、`ads.creative_aspect_tolerance_percent`；`taskTypes` 是三个固定类型，任务配置的假后端也按它校验；`googlePlayPackageName` 固定为一个包名（`null` 的情形在 `getAdminMeta` 的测试里有一例）。假后端的订阅写入仍把权益额度的上限写死为 1000000（和配置的默认值相同），没有跟着 `entitlement.limit_max` 变。
 - 请求：无。
 
