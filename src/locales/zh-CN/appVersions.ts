@@ -68,7 +68,7 @@ const messages: Record<string, string> = {
     '用 https:// 加 play.google.com/store/apps/details?id={package}，只可另带 hl、gl。',
   'appVersions.storeUrlHelpIos':
     'App Store 链接：https:// 加 apps.apple.com/us/app/名称/id123456789，或 apps.apple.com/app/id123456789。',
-  'appVersions.storeUrlHelpUnknownPackage': '渠道的包名',
+  'appVersions.storeUrlHelpUnknownPackage': '应用的包名',
   'appVersions.storeUrlRequired': '请填写商店链接',
   'appVersions.apk.url': '文件地址',
   'appVersions.apk.size': '大小',
@@ -114,7 +114,7 @@ const messages: Record<string, string> = {
   'appVersions.storeUrl.queryKey': '只允许 id、hl、gl 三个参数',
   'appVersions.storeUrl.duplicateParam': '同一个参数只能出现一次',
   'appVersions.storeUrl.idMissing': '链接要带 id 参数',
-  'appVersions.storeUrl.idMismatch': 'id 必须等于渠道的包名',
+  'appVersions.storeUrl.idMismatch': 'id 必须等于 {package}（应用在 Google Play 的包名）',
   'appVersions.storeUrl.idInvalid': 'id 不像应用包名',
   'appVersions.storeUrl.langParam': 'hl、gl 的值要是语言或地区，如 en、pt-BR、US',
   'appVersions.activate.title': '激活版本 {name}',

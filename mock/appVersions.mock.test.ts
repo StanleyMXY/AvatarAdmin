@@ -59,7 +59,7 @@ const upload = (codes?: PermissionCode[]) =>
 
 const refs = (answer: { body: { data: { details?: { ref: string }[] } } }) =>
   (answer.body.data.details ?? []).map((d) => d.ref).sort();
-const PLAY_URL = 'https://play.google.com/store/apps/details?id=app.example.play';
+const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.example.avatar';
 const versionBy = (channel: string, code: number): MockVersion => {
   const found = [...appVersionsState.versions.values()].find(
     (v) => v.channelCode === channel && v.versionCode === code,
@@ -323,7 +323,7 @@ describe('POST /app-versions: a version of a STORE channel', () => {
       refs(
         await create({
           ...STORE_BODY,
-          storeUrl: 'http://play.google.com/store/apps/details?id=app.example.play',
+          storeUrl: 'http://play.google.com/store/apps/details?id=com.example.avatar',
         }),
       ),
     ).toEqual(['storeUrl']);
@@ -534,22 +534,35 @@ describe('the reasons of a refused field (contract 24.2)', () => {
     const reason = async (storeUrl: string | undefined) =>
       reasonsOf(await create({ ...STORE_BODY, storeUrl }));
     expect(await reason(undefined)).toEqual(['storeUrl:EMPTY_NOT_ALLOWED']);
-    expect(await reason('http://play.google.com/store/apps/details?id=app.example.play')).toEqual([
-      'storeUrl:NOT_HTTPS',
-    ]);
+    expect(await reason('http://play.google.com/store/apps/details?id=com.example.avatar')).toEqual(
+      ['storeUrl:NOT_HTTPS'],
+    );
     expect(
-      await reason('https://play.google.com.evil.com/store/apps/details?id=app.example.play'),
+      await reason('https://play.google.com.evil.com/store/apps/details?id=com.example.avatar'),
     ).toEqual(['storeUrl:INVALID_HOST']);
     expect(
-      await reason('https://play.google.com:443/store/apps/details?id=app.example.play'),
+      await reason('https://play.google.com:443/store/apps/details?id=com.example.avatar'),
     ).toEqual(['storeUrl:INVALID_PORT']);
-    expect(await reason('https://play.google.com/store/apps/other?id=app.example.play')).toEqual([
+    expect(await reason('https://play.google.com/store/apps/other?id=com.example.avatar')).toEqual([
       'storeUrl:INVALID_PATH',
     ]);
     expect(await reason(`${PLAY_URL}&referrer=x`)).toEqual(['storeUrl:OUT_OF_RANGE']);
     expect(await reason(`https://play.google.com/${'a'.repeat(2100)}`)).toEqual([
       'storeUrl:TOO_LONG',
     ]);
+  });
+
+  it('compares the id of a Google Play link with the environment value of GET /meta (com.example.avatar), not with the package registered on the channel (app.example.play)', async () => {
+    const reason = async (id: string) =>
+      reasonsOf(
+        await create({
+          ...STORE_BODY,
+          storeUrl: `https://play.google.com/store/apps/details?id=${id}`,
+        }),
+      );
+    expect(channelsState.channels.get('play')?.packageName).toBe('app.example.play');
+    expect(await reason('app.example.play')).toEqual(['storeUrl:OUT_OF_RANGE']);
+    expect(await reason('com.example.avatar')).toEqual([]);
   });
 
   it('names confirmStoreLive and the status of an activation', async () => {

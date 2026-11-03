@@ -103,7 +103,7 @@ const HIGHER_THAN_120 =
   'It must be higher than 120, the highest version number of the other versions of this channel (drafts and taken-down versions included)';
 const HIGHER_THAN_110 =
   'It must be higher than 110, the highest version number of the other versions of this channel (drafts and taken-down versions included)';
-const PLAY_URL = 'https://play.google.com/store/apps/details?id=app.example.play';
+const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.example.avatar';
 const typeUrl = async (
   user: ReturnType<typeof userEvent.setup>,
   form: ReturnType<typeof within>,
@@ -478,20 +478,20 @@ describe('the rules of the form', { timeout: 60000 }, () => {
     await fillCommon(user, form);
     const cases: [string, string][] = [
       [
-        'http://play.google.com/store/apps/details?id=app.example.play',
+        'http://play.google.com/store/apps/details?id=com.example.avatar',
         'The link must start with lowercase https://.',
       ],
       [
-        'https://play.google.com.evil.com/store/apps/details?id=app.example.play',
+        'https://play.google.com.evil.com/store/apps/details?id=com.example.avatar',
         enUS['appVersions.storeUrl.androidHost'],
       ],
       [
         'https://play.google.com/store/apps/details?id=other.app',
-        enUS['appVersions.storeUrl.idMismatch'],
+        enUS['appVersions.storeUrl.idMismatch'].replace('{package}', 'com.example.avatar'),
       ],
       [`${PLAY_URL}&referrer=x`, enUS['appVersions.storeUrl.queryKey']],
       [
-        'https://play.google.com:443/store/apps/details?id=app.example.play',
+        'https://play.google.com:443/store/apps/details?id=com.example.avatar',
         enUS['appVersions.storeUrl.port'],
       ],
       [`${PLAY_URL}#x`, enUS['appVersions.storeUrl.fragment']],
@@ -507,6 +507,62 @@ describe('the rules of the form', { timeout: 60000 }, () => {
     await waitFor(() => expect(form.queryByText(enUS['appVersions.storeUrl.fragment'])).toBeNull());
     await user.click(submit(form));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+  });
+
+  describe('the package name of the store link is the one the backend checks against', () => {
+    // The backend compares the id with its environment value (`GET /meta`'s
+    // googlePlayPackageName), not with the package name registered on the channel: here they differ.
+    const ENV_URL = 'https://play.google.com/store/apps/details?id=com.example.avatar';
+    const CHANNEL_URL = 'https://play.google.com/store/apps/details?id=app.example.play';
+
+    it('lets the id of the environment value through and refuses the id the channel registered', async () => {
+      signIn('root', { meta: { ...META_LOCALES, googlePlayPackageName: 'com.example.avatar' } });
+      expect(channelsState.channels.get('play')?.packageName).toBe('app.example.play');
+      const { calls, user } = await load();
+      const form = await openNew(user);
+      await pickChannel(user, form, /Android store/);
+      await fillCommon(user, form);
+      expect(form.getByText(/details\?id=com\.example\.avatar\./)).toBeTruthy();
+
+      await typeUrl(user, form, CHANNEL_URL);
+      const mismatch = enUS['appVersions.storeUrl.idMismatch'].replace(
+        '{package}',
+        'com.example.avatar',
+      );
+      expect(await form.findByText(mismatch)).toBeTruthy();
+      await user.click(submit(form));
+      await settled();
+      expect(writesOf(calls)).toHaveLength(0);
+
+      await typeUrl(user, form, ENV_URL);
+      await waitFor(() => expect(form.queryByText(mismatch)).toBeNull());
+      await user.click(submit(form));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect(writesOf(calls)[0].body).toMatchObject({ storeUrl: ENV_URL });
+    });
+
+    it.each([
+      ['null', null],
+      ['missing', undefined],
+    ])(
+      'does not compare the id with any package name when the environment value is %s',
+      async (_, value) => {
+        const { googlePlayPackageName: _dropped, ...rest } = META_LOCALES;
+        signIn('root', {
+          meta: value === null ? { ...rest, googlePlayPackageName: null } : rest,
+        });
+        const { user } = await load();
+        const form = await openNew(user);
+        await pickChannel(user, form, /Android store/);
+        await fillCommon(user, form);
+        for (const url of [CHANNEL_URL, ENV_URL]) {
+          await typeUrl(user, form, url);
+          await settled();
+          expect(form.queryByText(/The id must be/), url).toBeNull();
+        }
+        expect(form.getByText(/details\?id=the package name of the app\./)).toBeTruthy();
+      },
+    );
   });
 
   it('does not carry the link typed for one channel over to another channel', async () => {

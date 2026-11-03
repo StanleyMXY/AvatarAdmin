@@ -26,6 +26,7 @@ import {
 import { guard } from './_core/auth';
 import { channelsState, type MockChannel } from './_core/channelsData';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
+import { currentMeta } from './_core/meta';
 import { paginateQuery } from './_core/paginate';
 import { store } from './_core/store';
 
@@ -89,6 +90,15 @@ function uploadFor(id: string): MockApkUpload {
 /** The upload has to be free, or be the one this version holds (409 CONSUMED: the last check of a save). */
 function assertFree(upload: MockApkUpload, holder: MockVersion | null): void {
   if (upload.used && holder?.apkUploadId !== upload.id) throw uploadConsumed();
+}
+
+/**
+ * The package name a Google Play link is checked against: the backend's environment value, which
+ * `GET /meta` gives as googlePlayPackageName, not the package registered on the channel.
+ */
+function googlePlayPackage(): string | undefined {
+  const name = currentMeta().googlePlayPackageName;
+  return typeof name === 'string' && name !== '' ? name : undefined;
 }
 
 /** The reason code (contract 1.7 and 24.2) of a store link the page's own check refuses. */
@@ -194,9 +204,7 @@ function check(channel: MockChannel, body: Record<string, unknown>): Checked {
   const apkUploadId = typeof body.apkUploadId === 'string' ? body.apkUploadId : '';
   if (channel.distribution === 'STORE') {
     const link =
-      storeUrl === ''
-        ? null
-        : validateStoreUrl(channel.platform, storeUrl, channel.packageName ?? undefined);
+      storeUrl === '' ? null : validateStoreUrl(channel.platform, storeUrl, googlePlayPackage());
     if (storeUrl === '') details.push({ ref: 'storeUrl', reason: 'EMPTY_NOT_ALLOWED' });
     else if (link && !link.ok)
       details.push({ ref: 'storeUrl', reason: storeUrlReason(link.reasonKey) });

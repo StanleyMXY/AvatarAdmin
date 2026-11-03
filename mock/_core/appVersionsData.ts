@@ -7,6 +7,7 @@
 import { createHash } from 'node:crypto';
 import type { AppVersion } from '../../src/services/appVersions/types';
 import { multilingualSamples } from './fixtures';
+import { META_DEFAULTS } from './meta';
 import { findAdminByUsername } from './store';
 
 export type MockVersion = AppVersion;
@@ -116,7 +117,8 @@ function seed(now: Date): AppVersionsStore {
     });
   };
 
-  const PLAY = 'https://play.google.com/store/apps/details?id=app.example.play';
+  // The id is the backend's environment value (GET /meta), not the package registered on the channel.
+  const PLAY = `https://play.google.com/store/apps/details?id=${META_DEFAULTS.googlePlayPackageName}`;
   add('play', 'ANDROID', {
     versionName: '1.0.0',
     versionCode: 100,

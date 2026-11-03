@@ -78,7 +78,7 @@ const pickChannel = async (
 };
 const submit = (form: ReturnType<typeof within>) =>
   form.getByRole('button', { name: /^(loading )?Submit$/ });
-const PLAY_URL = 'https://play.google.com/store/apps/details?id=app.example.play';
+const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.example.avatar';
 const choose = (file: File) =>
   fireEvent.change(screen.getByTestId('upload-input'), { target: { files: [file] } });
 const apk = () => fileOf(zipBytes(), 'avatar.apk');

@@ -75,7 +75,7 @@ const messages: Record<string, string> = {
     'Use https:// then play.google.com/store/apps/details?id={package}. Only hl and gl may be added.',
   'appVersions.storeUrlHelpIos':
     'An App Store link: https:// then apps.apple.com/us/app/name/id123456789 or apps.apple.com/app/id123456789.',
-  'appVersions.storeUrlHelpUnknownPackage': 'the package name of the channel',
+  'appVersions.storeUrlHelpUnknownPackage': 'the package name of the app',
   'appVersions.storeUrlRequired': 'Enter the store link',
   'appVersions.apk.url': 'Address',
   'appVersions.apk.size': 'Size',
@@ -126,7 +126,8 @@ const messages: Record<string, string> = {
   'appVersions.storeUrl.queryKey': 'Only the parameters id, hl and gl are allowed',
   'appVersions.storeUrl.duplicateParam': 'A parameter may appear only once',
   'appVersions.storeUrl.idMissing': 'The link needs the parameter id',
-  'appVersions.storeUrl.idMismatch': 'The id must be the package name of the channel',
+  'appVersions.storeUrl.idMismatch':
+    'The id must be {package}, the package name of the app on Google Play',
   'appVersions.storeUrl.idInvalid': 'The id does not look like an application id',
   'appVersions.storeUrl.langParam': 'hl and gl take a language or region such as en, pt-BR or US',
   'appVersions.activate.title': 'Activate version {name}',

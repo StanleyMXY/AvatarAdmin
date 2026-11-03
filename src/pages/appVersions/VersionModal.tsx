@@ -28,6 +28,7 @@ import {
   type VersionFields,
 } from '../../services/appVersions';
 import type { ChannelPackage } from '../../services/channelPackages';
+import { useAdminMeta } from '../../session/useSession';
 import { codeText } from '../../utils/displayText';
 import {
   detailReason,
@@ -197,7 +198,12 @@ export function VersionModal({ version, channels, onClose, onSaved }: Props) {
       ? distributionOf(version, channels.rows)
       : undefined;
   const platform = channel ? channel.platform : plainText(version?.platform);
-  const packageName = channel?.packageName ?? undefined;
+  // The package name the backend checks a Google Play link against is its environment value (GET
+  // /meta), not the one registered on the channel. When it is null or not given, the page does not
+  // compare the id with a package name; the backend decides.
+  const metaPackage = useAdminMeta().googlePlayPackageName;
+  const packageName =
+    typeof metaPackage === 'string' && metaPackage !== '' ? metaPackage : undefined;
 
   const hint = useChannelVersions(channelCode || undefined);
   // The number a new version, or a draft whose number changes, has to beat: the highest of the other
