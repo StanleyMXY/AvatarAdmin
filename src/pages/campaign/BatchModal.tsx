@@ -143,9 +143,12 @@ export function BatchModal({ settings, onClose, onSaved }: Props) {
       }
       return;
     }
-    // The backend counts the rows written and cannot say how many of them overwrote a cost.
+    // `count` is the rows written, the overwritten ones included; the old shape has no `overwritten`.
+    const count = done ? done.count : result.rows.length;
     message.success(
-      t('campaign.batch.imported', { count: done ? done.count : result.rows.length }),
+      done?.overwritten == null
+        ? t('campaign.batch.imported', { count })
+        : t('campaign.batch.importedOverwritten', { count, overwritten: done.overwritten }),
     );
     onSaved();
     onClose();

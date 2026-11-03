@@ -157,18 +157,33 @@ describe('the costs', () => {
     expect(body(calls[0])).toEqual(rows);
   });
 
-  it('hands back how many rows were written, from the count of the answer', async () => {
-    answer({ count: 5 });
-    expect(await batchCosts([])).toEqual({ count: 5 });
-    answer({ count: 0 });
-    expect(await batchCosts([])).toEqual({ count: 0 });
+  it('hands back how many rows were written (count, the overwritten ones included) and how many of them overwrote a cost (overwritten)', async () => {
+    answer({ count: 5, overwritten: 2 });
+    expect(await batchCosts([])).toEqual({ count: 5, overwritten: 2 });
+    answer({ count: 0, overwritten: 0 });
+    expect(await batchCosts([])).toEqual({ count: 0, overwritten: 0 });
+    answer({ count: 3, overwritten: 3 });
+    expect(await batchCosts([])).toEqual({ count: 3, overwritten: 3 });
   });
 
-  it('hands back nothing when the answer has no count, or a count that cannot be right (it does not wait for { imported, overwritten })', async () => {
+  it('has no overwritten in the old shape of the answer ({ count } only), and none when it cannot be right (not a whole number, below 0, above count)', async () => {
+    answer({ count: 5 });
+    expect(await batchCosts([])).toEqual({ count: 5, overwritten: null });
+    for (const overwritten of ['2', -1, 1.5, 6, null, true]) {
+      answer({ count: 5, overwritten });
+      expect(await batchCosts([]), JSON.stringify(overwritten)).toEqual({
+        count: 5,
+        overwritten: null,
+      });
+    }
+  });
+
+  it('hands back nothing when the answer has no count, or a count that cannot be right', async () => {
     for (const data of [
       null,
       {},
       { imported: 5, overwritten: 2 },
+      { overwritten: 2 },
       { count: '5' },
       { count: -1 },
       { count: 2.5 },

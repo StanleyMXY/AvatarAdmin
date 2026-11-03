@@ -549,8 +549,8 @@ export default {
     return ok(null);
   }),
 
-  // All or nothing; a (campaign, day) that has a cost is overwritten. The answer is { count } (rows
-  // written, added and overwritten together). A refusal lists every problem at once as
+  // All or nothing; a (campaign, day) that has a cost is overwritten. The answer is { count,
+  // overwritten }: the rows written (the overwritten ones included) and how many of them replaced a cost. A refusal lists every problem at once as
   // { index (from 0), ref (the field), reason }; a problem of the whole batch has no index.
   'POST /api/admin/attribution/costs/batch': guard('ATTRIBUTION:MANAGE', (req) => {
     const body = req.body;
@@ -611,11 +611,13 @@ export default {
       );
     }
     const now = new Date().toISOString();
+    let overwritten = 0;
     for (const row of wanted) {
       const old = campaignState.costs.find(
         (c) => c.campaignId === row.campaignId && c.statDate === row.statDate,
       );
       if (old) {
+        overwritten += 1;
         Object.assign(old, {
           amount: row.amount,
           remark: row.remark,
@@ -636,7 +638,7 @@ export default {
         });
       }
     }
-    return ok({ count: wanted.length });
+    return ok({ count: wanted.length, overwritten });
   }),
 
   // ---- the reports ----

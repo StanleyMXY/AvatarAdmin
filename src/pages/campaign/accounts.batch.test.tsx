@@ -16,8 +16,9 @@ import { buildCostTemplate, TEMPLATE_FILE_NAME } from './costTemplate';
 import { holdWrites, jsonAnswer, NOW, overrideFetch, signIn, writesOf } from './testSetup';
 
 const BOM = String.fromCharCode(0xfeff);
-const IMPORTED = (count: number) =>
-  `Imported ${count} rows (days that already had a cost are overwritten)`;
+const IMPORTED = (count: number, overwritten: number) =>
+  `Imported ${count} rows, of which ${overwritten} overwrote a cost`;
+const IMPORTED_OLD = (count: number) => `Imported ${count} rows`;
 
 beforeEach(() => {
   signIn('root');
@@ -147,7 +148,7 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
         remark: null,
       },
     ]);
-    expect(await screen.findByText(IMPORTED(3))).toBeInTheDocument();
+    expect(await screen.findByText(IMPORTED(3, 0))).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(
       campaignState.costs.filter((c) => c.statDate >= '2026-09-01' && c.statDate <= '2026-09-03'),
@@ -168,7 +169,7 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
     );
   });
 
-  it('writes the number of rows the backend counted and says that days that had a cost are overwritten: it cannot say how many (count is all the answer has)', async () => {
+  it('writes the rows written and how many of them overwrote a cost, from the answer of the backend (2 of the 5 rows had a cost on that day already)', async () => {
     const { user } = await open();
     const [first, second] = campaignState.costs;
     const codeOf = (campaignId: string) =>
@@ -183,35 +184,42 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
       ]),
     );
     await user.click(await importButton());
-    expect(await screen.findByText(IMPORTED(5))).toBeInTheDocument();
-    // the backend has no split of added and overwritten rows (that is a request to it), so the page writes none
-    expect(screen.queryByText(/added/)).not.toBeInTheDocument();
+    expect(await screen.findByText(IMPORTED(5, 2))).toBeInTheDocument();
   });
 
-  it('reads the count of the answer, not the number of rows sent', async () => {
+  it('writes 0 overwritten when every row was new', async () => {
+    const { user } = await open();
+    await putJson(jsonRows([row(), row({ statDate: '2026-01-05' })]));
+    await user.click(await importButton());
+    expect(await screen.findByText(IMPORTED(2, 0))).toBeInTheDocument();
+  });
+
+  it('reads count and overwritten of the answer, not the number of rows sent', async () => {
     const { user } = await open();
     overrideFetch(({ url, method }) =>
       url.pathname.endsWith('/attribution/costs/batch') && method === 'POST'
-        ? jsonAnswer(200, '200', { count: 7 })
+        ? jsonAnswer(200, '200', { count: 7, overwritten: 3 })
         : undefined,
     );
     await putJson(jsonRows([row(), row({ statDate: '2026-01-05' })]));
     await user.click(await importButton());
-    expect(await screen.findByText(IMPORTED(7))).toBeInTheDocument();
+    expect(await screen.findByText(IMPORTED(7, 3))).toBeInTheDocument();
   });
 
-  it('does not wait for { imported, overwritten }: an answer in that shape is not read as counts, the number of rows sent is written', async () => {
-    const { user } = await open();
-    overrideFetch(({ url, method }) =>
-      url.pathname.endsWith('/attribution/costs/batch') && method === 'POST'
-        ? jsonAnswer(200, '200', { imported: 9, overwritten: 4 })
-        : undefined,
-    );
-    await putJson(jsonRows([row(), row({ statDate: '2026-01-05' })]));
-    await user.click(await importButton());
-    expect(await screen.findByText(IMPORTED(2))).toBeInTheDocument();
-    expect(screen.queryByText(/overwritten, /)).not.toBeInTheDocument();
-  });
+  for (const data of [{ count: 7 }, { count: 7, overwritten: 8 }, { count: 7, overwritten: -1 }]) {
+    it(`falls back to the rows written alone when the answer is the old shape or its overwritten cannot be right: ${JSON.stringify(data)}`, async () => {
+      const { user } = await open();
+      overrideFetch(({ url, method }) =>
+        url.pathname.endsWith('/attribution/costs/batch') && method === 'POST'
+          ? jsonAnswer(200, '200', data)
+          : undefined,
+      );
+      await putJson(jsonRows([row(), row({ statDate: '2026-01-05' })]));
+      await user.click(await importButton());
+      expect(await screen.findByText(IMPORTED_OLD(7))).toBeInTheDocument();
+      expect(screen.queryByText(/overwrote/)).not.toBeInTheDocument();
+    });
+  }
 
   it('writes the number of rows sent when the answer has no count', async () => {
     const { user } = await open();
@@ -222,7 +230,7 @@ describe('the batch dialog: JSON', { timeout: 30000 }, () => {
     );
     await putJson(jsonRows([row(), row({ statDate: '2026-01-05' })]));
     await user.click(await importButton());
-    expect(await screen.findByText(IMPORTED(2))).toBeInTheDocument();
+    expect(await screen.findByText(IMPORTED_OLD(2))).toBeInTheDocument();
   });
 
   it('lists each bad row with its place in the array and the reason in words, imports nothing, and keeps the button off', async () => {

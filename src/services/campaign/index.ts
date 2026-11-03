@@ -97,7 +97,9 @@ export const deleteCost = (id: string): Promise<unknown> =>
 /**
  * All or nothing. A (campaign, day) that has a cost already is overwritten (contract 10.5); a bad
  * row refuses the whole batch with every problem in `data.details` as `{ index, ref, reason }`.
- * The answer is `{ count }`: the rows written, added and overwritten together. Anything else is null.
+ * The answer is `{ count, overwritten }`: the rows written, the overwritten ones included, and how
+ * many of them replaced a cost. An answer without a count that can be right is null; one without an
+ * `overwritten` that can be right (the old shape, `{ count }`) has `overwritten: null`.
  */
 export const batchCosts = async (rows: CostRow[]): Promise<BatchCostsResult | null> => {
   const data = await apiRequest<unknown>({
@@ -106,9 +108,14 @@ export const batchCosts = async (rows: CostRow[]): Promise<BatchCostsResult | nu
     body: rows,
   });
   if (typeof data !== 'object' || data === null) return null;
-  const { count } = data as Record<string, unknown>;
+  const { count, overwritten } = data as Record<string, unknown>;
   if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) return null;
-  return { count };
+  const known =
+    typeof overwritten === 'number' &&
+    Number.isInteger(overwritten) &&
+    overwritten >= 0 &&
+    overwritten <= count;
+  return { count, overwritten: known ? overwritten : null };
 };
 
 // ---- reports (ATTRIBUTION:VIEW) ----
