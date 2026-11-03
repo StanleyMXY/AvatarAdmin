@@ -7,6 +7,7 @@ import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import { getSubscription, type SubscriptionDetail } from '../../services/subscriptions';
 import { formatInstant } from '../../utils/format';
+import { maskTokenLikeText } from '../../utils/maskTokenLikeText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { sortTimeline } from './featureRules';
@@ -246,7 +247,11 @@ export function SubscriptionDrawer({ id, onClose }: Props) {
                   {event.error ? (
                     <Typography.Text type="danger" data-testid="event-error">
                       {t('subscriptions.event.error')}:{' '}
-                      <EllipsisPopoverText text={event.error} lines={3} width={420} />
+                      <EllipsisPopoverText
+                        text={maskTokenLikeText(plainText(event.error))}
+                        lines={3}
+                        width={420}
+                      />
                     </Typography.Text>
                   ) : null}
                 </div>

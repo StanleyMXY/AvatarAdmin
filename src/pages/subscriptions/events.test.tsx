@@ -116,6 +116,30 @@ describe('the event list', { timeout: 30000 }, () => {
     }
   });
 
+  it('hides the middle of a purchase token in the error, in the cell, in the popover and in what the copy button copies', async () => {
+    const token = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP.AO-J1Oxyz123';
+    const events = sortedEvents();
+    events[0].error = `ไม่สามารถตรวจสอบโทเค็น ${token} ได้ / تعذر التحقق من ${token}`;
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    useMockBackend(subscriptionsMock);
+    renderPage(<EventsPage />);
+    await waitFor(() => expect(rows()).toHaveLength(20));
+    expect(document.body.textContent).not.toContain('efghijklmnop');
+    const cell = rowOfEvent(events[0].id).querySelector('button[data-lines]') as HTMLElement;
+    expect(cell.textContent).toContain('ไม่สามารถตรวจสอบโทเค็น abcd…xyz123 ได้');
+    fireEvent.click(cell);
+    const fullNode = await screen.findByTestId('full-text');
+    const full = fullNode.textContent ?? '';
+    expect(full).toBe('ไม่สามารถตรวจสอบโทเค็น abcd…xyz123 ได้ / تعذر التحقق من abcd…xyz123');
+    fireEvent.click(
+      within(fullNode.closest('.ant-popover') as HTMLElement).getByRole('button', { name: 'Copy' }),
+    );
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText).toHaveBeenCalledWith(full);
+    expect(document.body.textContent).not.toContain('efghijklmnop');
+  });
+
   it('asks the server for FAILED events only when the status filter is set, and shows only events with an error', async () => {
     const calls = useMockBackend(subscriptionsMock);
     const user = userEvent.setup();

@@ -14,6 +14,8 @@ import {
 } from '../../services/subscriptions';
 import { describeFailure } from '../../session/describe';
 import { formatInstant } from '../../utils/format';
+import { maskTokenLikeText } from '../../utils/maskTokenLikeText';
+import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 
 type Filter = { status?: string; needsAttentionFilter?: string };
@@ -136,7 +138,11 @@ export default function EventsPage() {
       render: (_, row) =>
         row.error ? (
           <Typography.Text type="danger">
-            <EllipsisPopoverText text={row.error} lines={2} width={280} />
+            <EllipsisPopoverText
+              text={maskTokenLikeText(plainText(row.error))}
+              lines={2}
+              width={280}
+            />
           </Typography.Text>
         ) : (
           DASH

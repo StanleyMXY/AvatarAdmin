@@ -334,6 +334,32 @@ describe('the subscription detail drawer', { timeout: 30000 }, () => {
     expect(clean.length).toBeGreaterThan(0);
   });
 
+  it('hides the middle of a purchase token in the error of a timeline event, also in the whole text and in the copy', async () => {
+    const token = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP.AO-J1Oxyz123';
+    useMockBackend(subscriptionsMock);
+    const state = subscriptionsState();
+    const target = state.subscriptions.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+    const own = state.events.filter((e) => e.subscriptionId === target.id);
+    own[0].error = `Verifikasi gagal untuk ${token}: token tidak valid`;
+    const writeText = vi.fn(async () => {});
+    const dialog = await openFirst();
+    // (the helper starts a user-event session, which puts its own clipboard in place)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const errors = await within(dialog).findAllByTestId('event-error');
+    const error = errors.find((e) => e.textContent?.includes('Verifikasi gagal')) as HTMLElement;
+    expect(error.textContent).toContain('Verifikasi gagal untuk abcd…xyz123: token tidak valid');
+    expect(document.body.textContent).not.toContain('efghijklmnop');
+    fireEvent.click(error.querySelector('button') as HTMLElement);
+    const fullNode = await screen.findByTestId('full-text');
+    const full = fullNode.textContent ?? '';
+    expect(full).toBe('Verifikasi gagal untuk abcd…xyz123: token tidak valid');
+    fireEvent.click(
+      within(fullNode.closest('.ant-popover') as HTMLElement).getByRole('button', { name: 'Copy' }),
+    );
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(full));
+    expect(document.body.textContent).not.toContain('efghijklmnop');
+  });
+
   it('keeps a 5000 character error without spaces inside the drawer (clamped, whole text on demand)', async () => {
     useMockBackend(subscriptionsMock);
     const state = subscriptionsState();
