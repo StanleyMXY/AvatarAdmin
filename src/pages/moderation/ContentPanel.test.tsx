@@ -125,6 +125,10 @@ describe('the address of a file is renewed before it expires', { timeout: 30000 
       await vi.advanceTimersByTimeAsync(ms);
     });
   };
+  /** Moves the clock in steps, so that the page can plan its next read between them. */
+  const advanceBySteps = async (ms: number, step = 1_000) => {
+    for (let spent = 0; spent < ms; spent += step) await advance(step);
+  };
 
   it('asks again once the address is close to its end and not before, and shows the new address', async () => {
     const state = scripted([() => file('A', 5 * MINUTE), () => file('B', 5 * MINUTE)]);
@@ -299,5 +303,53 @@ describe('the address of a file is renewed before it expires', { timeout: 30000 
     });
     await waitFor(() => expect(picture().getAttribute('src')).toBe('/m?sig=B'), { timeout: 8000 });
     expect(state.asked).toBe(2);
+  });
+
+  // A browser clock that runs ahead of the server's makes every answer look nearly over. Each read
+  // writes an audit row, so the panel must not turn that into a read every few seconds.
+  it('does not read again and again when every answer looks nearly over (a clock that runs ahead)', async () => {
+    const state = scripted([() => file('A', 8_000)]);
+    renderPage(<ContentPanel record={recordOf(RECORD_ID.reportedAvatar)} canReview />);
+    await waitFor(() => expect(state.asked).toBe(1), { timeout: 8000 });
+    await screen.findByRole('img');
+    await advanceBySteps(10 * MINUTE);
+    // the first read, and one renewal; the renewed address is still short, so the player's own failure is the way on
+    expect(state.asked).toBeLessThanOrEqual(2);
+  });
+
+  it('after the short renewed address, still renews once when the player fails', async () => {
+    const state = scripted([
+      () => file('A', 8_000),
+      () => file('B', 8_000),
+      () => file('C', 8_000),
+    ]);
+    renderPage(<ContentPanel record={recordOf(RECORD_ID.reportedAvatar)} canReview />);
+    await waitFor(() => expect(state.asked).toBe(1), { timeout: 8000 });
+    await screen.findByRole('img');
+    await advanceBySteps(10_000);
+    await waitFor(() => expect(picture().getAttribute('src')).toBe('/m?sig=B'), { timeout: 8000 });
+    await advanceBySteps(5 * MINUTE);
+    expect(state.asked).toBe(2);
+    await act(async () => {
+      picture().dispatchEvent(new Event('error'));
+    });
+    await waitFor(() => expect(picture().getAttribute('src')).toBe('/m?sig=C'), { timeout: 8000 });
+    expect(state.asked).toBe(3);
+  });
+
+  it('renews by itself at most 3 times for one record, however long the page stays, then only when the player fails', async () => {
+    const state = scripted([() => file('A', 2 * MINUTE)]);
+    renderPage(<ContentPanel record={recordOf(RECORD_ID.reportedAvatar)} canReview />);
+    await waitFor(() => expect(state.asked).toBe(1), { timeout: 8000 });
+    await screen.findByRole('img');
+    await advanceBySteps(60 * MINUTE, 10_000);
+    // the first read and 3 renewals
+    expect(state.asked).toBe(4);
+    await act(async () => {
+      picture().dispatchEvent(new Event('error'));
+    });
+    await waitFor(() => expect(state.asked).toBe(5), { timeout: 8000 });
+    await advanceBySteps(60 * MINUTE, 10_000);
+    expect(state.asked).toBe(5);
   });
 });

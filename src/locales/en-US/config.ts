@@ -635,7 +635,7 @@ const messages: Record<string, string> = {
     'Number of administrator sign-in requests allowed per minute, counted per IP and username. Requests above it are rate limited.',
   'config.moderation.content_url_ttl_seconds.label': 'Moderation content link lifetime',
   'config.moderation.content_url_ttl_seconds.desc':
-    'How long the signed address of content under review stays valid, in seconds.',
+    'How long the signed address of content under review stays valid, in seconds. A very short lifetime makes the review page fetch the address again and again, and every read writes an audit record.',
   'config.upload.push_image_max_bytes.label': 'Maximum push image size',
   'config.upload.push_image_max_bytes.desc': 'Largest push image allowed, in bytes.',
   'config.ads.enabled.label': 'In-app ads',

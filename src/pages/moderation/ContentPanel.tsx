@@ -22,6 +22,21 @@ const RENEW_BEFORE_MS = 30_000;
 const RENEW_RECHECK_MS = 5_000;
 /** The least wait before a renewal, so an address with little time left cannot make a loop of reads. */
 const RENEW_MIN_MS = 1_000;
+/**
+ * A renewed address that the browser's clock says has less than this left is not renewed again by
+ * itself: the clock is off, or the lifetime is very short, and a next read would only be an audit row
+ * every few seconds. The player's failure then renews it once, as for any address.
+ */
+const RENEW_LEAST_LEFT_MS = 2 * RENEW_BEFORE_MS;
+/** How many times the panel renews by itself for one record in one visit; after that, only a failing player does. */
+const MAX_AUTO_RENEWALS = 3;
+
+/** Whether an address that ends at `expiresAt` still has at least `RENEW_LEAST_LEFT_MS` by the browser's clock. */
+function hasRoomToRenew(expiresAt: unknown, now: number): boolean {
+  if (typeof expiresAt !== 'string') return false;
+  const end = Date.parse(expiresAt);
+  return !Number.isNaN(end) && end - now >= RENEW_LEAST_LEFT_MS;
+}
 
 /** How long to wait before renewing an address that ends at `expiresAt`; null when there is nothing to plan. */
 function renewDelay(expiresAt: unknown, now: number): number | null {
@@ -98,7 +113,9 @@ function Media({
  * one new request; fails again: the person is told and can ask again); nothing is kept between
  * visits and the address is not written anywhere but the player's `src`. A file's answer says when
  * its address ends (`expiresAt`): the panel asks again shortly before that, once per address, only
- * while the tab is visible and nothing is playing; a failed renewal keeps what is shown.
+ * while the tab is visible and nothing is playing; a failed renewal keeps what is shown. An address
+ * that the browser's clock calls nearly over after a renewal, or the third renewal of a visit, is the
+ * last planned one: after that only a failing player asks again.
  */
 export function ContentPanel({
   record,
@@ -120,6 +137,9 @@ export function ContentPanel({
   const failure = failed === null ? '' : describeFailure(intl, failed.error).text;
   const [mediaFailed, setMediaFailed] = useState(false);
   const retried = useRef(false);
+  // How many times this visit renewed by itself, and whether the last renewed address left too little time to plan another.
+  const autoRenewals = useRef(0);
+  const [renewedTooShort, setRenewedTooShort] = useState(false);
   const begin = useLatestCall();
   const id = record.id;
   const area = useRef<HTMLDivElement>(null);
@@ -132,6 +152,7 @@ export function ContentPanel({
       const answer = await getModerationContent(id);
       if (!isCurrent()) return;
       setContent(answer);
+      setRenewedTooShort(false);
       setPhase('ready');
     } catch (error) {
       if (!isCurrent()) return;
@@ -144,6 +165,7 @@ export function ContentPanel({
   useEffect(() => {
     if (!active) return undefined;
     retried.current = false;
+    autoRenewals.current = 0;
     void load();
     return () => {
       // Another record, or the tab is left: the read still on its way belongs to nobody.
@@ -154,10 +176,14 @@ export function ContentPanel({
   // The renewal of an address that is about to end. It keeps the answer on screen when it fails.
   const renew = useCallback(async () => {
     const isCurrent = begin();
+    autoRenewals.current += 1;
     try {
       const answer = await getModerationContent(id);
       if (!isCurrent()) return;
       retried.current = false;
+      setRenewedTooShort(
+        !hasRoomToRenew(answer.kind === 'FILE' ? answer.expiresAt : undefined, Date.now()),
+      );
       setContent(answer);
     } catch (error) {
       if (!isCurrent()) return;
@@ -172,6 +198,7 @@ export function ContentPanel({
   const expiresAt = content?.kind === 'FILE' ? content.expiresAt : undefined;
   useEffect(() => {
     if (!active || phase !== 'ready') return undefined;
+    if (renewedTooShort || autoRenewals.current >= MAX_AUTO_RENEWALS) return undefined;
     const delay = renewDelay(expiresAt, Date.now());
     if (delay === null) return undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -200,7 +227,7 @@ export function ContentPanel({
       if (timer !== undefined) clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [active, phase, expiresAt, renew]);
+  }, [active, phase, expiresAt, renew, renewedTooShort]);
 
   const onMediaError = () => {
     if (!retried.current) {
