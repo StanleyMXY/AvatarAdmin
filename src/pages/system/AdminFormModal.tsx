@@ -139,7 +139,7 @@ export function AdminFormModal({ admin, me, protection, onDone, onClose }: Props
         const { text } = failureView(words, error, FIELDS);
         return text === null
           ? null
-          : withStateHint(words, error, withScopeHint(words, error, text), protection.own);
+          : withStateHint(words, error, withScopeHint(words, error, text));
       });
     }
   });

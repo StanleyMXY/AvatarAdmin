@@ -24,6 +24,9 @@ import {
 
 vi.setConfig({ testTimeout: 30000 });
 
+const OWN_ROLE_SENTENCE =
+  /This role is given to you: you cannot change a role you hold\. Nothing was changed\./;
+
 const backend = () => useMockBackend({ default: system }, { default: systemPermissions });
 
 beforeEach(() => {
@@ -639,8 +642,9 @@ describe('deleting a role', () => {
 
 describe('an administrator who is not a super administrator hands out only what they hold', () => {
   const HELD = ['ROLE:MANAGE', 'USER:VIEW', 'USER:BAN', 'STATS:VIEW', 'AUDIT:VIEW'];
-  const SCOPE_SENTENCE =
-    /Administrators can only grant permissions they hold\. You cannot change a role you hold, and you can only change roles and administrators whose permissions you all hold\. Nothing was changed\./;
+  const ROLE_NOT_HELD_SENTENCE =
+    /This role has permissions you do not hold: you can only change or delete roles whose permissions you all hold\. Nothing was changed\./;
+
   beforeEach(() => {
     signIn('support', { codes: HELD });
   });
@@ -660,7 +664,7 @@ describe('an administrator who is not a super administrator hands out only what 
         ? jsonAnswer(
             403,
             'ADMIN_FORBIDDEN',
-            null,
+            { reason: 'ROLE_NOT_HELD' },
             'Administrators can only change roles whose permissions they hold',
           )
         : undefined,
@@ -668,7 +672,7 @@ describe('an administrator who is not a super administrator hands out only what 
     const box = await openEdit(user, 'Within reach');
     await user.click(save(box));
     expect(await box.findByText(/You do not have permission to do this\./)).toBeInTheDocument();
-    expect(box.getByText(SCOPE_SENTENCE)).toBeInTheDocument();
+    expect(box.getByText(ROLE_NOT_HELD_SENTENCE)).toBeInTheDocument();
     expect(
       screen.queryByText('Administrators can only change roles whose permissions they hold'),
     ).not.toBeInTheDocument();
@@ -678,14 +682,37 @@ describe('an administrator who is not a super administrator hands out only what 
     expect(history.push).not.toHaveBeenCalled();
   });
 
-  it('shows the same sentence when a role cannot be deleted for the same reason, and keeps the row', async () => {
+  it('shows the sentence of the reason when a role cannot be deleted because of the permissions in it (the backend names ROLE_NOT_HELD), and keeps the row', async () => {
     const { user } = await load();
     // role 3 holds moderation codes that the signed-in administrator does not hold
     await user.click(within(await rowOf('ผู้ตรวจสอบเนื้อหา')).getByRole('button', { name: 'Delete' }));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
-    expect(await screen.findByText(SCOPE_SENTENCE, { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText(ROLE_NOT_HELD_SENTENCE, { exact: false })).toBeInTheDocument();
     expect(tableRows().some((cells) => cells[0] === 'ผู้ตรวจสอบเนื้อหา')).toBe(true);
     expect(history.replace).not.toHaveBeenCalled();
+  });
+
+  it('says a different sentence for the same save when the rule that refuses it is another (OWN_ROLE or ROLE_NOT_HELD), by data.reason and not by the operation', async () => {
+    systemState.roles.set('72', {
+      id: '72',
+      name: 'Within reach',
+      remark: null,
+      createdAt: '2026-10-08T00:00:00Z',
+      permissionCodes: ['USER:VIEW', 'USER:BAN'],
+    });
+    const { user } = await load();
+    const box = await openEdit(user, 'Within reach');
+    // meanwhile, in the backend: the role got a permission the signed-in administrator does not hold
+    systemState.roles.get('72')?.permissionCodes.push('COST:VIEW');
+    await user.click(save(box));
+    expect(await box.findByText(ROLE_NOT_HELD_SENTENCE)).toBeInTheDocument();
+    expect(box.queryByText(OWN_ROLE_SENTENCE)).not.toBeInTheDocument();
+    // and then the role was given to the signed-in administrator
+    systemState.extras.get('1002')?.roleIds.push('72');
+    await user.click(save(box));
+    expect(await box.findByText(OWN_ROLE_SENTENCE)).toBeInTheDocument();
+    expect(box.queryByText(ROLE_NOT_HELD_SENTENCE)).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('switches off the boxes of the permissions the signed-in administrator does not hold, and leaves the held ones on', async () => {

@@ -17,18 +17,26 @@ const messages: Record<string, string> = {
   'system.common.deleted': '已删除',
   'system.common.readFailed': '读取失败：{message}',
   'system.sentences': '{first}。{second}',
-  'system.scopeHint':
-    '管理员只能授出自己持有的权限；不能修改自己持有的角色；只能修改权限都在自己持有范围内的角色和管理员。什么都没有改变。',
+  'system.refusal.GRANT_NOT_HELD':
+    '要授出的权限里有你自己没有的：管理员只能授出自己持有的权限。什么都没有改变。',
+  'system.refusal.ROLE_NOT_HELD':
+    '这个角色里有你自己没有的权限：只能修改或删除权限都在自己持有范围内的角色。什么都没有改变。',
+  'system.refusal.OWN_ROLE': '这个角色分配给了你自己：不能修改自己持有的角色。什么都没有改变。',
+  'system.refusal.ADMIN_NOT_HELD':
+    '这个管理员持有你自己没有的权限：只能对权限都在自己持有范围内的管理员操作。什么都没有改变。',
+  'system.refusal.SUPER_TARGET':
+    '这是超级管理员的账号：只有超级管理员能对超级管理员操作。什么都没有改变。',
+  'system.refusal.SUPER_FLAG': '只有超级管理员能设置或清除超级管理员标志。什么都没有改变。',
 
   // ---- 管理员 ----
   'system.admins.note':
     '不能修改自己的角色、超级管理员标志和状态，也不能删除自己的账号。最后一个启用的超级管理员不能被停用或删除，它的标志也不能清除。只有超级管理员能设置或清除超级管理员标志。',
-  'system.admins.refusedOwnHint':
-    '后端拒绝了这个操作，什么都没有改变。这是你自己的账号：不能修改自己的角色和超级管理员标志，也不能停用或删除自己。',
-  'system.admins.refusedOtherHint':
-    '后端拒绝了这个操作，什么都没有改变。可能的原因：这是最后一个启用的超级管理员（不能停用、删除，标志也不能清除）；账号刚被别人改过（请重新读取列表）。',
-  'system.admins.forbiddenHint':
-    '后端拒绝了这个操作，什么都没有改变。可能的原因：管理员只能授出自己持有的权限；只能对权限都在自己持有范围内的管理员操作；只有超级管理员能对超级管理员操作。',
+  'system.admins.state.SELF_PROTECTED':
+    '这是你自己的账号：不能修改自己的角色和超级管理员标志，也不能停用或删除自己。什么都没有改变。',
+  'system.admins.state.LAST_SUPER_ADMIN':
+    '这是最后一个启用的超级管理员：不能停用、删除，标志也不能清除。什么都没有改变。',
+  'system.admins.state.CONCURRENT_CHANGE':
+    '同时有另一个对超级管理员的修改正在进行：什么都没有改变，请稍后重试。',
   'system.admins.new': '新建管理员',
   'system.admins.you': '我',
   'system.admins.col.username': '用户名',

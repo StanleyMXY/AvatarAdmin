@@ -271,36 +271,41 @@ describe('the protections of the own account and of the last super administrator
       await screen.findByText(/The current state of the item does not allow this action/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/This is the last enabled super administrator: it cannot be disabled or deleted/),
+      screen.getByText(
+        /This is the last enabled super administrator: it cannot be disabled or deleted/,
+      ),
     ).toBeInTheDocument();
     // the other two reasons are not said
-    expect(screen.queryByText(/This is your own account/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/delete yourself\. Nothing was changed/)).not.toBeInTheDocument();
     expect(screen.queryByText(/try again in a moment/)).not.toBeInTheDocument();
     // never the backend's own words
     expect(screen.queryByText(/The last enabled super administrator$/)).not.toBeInTheDocument();
   });
 
-  it('says a different sentence for the same click when the backend names another reason: a change of a super administrator under way says to try again', async () => {
-    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
-    adminOf('finance').superAdmin = true;
-    const { user } = await load();
-    await waitFor(async () => expect(await rowButton('finance', 'Disable')).toBeEnabled());
-    const disable = async () => {
+  it.each([
+    ['CONCURRENT_CHANGE', /try again in a moment/],
+    ['LAST_SUPER_ADMIN', /This is the last enabled super administrator/],
+  ] as const)(
+    'says the sentence of %s for the same click as the other reasons: a different sentence, by data.reason',
+    async (race, sentence) => {
+      signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+      adminOf('finance').superAdmin = true;
+      const { user } = await load();
+      await waitFor(async () => expect(await rowButton('finance', 'Disable')).toBeEnabled());
+      systemState.race = race;
       await user.click(await rowButton('finance', 'Disable'));
       await user.click(await screen.findByRole('button', { name: 'OK' }));
-    };
-    systemState.race = 'CONCURRENT_CHANGE';
-    await disable();
-    expect(await screen.findByText(/try again in a moment/)).toBeInTheDocument();
-    expect(screen.queryByText(/This is the last enabled super administrator/)).not.toBeInTheDocument();
-    systemState.race = 'LAST_SUPER_ADMIN';
-    await disable();
-    expect(
-      await screen.findByText(/This is the last enabled super administrator/),
-    ).toBeInTheDocument();
-    // nothing was changed by either
-    expect(adminOf('finance').status).toBe('ACTIVE');
-  });
+      expect(await screen.findByText(sentence)).toBeInTheDocument();
+      for (const other of [
+        /try again in a moment/,
+        /This is the last enabled super administrator/,
+      ]) {
+        if (other.source !== sentence.source)
+          expect(screen.queryByText(other)).not.toBeInTheDocument();
+      }
+      expect(adminOf('finance').status).toBe('ACTIVE');
+    },
+  );
 
   it('says the sentence of the own account for SELF_PROTECTED, whichever row it comes back on', async () => {
     const { user } = await load();
@@ -312,7 +317,7 @@ describe('the protections of the own account and of the last super administrator
     await user.click(await rowButton('reviewer', 'Disable'));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
-      await screen.findByText(/This is your own account: you cannot change your own roles/),
+      await screen.findByText(/you cannot disable or delete yourself\. Nothing was changed/),
     ).toBeInTheDocument();
   });
 
@@ -1679,8 +1684,7 @@ describe('in Chinese', () => {
 
 describe('an administrator who is not a super administrator acts only on administrators within what they hold', () => {
   const HELD = ['ADMIN:MANAGE', 'USER:VIEW', 'STATS:VIEW'];
-  const SENTENCE =
-    /administrators can only grant permissions they hold; they can only act on administrators whose permissions they all hold; and only a super administrator can act on a super administrator\./;
+  const NOT_HELD = /This administrator holds permissions you do not hold: you can only act on/;
 
   it('shows the sentence of the rules after the text of the code when the backend refuses a row, never its words, and does not leave the page', async () => {
     signIn('support', { codes: HELD });
@@ -1689,7 +1693,7 @@ describe('an administrator who is not a super administrator acts only on adminis
     await user.click(await rowButton('finance', 'Disable'));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(await screen.findByText(/You do not have permission to do this\./)).toBeInTheDocument();
-    expect(screen.getByText(SENTENCE, { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(NOT_HELD, { exact: false })).toBeInTheDocument();
     expect(
       screen.queryByText(
         'Administrators can only act on administrators whose permissions they hold',
@@ -1699,7 +1703,7 @@ describe('an administrator who is not a super administrator acts only on adminis
     expect(history.replace).not.toHaveBeenCalled();
   });
 
-  it('shows the same sentence in the edit dialog when the roles chosen go beyond what is held', async () => {
+  it('shows the sentence of the reason in the edit dialog, and another sentence for the same Save when the reason is another (GRANT_NOT_HELD, then SUPER_TARGET)', async () => {
     signIn('support', { codes: HELD });
     const { user } = await load();
     // "newhire" holds USER:VIEW and STATS:VIEW only: the row is within reach, the role "财务审核" is not
@@ -1710,9 +1714,13 @@ describe('an administrator who is not a super administrator acts only on adminis
     await user.click(box.getByRole('button', { name: /Save$/ }));
     expect(await box.findByText(/You do not have permission to do this\./)).toBeInTheDocument();
     expect(box.getByText(/Nothing was changed\./, { exact: false })).toBeInTheDocument();
-    expect(
-      box.getByText(/Administrators can only grant permissions they hold\./),
-    ).toBeInTheDocument();
+    const grant = /Some of the permissions to hand out are not held by you/;
+    expect(box.getByText(grant)).toBeInTheDocument();
+    // meanwhile "newhire" became a super administrator in the backend; the dialog still has the old row
+    adminOf('newhire').superAdmin = true;
+    await user.click(box.getByRole('button', { name: /Save$/ }));
+    expect(await box.findByText(/This is a super administrator account/)).toBeInTheDocument();
+    expect(box.queryByText(grant)).not.toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(history.replace).not.toHaveBeenCalled();
   });

@@ -21,28 +21,40 @@ import {
 // log. The protections are the contract's: nobody changes their own roles or super administrator
 // flag, disables or deletes themselves, or takes the last enabled super administrator away; only a
 // super administrator sets or clears the flag. The backend answers all of those protections 409
-// INVALID_STATE with `data.status` (its answer 22; 403 ADMIN_FORBIDDEN is for the rules about what the
+// INVALID_STATE with `data.status` and `data.reason` (its answer 22; 403 ADMIN_FORBIDDEN is for the rules about what the
 // operator holds and about super administrators), and the 409 does not say which rule it was.
 
 type Detail = { ref: string; reason: string };
 const refuse = (details: Detail[]): never => {
   throw invalidRequest(`invalid: ${details.map((d) => d.ref).join(', ')}`, details);
 };
-const forbidden = (message: string): never => {
-  throw new MockHttpError(403, 'ADMIN_FORBIDDEN', message);
+/** Which rule refused a 403 ADMIN_FORBIDDEN of these routes (`data.reason`, contract 17.4). */
+type ForbiddenReason =
+  | 'GRANT_NOT_HELD'
+  | 'ROLE_NOT_HELD'
+  | 'OWN_ROLE'
+  | 'ADMIN_NOT_HELD'
+  | 'SUPER_TARGET'
+  | 'SUPER_FLAG';
+type Scope = readonly [message: string, reason: ForbiddenReason];
+const forbidden = (message: string, reason: ForbiddenReason): never => {
+  throw new MockHttpError(403, 'ADMIN_FORBIDDEN', message, { reason });
 };
 
-// The four rules "an administrator hands out and acts on only what they hold" (403 ADMIN_FORBIDDEN,
-// `data` null, nothing changed). A super administrator is not bound by them. What an administrator
-// holds is what `GET /me` lists for them (the union of the codes of their roles); a super
-// administrator held by the target counts as holding every code. The order of the checks inside one
-// route is the mock's own: the backend's order is not in the documents we have.
-const SCOPE = {
-  grant: 'Administrators can only grant permissions they hold',
-  ownRole: 'Administrators cannot change a role they hold',
-  role: 'Administrators can only change roles whose permissions they hold',
-  admin: 'Administrators can only act on administrators whose permissions they hold',
-} as const;
+// The rules "an administrator hands out and acts on only what they hold" and the two about super
+// administrators (403 ADMIN_FORBIDDEN, `data.reason` names the rule, nothing changed). A super
+// administrator is not bound by the first four. What an administrator holds is what `GET /me` lists
+// for them (the union of the codes of their roles). The order of the checks inside a route is the
+// contract's (2392) for the administrator routes; the role routes keep the mock's own.
+const SCOPE: Record<'grant' | 'ownRole' | 'role' | 'admin', Scope> = {
+  grant: ['Administrators can only grant permissions they hold', 'GRANT_NOT_HELD'],
+  ownRole: ['Administrators cannot change a role they hold', 'OWN_ROLE'],
+  role: ['Administrators can only change roles whose permissions they hold', 'ROLE_NOT_HELD'],
+  admin: [
+    'Administrators can only act on administrators whose permissions they hold',
+    'ADMIN_NOT_HELD',
+  ],
+};
 
 const heldCodes = (admin: MockAdmin): ReadonlySet<string> =>
   new Set<string>(admin.superAdmin ? PERMISSION_CODES : admin.permissions);
@@ -54,30 +66,41 @@ const holdsAll = (operator: MockAdmin, codes: Iterable<string>): boolean => {
   return [...codes].every((code) => held.has(code));
 };
 
-const requireHolds = (operator: MockAdmin, codes: Iterable<string>, message: string): void => {
-  if (!holdsAll(operator, codes)) forbidden(message);
+const requireHolds = (operator: MockAdmin, codes: Iterable<string>, scope: Scope): void => {
+  if (!holdsAll(operator, codes)) forbidden(...scope);
 };
 
 /** The codes the roles give together. */
 const codesOfRoles = (roleIds: readonly string[]): string[] =>
   roleIds.flatMap((id) => systemState.roles.get(id)?.permissionCodes ?? []);
 
-/** Rule 4: the target administrator's codes must all be held by the operator. */
-const requireHoldsTarget = (operator: MockAdmin, target: MockAdmin): void =>
+/**
+ * The target of an administrator route: only a super administrator acts on a super administrator
+ * (SUPER_TARGET), then the target's codes must all be held by the operator (ADMIN_NOT_HELD).
+ */
+const requireHoldsTarget = (operator: MockAdmin, target: MockAdmin): void => {
+  if (target.superAdmin && !operator.superAdmin)
+    forbidden('Only a super administrator acts on a super administrator', 'SUPER_TARGET');
   requireHolds(operator, heldCodes(target), SCOPE.admin);
+};
 const duplicate = (field: string): never => {
   throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The value exists already', { field });
 };
-/** 409 INVALID_STATE with the current status of the target: the own account, the last super administrator. */
-const invalidState = (target: MockAdmin): never => {
+/** Which rule refused a 409 INVALID_STATE of the administrator routes (`data.reason`, contract 17.4). */
+type StateReason = 'SELF_PROTECTED' | 'LAST_SUPER_ADMIN' | 'CONCURRENT_CHANGE';
+/** 409 INVALID_STATE with the current status of the target and the rule that refused. */
+const invalidState = (target: MockAdmin, reason: StateReason): never => {
   throw new MockHttpError(
     409,
     'INVALID_STATE',
     'The state of the administrator does not allow this',
-    {
-      status: target.status,
-    },
+    { status: target.status, reason },
   );
+};
+/** The races of `systemState.race` (see systemData.ts): a write on a super administrator other than the operator. */
+const meetRace = (operator: MockAdmin, target: MockAdmin): void => {
+  if (systemState.race !== null && target.superAdmin && target.id !== operator.id)
+    invalidState(target, systemState.race);
 };
 const notFound = (what: string): never => {
   throw new MockHttpError(404, 'RESOURCE_NOT_FOUND', `${what} is not there`);
@@ -189,7 +212,7 @@ export default {
     if (details.length > 0) refuse(details);
     const roleIds = roleIdsOf(body.roleIds ?? []);
     if (body.superAdmin === true && !req.admin.superAdmin)
-      forbidden('Only a super administrator sets the super administrator flag');
+      forbidden('Only a super administrator sets the super administrator flag', 'SUPER_FLAG');
     requireHolds(req.admin, codesOfRoles(roleIds), SCOPE.grant);
     if ([...store.admins.values()].some((a) => a.username.toLowerCase() === username.toLowerCase()))
       duplicate('username');
@@ -241,12 +264,17 @@ export default {
     const rolesChanged =
       roleIds.length !== current.length || !roleIds.every((id) => current.includes(id));
     const flagChanged = typeof given === 'boolean' && given !== Boolean(admin.superAdmin);
-    if (flagChanged && !req.admin.superAdmin)
-      forbidden('Only a super administrator sets or clears the super administrator flag');
     if (rolesChanged) requireHolds(req.admin, codesOfRoles(roleIds), SCOPE.grant);
-    if ((rolesChanged || flagChanged) && admin.id === req.admin.id) invalidState(admin);
+    if (flagChanged && !req.admin.superAdmin)
+      forbidden(
+        'Only a super administrator sets or clears the super administrator flag',
+        'SUPER_FLAG',
+      );
+    if ((rolesChanged || flagChanged) && admin.id === req.admin.id)
+      invalidState(admin, 'SELF_PROTECTED');
+    meetRace(req.admin, admin);
     if (flagChanged && given === false && admin.superAdmin && isLastEnabledSuper(admin.id))
-      invalidState(admin);
+      invalidState(admin, 'LAST_SUPER_ADMIN');
     if (
       [...store.admins.values()].some(
         (a) => a.id !== admin.id && a.username.toLowerCase() === username.toLowerCase(),
@@ -275,14 +303,15 @@ export default {
       refuse([{ ref: 'status', reason: 'OUT_OF_RANGE' }]);
     const admin = adminOrFail(req.params.id);
     requireHoldsTarget(req.admin, admin);
-    if (admin.id === req.admin.id) invalidState(admin);
+    if (admin.id === req.admin.id) invalidState(admin, 'SELF_PROTECTED');
+    meetRace(req.admin, admin);
     if (
       status === 'DISABLED' &&
       admin.superAdmin &&
       admin.status === 'ACTIVE' &&
       isLastEnabledSuper(admin.id)
     )
-      invalidState(admin);
+      invalidState(admin, 'LAST_SUPER_ADMIN');
     admin.status = status as 'ACTIVE' | 'DISABLED';
     // A disabled administrator's tokens are void at once.
     if (status === 'DISABLED') admin.tokenVersion += 1;
@@ -293,6 +322,7 @@ export default {
   'POST /api/admin/admins/:id/reset-password': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
     requireHoldsTarget(req.admin, admin);
+    meetRace(req.admin, admin);
     const newPassword = bodyOf(req).newPassword;
     const problem = newPasswordProblem(newPassword, admin.username, 'newPassword');
     if (problem) refuse([problem]);
@@ -306,6 +336,7 @@ export default {
   'POST /api/admin/admins/:id/reset-totp': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
     requireHoldsTarget(req.admin, admin);
+    meetRace(req.admin, admin);
     admin.totpEnrolled = false;
     admin.totpSecretUnreadable = false;
     admin.tokenVersion += 1;
@@ -316,9 +347,10 @@ export default {
   'DELETE /api/admin/admins/:id': guard('ADMIN:MANAGE', (req) => {
     const admin = adminOrFail(req.params.id);
     requireHoldsTarget(req.admin, admin);
-    if (admin.id === req.admin.id) invalidState(admin);
+    if (admin.id === req.admin.id) invalidState(admin, 'SELF_PROTECTED');
+    meetRace(req.admin, admin);
     if (admin.superAdmin && admin.status === 'ACTIVE' && isLastEnabledSuper(admin.id))
-      invalidState(admin);
+      invalidState(admin, 'LAST_SUPER_ADMIN');
     store.admins.delete(admin.id);
     systemState.extras.delete(admin.id);
     // The audit rows of the administrator stay, with the name they were written with.
@@ -351,7 +383,7 @@ export default {
     // A role the operator has themselves cannot be changed by them; the codes the role has now and the
     // codes asked for must all be held.
     if (!req.admin.superAdmin && extraOf(req.admin).roleIds.includes(role.id))
-      forbidden(SCOPE.ownRole);
+      forbidden(...SCOPE.ownRole);
     requireHolds(req.admin, role.permissionCodes, SCOPE.role);
     const fields = roleFields(bodyOf(req), role.id, (codes) =>
       requireHolds(req.admin, codes, SCOPE.grant),

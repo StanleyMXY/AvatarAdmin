@@ -18,18 +18,28 @@ const messages: Record<string, string> = {
   'system.common.deleted': 'Deleted',
   'system.common.readFailed': 'Could not read: {message}',
   'system.sentences': '{first} {second}',
-  'system.scopeHint':
-    'Administrators can only grant permissions they hold. You cannot change a role you hold, and you can only change roles and administrators whose permissions you all hold. Nothing was changed.',
+  'system.refusal.GRANT_NOT_HELD':
+    'Some of the permissions to hand out are not held by you: administrators can only grant permissions they hold. Nothing was changed.',
+  'system.refusal.ROLE_NOT_HELD':
+    'This role has permissions you do not hold: you can only change or delete roles whose permissions you all hold. Nothing was changed.',
+  'system.refusal.OWN_ROLE':
+    'This role is given to you: you cannot change a role you hold. Nothing was changed.',
+  'system.refusal.ADMIN_NOT_HELD':
+    'This administrator holds permissions you do not hold: you can only act on administrators whose permissions you all hold. Nothing was changed.',
+  'system.refusal.SUPER_TARGET':
+    'This is a super administrator account: only a super administrator can act on a super administrator. Nothing was changed.',
+  'system.refusal.SUPER_FLAG':
+    'Only a super administrator can set or clear the super administrator flag. Nothing was changed.',
 
   // ---- administrators ----
   'system.admins.note':
     'You cannot change your own roles, super administrator flag or status, and you cannot delete your own account. The last enabled super administrator cannot be disabled or deleted, and its flag cannot be cleared. Only a super administrator sets or clears the super administrator flag.',
-  'system.admins.refusedOwnHint':
-    'The backend refused this and nothing was changed. This is your own account: you cannot change your own roles or super administrator flag, and you cannot disable or delete yourself.',
-  'system.admins.refusedOtherHint':
-    'The backend refused this and nothing was changed. Possible reasons: it is the last enabled super administrator (it cannot be disabled or deleted, and its flag cannot be cleared); or the account was changed by someone else meanwhile (read the list again).',
-  'system.admins.forbiddenHint':
-    'The backend refused this and nothing was changed. Possible reasons: administrators can only grant permissions they hold; they can only act on administrators whose permissions they all hold; and only a super administrator can act on a super administrator.',
+  'system.admins.state.SELF_PROTECTED':
+    'This is your own account: you cannot change your own roles or super administrator flag, and you cannot disable or delete yourself. Nothing was changed.',
+  'system.admins.state.LAST_SUPER_ADMIN':
+    'This is the last enabled super administrator: it cannot be disabled or deleted, and its flag cannot be cleared. Nothing was changed.',
+  'system.admins.state.CONCURRENT_CHANGE':
+    'Another change of a super administrator is under way at the same moment. Nothing was changed; try again in a moment.',
   'system.admins.new': 'New administrator',
   'system.admins.you': 'You',
   'system.admins.col.username': 'User name',
