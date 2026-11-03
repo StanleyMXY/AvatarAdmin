@@ -456,8 +456,10 @@ describe('pending prices', () => {
           'Some input is not valid. Please check the fields and try again.',
         ),
       );
-      // the backend gives no details for the bands: the general sentence is all there is
-      expect(dialog.textContent).not.toContain('The value is outside the allowed range.');
+      // the backend names the lower bound of the second band; the line says which band and which field
+      expect(dialog.textContent).toContain(
+        'Band 2: lower bound (tokens): The value is outside the allowed range.',
+      );
       expect(dialog.textContent).not.toContain('cannot confirm');
       expect(costState.batches.find((b) => b.batchId === BATCH.pendingGap)?.status).toBe(
         'PENDING_REVIEW',
@@ -1516,30 +1518,111 @@ describe('models', () => {
     expect(rowOf('model-large-1').getAttribute('data-unpriced')).toBe('false');
   });
 
-  it('filters to the models without a price in force, and back', async () => {
-    const { user } = await open(ALL, { tab: 'Models' });
+  const modelReads = (calls: { method: string; url: string }[]) =>
+    calls.filter((c) => c.method === 'GET' && c.url.startsWith('/api/admin/usage/models'));
+  const queryOf = (url: string) => Object.fromEntries(new URL(url, 'http://x').searchParams);
+  const bodyRows = () => [...document.querySelectorAll('.ant-table-tbody > tr.ant-table-row')];
+  const lastQuery = (calls: { method: string; url: string }[]) =>
+    queryOf(modelReads(calls).at(-1)?.url ?? '');
+  const manyUnpriced = (count: number) => () => {
+    for (let i = 0; i < count; i += 1) {
+      costState.models.push({
+        id: `extra-${i}`,
+        resourceType: 'MATTING',
+        provider: 'extra.example',
+        model: `extra-model-${String(i).padStart(2, '0')}`,
+        syncAdapter: null,
+        syncModelId: null,
+        firstSeenAt: '2026-09-01T00:00:00Z',
+        lastSeenAt: '2026-10-01T00:00:00Z',
+      });
+    }
+  };
+  const ONLY_UNPRICED = { name: 'Only models without a price in force' };
+
+  it('asks the server for the models without a price in force (hasActivePrice=false), and back; the page filters nothing itself', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models' });
     await screen.findAllByText('model-large-1');
-    await user.click(
-      screen.getByRole('checkbox', { name: 'Only models without a price in force' }),
+    expect(lastQuery(calls)).not.toHaveProperty('hasActivePrice');
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(lastQuery(calls).hasActivePrice).toBe('false'));
+    await waitFor(() =>
+      expect(bodyRows().length).toBe(
+        costState.models.filter((m) => !['1', '2', '4', '5', '7', '8', '10'].includes(m.id)).length,
+      ),
     );
-    const rows = [...document.querySelectorAll('.ant-table-tbody > tr.ant-table-row')];
-    expect(rows.length).toBe(
-      costState.models.filter((m) => !['1', '2', '4', '5', '7', '8', '10'].includes(m.id)).length,
-    );
-    expect(rows.every((r) => r.getAttribute('data-unpriced') === 'true')).toBe(true);
-    await user.click(
-      screen.getByRole('checkbox', { name: 'Only models without a price in force' }),
-    );
-    expect(document.querySelectorAll('.ant-table-tbody > tr.ant-table-row').length).toBe(
-      costState.models.length,
+    expect(bodyRows().every((r) => r.getAttribute('data-unpriced') === 'true')).toBe(true);
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(bodyRows().length).toBe(costState.models.length));
+    expect(lastQuery(calls)).not.toHaveProperty('hasActivePrice');
+  });
+
+  it('opens with the filter from the address already asked for: the first read has it, there is no read of everything first', async () => {
+    const { calls } = await open(ALL, { search: '?tab=models&hasPrice=false' });
+    await screen.findAllByText('matting-model-besar');
+    expect(modelReads(calls).length).toBeGreaterThan(0);
+    for (const read of modelReads(calls)) expect(queryOf(read.url).hasActivePrice).toBe('false');
+  });
+
+  it('asks the server for one page at a time: a long list is paged by the server and the pager counts what the server counts', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models', prepare: manyUnpriced(15) });
+    await screen.findAllByText('model-large-1');
+    // 10 models of the preset and 15 more: 25 in all, 20 on the first page, read in one request
+    expect(bodyRows()).toHaveLength(20);
+    expect(modelReads(calls)).toHaveLength(1);
+    expect(lastQuery(calls)).toMatchObject({ page: '1', pageSize: '20' });
+    await user.click(screen.getByTitle('2'));
+    await waitFor(() => expect(bodyRows()).toHaveLength(5));
+    expect(lastQuery(calls)).toMatchObject({ page: '2', pageSize: '20' });
+    // a filter starts again from the first page, and the pager counts the filtered list
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(lastQuery(calls).hasActivePrice).toBe('false'));
+    expect(lastQuery(calls).page).toBe('1');
+    // 3 of the 10 models of the preset have no price in force, and the 15 more: 18 in all, one page
+    await waitFor(() => expect(bodyRows()).toHaveLength(18));
+    expect(screen.queryByTitle('2')).toBeNull();
+  });
+
+  it('asks the server for one resource type (resourceType=MATTING), together with the other filter', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models' });
+    await screen.findAllByText('model-large-1');
+    await chooseOption(user, 'Resource type', 'Matting');
+    await waitFor(() => expect(bodyRows()).toHaveLength(1));
+    expect(lastQuery(calls).resourceType).toBe('MATTING');
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() =>
+      expect(lastQuery(calls)).toMatchObject({ resourceType: 'MATTING', hasActivePrice: 'false' }),
     );
   });
 
-  it('filters by resource type', async () => {
-    const { user } = await open(ALL, { tab: 'Models' });
+  it('keeps the two filters when the tab is left and opened again', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models' });
     await screen.findAllByText('model-large-1');
     await chooseOption(user, 'Resource type', 'Matting');
-    expect(document.querySelectorAll('.ant-table-tbody > tr.ant-table-row')).toHaveLength(1);
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(lastQuery(calls).hasActivePrice).toBe('false'));
+    await user.click(screen.getByRole('tab', { name: 'Current prices' }));
+    await user.click(screen.getByRole('tab', { name: 'Models' }));
+    await waitFor(() =>
+      expect(lastQuery(calls)).toMatchObject({ resourceType: 'MATTING', hasActivePrice: 'false' }),
+    );
+    expect(screen.getByRole('checkbox', ONLY_UNPRICED)).toBeChecked();
+  });
+
+  it('says the words of the error code when the server refuses the read, with a retry that reads again', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models' });
+    await screen.findAllByText('model-large-1');
+    failRequests((path, method) => method === 'GET' && path === '/api/admin/usage/models');
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    expect(await screen.findByText(new RegExp(SERVER_ERROR.en))).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('message of INTERNAL_ERROR');
+    const before = modelReads(calls).length;
+    vi.unstubAllGlobals();
+    const again = useMockBackend(metaMock, costMock, monitorMock, configMock);
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(bodyRows().length).toBeGreaterThan(0));
+    expect(lastQuery(again).hasActivePrice).toBe('false');
+    expect(before).toBeGreaterThan(0);
   });
 
   it('shows "By hand" for a model with no adapter and the adapter code otherwise', async () => {

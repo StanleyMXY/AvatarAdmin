@@ -50,6 +50,23 @@ describe('the price endpoints', () => {
     ]);
   });
 
+  it('GET /usage/models sends resourceType and hasActivePrice (true or false as text) only when they are given', async () => {
+    const calls = stubFetch(answer({ items: [], total: 0 }));
+    await listUsageModels({
+      resourceType: 'MATTING',
+      hasActivePrice: false,
+      page: 2,
+      pageSize: 20,
+    });
+    await listUsageModels({ hasActivePrice: true, page: 1, pageSize: 20 });
+    await listUsageModels({ resourceType: '', page: 1, pageSize: 20 });
+    expect(calls.map((c) => c.url)).toEqual([
+      '/api/admin/usage/models?page=2&pageSize=20&resourceType=MATTING&hasActivePrice=false',
+      '/api/admin/usage/models?page=1&pageSize=20&hasActivePrice=true',
+      '/api/admin/usage/models?page=1&pageSize=20',
+    ]);
+  });
+
   it('POST /usage/prices sends the prices as the strings they are, and the bounds as integers', async () => {
     const calls = stubFetch(answer(null));
     await createPrice({

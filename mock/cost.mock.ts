@@ -221,13 +221,29 @@ export default {
     return ok({ items });
   }),
 
+  // `resourceType` (one of the seven) and `hasActivePrice` (`true` or `false`) filter on the server, the
+  // total is the number kept. Any other value is a 400 with no details, as for `GET /usage/prices`.
   'GET /api/admin/usage/models': guard('COST:VIEW', (req) => {
-    const rows = [...costState.models].sort((a, b) =>
-      `${a.resourceType}\u0000${a.provider}\u0000${a.model}` <
-      `${b.resourceType}\u0000${b.provider}\u0000${b.model}`
-        ? -1
-        : 1,
-    );
+    const resourceType = text(req.query.resourceType);
+    const asked = text(req.query.hasActivePrice);
+    if (
+      (resourceType !== '' && !(resourceType in UNITS)) ||
+      (asked !== '' && asked !== 'true' && asked !== 'false')
+    )
+      throw new MockHttpError(
+        400,
+        'INVALID_REQUEST',
+        'resourceType or hasActivePrice is not valid',
+      );
+    const rows = costState.models
+      .filter((m) => resourceType === '' || m.resourceType === resourceType)
+      .filter((m) => asked === '' || hasActivePrice(m) === (asked === 'true'))
+      .sort((a, b) =>
+        `${a.resourceType}\u0000${a.provider}\u0000${a.model}` <
+        `${b.resourceType}\u0000${b.provider}\u0000${b.model}`
+          ? -1
+          : 1,
+      );
     const { page, pageSize } = pagingOf(req);
     const answer = paginate(rows, page, pageSize);
     return ok({

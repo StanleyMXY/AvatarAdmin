@@ -255,6 +255,56 @@ describe('the price endpoints of the mock backend', () => {
   });
 });
 
+describe('the model list filters on the server (resourceType, hasActivePrice)', () => {
+  type Row = { id: string; resourceType: string; hasActivePrice: boolean };
+  const models = async (query: Record<string, unknown> = {}) =>
+    (await get(MODELS, { pageSize: '200', ...query })).body.data as { items: Row[]; total: number };
+
+  it('keeps the models of one resource type, and the total is the number kept', async () => {
+    const llm = await models({ resourceType: 'LLM' });
+    const expected = costState.models.filter((m) => m.resourceType === 'LLM');
+    expect(llm.items.map((m) => m.id).sort()).toEqual(expected.map((m) => m.id).sort());
+    expect(llm.total).toBe(expected.length);
+    expect(llm.total).toBeLessThan(costState.models.length);
+  });
+
+  it('keeps the models without a price in force (false) or with one (true), and the total follows', async () => {
+    const none = await models({ hasActivePrice: 'false' });
+    expect(none.items.length).toBeGreaterThan(0);
+    expect(none.items.every((m) => m.hasActivePrice === false)).toBe(true);
+    const some = await models({ hasActivePrice: 'true' });
+    expect(some.items.every((m) => m.hasActivePrice === true)).toBe(true);
+    expect(none.total + some.total).toBe(costState.models.length);
+    expect(none.total).toBe(none.items.length);
+  });
+
+  it('combines the two filters, and pages the filtered list (the total is not the page)', async () => {
+    const both = await models({ resourceType: 'LLM', hasActivePrice: 'false' });
+    expect(both.items.every((m) => m.resourceType === 'LLM' && !m.hasActivePrice)).toBe(true);
+    expect(both.total).toBe(both.items.length);
+    const all = await models({ hasActivePrice: 'false' });
+    const second = await models({ hasActivePrice: 'false', pageSize: '2', page: '2' });
+    expect(second.total).toBe(all.total);
+    expect(second.items).toHaveLength(Math.min(2, Math.max(0, all.total - 2)));
+    expect(second.items.map((m) => m.id)).toEqual(all.items.slice(2, 4).map((m) => m.id));
+  });
+
+  it('refuses a value that is not a resource type or not true or false, with 400 INVALID_REQUEST and no details', async () => {
+    for (const query of [
+      { resourceType: 'TTS' },
+      { resourceType: 'llm' },
+      { hasActivePrice: 'yes' },
+      { hasActivePrice: 'TRUE' },
+      { hasActivePrice: '1' },
+    ]) {
+      const answer = await get(MODELS, query);
+      expect(answer.status, JSON.stringify(query)).toBe(400);
+      expect(answer.body.code).toBe('INVALID_REQUEST');
+      expect(answer.body.data, JSON.stringify(query)).toBeNull();
+    }
+  });
+});
+
 describe('creating a batch by hand', () => {
   it('saves an ACTIVE batch from a MANUAL source with the prices unchanged, by the signed-in administrator', async () => {
     const answer = await write(
@@ -395,14 +445,36 @@ describe('creating a batch by hand', () => {
               inputMinTokens: 0,
               inputMaxTokens: null,
               inputPrice: price,
-              cachedInputPrice: null,
+              cachedInputPrice: price,
               outputPrice: '1',
             },
           ],
         }),
       );
       expect(answer.status, price).toBe(400);
+      expect(answer.body.data.details, price).toEqual([
+        { ref: 'bands[0].inputPrice', reason: 'OUT_OF_RANGE' },
+        { ref: 'bands[0].cachedInputPrice', reason: 'OUT_OF_RANGE' },
+      ]);
     }
+    const empty = await write(
+      CREATE,
+      {},
+      llmBody({
+        bands: [
+          {
+            inputMinTokens: 0,
+            inputMaxTokens: null,
+            inputPrice: '',
+            cachedInputPrice: null,
+            outputPrice: '1',
+          },
+        ],
+      }),
+    );
+    expect(empty.body.data.details).toEqual([
+      { ref: 'bands[0].inputPrice', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
     const num = await write(
       CREATE,
       {},
