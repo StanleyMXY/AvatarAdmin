@@ -352,4 +352,75 @@ describe('the address of a file is renewed before it expires', { timeout: 30000 
     await advanceBySteps(60 * MINUTE, 10_000);
     expect(state.asked).toBe(5);
   });
+
+  describe('a clip that was stopped in the middle keeps its place when the address is replaced', () => {
+    /** A media element that remembers what was written to `currentTime` (happy-dom has no player). */
+    const fake = (element: HTMLMediaElement, position: number, paused: boolean) => {
+      const writes: number[] = [];
+      let current = position;
+      Object.defineProperty(element, 'currentTime', {
+        configurable: true,
+        get: () => current,
+        set: (value: number) => {
+          writes.push(value);
+          current = value;
+        },
+      });
+      Object.defineProperty(element, 'paused', { configurable: true, value: paused });
+      return writes;
+    };
+
+    it('puts the position back once the new address has its metadata, and does not start it', async () => {
+      const state = scripted([
+        () => file('A', 5 * MINUTE, 'video/mp4'),
+        () => file('B', 5 * MINUTE, 'video/mp4'),
+      ]);
+      const { container } = renderPage(
+        <ContentPanel record={recordOf(RECORD_ID.reportedVoice)} canReview />,
+      );
+      await waitFor(() => expect(container.querySelector('video')).not.toBeNull(), {
+        timeout: 8000,
+      });
+      const video = container.querySelector('video') as HTMLVideoElement;
+      const play = vi.fn();
+      video.play = play as unknown as HTMLVideoElement['play'];
+      const writes = fake(video, 80, true);
+      await advance(5 * MINUTE - 20_000);
+      await waitFor(() => expect(video.getAttribute('src')).toBe('/m?sig=B'), { timeout: 8000 });
+      expect(state.asked).toBe(2);
+      // the new address is not ready: a position written now would be lost
+      expect(writes).toEqual([]);
+      await act(async () => {
+        video.dispatchEvent(new Event('loadedmetadata'));
+      });
+      expect(writes).toEqual([80]);
+      expect(play).not.toHaveBeenCalled();
+      // and only once: a later load of metadata (a seek, another reload) is not set back to 80
+      await act(async () => {
+        video.dispatchEvent(new Event('loadedmetadata'));
+      });
+      expect(writes).toEqual([80]);
+    });
+
+    it('writes nothing for a clip that was never played', async () => {
+      scripted([
+        () => file('A', 5 * MINUTE, 'audio/mpeg'),
+        () => file('B', 5 * MINUTE, 'audio/mpeg'),
+      ]);
+      const { container } = renderPage(
+        <ContentPanel record={recordOf(RECORD_ID.reportedVoice)} canReview />,
+      );
+      await waitFor(() => expect(container.querySelector('audio')).not.toBeNull(), {
+        timeout: 8000,
+      });
+      const audio = container.querySelector('audio') as HTMLAudioElement;
+      const writes = fake(audio, 0, true);
+      await advance(5 * MINUTE - 20_000);
+      await waitFor(() => expect(audio.getAttribute('src')).toBe('/m?sig=B'), { timeout: 8000 });
+      await act(async () => {
+        audio.dispatchEvent(new Event('loadedmetadata'));
+      });
+      expect(writes).toEqual([]);
+    });
+  });
 });

@@ -49,6 +49,13 @@ function renewDelay(expiresAt: unknown, now: number): number | null {
   return Math.max(left - RENEW_BEFORE_MS, left / 2, RENEW_MIN_MS);
 }
 
+/** The place of a sound or a clip that is stopped in the middle, when `answer` is going to replace its address; else null. */
+function stoppedPosition(area: HTMLElement | null, answer: ModerationContent): number | null {
+  const media = area?.querySelector<HTMLMediaElement>('audio, video');
+  if (!media || answer.kind !== 'FILE' || media.getAttribute('src') === answer.url) return null;
+  return media.currentTime > 0 && media.paused ? media.currentTime : null;
+}
+
 const WRAP = { overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' } as const;
 
 /** The player for a file; the address is only ever the `src` of this element. */
@@ -115,7 +122,8 @@ function Media({
  * its address ends (`expiresAt`): the panel asks again shortly before that, once per address, only
  * while the tab is visible and nothing is playing; a failed renewal keeps what is shown. An address
  * that the browser's clock calls nearly over after a renewal, or the third renewal of a visit, is the
- * last planned one: after that only a failing player asks again.
+ * last planned one: after that only a failing player asks again. A sound or a clip stopped in the
+ * middle goes back to its place when the new address is ready.
  */
 export function ContentPanel({
   record,
@@ -140,6 +148,8 @@ export function ContentPanel({
   // How many times this visit renewed by itself, and whether the last renewed address left too little time to plan another.
   const autoRenewals = useRef(0);
   const [renewedTooShort, setRenewedTooShort] = useState(false);
+  // Where a clip that was stopped in the middle was, to put it back when its address is replaced.
+  const resume = useRef<number | null>(null);
   const begin = useLatestCall();
   const id = record.id;
   const area = useRef<HTMLDivElement>(null);
@@ -151,6 +161,7 @@ export function ContentPanel({
     try {
       const answer = await getModerationContent(id);
       if (!isCurrent()) return;
+      resume.current = null;
       setContent(answer);
       setRenewedTooShort(false);
       setPhase('ready');
@@ -181,6 +192,7 @@ export function ContentPanel({
       const answer = await getModerationContent(id);
       if (!isCurrent()) return;
       retried.current = false;
+      resume.current = stoppedPosition(area.current, answer);
       setRenewedTooShort(
         !hasRoomToRenew(answer.kind === 'FILE' ? answer.expiresAt : undefined, Date.now()),
       );
@@ -228,6 +240,20 @@ export function ContentPanel({
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [active, phase, expiresAt, renew, renewedTooShort]);
+
+  // The new address of a clip that was stopped in the middle starts at 0:00 again: once it knows its
+  // length, go back to where it was. Nothing is played, so it stays stopped.
+  const url = content?.kind === 'FILE' ? content.url : undefined;
+  useEffect(() => {
+    const media = area.current?.querySelector<HTMLMediaElement>('audio, video');
+    if (url === undefined || !media || resume.current === null) return undefined;
+    const restore = () => {
+      if (resume.current !== null) media.currentTime = resume.current;
+      resume.current = null;
+    };
+    media.addEventListener('loadedmetadata', restore, { once: true });
+    return () => media.removeEventListener('loadedmetadata', restore);
+  }, [url]);
 
   const onMediaError = () => {
     if (!retried.current) {
