@@ -168,9 +168,9 @@
 ### 12.1 管理员、角色的授予规则（第 356–357 行）
 
 - **现在：** 管理员、角色的行操作和表单；没有关于操作者只能授出自己持有的权限的规则。
-- **改成：** 补："管理员只能授出、操作自己持有的权限（'持有'指操作者各角色权限码的并集，后端保存时从数据库读）。违反时 403 `ADMIN_FORBIDDEN`，`data` 为 `null`，什么都不改：① `POST /roles`：`permissionCodes` 里有操作者没有的码；② `PUT /roles/{id}`：操作者不能改自己被分配的角色，角色原有的码和请求里的 `permissionCodes` 都必须是操作者持有的；`DELETE /roles/{id}`：角色原有的码必须是操作者持有的；③ `POST /admins`、`PUT /admins/{id}`：`roleIds` 里各角色的码合起来必须是操作者持有的；④ `PUT /admins/{id}`、`POST /admins/{id}/status`、`POST /admins/{id}/reset-password`、`POST /admins/{id}/reset-totp`、`DELETE /admins/{id}`：目标管理员当前持有的码必须是操作者持有的。`superAdmin=true` 的操作者不受这四条限制。前端不复刻规则逻辑，也不预先禁用权限树里操作者没有的节点；403 时提示无权限、不跳转（第 26 行），并按提交的操作显示原因。"
-- **检查顺序：** 每个路由的检查顺序（第一个不通过的先答）清单只说'见来源'，没有给出，本仓库读不到；需要后端补一张表。前端不依赖顺序。
-- **错误：** 403 `ADMIN_FORBIDDEN`，`data` 为 `null`。
+- **改成：** 补："管理员只能授出、操作自己持有的权限（'持有'指操作者各角色权限码的并集，后端保存时从数据库读）。违反时 403 `ADMIN_FORBIDDEN`，`data` 为 `{"reason":"<原因>"}`（原因的取值和页面怎么显示见 `2026-11-03-design-doc-forbidden-reasons-and-error-texts.md`），什么都不改：① `POST /roles`：`permissionCodes` 里有操作者没有的码；② `PUT /roles/{id}`：操作者不能改自己被分配的角色，角色原有的码和请求里的 `permissionCodes` 都必须是操作者持有的；`DELETE /roles/{id}`：角色原有的码必须是操作者持有的；③ `POST /admins`、`PUT /admins/{id}`：`roleIds` 里各角色的码合起来必须是操作者持有的；④ `PUT /admins/{id}`、`POST /admins/{id}/status`、`POST /admins/{id}/reset-password`、`POST /admins/{id}/reset-totp`、`DELETE /admins/{id}`：目标管理员当前持有的码必须是操作者持有的。`superAdmin=true` 的操作者不受这四条限制。前端不复刻规则逻辑，只做两处辅助（权限树里操作者没有的节点显示但不能勾选，自己被分配的角色行不能编辑），后端仍是最终裁决；403 时不跳转（第 26 行），按 `data.reason` 显示原因。"
+- **检查顺序：** 每个路由的检查顺序（第一个不通过的先答）契约第 2392 行已经给出；前端不依赖顺序。
+- **错误：** 403 `ADMIN_FORBIDDEN`，`data` 为 `{"reason":"<原因>"}`。
 - **测试：** 四类各一例；超级管理员不受限；403 后什么都没改；持有 `ADMIN:MANAGE` 但不持有目标管理员某个权限码的操作者对该管理员做五种写操作都得 403。
 
 ### 12.2 权限树（第 358 行）
