@@ -1,6 +1,6 @@
 # AvatarAdmin 项目约定
 
-AvatarApp 的管理后台前端（Umi Max + Ant Design，TypeScript）。计划在 `docs/superpowers/plans/2026-10-21-avatar-admin-frontend.md`，接手说明在 `docs/superpowers/handoff/2026-10-25-cloud-handoff.md`，先读后者。
+AvatarApp 的管理后台前端（Umi Max + Ant Design，TypeScript）。计划在 `docs/superpowers/plans/2026-10-21-avatar-admin-frontend.md`，接手说明在 `docs/superpowers/handoff/2026-11-03-local-handoff.md`（云端结束、转入本地开发时写的，先读它；`2026-10-25-cloud-handoff.md` 是云端开工时的交接，只作历史）。
 
 这份文件把项目负责人的通用工作规则里和本项目有关的部分写在仓库里，因为云端会话读不到他本机的全局设置。
 
