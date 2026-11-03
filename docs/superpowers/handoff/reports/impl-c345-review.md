@@ -146,3 +146,56 @@
 ## 十、附：评审时读过的主要位置
 
 `src/hooks/useServerPage.ts`、`src/pages/cost/{ModelsTab,ManualTab,PendingTab,failure}.ts(x)`、`src/services/cost/index.ts`、`mock/cost.mock.ts`、`src/pages/campaign/BatchModal.tsx`、`src/services/campaign/{index,types}.ts`、`src/pages/push/{records.tsx,recallRule.ts}`、`src/components/stat/DateRangeUtc.tsx`、`src/pages/appVersions/{failureText,VersionModal,ActivateModal,storeUrl,versionRules}.ts(x)`、`src/pages/ads/{AdsWarnings,creatives,mediaSpec}.ts(x)`、`src/services/ads/index.ts`、`mock/ads.mock.ts`、`src/utils/metaValues.ts`、`src/pages/{monitor/pipeline,activity/taskConfig,activity/TaskFormModal,subscriptions/*}.tsx`、`src/pages/avatar/CosmeticModal.tsx`、`src/services/auth/index.ts`。
+
+## 十一、修复（2026-11-03，修复者另起上下文；以上各节不改）
+
+立即修未修 0、记录项 2（记录 1 等后端回答，记录 7 不在仓库里）、未运行 3、阻塞 0。
+
+分支 `claude/jolly-dirac-4pq9g6`，每条一个提交（先写失败的测试并看到红，再修，变异检查）。
+
+### 立即修 1：商店链接的包名预检改用 `GET /meta` 的 `googlePlayPackageName`（`f955cd2`）
+
+- 页面（`VersionModal.tsx`）用 `useAdminMeta().googlePlayPackageName`，不再用渠道登记的包名；它是 `null`、缺失或空串时 `packageName` 为 `undefined`，不比较包名，`storeUrl.ts` 只保留 `id` 像应用编号的形状检查，包名对不对交给后端（`PACKAGE_NAME_NOT_CONFIGURED`）。说明文字里的包名、"id 必须等于…"的提示里的包名也是这个值（两种语言的 `idMismatch` 文字加了 `{package}`，未知时写"应用的包名"，不再写"渠道的包名"）。
+- 假后端（`mock/appVersions.mock.ts`）校验商店链接时用 `currentMeta().googlePlayPackageName`；假后端的初始版本数据里的链接也改成这个值（`mock/_core/appVersionsData.ts`）。渠道 `play` 的包名仍是 `app.example.play`，环境值是 `com.example.avatar`，所以两者不同的情形一直可测。
+- 测试：`versions.form.test.tsx` 新增三个用例（环境值 `com.example.avatar` 放行并能提交、渠道包名 `app.example.play` 提示不符、环境值为 `null` 或缺失时两者都不提示不符）；`mock/appVersions.mock.test.ts` 新增一个用例（`id=app.example.play` 被拒、`id=com.example.avatar` 放行）。原先用渠道包名当"正确链接"的测试改用环境值。先看到红：新增用例在改前失败（页面三个、假后端一个）。
+- 变异检查：把页面的包名改回 `channel?.packageName`，3 个用例失败；把假后端改回渠道包名，1 个用例失败。
+
+### 立即修 2：`useServerPage` 筛选 A→B→A 回到第 1 页（`4a199c2`）
+
+- 修法（`src/hooks/useServerPage.ts`）：分页状态里的键和当前筛选的键不同时，在渲染时立刻把状态改成 `{key, page: 1}`（React 会在其他事情之前重画），旧键不再留着，所以回到旧筛选时是第 1 页。
+- 测试：钩子测试用评审给的请求序列（`page=1`、`page=3`、`only=true&page=1`，期望再取消后 `page=1`），改前红（最后一次读取是 `page=3`）；价格页模型页签新增用例（无筛选翻到第 2 页→勾上→取消勾选，读取序列 `all:1`、`all:2`、`false:1`、`all:1`），改前红（得到第 2 页）；投放页记录、点击、成本三个页签各加一个同序列用例。
+- 与评审说法不同的一点：投放页三个页签只通过"查询"按钮换筛选，而按钮同时调用 `state.search()`，会把页码重置成第 1 页，所以这三处在改前就不会回到旧页码（新增的三个用例改前就绿，是回归覆盖，不是复现）。真正受影响的是只改筛选、不调用 `search()` 的用法，即价格页模型页签。
+- 变异检查：把修法去掉（即改前的代码），钩子用例和价格页用例都红；其余 5 处使用者（短信、广告、通知、系统、应用版本）的整套测试通过。
+
+### 记录 2：推送记录页读取失败后不再显示旧行（`538107d`）
+
+`records.tsx` 的读取失败分支调用 `setData(null)`，错误条下面是空表和"没有推送记录"，分页不再出现第 2 页。新增用例：日期筛选收到 400（`ref: from`）后表格没有行。变异（去掉 `setData(null)`）：1 个用例失败。
+
+### 记录 3：“创建时间”列按 UTC 显示（`677ebeb`）
+
+新增 `formatInstantUtc`（`src/utils/format.ts`）和 `instantUtcText`（`displayText.ts`）；列头改为"Created at (UTC)"和"创建时间（UTC）"，沿用其他统计页"（UTC）"的写法。测试：浏览器在 `America/Los_Angeles`，创建时间 `2026-10-31T06:04:51Z` 显示为 `10/31/2026, 06:04:51`，不出现本地的 `23:04:51`；中文列头；`formatInstantUtc` 在三个时区里结果相同、可解析失败时原样返回。变异（列改回 `instantText`）：1 个用例失败。展开行里的发送时间（`sentAt`）仍按浏览器时区显示，它不是日期筛选依据，没有改。
+
+### 记录 4：过时的注释（`36e46ac`）
+
+删掉 `src/services/campaign/types.ts` 里第一段（"`overwritten` 是给后端的请求、没有读它"），留下与现状一致的第二段。
+
+### 记录 5：假后端的权益额度上限跟着 `entitlement.limit_max`（`ae6b3c7`）
+
+`mock/subscriptions.mock.ts` 的上限取 `currentMeta().entitlementLimitMax`（与 `GET /meta` 同一个来源，读不到数字时才退回 1 000 000）。新增用例：默认 1 000 000 放行、1 000 001 被拒；保存 500 后 500 放行、501 被拒；保存 2 000 000 后 2 000 000 放行、2 000 001 被拒。变异（改回写死 1 000 000）：1 个用例失败。
+
+### 记录 6：推送记录筛选行的布局（`12fb8c7`）
+
+- 在真实浏览器里量（Playwright Chromium，从草稿目录拷贝起 `dev:mock`，1440 宽，中英文）：没有错误行时，"查询""重置"在 1440 宽下本来就在同一行（重置右边缘 1350，容器右边缘 1416）；日期框下出现红色的原因行（日期被后端拒绝，评审用请求拦截模拟的那种状态）时，原因行把这一栏撑到和它一样宽：zh-CN 下"重置"掉到下一行，en-US 下日期框本身掉到下一行。这才是评审看到的情形。
+- 修法：这一栏（勾选框加日期框）最宽 366 像素（日期框的宽度，常量 `DATE_COLUMN_WIDTH`），原因行在栏内折行。改后同样的四种状态（中英文、有无原因行）"查询""重置"都在日期框右边同一行（zh-CN 重置 x=1266、en-US 重置 x=1280，y 都是 166）。变异前后的数字：改前 zh-CN 有原因行时重置在 y=258，en-US 日期框在 y=232。
+- 没有写自动测试：版式在 happy-dom 里量不出来，所以放在"只在真实浏览器里验证"；窄于约 1380 的宽度时整行仍会折行（1360 宽时"重置"单独掉下去，没有改，本条只要求 1440 宽）。开发服务器按进程号停掉了。
+
+### 记录 1、记录 7：没有改代码
+
+- 记录 1（价格 400 的 `ref` 下标起点）：`docs/contract-requests/2026-11-03-contract-gaps.md` 的 G5 已有对应请求（补什么、行为、检查顺序、错误、测试、前端现在的做法都写了），不用再补；等后端回答。
+- 记录 7（文件系统根目录的空文件 `/tsc3.out`）：不在仓库里，没有处理，仍需有权限的人删。
+
+### 跑过的检查
+
+`src/pages/appVersions`、`src/pages/cost`、`src/pages/campaign`、`src/pages/push`、`src/hooks`、`src/utils`、`src/components`、`mock`、`tests/noHardcodedText.test.ts`、`src/locales`：166 个文件 3841 个用例（`--testTimeout=60000`），第一遍有 2 个用例失败，都是新测试自己的写法问题（提示文字里的 `{package}` 没有代入；清除下拉选择的写法），改过测试后重跑，单个文件全部通过；`src/pages/push`、`src/hooks`、noHardcodedText、`src/locales` 在最后一个提交后又整组重跑，30 个文件 1017 个用例通过。`tsc --noEmit` 0 错误，`biome check .` 0 诊断。以上各条中英文语言文件对称（`src/locales` 测试通过）。假数据没有新增语言覆盖的要求，新测试里的 `com.example.avatar`、`app.example.play` 与语言无关。
+
+未运行：全量测试和生产构建（按约定放在全部任务做完后跑一次）；对着真实后端联调（`googlePlayPackageName` 在真实后端上的值、价格 400 的下标）；Firefox、Safari、窄屏和手机。
