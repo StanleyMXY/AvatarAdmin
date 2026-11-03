@@ -82,7 +82,9 @@ describe('extractPermissionCodes on the snapshots', () => {
 
 describe('check-permission-codes.ts', { timeout: 60_000 }, () => {
   const run = (args: string[]) =>
-    spawnSync('npx', ['tsx', 'scripts/check-permission-codes.ts', ...args], { encoding: 'utf8' });
+    spawnSync(process.execPath, ['--import', 'tsx', 'scripts/check-permission-codes.ts', ...args], {
+      encoding: 'utf8',
+    });
 
   it('exits 0 and says 79 when the list agrees', () => {
     const result = run([SPEC, CONTRACT]);

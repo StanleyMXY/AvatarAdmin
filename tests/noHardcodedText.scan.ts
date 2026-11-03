@@ -175,7 +175,7 @@ export const isTextFile = (file: string) => {
 };
 
 const ALLOW_FILE = 'tests/noHardcodedText.allow.json';
-const MODULE_ALLOW_FILE = /(^|\/)hardcodedText\.allow\.json$/;
+const MODULE_ALLOW_FILE = /(^|[\\/])hardcodedText\.allow\.json$/;
 
 /** The allow list: the shared file and, for module tasks, a `hardcodedText.allow.json` next to their own pages. */
 export function readAllowList(files: string[]): AllowEntry[] {

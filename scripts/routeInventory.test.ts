@@ -218,7 +218,9 @@ describe('runRouteInventory', () => {
 
 describe('check-route-inventory.ts', { timeout: 60_000 }, () => {
   const run = (args: string[]) =>
-    spawnSync('npx', ['tsx', 'scripts/check-route-inventory.ts', ...args], { encoding: 'utf8' });
+    spawnSync(process.execPath, ['--import', 'tsx', 'scripts/check-route-inventory.ts', ...args], {
+      encoding: 'utf8',
+    });
 
   it('prints usage and exits 1 without the spec path', () => {
     const result = run([]);

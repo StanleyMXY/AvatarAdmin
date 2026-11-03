@@ -1,0 +1,4 @@
+# One line ending in the repository and in every checkout: the formatter (biome.json lineEnding)
+# and the tests that read the checked-in files expect LF, and a Windows checkout with
+# core.autocrlf=true would otherwise write CRLF.
+* text=auto eol=lf

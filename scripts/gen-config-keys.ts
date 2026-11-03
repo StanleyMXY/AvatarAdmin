@@ -27,9 +27,9 @@ writeFileSync(
 );
 // The files are committed in the form the formatter writes, so the commit hook accepts them.
 execFileSync(
-  'npx',
+  process.execPath,
   [
-    'biome',
+    'node_modules/@biomejs/biome/bin/biome',
     'format',
     '--write',
     'src/pages/config/configKeys.generated.json',
