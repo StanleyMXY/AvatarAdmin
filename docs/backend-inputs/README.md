@@ -11,5 +11,7 @@
 | `2026-10-29-avatar-backend-d1-admin-frontend-changes.md` | 负责人从后端会话取得（2026-10-31 放入；后端合并提交 89370b6 及之后的 2026-10-30、10-31 追加） | 后端第一批交付给管理端前端的改动清单：22 个改变前端的请求（逐行 a1–a14、b1–b2、c1、d1–d18、e1–e6）、11 个不改变的、预告、未核实项，以及 2026-10-31 追加的 W2a、GROUP A、GROUP B |
 | `2026-11-02-avatar-backend-answers-to-avataradmin-questions.md` | 负责人从后端会话取得（2026-11-02 放入） | 后端对 `docs/contract-requests/for-backend.md` 里 140 条问题的回答：第一节 49 条前端要改，第二、三节向后端提出的改动请求（后端还没改），第四节 17 条没有完全核实 |
 | `2026-11-02-backend-task-java-backend-e07469d1.md` | AvatarApp main 提交 e07469d1 的 `docs/backend-task-java-backend.md` | 新版接口文档。答案文档里的“接口文档第 N 行”指这一份。`docs/shared-snapshots/` 里的旧快照没有更新（只读，由负责人决定），行号对不上时以这一份为准 |
+| `2026-11-03-avatar-backend-admin-change-requests-implemented.md` | 负责人从后端会话取得（2026-11-03 放入） | 后端已实现的管理端改动请求：33 条建议做的全部已在后端实现（对应 28 个请求编号），8 条不做；第二节列会破坏现有前端代码的改动 |
+| `2026-11-03-backend-task-java-backend-updated.md` | 后端更新后的接口文档（负责人取得） | 上一份文件配套的接口文档；措辞以它为准。`docs/shared-snapshots/` 的旧快照不更新（只读） |
 
 **规则：** 这些文件是快照，不在这里改。后端以后若有新的回复，是新的文件；管理端前端有新问题，写新的文件放到 `docs/contract-requests/`，不改这里的任何一份。契约和管理端前端设计的快照在 `docs/shared-snapshots/`，同样只读。
