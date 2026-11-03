@@ -94,9 +94,9 @@ describe('reading a contract by its path', () => {
     expect(old.filter((code) => !codes.includes(code))).toEqual([]);
   });
 
-  it('reads the 29 reason codes of the new version: the 14 of the snapshot, then the 8 and the 7 it adds', () => {
+  it('reads the 35 reason codes of the new version (the updated interface document of 2026-11-03): the 14 of the snapshot, then the 21 it adds', () => {
     const next = reasonCodes(readContract(NEXT_CONTRACT));
-    expect(next).toHaveLength(29);
+    expect(next).toHaveLength(35);
     expect(next.slice(0, 14)).toEqual(reasonCodes(readContract()));
     expect(next.slice(14)).toEqual([
       'RESOURCE_NOT_FOUND',
@@ -107,6 +107,10 @@ describe('reading a contract by its path', () => {
       'SOURCE_EXPIRED',
       'TOO_SLOW',
       'TOO_MANY_EVENTS',
+      'LAST_OTP_CHANNEL',
+      'COUNTRY_LOSES_OTP_CHANNEL',
+      'LAST_OTP_TEMPLATE',
+      'LAST_ENGLISH_FALLBACK_TEMPLATE',
       'REQUIRED',
       'INVALID_TYPE',
       'CONTROL_CHARACTER',
@@ -114,6 +118,8 @@ describe('reading a contract by its path', () => {
       'NOT_FOUND',
       'DISABLED',
       'CURRENCY_MISMATCH',
+      'NEGATIVE',
+      'TOO_MANY_DECIMALS',
     ]);
   });
 });

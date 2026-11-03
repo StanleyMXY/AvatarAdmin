@@ -38,6 +38,12 @@ type SystemStore = {
   nextRoleId: number;
   nextAdminId: number;
   nextAuditId: number;
+  /**
+   * A 409 INVALID_STATE that one request at a time cannot meet: set it and the next write on a super
+   * administrator other than the operator is refused with this `data.reason` (the backend meets them
+   * when two super administrators are changed at the same moment). A test's switch; null is off.
+   */
+  race: 'LAST_SUPER_ADMIN' | 'CONCURRENT_CHANGE' | null;
 };
 
 const SEED_AT = '2026-09-01T08:00:00Z';
@@ -217,6 +223,7 @@ function fresh(): SystemStore {
     nextRoleId: 8,
     nextAdminId: 2001,
     nextAuditId: 6000,
+    race: null,
   };
 }
 
@@ -233,6 +240,7 @@ export function resetSystemStore(): void {
   systemState.nextRoleId = next.nextRoleId;
   systemState.nextAdminId = next.nextAdminId;
   systemState.nextAuditId = next.nextAuditId;
+  systemState.race = next.race;
   // The preset administrators of the sign-in store have the permissions their roles give.
   for (const admin of store.admins.values()) syncPermissions(admin);
 }

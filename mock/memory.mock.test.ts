@@ -167,6 +167,9 @@ describe('embedding models', () => {
     expect(body.code).toBe('MEMORY_MODEL_CONFLICT');
     expect(typeof body.data.detail).toBe('string');
     expect(body.data.detail).toContain('1024');
+    // the dimension the name was registered with, as a whole number
+    expect(Object.keys(body.data).sort()).toEqual(['detail', 'registeredDimensions']);
+    expect(body.data.registeredDimensions).toBe(1024);
     expect(memoryStore.models.get('bge-m3')?.dimensions).toBe(1024);
   });
 

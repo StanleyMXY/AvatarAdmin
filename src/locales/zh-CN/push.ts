@@ -81,6 +81,12 @@ const messages: Record<string, string> = {
   'push.templates.enabledOf': '启用：{reason}，{locale}',
   'push.templates.defaultLanguageRequired':
     '触发原因“{reason}”需要默认语言 {defaultLocale} 的启用模板。先启用默认语言的模板；要停用、删除或改掉它，先停用“{reason}”下其他语言的模板；它是唯一启用的模板时，保持它为 {defaultLocale} 并启用，另建其他语言的新模板。',
+  'push.templates.defaultCase.DEFAULT_MISSING':
+    '触发原因“{reason}”要先有默认语言 {defaultLocale} 的启用模板，其他语言的模板才能启用。先启用“{reason}”的 {defaultLocale} 模板，再启用或新建其他语言的模板。',
+  'push.templates.defaultCase.DEFAULT_REQUIRED_BY_OTHERS':
+    '“{reason}”下其他语言的模板仍在启用，默认语言 {defaultLocale} 的模板不能停用、删除，也不能改成别的语言或别的触发原因。要这样做，先停用“{reason}”下其他语言的模板。',
+  'push.templates.defaultCase.DEFAULT_MOVED_AWAY':
+    '{defaultLocale} 的模板是“{reason}”唯一启用的模板，不能把它改成别的语言。保持它为 {defaultLocale} 并启用，另建其他语言的新模板。',
   'push.templates.exists': '这个触发原因和语言已经有模板了，请改那一条。',
   'push.templates.reason': '触发原因',
   'push.templates.locale': '语言',
@@ -183,14 +189,18 @@ const messages: Record<string, string> = {
   'push.records.filter.reset': '重置',
   'push.records.filter.accountInvalid':
     '账号编号是 36 个字符：数字、a 到 f 的字母和连字符，例如 00000000-0000-4000-8000-000000000011。',
-  'push.records.filter.note': '后端只能按账号和触发原因筛选，不能按日期。',
+  'push.records.filter.note':
+    '可按账号、触发原因和创建日期筛选：日期按 UTC 日，含首尾（“本地日期”列不是筛选条件）。',
+  'push.records.filter.dateRange': '只看创建日期在某个范围内的记录（UTC）',
   'push.records.col.type': '类型',
   'push.records.col.reason': '触发原因',
   'push.records.col.localDate': '本地日期',
-  'push.records.col.createdAt': '创建时间',
+  'push.records.col.createdAt': '创建时间（UTC）',
   'push.records.localDate.tip': '发送时按账号所在时区算的那一天。',
   'push.records.deliveries': '对每个 token 的发送结果',
   'push.records.col.token': 'Token',
+  'push.records.col.platform': '平台',
+  'push.records.col.tokenSuffix': 'Token 末 6 位',
   'push.records.col.result': '结果',
   'push.records.col.sentAt': '发送时间',
   'push.records.noDeliveries': '这次推送没有记录到发送结果。',

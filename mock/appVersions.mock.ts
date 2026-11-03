@@ -26,6 +26,7 @@ import {
 import { guard } from './_core/auth';
 import { channelsState, type MockChannel } from './_core/channelsData';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
+import { currentMeta } from './_core/meta';
 import { paginateQuery } from './_core/paginate';
 import { store } from './_core/store';
 
@@ -36,11 +37,13 @@ const refuse = (details: Detail[]): never => {
 const notFound = (what: string) =>
   new MockHttpError(404, 'RESOURCE_NOT_FOUND', `The ${what} is not there`);
 /**
- * 409 INVALID_STATE. The backend gives it data only when the upload is already used (status
- * CONSUMED); the 409 of a channel that is off and of a version in the wrong state have none
- * (answers 47), so the page cannot tell them apart from the upload by the data.
+ * 409 INVALID_STATE of the version endpoints (contract 24.2 and 24.7): `data.status` is the current
+ * state of the version (DRAFT, ACTIVE, ARCHIVED), or DISABLED when the channel is off; a used upload
+ * is CONSUMED (below).
  */
-const invalidState = (message: string) => new MockHttpError(409, 'INVALID_STATE', message);
+const invalidState = (status: string, message: string) =>
+  new MockHttpError(409, 'INVALID_STATE', message, { status });
+const channelOff = () => invalidState('DISABLED', 'The channel is off');
 const uploadConsumed = () =>
   new MockHttpError(409, 'INVALID_STATE', 'Upload is already used', { status: 'CONSUMED' });
 
@@ -89,6 +92,25 @@ function assertFree(upload: MockApkUpload, holder: MockVersion | null): void {
   if (upload.used && holder?.apkUploadId !== upload.id) throw uploadConsumed();
 }
 
+/**
+ * The package name a Google Play link is checked against: the backend's environment value, which
+ * `GET /meta` gives as googlePlayPackageName, not the package registered on the channel.
+ */
+function googlePlayPackage(): string | undefined {
+  const name = currentMeta().googlePlayPackageName;
+  return typeof name === 'string' && name !== '' ? name : undefined;
+}
+
+/** The reason code (contract 1.7 and 24.2) of a store link the page's own check refuses. */
+function storeUrlReason(reasonKey: string): string {
+  const own = /^reason\.([A-Z_]+)$/.exec(reasonKey);
+  if (own) return own[1];
+  if (/Host$/.test(reasonKey)) return 'INVALID_HOST';
+  if (/port$/.test(reasonKey)) return 'INVALID_PORT';
+  if (/Path$/.test(reasonKey)) return 'INVALID_PATH';
+  return 'OUT_OF_RANGE';
+}
+
 type Checked = {
   versionName: string;
   versionCode: number;
@@ -119,10 +141,9 @@ function checkNumber(channel: MockChannel, code: number, own: MockVersion | null
   if (own !== null && own.versionCode === code) return;
   const highest = highestOtherCode(others, null);
   if (!checkVersionCode(code, highest).ok) {
-    throw new MockHttpError(
-      400,
-      'INVALID_REQUEST',
+    throw invalidRequest(
       `versionCode must be higher than ${highest}, the highest version number of the other versions of the channel`,
+      [{ ref: 'versionCode', reason: 'OUT_OF_RANGE' }],
     );
   }
 }
@@ -139,8 +160,12 @@ function check(channel: MockChannel, body: Record<string, unknown>): Checked {
   }
   const details: Detail[] = [];
   const versionName = typeof body.versionName === 'string' ? trimSpec(body.versionName) : '';
-  if (!checkVersionName(versionName).ok)
-    details.push({ ref: 'versionName', reason: 'INVALID_PATTERN' });
+  if (!checkVersionName(versionName).ok) {
+    details.push({
+      ref: 'versionName',
+      reason: versionName === '' ? 'EMPTY_NOT_ALLOWED' : 'INVALID_FORMAT',
+    });
+  }
   if (!checkVersionCode(body.versionCode, null).ok) {
     details.push({ ref: 'versionCode', reason: 'OUT_OF_RANGE' });
   }
@@ -150,46 +175,39 @@ function check(channel: MockChannel, body: Record<string, unknown>): Checked {
   }
   const raw = body.changelog;
   const isNotes = typeof raw === 'object' && raw !== null && !Array.isArray(raw);
-  if (isNotes) {
+  if (!isNotes && raw !== undefined && raw !== null) {
+    details.push({ ref: 'changelog', reason: 'INVALID_FORMAT' });
+  } else if (isNotes) {
     const entries = Object.entries(raw as Record<string, unknown>);
-    // a language key that is not of the form is named; the other faults have a message only
-    for (const [tag] of entries) {
-      if (!NOTE_KEY.test(tag) || tag.length > NOTE_KEY_MAX) {
-        details.push({ ref: `changelog.${tag}`, reason: 'INVALID_LANGUAGE_TAG' });
-      }
-    }
-    if (entries.length > NOTE_LANGUAGES_MAX) {
-      throw new MockHttpError(400, 'INVALID_REQUEST', 'changelog has more than 30 languages');
-    }
+    // every fault of the notes names `changelog.<language key>` (a fault of the whole map, `changelog`)
     for (const [tag, text] of entries) {
-      if (typeof text !== 'string' || trimSpec(text) === '') {
-        throw new MockHttpError(
-          400,
-          'INVALID_REQUEST',
-          `changelog.${tag} must be a non-empty text`,
-        );
-      }
-      if (countCodePoints(trimSpec(text)) > NOTE_MAX) {
-        throw new MockHttpError(
-          400,
-          'INVALID_REQUEST',
-          `changelog.${tag} is longer than ${NOTE_MAX} characters`,
-        );
+      const ref = `changelog.${tag}`;
+      if (!NOTE_KEY.test(tag) || tag.length > NOTE_KEY_MAX) {
+        details.push({ ref, reason: 'INVALID_LANGUAGE_TAG' });
+      } else if (typeof text !== 'string') {
+        details.push({ ref, reason: 'INVALID_FORMAT' });
+      } else if (trimSpec(text) === '') {
+        details.push({ ref, reason: 'EMPTY_NOT_ALLOWED' });
+      } else if (countCodePoints(trimSpec(text)) > NOTE_MAX) {
+        details.push({ ref, reason: 'OUT_OF_RANGE' });
       }
     }
+    if (entries.length > NOTE_LANGUAGES_MAX)
+      details.push({ ref: 'changelog', reason: 'OUT_OF_RANGE' });
   }
   const texts = isNotes ? cleanChangelog(raw as Record<string, string>) : {};
-  if (typeof texts.en !== 'string') details.push({ ref: 'changelog', reason: 'EMPTY_NOT_ALLOWED' });
+  if (typeof texts.en !== 'string' && !details.some((d) => d.ref.startsWith('changelog'))) {
+    details.push({ ref: 'changelog', reason: 'EMPTY_NOT_ALLOWED' });
+  }
 
   const storeUrl = typeof body.storeUrl === 'string' ? trimSpec(body.storeUrl) : '';
   const apkUploadId = typeof body.apkUploadId === 'string' ? body.apkUploadId : '';
   if (channel.distribution === 'STORE') {
-    if (
-      storeUrl === '' ||
-      !validateStoreUrl(channel.platform, storeUrl, channel.packageName ?? undefined).ok
-    ) {
-      details.push({ ref: 'storeUrl', reason: 'INVALID_PATTERN' });
-    }
+    const link =
+      storeUrl === '' ? null : validateStoreUrl(channel.platform, storeUrl, googlePlayPackage());
+    if (storeUrl === '') details.push({ ref: 'storeUrl', reason: 'EMPTY_NOT_ALLOWED' });
+    else if (link && !link.ok)
+      details.push({ ref: 'storeUrl', reason: storeUrlReason(link.reasonKey) });
     if (apkUploadId !== '') details.push({ ref: 'apkUploadId', reason: 'OUT_OF_RANGE' });
   } else {
     if (storeUrl !== '') details.push({ ref: 'storeUrl', reason: 'OUT_OF_RANGE' });
@@ -266,7 +284,7 @@ export default {
     const upload = fields.apkUploadId === null ? null : uploadFor(fields.apkUploadId);
     // answers 47: the numbers, then whether the channel is on, then whether the upload is free
     checkNumber(target, fields.versionCode, null);
-    if (!target.enabled) throw invalidState('The channel is off');
+    if (!target.enabled) throw channelOff();
     if (upload) assertFree(upload, null);
     const now = new Date().toISOString();
     const version: MockVersion = {
@@ -299,7 +317,8 @@ export default {
 
   'PUT /api/admin/app-versions/:id': guard('APPVERSION:MANAGE', (req) => {
     const version = versionOf(req.params.id);
-    if (version.status !== 'DRAFT') throw invalidState('Only a draft can be edited');
+    if (version.status !== 'DRAFT')
+      throw invalidState(version.status, 'Only a draft can be edited');
     const body = bodyOf(req);
     if ('channelCode' in body && body.channelCode !== version.channelCode) {
       refuse([{ ref: 'channelCode', reason: 'OUT_OF_RANGE' }]);
@@ -335,12 +354,13 @@ export default {
     const now = new Date().toISOString();
     if (body.status === 'ARCHIVED') {
       if (version.status !== 'ACTIVE')
-        throw invalidState('Only the active version can be taken down');
+        throw invalidState(version.status, 'Only the active version can be taken down');
       version.status = 'ARCHIVED';
       version.updatedAt = now;
       return ok(view(version));
     }
-    if (version.status !== 'DRAFT') throw invalidState('Only a draft can be activated');
+    if (version.status !== 'DRAFT')
+      throw invalidState(version.status, 'Only a draft can be activated');
     // answers 47: the state, the store confirmation, the number, and last whether the channel is on
     if (channel.distribution === 'STORE' && body.confirmStoreLive !== true) {
       refuse([{ ref: 'confirmStoreLive', reason: 'EMPTY_NOT_ALLOWED' }]);
@@ -350,13 +370,20 @@ export default {
       versionsOf(version.channelCode).filter((v) => v.id !== version.id),
     );
     if (!checkVersionCode(version.versionCode, live).ok) {
+      throw invalidRequest(
+        `versionCode must be higher than ${live}, the highest version number of the versions of the channel that have been active`,
+        [{ ref: 'versionCode', reason: 'OUT_OF_RANGE' }],
+      );
+    }
+    if (!channel.enabled) throw channelOff();
+    // The checks of the stored APK of a DIRECT channel (missing, size, SHA-256) answer a message only.
+    if (channel.distribution === 'DIRECT' && appVersionsState.storedFileFault) {
       throw new MockHttpError(
         400,
         'INVALID_REQUEST',
-        `versionCode must be higher than ${live}, the highest version number of the versions of the channel that have been active`,
+        'The stored APK file does not match its record',
       );
     }
-    if (!channel.enabled) throw invalidState('The channel is off');
     const active = activeIn(version.channelCode);
     if (active) {
       active.status = 'ARCHIVED';
@@ -371,7 +398,8 @@ export default {
 
   'DELETE /api/admin/app-versions/:id': guard('APPVERSION:MANAGE', (req) => {
     const version = versionOf(req.params.id);
-    if (version.status !== 'DRAFT') throw invalidState('Only a draft can be deleted');
+    if (version.status !== 'DRAFT')
+      throw invalidState(version.status, 'Only a draft can be deleted');
     // the file of a draft goes with it
     if (version.apkUploadId) appVersionsState.uploads.delete(version.apkUploadId);
     appVersionsState.versions.delete(version.id);

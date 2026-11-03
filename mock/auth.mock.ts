@@ -13,6 +13,7 @@ import {
   TOTP_LOCKOUT_MINUTES,
   TOTP_MAX_FAILURES,
 } from './_core/store';
+import { extraOf } from './_core/systemData';
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '');
 
@@ -70,6 +71,8 @@ const meOf = (admin: MockAdmin) => ({
   mustChangePassword: admin.mustChangePassword,
   permissions: admin.superAdmin ? [...ALL_CODES] : [...admin.permissions],
   passwordMinLength: PASSWORD_MIN_LENGTH,
+  // The ids of the roles the administrator is given, as text in ascending text order (backend answer 19).
+  roleIds: [...extraOf(admin).roleIds].sort(),
 });
 
 export default {

@@ -192,6 +192,8 @@ const messages: Record<string, string> = {
     '生效日期在将来：在那之前不会按这个价格计费，未关闭的“模型没有价格”告警也不会关闭。',
   'cost.manual.saved': '价格已保存。',
 
+  'cost.refused.field': '{field}：{reason}',
+  'cost.refused.generic': '后端没有接受这个值。',
   'cost.bands.empty': '至少加一档。',
   'cost.bands.minMissing': '每一档都要填下限。',
   'cost.bands.notInteger': '边界是不小于 0 的整数。',

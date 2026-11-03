@@ -5,6 +5,7 @@ import { resetStore } from '../../../mock/_core/store';
 import { resetSubscriptionsStore, subscriptionsState } from '../../../mock/_core/subscriptionsData';
 import { adminOf } from '../../../mock/_core/testing';
 import * as subscriptionsMock from '../../../mock/subscriptions.mock';
+import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { signInAs, useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { resetUmiStub, setTestAccess } from '../../../tests/stubs/umi-max';
@@ -117,6 +118,44 @@ describe('the subscription list', { timeout: 30000 }, () => {
   });
 });
 
+/** Collects the text of every answer the fake backend gives, to see what the page was handed. */
+function recordAnswers(): string[] {
+  const texts: string[] = [];
+  const mocked = globalThis.fetch;
+  vi.stubGlobal('fetch', async (...args: Parameters<typeof fetch>) => {
+    const response = await mocked(...args);
+    texts.push(await response.clone().text());
+    return response;
+  });
+  return texts;
+}
+
+const googleRow = {
+  id: '500',
+  accountId: '10000000001',
+  store: 'GOOGLE',
+  // a backend that is not yet changed would still give this; the page must not show it
+  storeRef: 'gp-token-SECRETVALUE-abc123',
+  storeRefSuffix: 'zz9876',
+  linkedPurchaseTokenSuffix: null,
+  productId: 'avatar_premium_monthly',
+  state: 'ACTIVE',
+  currentPeriodStart: '2026-10-01T00:00:00Z',
+  currentPeriodEnd: '2026-11-01T00:00:00Z',
+  gracePeriodEndsAt: null,
+  autoRenew: true,
+  environment: 'PRODUCTION',
+  acknowledgementState: 'ACKNOWLEDGED',
+  purchasedAt: '2026-09-01T00:00:00Z',
+  firstActiveAt: '2026-09-01T00:00:00Z',
+  voidedAt: null,
+  lastEventSignedAt: null,
+  periodOrderId: null,
+  lastSyncedAt: '2026-10-02T00:00:00Z',
+  createdAt: '2026-09-01T00:00:00Z',
+  updatedAt: '2026-10-02T00:00:00Z',
+};
+
 describe('the subscription detail drawer', { timeout: 30000 }, () => {
   const openFirst = async () => {
     const user = userEvent.setup();
@@ -126,18 +165,65 @@ describe('the subscription detail drawer', { timeout: 30000 }, () => {
     return await screen.findByRole('dialog');
   };
 
-  it('does not show a Google purchase token: it can claim the subscription, so only its last six characters appear, with nothing to copy', async () => {
+  it('does not show a Google purchase token: the answer has only its last six characters (storeRefSuffix), and the page shows those with nothing to copy', async () => {
     for (const s of subscriptionsState().subscriptions) {
       s.store = 'GOOGLE';
       s.storeRef = 'gp-token-SECRETVALUE-abc123';
     }
-    useMockBackend(subscriptionsMock);
+    const calls = useMockBackend(subscriptionsMock);
+    const bodies = recordAnswers();
     const dialog = await openFirst();
     await within(dialog).findAllByTestId('timeline-event');
+    expect(calls.length).toBeGreaterThan(0);
+    // the page never got the whole token, and it shows the suffix the backend gave
+    expect(bodies.join('')).not.toContain('SECRETVALUE');
+    expect(bodies.join('')).toContain('"storeRefSuffix":"abc123"');
     expect(dialog.textContent).not.toContain('SECRETVALUE');
-    expect(dialog.textContent).toContain('abc123');
+    expect(dialog.textContent).toContain('…abc123');
+    expect(document.body.textContent).not.toContain('SECRETVALUE');
     expect(within(dialog).queryByRole('button', { name: /copy/i })).toBeNull();
     expect(dialog.querySelector('.anticon-copy')).toBeNull();
+  });
+
+  it('shows the suffix and not a whole token even if an answer still carries one for a Google row', async () => {
+    const calls = stubFetch(async ({ url }) =>
+      jsonResponse(
+        200,
+        envelope(
+          '200',
+          url.includes('/subscriptions/')
+            ? { ...googleRow, events: [] }
+            : { items: [googleRow], total: 1 },
+        ),
+      ),
+    );
+    renderPage(<SubscriptionListPage />);
+    const user = userEvent.setup();
+    await user.click((await screen.findAllByRole('button', { name: 'Details' }))[0]);
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('…zz9876');
+    expect(calls.length).toBeGreaterThan(0);
+    expect(dialog.textContent).not.toContain('SECRETVALUE');
+  });
+
+  it('shows a dash for a Google row that has no suffix, never the word null', async () => {
+    stubFetch(async ({ url }) =>
+      jsonResponse(
+        200,
+        envelope(
+          '200',
+          url.includes('/subscriptions/')
+            ? { ...googleRow, storeRef: null, storeRefSuffix: null, events: [] }
+            : { items: [{ ...googleRow, storeRef: null, storeRefSuffix: null }], total: 1 },
+        ),
+      ),
+    );
+    renderPage(<SubscriptionListPage />);
+    const user = userEvent.setup();
+    await user.click((await screen.findAllByRole('button', { name: 'Details' }))[0]);
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('Store reference');
+    expect(dialog.textContent).not.toMatch(/null|undefined/);
   });
 
   it('shows the whole Apple original transaction ID, which cannot claim a subscription by itself', async () => {
@@ -246,6 +332,32 @@ describe('the subscription detail drawer', { timeout: 30000 }, () => {
       .getAllByTestId('timeline-event')
       .filter((e) => !e.querySelector('[data-testid="event-error"]'));
     expect(clean.length).toBeGreaterThan(0);
+  });
+
+  it('hides the middle of a purchase token in the error of a timeline event, also in the whole text and in the copy', async () => {
+    const token = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP.AO-J1Oxyz123';
+    useMockBackend(subscriptionsMock);
+    const state = subscriptionsState();
+    const target = state.subscriptions.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+    const own = state.events.filter((e) => e.subscriptionId === target.id);
+    own[0].error = `Verifikasi gagal untuk ${token}: token tidak valid`;
+    const writeText = vi.fn(async () => {});
+    const dialog = await openFirst();
+    // (the helper starts a user-event session, which puts its own clipboard in place)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const errors = await within(dialog).findAllByTestId('event-error');
+    const error = errors.find((e) => e.textContent?.includes('Verifikasi gagal')) as HTMLElement;
+    expect(error.textContent).toContain('Verifikasi gagal untuk abcd…xyz123: token tidak valid');
+    expect(document.body.textContent).not.toContain('efghijklmnop');
+    fireEvent.click(error.querySelector('button') as HTMLElement);
+    const fullNode = await screen.findByTestId('full-text');
+    const full = fullNode.textContent ?? '';
+    expect(full).toBe('Verifikasi gagal untuk abcd…xyz123: token tidak valid');
+    fireEvent.click(
+      within(fullNode.closest('.ant-popover') as HTMLElement).getByRole('button', { name: 'Copy' }),
+    );
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(full));
+    expect(document.body.textContent).not.toContain('efghijklmnop');
   });
 
   it('keeps a 5000 character error without spaces inside the drawer (clamped, whole text on demand)', async () => {

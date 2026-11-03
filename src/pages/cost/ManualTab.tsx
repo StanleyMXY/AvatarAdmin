@@ -1,8 +1,9 @@
 import { useIntl } from '@umijs/max';
 import { Alert, App, Button, DatePicker, Flex, Input, Select, Typography } from 'antd';
 import dayjs from 'dayjs';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useId, useMemo, useState } from 'react';
 import { type Kept, useKeptState } from '../../hooks/useKeptState';
+import { ApiError } from '../../request/errors';
 import { listConfig } from '../../services/config';
 import {
   createPrice,
@@ -13,10 +14,12 @@ import {
   UNIT_OF,
   validateBands,
 } from '../../services/cost';
+import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
 import { trimSpec } from '../../utils/trimSpec';
 import { pickedDay, todayUtc } from '../../utils/utcDay';
 import { ActionModal } from './ActionModal';
+import { type BandField, bandPlace, reasonWords, refusalLine } from './failure';
 import { labelOf } from './labels';
 
 type BandDraft = { min: string; max: string; input: string; cached: string; output: string };
@@ -28,6 +31,27 @@ const parseBound = (text: string): number | null => {
   if (t === '') return null;
   return /^\d+$/.test(t) ? Number(t) : Number.NaN;
 };
+
+/** The field of a band draft, by the name the backend gives the field in `data.details`. */
+const BAND_REF: Record<keyof BandDraft, BandField> = {
+  min: 'inputMinTokens',
+  max: 'inputMaxTokens',
+  input: 'inputPrice',
+  cached: 'cachedInputPrice',
+  output: 'outputPrice',
+};
+
+/** The refs of `data.details` that have a place in this form: its own fields and the fields of its bands. */
+const FORM_REFS = new Set([
+  'resourceType',
+  'unit',
+  'provider',
+  'model',
+  'currency',
+  'effectiveFrom',
+  'unitPrice',
+  'bands',
+]);
 
 const validName = (text: string) => {
   const n = countCodePoints(trimSpec(text));
@@ -67,6 +91,11 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
   const [attempted, setAttempted] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [maxBands, setMaxBands] = useState<number | null>(null);
+  // The backend refused the price field by field: the failure itself (its words are made when the form
+  // is drawn, so they follow the language), and the refs whose field was edited since (their hint is gone).
+  const [refused, setRefused] = useState<{ error: ApiError } | null>(null);
+  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
+  const hintId = useId();
 
   // The limit on the number of bands is a parameter of this page (`usage_price.max_bands`); without it nothing is limited here.
   useEffect(() => {
@@ -117,14 +146,66 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
     bandsProblem !== null ||
     currency === undefined;
 
-  const setBand = (index: number, patch: Partial<BandDraft>) =>
+  // The hints that are up now: the first reason of each ref the backend named whose field was not edited since.
+  const refusals = useMemo(() => {
+    const byRef = new Map<string, string>();
+    for (const detail of refused?.error.details ?? []) {
+      if (!edited.has(detail.ref) && !byRef.has(detail.ref)) byRef.set(detail.ref, detail.reason);
+    }
+    return byRef;
+  }, [refused, edited]);
+  const hasPlace = (ref: string) => {
+    const band = bandPlace(ref);
+    return band !== null ? band.index < bands.length : FORM_REFS.has(ref);
+  };
+  /** The fields that were edited: their hints go (the hints of the other fields stay). */
+  const forget = (...refs: string[]) => {
+    if (refused === null) return;
+    setEdited((before) =>
+      refs.every((r) => before.has(r)) ? before : new Set([...before, ...refs]),
+    );
+  };
+  const forgetBands = () =>
+    forget(
+      ...(refused?.error.details ?? [])
+        .map((d) => d.ref)
+        .filter((r) => r === 'bands' || bandPlace(r)),
+    );
+  const forgetAll = () => forget(...(refused?.error.details ?? []).map((d) => d.ref));
+  const hint = (ref: string): ReactNode => {
+    const reason = refusals.get(ref);
+    if (reason === undefined) return null;
+    return (
+      <Typography.Text
+        type="danger"
+        id={`${hintId}${ref}`}
+        data-testid={`refusal-${ref}`}
+        style={{ fontSize: 12, overflowWrap: 'anywhere' }}
+      >
+        {reasonWords(intl, reason) ?? t('cost.refused.generic')}
+      </Typography.Text>
+    );
+  };
+  /** Marks an input as refused and ties its hint to it. */
+  const refusedProps = (ref: string) =>
+    refusals.has(ref)
+      ? ({ status: 'error', 'aria-invalid': true, 'aria-describedby': `${hintId}${ref}` } as const)
+      : ({} as const);
+  const setBand = (index: number, patch: Partial<BandDraft>) => {
     setBands((list) => list.map((b, i) => (i === index ? { ...b, ...patch } : b)));
-  const addBand = () =>
+    forget(
+      ...(Object.keys(patch) as (keyof BandDraft)[]).map((k) => `bands[${index}].${BAND_REF[k]}`),
+      'bands',
+    );
+  };
+  const addBand = () => {
+    forgetBands();
     setBands((list) => {
       const before = parseBound(list[list.length - 1].max);
       const min = before !== null && Number.isSafeInteger(before) ? String(before + 1) : '';
       return [...list, { min, max: '', input: '', cached: '', output: '' }];
     });
+  };
 
   const body = (): NewPrice => {
     const common = {
@@ -152,8 +233,19 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
     setUnitPrice('');
     setBands([FIRST_BAND]);
     setAttempted(false);
+    setRefused(null);
+    setEdited(new Set());
   };
 
+  // What the backend said about a field this form has no place for, as lines above the form.
+  const refusalLines = [
+    ...new Set(
+      (refused?.error.details ?? [])
+        .filter((d) => !edited.has(d.ref) && !hasPlace(d.ref))
+        .map((d) => refusalLine(intl, d))
+        .filter((line): line is string => line !== null),
+    ),
+  ];
   const canAdd = maxBands === null || bands.length < maxBands;
   const today = todayUtc();
 
@@ -165,23 +257,34 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
           <Typography.Text>{t('cost.manual.resourceType')}</Typography.Text>
           <Select
             aria-label={t('cost.manual.resourceType')}
+            status={refusals.has('resourceType') ? 'error' : undefined}
             style={{ minWidth: 220 }}
             value={resourceType}
-            onChange={setResourceType}
+            onChange={(next) => {
+              setResourceType(next);
+              forgetAll();
+            }}
             options={RESOURCE_TYPES.map((r) => ({
               value: r,
               label: labelOf(intl, 'cost.resourceType', r),
             }))}
           />
+          {hint('resourceType')}
+          {hint('unit')}
         </Flex>
         <Flex vertical gap={4}>
           <Typography.Text>{t('cost.manual.provider')}</Typography.Text>
           <Input
             aria-label={t('cost.manual.provider')}
             value={provider}
-            onChange={(e) => setProvider(e.target.value)}
+            onChange={(e) => {
+              setProvider(e.target.value);
+              forget('provider');
+            }}
             style={{ width: 240 }}
+            {...refusedProps('provider')}
           />
+          {hint('provider')}
           {attempted && providerProblem ? (
             <Typography.Text type="danger">{t('cost.manual.invalid.provider')}</Typography.Text>
           ) : null}
@@ -191,9 +294,14 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
           <Input
             aria-label={t('cost.manual.model')}
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) => {
+              setModel(e.target.value);
+              forget('model');
+            }}
             style={{ width: 240 }}
+            {...refusedProps('model')}
           />
+          {hint('model')}
           {attempted && modelProblem ? (
             <Typography.Text type="danger">{t('cost.manual.invalid.model')}</Typography.Text>
           ) : null}
@@ -206,9 +314,14 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
             <DatePicker
               allowClear={false}
               value={dayjs(`${date}T00:00:00`)}
-              onChange={(picked) => picked && setDate(pickedDay(picked))}
+              status={refusals.has('effectiveFrom') ? 'error' : undefined}
+              onChange={(picked) => {
+                if (picked) setDate(pickedDay(picked));
+                forget('effectiveFrom');
+              }}
             />
           </div>
+          {hint('effectiveFrom')}
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {t('cost.manual.effectiveFromHint')}
           </Typography.Text>
@@ -219,10 +332,15 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
             aria-label={t('cost.manual.currency')}
             style={{ minWidth: 140 }}
             disabled={!listKnown}
+            status={refusals.has('currency') ? 'error' : undefined}
             value={currency}
-            onChange={setCurrency}
+            onChange={(next) => {
+              setCurrency(next);
+              forget('currency');
+            }}
             options={(listKnown ? allowedCurrencies : []).map((c) => ({ value: c, label: c }))}
           />
+          {hint('currency')}
           {!listKnown ? (
             <Typography.Text type="warning" style={{ fontSize: 12 }}>
               {t('cost.manual.currencyMissing')}
@@ -247,53 +365,57 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
           {bands.map((band, index) => {
             const n = index + 1;
             const last = index === bands.length - 1;
+            const cell = (key: keyof BandDraft, props: React.ComponentProps<typeof Input>) => {
+              const ref = `bands[${index}].${BAND_REF[key]}`;
+              return (
+                // A plain box: twenty bands of five boxes are drawn again at every keystroke.
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: 130 }}>
+                  <Input
+                    value={band[key]}
+                    onChange={(e) => setBand(index, { [key]: e.target.value })}
+                    style={{ width: 130 }}
+                    {...props}
+                    {...refusedProps(ref)}
+                  />
+                  {hint(ref)}
+                </div>
+              );
+            };
             return (
               // biome-ignore lint/suspicious/noArrayIndexKey: bands have no identity but their position
-              <Flex key={index} gap={8} wrap align="flex-end">
-                <Input
-                  aria-label={t('cost.manual.band.min', { n })}
-                  placeholder={t('cost.manual.band.col.min')}
-                  value={band.min}
-                  onChange={(e) => setBand(index, { min: e.target.value })}
-                  style={{ width: 130 }}
-                  inputMode="numeric"
-                />
-                <Input
-                  aria-label={t('cost.manual.band.max', { n })}
-                  placeholder={last ? t('cost.manual.band.maxHint') : t('cost.manual.band.col.max')}
-                  value={band.max}
-                  onChange={(e) => setBand(index, { max: e.target.value })}
-                  style={{ width: 130 }}
-                  inputMode="numeric"
-                />
-                <Input
-                  aria-label={t('cost.manual.band.input', { n })}
-                  placeholder={t('cost.manual.band.col.input')}
-                  value={band.input}
-                  onChange={(e) => setBand(index, { input: e.target.value })}
-                  style={{ width: 130 }}
-                  inputMode="decimal"
-                />
-                <Input
-                  aria-label={t('cost.manual.band.cached', { n })}
-                  placeholder={t('cost.manual.band.cachedHint')}
-                  value={band.cached}
-                  onChange={(e) => setBand(index, { cached: e.target.value })}
-                  style={{ width: 130 }}
-                  inputMode="decimal"
-                />
-                <Input
-                  aria-label={t('cost.manual.band.output', { n })}
-                  placeholder={t('cost.manual.band.col.output')}
-                  value={band.output}
-                  onChange={(e) => setBand(index, { output: e.target.value })}
-                  style={{ width: 130 }}
-                  inputMode="decimal"
-                />
+              <Flex key={index} gap={8} wrap align="flex-start">
+                {cell('min', {
+                  'aria-label': t('cost.manual.band.min', { n }),
+                  placeholder: t('cost.manual.band.col.min'),
+                  inputMode: 'numeric',
+                })}
+                {cell('max', {
+                  'aria-label': t('cost.manual.band.max', { n }),
+                  placeholder: last ? t('cost.manual.band.maxHint') : t('cost.manual.band.col.max'),
+                  inputMode: 'numeric',
+                })}
+                {cell('input', {
+                  'aria-label': t('cost.manual.band.input', { n }),
+                  placeholder: t('cost.manual.band.col.input'),
+                  inputMode: 'decimal',
+                })}
+                {cell('cached', {
+                  'aria-label': t('cost.manual.band.cached', { n }),
+                  placeholder: t('cost.manual.band.cachedHint'),
+                  inputMode: 'decimal',
+                })}
+                {cell('output', {
+                  'aria-label': t('cost.manual.band.output', { n }),
+                  placeholder: t('cost.manual.band.col.output'),
+                  inputMode: 'decimal',
+                })}
                 <Button
                   aria-label={t('cost.manual.band.remove', { n })}
                   disabled={bands.length === 1}
-                  onClick={() => setBands((list) => list.filter((_, i) => i !== index))}
+                  onClick={() => {
+                    forgetBands();
+                    setBands((list) => list.filter((_, i) => i !== index));
+                  }}
                 >
                   −
                 </Button>
@@ -310,6 +432,7 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
               {t(bandsProblem)}
             </Typography.Text>
           ) : null}
+          {hint('bands')}
         </Flex>
       ) : (
         <Flex vertical gap={4}>
@@ -317,10 +440,15 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
           <Input
             aria-label={t('cost.manual.unitPrice')}
             value={unitPrice}
-            onChange={(e) => setUnitPrice(e.target.value)}
+            onChange={(e) => {
+              setUnitPrice(e.target.value);
+              forget('unitPrice');
+            }}
             style={{ width: 240 }}
             inputMode="decimal"
+            {...refusedProps('unitPrice')}
           />
+          {hint('unitPrice')}
         </Flex>
       )}
       {attempted && priceProblem ? (
@@ -328,6 +456,16 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
       ) : null}
       {attempted && currency === undefined ? (
         <Typography.Text type="danger">{t('cost.manual.invalid.currency')}</Typography.Text>
+      ) : null}
+
+      {refused && refusals.size > 0 ? (
+        <Alert
+          type="error"
+          showIcon
+          data-testid="manual-refused"
+          title={describeFailure(intl, refused.error).text}
+          description={refusalLines.map((line) => <div key={line}>{line}</div>)}
+        />
       ) : null}
 
       <div>
@@ -349,7 +487,22 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
         okText={t('cost.manual.save')}
         onClose={() => setConfirming(false)}
         onSubmit={async () => {
-          await createPrice(body());
+          try {
+            await createPrice(body());
+          } catch (error) {
+            // A refusal that names fields goes under the fields, in the form; anything else stays in the dialog.
+            if (
+              error instanceof ApiError &&
+              error.code === 'INVALID_REQUEST' &&
+              error.details.length > 0
+            ) {
+              setRefused({ error });
+              setEdited(new Set());
+              setConfirming(false);
+              return;
+            }
+            throw error;
+          }
           message.success(t('cost.manual.saved'));
           setConfirming(false);
           reset();

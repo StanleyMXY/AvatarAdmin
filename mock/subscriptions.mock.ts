@@ -4,6 +4,7 @@
 import { guard } from './_core/auth';
 import { daysAgoIso } from './_core/fixtures';
 import { bodyOf, invalidRequest, MockHttpError, type MockReq, ok } from './_core/http';
+import { currentMeta } from './_core/meta';
 import { paginateQuery } from './_core/paginate';
 import { rangeOf, text } from './_core/statRange';
 import {
@@ -16,6 +17,8 @@ import {
   MODEL_TIERS,
   type Mode,
   type Product,
+  publicEvent,
+  publicSubscription,
   QUOTA_KEYS,
   SUBSCRIPTION_STATES,
   subscriptionsState,
@@ -51,6 +54,12 @@ function defProblems(body: Record<string, unknown>): { ref: string; reason: stri
 
 type FeatureInput = { mode: Mode; value: unknown };
 
+/** The largest value of a LIMIT feature: `entitlement.limit_max`, the same value `GET /meta` gives as entitlementLimitMax. */
+function limitMax(): number {
+  const max = currentMeta().entitlementLimitMax;
+  return typeof max === 'number' ? max : 1_000_000;
+}
+
 /** What the server would refuse about one feature value, as a reason code, or null. */
 function valueProblem(gate: Gate, input: FeatureInput, forEntitlement: boolean): string | null {
   if (input.mode === 'UNSET') {
@@ -68,7 +77,7 @@ function valueProblem(gate: Gate, input: FeatureInput, forEntitlement: boolean):
       return typeof value === 'boolean' ? null : 'NOT_BOOLEAN';
     case 'LIMIT':
       if (typeof value !== 'number' || !Number.isInteger(value)) return 'NOT_AN_INTEGER';
-      return value < 0 || value > 1_000_000 ? 'OUT_OF_RANGE' : null;
+      return value < 0 || value > limitMax() ? 'OUT_OF_RANGE' : null;
     case 'STRING': {
       if (typeof value !== 'string' || value.trim() === '') return 'EMPTY_NOT_ALLOWED';
       if (gate.key === 'memory.tier') return MEMORY_TIERS.includes(value) ? null : 'OUT_OF_RANGE';
@@ -250,7 +259,7 @@ export default {
             ? 1
             : -1,
       );
-    return ok(paginateQuery(rows, req));
+    return ok(paginateQuery(rows.map(publicSubscription), req));
   }),
 
   'GET /api/admin/subscriptions/:id': guard('SUBSCRIPTION:VIEW', (req) => {
@@ -273,7 +282,7 @@ export default {
         error: e.error,
         needsAttention: e.needsAttention,
       }));
-    return ok({ ...row, events });
+    return ok({ ...publicSubscription(row), events });
   }),
 
   'GET /api/admin/accounts/:id/entitlements': guard('SUBSCRIPTION:VIEW', (req) => {
@@ -575,7 +584,7 @@ export default {
       .sort(
         (a, b) => b.eventSignedAt.localeCompare(a.eventSignedAt) || Number(b.id) - Number(a.id),
       );
-    return ok(paginateQuery(rows, req));
+    return ok(paginateQuery(rows.map(publicEvent), req));
   }),
 
   'POST /api/admin/subscription-events/:id/reprocess': guard('SUBSCRIPTION:GRANT', (req) => {
@@ -587,7 +596,7 @@ export default {
       });
     event.error = null;
     event.processedAt = daysAgoIso(0);
-    return ok(event);
+    return ok(publicEvent(event));
   }),
 
   'POST /api/admin/subscription-events/:id/ack': guard('SUBSCRIPTION:GRANT', (req) => {
@@ -598,6 +607,6 @@ export default {
         status: 'HANDLED',
       });
     event.needsAttention = false;
-    return ok(event);
+    return ok(publicEvent(event));
   }),
 };

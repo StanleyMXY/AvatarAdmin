@@ -654,7 +654,7 @@ describe('the batch of costs', () => {
       d.index === undefined ? `${d.ref}:${d.reason}` : `${d.index}:${d.ref}:${d.reason}`,
     );
 
-  it('makes new rows and overwrites the rows of a campaign and day that have one, and answers only { count } (the rows written, added and overwritten together)', async () => {
+  it('makes new rows and overwrites the rows of a campaign and day that have one, and answers { count, overwritten }: count is the rows written (the overwritten ones included), overwritten how many of them replaced a cost', async () => {
     const existing = campaignState.costs[0];
     const code = campaignState.campaigns.find((c) => c.id === existing.campaignId)?.code as string;
     const count = campaignState.costs.length;
@@ -664,10 +664,22 @@ describe('the batch of costs', () => {
     ]);
     expect(result.status).toBe(200);
     expect(campaignState.costs).toHaveLength(count + 1);
-    // no split of added and overwritten: the backend has none yet (a request to it)
-    expect(result.body.data).toEqual({ count: 2 });
+    expect(result.body.data).toEqual({ count: 2, overwritten: 1 });
     const overwritten = campaignState.costs.find((c) => c.id === existing.id);
     expect(overwritten).toMatchObject({ amount: 777.77, remark: 'over' });
+  });
+
+  it('counts no overwritten row for a batch of days that have no cost yet, and every row for a batch that replaces them all', async () => {
+    const fresh = await send(BATCH, [
+      batchRow({ statDate: '2026-01-01' }),
+      batchRow({ statDate: '2026-01-02' }),
+    ]);
+    expect(fresh.body.data).toEqual({ count: 2, overwritten: 0 });
+    const again = await send(BATCH, [
+      batchRow({ statDate: '2026-01-01', amount: 9 }),
+      batchRow({ statDate: '2026-01-02', amount: 9 }),
+    ]);
+    expect(again.body.data).toEqual({ count: 2, overwritten: 2 });
   });
 
   it('takes the amount as a number or as text, and the currency may be left out', async () => {

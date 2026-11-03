@@ -5,9 +5,9 @@ import { type FailureLines, useFailureView } from '../../hooks/useFailure';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type AppVersion, setAppVersionStatus } from '../../services/appVersions';
 import type { ChannelPackage } from '../../services/channelPackages';
-import { describeFailure } from '../../session/describe';
 import { plainText } from '../../utils/plainText';
 import { distributionOf } from './distribution';
+import { describeVersionFailure, refusalLine } from './failureText';
 import { useChannelVersions } from './useChannelVersions';
 import { highestLiveCode } from './versionRules';
 
@@ -77,8 +77,16 @@ export function ActivateModal({ version, channels, rows, onClose, onDone }: Prop
       await setAppVersionStatus(plainText(version.id), 'ACTIVE', needsBox ? true : undefined);
     } catch (error) {
       show((words) => {
-        const described = describeFailure(words, error);
-        return { text: described.text, more: described.fields.map((f) => f.text) };
+        const described = describeVersionFailure(words, error);
+        return {
+          text: described.text,
+          // The box is the answer to `confirmStoreLive`; the other fields are named with their reason.
+          more: described.fields.map((f) =>
+            f.ref === 'confirmStoreLive'
+              ? words.formatMessage({ id: 'appVersions.activate.confirmRequired' })
+              : refusalLine(words, f.ref, f.text),
+          ),
+        };
       });
       return;
     }

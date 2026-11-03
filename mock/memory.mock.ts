@@ -147,6 +147,8 @@ export default {
         'The model is registered with other dimensions',
         {
           detail: `Model ${name} is already registered with ${existing.dimensions} dimensions; its vector table cannot change, register a new name instead`,
+          // the dimension the name was registered with, read before the call (null when it cannot be read)
+          registeredDimensions: existing.dimensions,
         },
       );
     }

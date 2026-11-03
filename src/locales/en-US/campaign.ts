@@ -206,7 +206,9 @@ const messages: Record<string, string> = {
   'campaign.batch.errors.line': 'Line {line}: {reason}',
   'campaign.batch.errors.item': 'Item {line}: {reason}',
   'campaign.batch.import': 'Import',
-  'campaign.batch.imported': 'Imported {count} rows (days that already had a cost are overwritten)',
+  'campaign.batch.imported': 'Imported {count} rows',
+  'campaign.batch.importedOverwritten':
+    'Imported {count} rows, of which {overwritten} overwrote a cost',
   'campaign.batch.refused': 'The backend refused the batch, and nothing was imported:',
   'campaign.batch.refused.ref': '{field}: {reason}',
   'campaign.batch.refused.row': 'Row {row}, {field}: {reason}',

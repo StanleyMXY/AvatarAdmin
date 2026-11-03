@@ -26,6 +26,8 @@ import {
   saveGateDefault,
 } from '../../services/subscriptions';
 import { failureLine } from '../../session/failureLine';
+import { useAdminMeta } from '../../session/useSession';
+import { entitlementLimitMaxOf } from '../../utils/metaValues';
 import { ConfigForm } from '../config/ConfigForm';
 import { FailureAlert } from './FailureAlert';
 import { FeatureValueEditor } from './FeatureValueEditor';
@@ -58,13 +60,17 @@ function DefaultDialog({
   const { message } = App.useApp();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
+  const meta = useAdminMeta();
   const [value, setValue] = useState<FeatureValue>(defaultValueOf(gate));
   const [failure, setFailure] = useState<unknown>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
   const { run, pending } = useSingleFlight(async () => {
     setFailure(null);
-    const found = value.mode === 'VALUE' ? valueProblem(gate.kind, value.value) : null;
+    const found =
+      value.mode === 'VALUE'
+        ? valueProblem(gate.kind, value.value, entitlementLimitMaxOf(meta))
+        : null;
     setProblem(found);
     if (found) return;
     try {

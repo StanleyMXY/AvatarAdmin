@@ -4,10 +4,15 @@ import { codeText, type Translator } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 
 /** What the backend names when it refuses a template write for the rule of the default language. */
-export type RecallRule = { defaultLocale: string; reason: string };
+export type RecallRule = {
+  defaultLocale: string;
+  reason: string;
+  /** `data.case` when the backend names one (`DEFAULT_MISSING`, `DEFAULT_REQUIRED_BY_OTHERS`, `DEFAULT_MOVED_AWAY`); null from a backend that does not. */
+  defaultCase: string | null;
+};
 
 /**
- * The data of the refusal of contract 8.4 (400 INVALID_REQUEST with `data` `{defaultLocale, reason}`):
+ * The data of the refusal of contract 8.4 (400 INVALID_REQUEST with `data` `{defaultLocale, reason, case}`):
  * a recall reason with an enabled template must have an enabled template in the default language.
  * Null for any other failure. The answer of saving `push.default_locale` is not this one: it has
  * `reasons`, and belongs to the settings page.
@@ -16,10 +21,18 @@ export function recallRuleOf(error: unknown): RecallRule | null {
   if (!(error instanceof ApiError) || error.code !== 'INVALID_REQUEST') return null;
   const data = error.data;
   if (typeof data !== 'object' || data === null) return null;
-  const { defaultLocale, reason } = data as { defaultLocale?: unknown; reason?: unknown };
+  const {
+    defaultLocale,
+    reason,
+    case: kase,
+  } = data as { defaultLocale?: unknown; reason?: unknown; case?: unknown };
   if (typeof defaultLocale !== 'string' || defaultLocale === '') return null;
   if (typeof reason !== 'string' || reason === '') return null;
-  return { defaultLocale, reason };
+  return {
+    defaultLocale,
+    reason,
+    defaultCase: typeof kase === 'string' && kase !== '' ? kase : null,
+  };
 }
 
 /**
@@ -42,10 +55,12 @@ function withReasons(intl: Translator, error: unknown): string {
 }
 
 /**
- * The words of a failed template write. The backend has three messages for this refusal that data
- * cannot tell apart, so one text says what is true in each: the reason needs an enabled template in
- * the default language; enable or keep it first, then change the other languages. The backend's own
- * message is never shown. Any other failure gets the words of its error code, and with `reasons`
+ * The words of a failed template write. The backend tells the three refusals of the rule apart by
+ * `data.case`, and each has its own text of what to do: enable the template of the default language
+ * first; switch off the other languages before the default one goes; keep the only enabled
+ * template in the default language and create a new template for the other language. Without a
+ * case the page has words for (an older backend, another shape) one text says what is true in all
+ * three. The backend's own message is never shown. Any other failure gets the words of its error code, and with `reasons`
  * (a place that has no field to put them under: a switch or a delete in the list) the words of the
  * reasons it names.
  */
@@ -58,8 +73,13 @@ export function templateFailureText(
   if (rule === null) {
     return options.reasons ? withReasons(intl, error) : describeFailure(intl, error).text;
   }
+  const caseId = `push.templates.defaultCase.${rule.defaultCase}`;
+  const id =
+    rule.defaultCase !== null && Object.hasOwn(intl.messages, caseId)
+      ? caseId
+      : 'push.templates.defaultLanguageRequired';
   return intl.formatMessage(
-    { id: 'push.templates.defaultLanguageRequired' },
+    { id },
     {
       reason: codeText(intl, 'push.reason', rule.reason),
       defaultLocale: plainText(rule.defaultLocale),

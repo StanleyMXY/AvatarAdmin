@@ -313,7 +313,7 @@ describe('activating a version of a STORE channel', () => {
     await user.click(within(dialog).getByRole('checkbox', { name: LIVE }));
     overrideFetch(async ({ method, url }) =>
       method === 'PUT' && url.pathname.endsWith('/status')
-        ? jsonAnswer(409, 'INVALID_STATE', { status: 'ACTIVE' }, 'backend words about state')
+        ? jsonAnswer(409, 'INVALID_STATE', null, 'backend words about state')
         : undefined,
     );
     await user.click(dialogSubmit(dialog));
@@ -336,7 +336,9 @@ describe('activating a version of a STORE channel', () => {
         : undefined,
     );
     await user.click(dialogSubmit(dialog));
-    expect(await within(dialog).findByText(enUS['reason.OUT_OF_RANGE'])).toBeTruthy();
+    expect(
+      await within(dialog).findByText(`Version number: ${enUS['reason.OUT_OF_RANGE']}`),
+    ).toBeTruthy();
   });
 
   it('does not offer the dialog without APPVERSION:ACTIVATE', async () => {
@@ -392,7 +394,7 @@ describe('what the dialog does not remember', () => {
     const { user } = await load();
     const taken = overrideFetch(async ({ method, url }) =>
       method === 'PUT' && url.pathname.endsWith('/status')
-        ? jsonAnswer(409, 'INVALID_STATE', { status: 'ACTIVE' })
+        ? jsonAnswer(409, 'INVALID_STATE', null)
         : undefined,
     );
     let dialog = await openActivation(user, versionBy('play', 120).id);

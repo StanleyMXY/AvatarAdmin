@@ -9,6 +9,7 @@ const messages: Record<string, string> = {
   'subscriptions.value.unset': 'Not configured',
   'subscriptions.value.value': 'Value',
   'subscriptions.value.unlimited': 'No limit',
+  'subscriptions.value.largest': 'Largest value: {max}',
   'subscriptions.value.on': 'On',
   'subscriptions.value.off': 'Off',
   'subscriptions.source.ENTITLEMENT': 'Entitlement',

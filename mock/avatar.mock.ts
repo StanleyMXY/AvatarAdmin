@@ -182,12 +182,15 @@ function requiredFlag(value: unknown, ref: string, details: Detail[]): boolean {
   return flag(value, ref, details);
 }
 
-/** An update may carry the key, but only the one the item has. */
-function sameKey(value: unknown, current: string, details: Detail[]): void {
+/** An update may carry a field that is fixed once the item exists, but only with the value the item has. */
+function same(ref: string, value: unknown, current: string, details: Detail[]): void {
   if (value !== undefined && value !== null && value !== current) {
-    details.push({ ref: 'key', reason: 'OUT_OF_RANGE' });
+    details.push({ ref, reason: 'OUT_OF_RANGE' });
   }
 }
+
+const sameKey = (value: unknown, current: string, details: Detail[]): void =>
+  same('key', value, current, details);
 
 const keyOf = (value: unknown, details: Detail[]): string => {
   const trimmed = typeof value === 'string' ? trimSpec(value) : '';
@@ -338,13 +341,11 @@ export default {
     if (!found) throw notFound('cosmetic');
     const body = bodyOf(req);
     const details: Detail[] = [];
-    // The whole item is sent: the kind and the enabled state too (the key may be, the picture
-    // is only when it is replaced).
+    // The whole item is sent: the enabled state too. The key and the kind may be left out (the
+    // item keeps them) or be the ones it has; any other value is 400 on that ref (request 97).
+    // The picture is only sent when it is replaced.
     sameKey(body.key, found.key, details);
-    const kind = typeof body.kind === 'string' ? body.kind : '';
-    if (body.kind === undefined || body.kind === null || body.kind === '') {
-      details.push({ ref: 'kind', reason: 'EMPTY_NOT_ALLOWED' });
-    } else if (!KINDS.includes(kind)) details.push({ ref: 'kind', reason: 'OUT_OF_RANGE' });
+    same('kind', body.kind, found.kind, details);
     const enabled = requiredFlag(body.enabled, 'enabled', details);
     const item = readCosmeticFields(body, details);
     if (details.length > 0) throw fail(details);
@@ -353,7 +354,7 @@ export default {
         ? uploadOf(body.previewUploadId, 'CATALOG_IMAGE', 'previewUploadId')
         : null;
     keepingDefaults(() => {
-      Object.assign(found, item, { kind: kind as MockCosmetic['kind'], enabled });
+      Object.assign(found, item, { enabled });
       if (picture) found.previewFile = `${found.key}-${picture.id}.svg`;
       clearOtherDefaults(found);
     });

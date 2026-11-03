@@ -65,6 +65,36 @@ describe('the renderer model page', { timeout: 60000 }, () => {
     expect(screen.getByText(/to every build; there is no scope/)).toBeInTheDocument();
   });
 
+  it('has no column for a file reference and shows none, even from a backend that still sends one', async () => {
+    backend();
+    const real = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) => {
+        const response = await real(input, init);
+        if (!String(input).includes('/renderer-models') || (init.method ?? 'GET') !== 'GET') {
+          return response;
+        }
+        const envelope = await response.json();
+        envelope.data.items = envelope.data.items.map((m: object) => ({
+          ...m,
+          fileRef: 'renderer/avatar-renderer-1.0.0.zip',
+        }));
+        return new Response(JSON.stringify(envelope), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+    renderPage(<RendererModelsPage />);
+    await screen.findByText('arm64-v8a');
+    const headers = [...document.querySelectorAll('.ant-table-thead th')].map(
+      (th) => th.textContent,
+    );
+    expect(headers.join('|')).not.toMatch(/file|reference|文件/i);
+    expect(document.body.textContent).not.toContain('avatar-renderer-1.0.0.zip');
+  });
+
   it('lists when each model was registered: the contract picks the newest enabled model of a platform, ABI and format by that time', async () => {
     backend();
     renderPage(<RendererModelsPage />);

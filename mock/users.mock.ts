@@ -111,6 +111,30 @@ const listRow = (user: MockUser, seen: Seen) => ({
   conversationLanguage: user.conversationLanguage,
 });
 
+/** The states of a deletion task that is not over (contract 13.1: unique per account while it is in one of them). */
+const OPEN_DELETION: ReadonlySet<string> = new Set(['SCHEDULED', 'PENDING', 'RUNNING', 'FAILED']);
+
+/**
+ * The task of the account that is not finished, or null (backend answer 60). `requestedByUsername`
+ * is null when the user asked for it themselves (`requestedBy` null) and when the administrator who
+ * did is gone (`requestedBy` stays).
+ */
+function openDeletion(accountId: string) {
+  const task = usersState.deletions
+    .filter((row) => row.accountId === accountId && OPEN_DELETION.has(row.status))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  if (!task) return null;
+  return {
+    id: task.id,
+    status: task.status,
+    executeAfter: task.executeAfter,
+    requestedBy: task.requestedBy,
+    requestedByUsername:
+      task.requestedBy === null ? null : (store.admins.get(task.requestedBy)?.username ?? null),
+    createdAt: task.createdAt,
+  };
+}
+
 function detailRow(user: MockUser, seen: Seen) {
   return {
     id: user.id,
@@ -139,6 +163,7 @@ function detailRow(user: MockUser, seen: Seen) {
     companionship: { ...user.companionship },
     counts: { ...user.counts },
     attribution: user.attribution === null ? null : { ...user.attribution },
+    deletion: openDeletion(user.id),
   };
 }
 

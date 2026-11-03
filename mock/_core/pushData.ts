@@ -85,6 +85,10 @@ export type MockDelivery = {
   pushTokenId: string;
   result: 'ACCEPTED' | 'INVALID_TOKEN' | 'FAILED';
   sentAt: string;
+  /** Noted when the push was sent; `null` (with `tokenSuffix`) for a push from before it was. */
+  platform: 'ANDROID' | 'IOS' | null;
+  /** The last 6 characters of the token. */
+  tokenSuffix: string | null;
 };
 
 export type MockUpload = { id: string; used: boolean; file: string };
@@ -382,6 +386,13 @@ function seed(now: Date): PushStore {
     'ACCEPTED',
     'FAILED',
   ];
+  const OLD_RECORDS_FROM = 28;
+  const SUFFIX_CHARS = 'aB3dE9fG7hJ2kL5mN8pQ4rS6tU1vW0xYzC';
+  const suffixOf = (n: number, t: number): string =>
+    Array.from(
+      { length: 6 },
+      (_, i) => SUFFIX_CHARS[(n * 7 + t * 5 + i * 11) % SUFFIX_CHARS.length],
+    ).join('');
   for (let n = 1; n <= 32; n += 1) {
     const [triggerReason, pushType] = reasons[n % 4];
     const createdAt = ago(n * 3 + 1);
@@ -401,6 +412,9 @@ function seed(now: Date): PushStore {
         pushTokenId: `tok-${n}-${t}`,
         result: results[(n + t) % results.length],
         sentAt: createdAt,
+        // The oldest pushes were sent before the platform and the suffix were noted.
+        platform: n > OLD_RECORDS_FROM ? null : (n + t) % 2 === 0 ? 'ANDROID' : 'IOS',
+        tokenSuffix: n > OLD_RECORDS_FROM ? null : suffixOf(n, t),
       });
     }
   }

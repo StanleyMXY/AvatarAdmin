@@ -112,6 +112,7 @@ const messages: Record<string, string> = {
   'activity.task.enable': 'Enable',
   'activity.task.disable': 'Stop',
   'activity.task.delete': 'Delete',
+  'activity.task.hasRecordsRow': 'Has records: it cannot be deleted, stop it instead',
   'activity.task.enableConfirm': 'Enable this task?',
   'activity.task.disableConfirm': 'Stop this task?',
   'activity.task.deleteConfirm':
@@ -141,8 +142,6 @@ const messages: Record<string, string> = {
   'activity.task.form.claimInvalid': 'Enter a whole number, 1 or more, or leave it empty',
   'activity.task.form.sortOrder': 'Order',
   'activity.task.form.sortInvalid': 'Enter a whole number',
-  'activity.task.form.hasRecordsNote':
-    'For a task that has records, the type and the target cannot be changed. To change them, stop the old task and make a new one.',
   'activity.task.form.hasRecords':
     'This task has records, so its type and target cannot be changed. To change them, stop the old task and make a new one.',
 

@@ -507,6 +507,22 @@ export function resetAdsStore(now: Date = new Date()): void {
   Object.assign(adsState, seed(now));
 }
 
+/**
+ * The creatives that cannot be skipped, are not rejected and sit on a splash or interstitial placement
+ * (contract 22 and 17.4): `GET /ads/meta` answers the count as `notSkippableFullScreenCount`, and the
+ * save of `ads.force_close_seconds` = 0 warns with the same number. A rejected creative is never served.
+ */
+export function notSkippableFullScreenCount(): number {
+  const fullScreen = (unitId: string): boolean => {
+    const unit = adsState.units.get(unitId);
+    const format = unit ? adsState.placements.get(unit.placementId)?.adFormat : undefined;
+    return format === 'SPLASH' || format === 'INTERSTITIAL';
+  };
+  return [...adsState.creatives.values()].filter(
+    (c) => !c.skippable && c.reviewStatus !== 'REJECTED' && fullScreen(c.adUnitId),
+  ).length;
+}
+
 /** The name of the administrator, read when asked; `null` when the administrator has been deleted. */
 export const usernameOf = (id: string | null): string | null =>
   id === null ? null : (store.admins.get(id)?.username ?? null);

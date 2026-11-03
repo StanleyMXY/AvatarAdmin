@@ -578,7 +578,8 @@ const messages: Record<string, string> = {
   'config.ratelimit.admin_login_per_min.desc':
     '管理员登录每分钟允许的请求数，按 IP 加用户名计，超出后被限流。',
   'config.moderation.content_url_ttl_seconds.label': '审核内容地址有效期',
-  'config.moderation.content_url_ttl_seconds.desc': '审核内容的签名地址有效期，单位秒。',
+  'config.moderation.content_url_ttl_seconds.desc':
+    '审核内容的签名地址有效期，单位秒。很短的有效期会让审核页频繁重取地址，每次读取都会写一条审计记录。',
   'config.upload.push_image_max_bytes.label': '推送图片大小上限',
   'config.upload.push_image_max_bytes.desc': '推送图片的大小上限，单位字节。',
   'config.ads.enabled.label': '应用内广告总开关',

@@ -51,7 +51,7 @@ describe('the failures of the activity dialogs follow the language', () => {
     failRequests((path, method) => method === 'PUT' && path.includes('tasks/configs'));
     const user = userEvent.setup();
     const view = renderWithLocaleSwitch(
-      <TaskFormModal target={target} open onClose={noop} onSaved={noop} />,
+      <TaskFormModal target={target} open onClose={noop} onSaved={noop} onRefreshed={noop} />,
     );
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: /Submit/ }));

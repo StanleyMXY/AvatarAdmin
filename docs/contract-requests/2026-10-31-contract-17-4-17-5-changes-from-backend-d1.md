@@ -156,3 +156,23 @@
 后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：140）。
 
 核对于 2026-11-02
+
+## 采纳情况（2026-11-03 对照更新接口文档）
+
+对照的是 `docs/backend-inputs/2026-11-03-backend-task-java-backend-updated.md`（行号指它；这几处在上一版 `docs/backend-inputs/2026-11-02-backend-task-java-backend-e07469d1.md` 里就已经有，两版在这些行上没有差别，所以"已被采纳"发生在 2026-11-02 的那一版）。结论：**本文件的 17.4 告警一节和 17.5 的键表已被采纳，只剩 2.5 节第三行（`auth.phone_login_enabled` 保存被拒时的 `details`）没有写**，已列入 `2026-11-03-contract-gaps.md` 的 G8。
+
+| 本文件的条目 | 状态 | 更新接口文档里的位置 |
+|---|---|---|
+| 一、1.1 告警类型"十四种改成十八种" | 已采纳 | 第 2409 行"`type` 共十八种" |
+| 一、1.2 四个新类型的行 | 已采纳；`SUBSCRIPTION_EVENT_FAILED` 一行本文件写"清单没有给出"，更新接口文档已写出：`refType=SUBSCRIPTION_EVENT`，`refId` 是 `SubscriptionEvent.id`，`accountId` 取事件的账号（已知时），商店不可用连续处理失败达到 60 次后被放弃且事件没有关联任何订阅时写入，事件被处理成功或被 `ack` 时自动 `RESOLVED`，reprocess 本身不解决 | 第 2409 行 |
+| 一、1.3 `GET /alerts` 的 `status`、`type` 校验 | 已采纳，并回答了本文件问的 `ref`：`data.details` 为 `[{"ref":"status"或"type","reason":"OUT_OF_RANGE"}]`，空字符串也算一个值（400） | 第 2390 行 |
+| 一、1.4 重试与告警联动 | 已采纳：重试 `FAILED` 反馈时 `SUPPORT_FORWARD_FAILED` 自动 `RESOLVED`，重试之后再失败会打开新的告警；"重试没有改变任何东西时告警保持打开"没有逐字写，由"重试只对 `FAILED`"（第 2389 行）推出 | 第 2409、2389 行 |
+| 二、2.1、2.2、2.3 的 25 个键 | 已采纳：25 个键都有表格行，我逐个对过键名和编辑权限——`CONFIG:MANAGE` 20 个、`PUSH:CONFIG` 1 个（`push.task_poll_seconds`）、`ATTRIBUTION:MANAGE` 3 个（`attribution.postback_enabled`、`attribution.facebook_graph_version`、`attribution.store_click_ip`）、`MODERATION:CONFIG` 1 个（`moderation.record_retention_days`），与本文件第 90 行一致；每个键的取值范围没有逐字对 | 第 2504–2741 行之间（例如 `chat.message_retention_days` 第 2504 行、`push.task_poll_seconds` 第 2608 行、`ratelimit.ad_media_per_ip_per_min` 第 2739 行） |
+| 二、2.4 三个键的范围变化 | 已采纳：`recall.window_minutes`、`recall.scan_interval_minutes` 为 1 到 1440；`push.schedule_catchup_minutes` 为 1 到 10080 并与 `push.task_poll_seconds` 互相检查；`chat.moderation_deadline_ms` 为 100 到 2500 | 第 2596、2598、2607、2628 行 |
+| 二、2.5 保存失败的新 `data` 字段 | 前两行、第四、第五行已采纳（`app.supported_locales` 第 2603 行含 `missingLanguages`；`push.default_locale` 第 2604 行含 `defaultLocale`、`reasons`；`usage_price.*` 第 2489 行；`attribution.cost_currency` 第 2581 行）。**第三行 `auth.phone_login_enabled` 未采纳**：第 2718 行只写"`message` 逐项写出缺的内容"，没有写 `details` | 见 G8 |
+| 二、2.6 `moderation.model_check_enabled` | 已采纳（布尔，`MODERATION:CONFIG`） | 第 2625 行 |
+| 三、17.4 其他行的变化 | 抽查了 13 项都已写入：授权 403 的 `data`（已从 `null` 改成 `{reason}`，比本文件写的更新）、二次验证密钥解不开的 `ADMIN_TOTP_INVALID`、召回模板的 `missingLocales`、手动任务 `MISSED`、通话 `maxDurationMinutes`、价格确认的币种、投诉 `status=OPEN`（第 2379 行）、订阅统计 `listPriceAmount`、文本规则形近字折叠、第六个邮件模板 `LOGIN_METHOD_ADDED`、记忆的 `truncated`/`totalCount`、权限节点类型不能改、审计筛选长度 64/64/255；其余几项（成本币种锁、漏斗并发上限等）没有逐行对 | 见 `2026-11-02-contract-version-diff.md` 和 `2026-11-03-contract-version-diff.md` |
+
+快照 `docs/shared-snapshots/backend-task-java-backend.md` 仍是旧版（没有这些内容），换成新版之后的前端收尾清理见 `docs/superpowers/handoff/2026-11-03-local-handoff.md` 第二节。
+
+核对于 2026-11-03

@@ -20,3 +20,5 @@
 后端回答于 2026-11-02，见答案文档（`docs/backend-inputs/2026-11-02-avatar-backend-answers-to-avataradmin-questions.md`，对应编号：112）。
 
 核对于 2026-11-02
+
+后端实现于 2026-11-03（后端实现说明 112 号，更新接口文档 14.2 后台接口一段）：`confirm` 因币种被拒时 `data.details` 是 `[{ref:'currency', reason:'OUT_OF_RANGE'}]`，即使请求没有带 `currency` 也是（按批次自己的币种检查）；校验类 400 的 `details` 形状同手填价格（`ref` 是字段路径，如 `bands[1].inputMinTokens`）。前端已对齐：确认对话框收到 `ref=currency` 时显示"批次最终使用的币种不在允许币种里，批次仍待审核"（文字按页面是否读到允许币种列表分两句，见语言文件 `cost.pending.currencyRefused`、`cost.pending.currencyRefusedNoList`），收到 `bands[n].<字段>` 时写成"第 n+1 档：<字段>：<原因>"；上面"没有 `details` 就只显示通用句"的说法不再适用。假后端按新形状返回。

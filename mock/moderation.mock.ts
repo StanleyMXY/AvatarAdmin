@@ -1,7 +1,6 @@
 // The content moderation endpoints of the mock backend (contract 11.2 to 11.4 and 17.4, content
 // moderation row; backend reply 8 for the rule list, the backend note for the transcript). State
-// lives in _core/moderationData.ts. The filter by content type is not in the contract; the question
-// is in docs/contract-requests/2026-10-26-admin-frontend-moderation.md.
+// lives in _core/moderationData.ts.
 import { countCodePoints } from '../src/utils/codePoints';
 import { trimSpec } from '../src/utils/trimSpec';
 import { guard } from './_core/auth';
@@ -15,6 +14,7 @@ import {
   mediaFile,
   moderationState,
   nextRuleId,
+  SIGNATURE_TTL_MS,
   signAddress,
 } from './_core/moderationData';
 import { paginateQuery } from './_core/paginate';
@@ -25,6 +25,15 @@ type Detail = { ref: string; reason: string };
 
 const STATUSES = ['PENDING_REVIEW', 'APPROVED', 'REJECTED', 'BLOCKED'];
 const SOURCES = ['AUTO', 'REPORT', 'COMPLAINT'];
+const CONTENT_TYPES = [
+  'AVATAR',
+  'VOICE',
+  'MESSAGE',
+  'PERSONA',
+  'COMPANION_NAME',
+  'AVATAR_IMAGE',
+  'ACTION_CLIP',
+];
 const MATCH_MODES = ['SUBSTRING', 'WORD', 'REGEX'];
 const LEVELS = ['REVIEW', 'BLOCK'];
 const PATTERN_MAX = 200;
@@ -173,13 +182,17 @@ const rulesMax = (): number => {
 };
 
 export default {
-  // Only `status` and `source` filter (and the paging); any other query parameter is ignored, not a 400 (the backend's answer of 2026-11-02, question 61).
+  // `status`, `source` and `contentType` filter, on the server, so the pages and the total are those of
+  // the filtered list; a value outside the list is 400 with the parameter as `ref` (backend answer 61).
+  // Any other query parameter is ignored, not a 400.
   'GET /api/admin/moderation/records': guard('MODERATION:VIEW', (req) => {
     const status = enumParam(req, 'status', STATUSES);
     const source = enumParam(req, 'source', SOURCES);
+    const contentType = enumParam(req, 'contentType', CONTENT_TYPES);
     const rows = moderationState.records
       .filter((r) => (status === '' ? true : r.status === status))
       .filter((r) => (source === '' ? true : r.source === source))
+      .filter((r) => (contentType === '' ? true : r.contentType === contentType))
       .sort(byQueueOrder);
     const page = paginateQuery(rows, req);
     return ok({ items: page.items.map(recordRow), total: page.total });
@@ -208,6 +221,8 @@ export default {
       kind: 'FILE',
       mediaType: MEDIA_TYPE[content.media],
       url: signAddress(content.media),
+      // The moment the address stops working, in UTC (backend answer 134); a text answer has no such field.
+      expiresAt: new Date(Date.now() + SIGNATURE_TTL_MS).toISOString(),
       ...(content.text ? { text: content.text } : {}),
     });
   }),

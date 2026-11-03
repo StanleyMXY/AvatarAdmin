@@ -43,11 +43,15 @@ export type SmsChannel = {
 };
 
 /**
- * The body of a create. `credentials` is a map of names to text values (the backend answers 400
- * EMPTY_NOT_ALLOWED on a null value, and an unreadable body, such as a single string, as a 400
- * without details), and it is left out unless something was typed. With entries it replaces
- * everything stored; absent, null or `{}` keeps what is stored. There is no way to clear stored
- * credentials, so the page offers none.
+ * The body of a create. `credentials` is a map of names to text values, and it is left out unless
+ * something was typed. When it is given, its names must be exactly the `credentialNames` of the
+ * provider (`GET /sms/meta`): a missing name is 400 EMPTY_NOT_ALLOWED and a name the provider does
+ * not use is 400 OUT_OF_RANGE, both with the `ref` credentials; a null value is 400
+ * EMPTY_NOT_ALLOWED, and an unreadable body, such as a single string, is a 400 without details. With
+ * entries it replaces everything stored; absent, null or `{}` keeps what is stored (an update that
+ * changes the provider to one that needs credentials, without giving them, is 400 EMPTY_NOT_ALLOWED:
+ * what is stored belongs to the old provider). There is no way to clear stored credentials, so the
+ * page offers none.
  */
 export type ChannelInput = {
   channelCode: string;
@@ -71,12 +75,24 @@ export type ChannelPatch = Omit<ChannelInput, 'channelCode' | 'enabled' | 'extCo
   extConfig: Record<string, unknown>;
 };
 
-export type SmsProvider = { code: string; allowedHosts: string[] };
+export type SmsProvider = {
+  code: string;
+  allowedHosts: string[];
+  /**
+   * The names of the credentials the provider needs (empty for the local stub). A channel that is
+   * given credentials must be given exactly these names, no more and no fewer.
+   */
+  credentialNames: string[];
+};
 
 export type SmsMeta = {
   providers: SmsProvider[];
   /** The test sends the signed-in administrator has left today; null when the answer does not say. */
   testRemainingToday: number | null;
+  /** `auth.phone_login_enabled` now; null when the answer does not say. */
+  phoneLoginEnabled: boolean | null;
+  /** How many accounts have a phone number (the backend guards the last OTP channel and template while there are some); null when the answer does not say. */
+  phoneAccountCount: number | null;
 };
 
 export type SmsTemplate = {

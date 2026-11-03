@@ -108,6 +108,7 @@ const messages: Record<string, string> = {
   'activity.task.enable': '启用',
   'activity.task.disable': '停用',
   'activity.task.delete': '删除',
+  'activity.task.hasRecordsRow': '已有任务记录：不能删除，请改用停用',
   'activity.task.enableConfirm': '确定启用该任务？',
   'activity.task.disableConfirm': '确定停用该任务？',
   'activity.task.deleteConfirm': '确定删除该任务？已有任务记录时不能删除，请改用停用。',
@@ -136,8 +137,6 @@ const messages: Record<string, string> = {
   'activity.task.form.claimInvalid': '请填写不小于 1 的整数，或留空',
   'activity.task.form.sortOrder': '排序',
   'activity.task.form.sortInvalid': '请填写整数',
-  'activity.task.form.hasRecordsNote':
-    '已有任务记录的任务，类型和目标值不能修改；要换就停用旧任务、新建一个。',
   'activity.task.form.hasRecords':
     '该任务已有任务记录，类型和目标值不能修改；要换就停用旧任务、新建一个。',
 

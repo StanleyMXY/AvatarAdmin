@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { saved } from '../../../mock/_core/configStore';
@@ -8,6 +8,7 @@ import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import ChannelsPage from './channels';
 import {
+  dialogsClosed,
   holdWrites,
   jsonAnswer,
   overrideFetch,
@@ -337,31 +338,38 @@ describe('the question before the last enabled OTP channel is switched off, dele
     expect(
       within(ask).getByText(/Phone sign-in is on \(auth\.phone_login_enabled\)/),
     ).toBeInTheDocument();
-    expect(within(ask).getByText(/accounts that sign in with a phone number/)).toBeInTheDocument();
+    expect(
+      within(ask).getByText(/Accounts that sign in with a phone number: 3/),
+    ).toBeInTheDocument();
     await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
     await settled();
     expect(writesOf(calls)).toHaveLength(0);
     expect(switchOf('gw_th_otp')).toBeChecked();
   });
 
-  it('sends the request when the question is confirmed, and shows the fixed text of the refusal (ref SmsChannel, reason OUT_OF_RANGE)', async () => {
+  it('sends the request when the question is confirmed, and shows the fixed text of the refusal (ref SmsChannel, reason COUNTRY_LOSES_OTP_CHANNEL: the other channels are left, a country is not)', async () => {
     phoneLoginOn();
     const { calls, user } = await load();
     await rowOf('gw_th_otp');
     await user.click(switchOf('gw_th_otp'));
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    // The refusal of the backend has the detail SmsChannel / OUT_OF_RANGE: one fixed text for both cases.
+    // The refusal of the backend has the detail SmsChannel / COUNTRY_LOSES_OTP_CHANNEL: a text of its own.
     expect(
-      await screen.findByText(/at least one enabled OTP channel must remain/),
+      await screen.findByText(
+        /a country that is served by an enabled OTP channel now would have none/,
+      ),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('Some input is not valid');
-    expect(document.body.textContent).not.toContain('The last enabled OTP channel of a country');
+    expect(document.body.textContent).not.toContain(
+      'A country that has an OTP channel would lose it',
+    );
+    expect(document.body.textContent).not.toContain('The value is outside the allowed range');
     await waitFor(() => expect(switchOf('gw_th_otp')).toBeChecked());
     expect(channel('gw_th_otp').enabled).toBe(true);
   });
 
-  it('says the same fixed text also for a channel that the page did not take for the last one, because the backend has the last word', async () => {
+  it('says the fixed text of the reason also for a channel that the page did not take for the last one, because the backend has the last word', async () => {
     channel('gw_all_backup').enabled = true;
     backend();
     overrideFetch(async ({ method, url }) =>
@@ -369,7 +377,7 @@ describe('the question before the last enabled OTP channel is switched off, dele
         ? jsonAnswer(
             400,
             'INVALID_REQUEST',
-            { details: [{ ref: 'SmsChannel', reason: 'OUT_OF_RANGE' }] },
+            { details: [{ ref: 'SmsChannel', reason: 'LAST_OTP_CHANNEL' }] },
             'SECRET BACKEND WORDS',
           )
         : undefined,
@@ -380,7 +388,7 @@ describe('the question before the last enabled OTP channel is switched off, dele
     await user.click(switchOf('gw_th_otp'));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(
-      await screen.findByText(/at least one enabled OTP channel must remain/),
+      await screen.findByText(/This is the last enabled OTP channel\. While phone sign-in is on/),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
@@ -412,17 +420,75 @@ describe('the question before the last enabled OTP channel is switched off, dele
     expect(
       within(ask).getByText(/Phone sign-in is off \(auth\.phone_login_enabled\)/),
     ).toBeInTheDocument();
-    expect(within(ask).getByText(/accounts that sign in with a phone number/)).toBeInTheDocument();
+    expect(
+      within(ask).getByText(/Accounts that sign in with a phone number: 3/),
+    ).toBeInTheDocument();
   });
 
-  it('says that it cannot read the setting when the administrator may not see it, and still names both conditions', async () => {
+  it('reads the two conditions from the meta, which an administrator with only the SMS channel codes can read, and names them with the number of accounts', async () => {
     signIn('support', { codes: ['SMS:CHANNEL', 'SMS:CHANNEL:CONFIG'] });
+    phoneLoginOn();
+    smsState.phoneAccounts = 1;
     const { user } = await load();
     await rowOf('gw_th_otp');
     await user.click(switchOf('gw_th_otp'));
     const ask = await screen.findByRole('dialog');
-    expect(within(ask).getByText(/cannot read whether phone sign-in is on/)).toBeInTheDocument();
-    expect(within(ask).getByText(/accounts that sign in with a phone number/)).toBeInTheDocument();
+    expect(
+      within(ask).getByText(/Phone sign-in is on \(auth\.phone_login_enabled\)/),
+    ).toBeInTheDocument();
+    expect(
+      within(ask).getByText(/Accounts that sign in with a phone number: 1/),
+    ).toBeInTheDocument();
+    expect(within(ask).queryByText(/could not read/)).toBeNull();
+  });
+
+  it('is not asked at all when phone sign-in is off and no account has a phone number: the backend does not guard then', async () => {
+    smsState.phoneAccounts = 0;
+    const { calls, user } = await load();
+    await rowOf('gw_th_otp');
+    await user.click(switchOf('gw_th_otp'));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(switchOf('gw_th_otp')).not.toBeChecked());
+  });
+
+  it('is asked for either condition alone: accounts with phone numbers while sign-in is off, and sign-in on with no such account', async () => {
+    smsState.phoneAccounts = 5;
+    const first = await load();
+    await rowOf('gw_th_otp');
+    await first.user.click(switchOf('gw_th_otp'));
+    let ask = await screen.findByRole('dialog');
+    expect(within(ask).getByText(/Phone sign-in is off/)).toBeInTheDocument();
+    expect(
+      within(ask).getByText(/Accounts that sign in with a phone number: 5/),
+    ).toBeInTheDocument();
+    await first.user.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    cleanup();
+    smsState.phoneAccounts = 0;
+    phoneLoginOn();
+    const second = await load();
+    await rowOf('gw_th_otp');
+    await second.user.click(switchOf('gw_th_otp'));
+    ask = await screen.findByRole('dialog');
+    expect(within(ask).getByText(/Phone sign-in is on/)).toBeInTheDocument();
+    expect(within(ask).getByText(/No account signs in with a phone number/)).toBeInTheDocument();
+  });
+
+  it('says that it could not read the two conditions when the meta cannot be read, and still asks', async () => {
+    let metaReads = 0;
+    backend();
+    overrideFetch(async ({ method, url }) =>
+      method === 'GET' && url.pathname === '/api/admin/sms/meta' && metaReads++ > 0
+        ? jsonAnswer(500, 'INTERNAL_ERROR')
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<ChannelsPage />);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    await user.click(switchOf('gw_th_otp'));
+    const ask = await screen.findByRole('dialog');
+    expect(within(ask).getByText(/could not read whether phone sign-in is on/)).toBeInTheDocument();
+    expect(within(ask).getByText(/could not read how many accounts sign in/)).toBeInTheDocument();
   });
 
   it('reads the setting when the question is asked, not when the page was opened', async () => {
@@ -477,7 +543,7 @@ describe('the question before the last enabled OTP channel is switched off, dele
         ? jsonAnswer(
             400,
             'INVALID_REQUEST',
-            { details: [{ ref: 'SmsChannel', reason: 'OUT_OF_RANGE' }] },
+            { details: [{ ref: 'SmsChannel', reason: 'LAST_OTP_CHANNEL' }] },
             'SECRET BACKEND WORDS',
           )
         : undefined,
@@ -489,7 +555,7 @@ describe('the question before the last enabled OTP channel is switched off, dele
     expect(screen.queryByRole('dialog')).toBeNull();
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(
-      await screen.findByText(/at least one enabled OTP channel must remain/),
+      await screen.findByText(/This is the last enabled OTP channel\. While phone sign-in is on/),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('SECRET BACKEND WORDS');
   });
@@ -509,16 +575,30 @@ describe('the question before the last enabled OTP channel is switched off, dele
     );
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(
-      await screen.findByText(/at least one enabled OTP channel must remain/),
+      await screen.findByText(
+        /a country that is served by an enabled OTP channel now would have none/,
+      ),
     ).toBeInTheDocument();
     expect((await rowOf('gw_th_otp')).textContent).toContain('gw_th_otp');
   });
 
-  it('deletes the last channel when the backend allows it (no phone sign-in, no phone accounts)', async () => {
+  it('asks a plain delete question for the last channel when the meta says that the backend does not guard it, and sends the delete only when it is confirmed', async () => {
     smsState.phoneAccounts = 0;
     const { calls, user } = await load();
     await user.click(within(await rowOf('gw_th_otp')).getByRole('button', { name: 'Delete' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    const ask = await screen.findByRole('dialog');
+    expect(within(ask).getAllByText('Delete this channel?').length).toBeGreaterThan(0);
+    // The guard dialog is not shown: nothing of the two conditions is named.
+    expect(within(ask).queryByText(/Phone sign-in is/)).toBeNull();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+    await dialogsClosed();
+    expect((await rowOf('gw_th_otp')).textContent).toContain('gw_th_otp');
+    await user.click(within(await rowOf('gw_th_otp')).getByRole('button', { name: 'Delete' }));
+    const again = (await screen.findAllByRole('dialog')).at(-1) as HTMLElement;
+    await user.click(within(again).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     await waitFor(() => expect(rows().some((tr) => cellsOf(tr)[0] === 'gw_th_otp')).toBe(false));
     expect(screen.queryByText(/Some input is not valid/)).toBeNull();

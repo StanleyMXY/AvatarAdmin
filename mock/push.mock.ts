@@ -246,7 +246,8 @@ function missingLocales(): Record<string, string[]> {
 }
 
 /**
- * The one hard rule of contract 8.4 and its three refusals (a5): after the write, a recall reason
+ * The one hard rule of contract 8.4 and its three refusals (a5), told apart by `data.case`
+ * (`DEFAULT_MISSING`, `DEFAULT_REQUIRED_BY_OTHERS`, `DEFAULT_MOVED_AWAY`, request 35): after the write, a recall reason
  * with an enabled template has an enabled template in the default language. `before` and `after`
  * are the template as it was and as it will be (null for a create, for a delete). A write that
  * touches no enabled template is not judged. Nothing is written when it throws.
@@ -264,12 +265,21 @@ function enforceDefaultLanguage(before: MockTemplate | null, after: MockTemplate
       before?.enabled === true && before.triggerReason === reason && before.locale === lang;
     const movedAway = hadDefault && enabled.length === 1 && enabled[0] === after;
     const base = `${reason} needs an enabled template in ${lang} (the default language) while other languages are enabled`;
+    const kase = movedAway
+      ? 'DEFAULT_MOVED_AWAY'
+      : hadDefault
+        ? 'DEFAULT_REQUIRED_BY_OTHERS'
+        : 'DEFAULT_MISSING';
     const message = movedAway
       ? `${reason} would have no enabled template in ${lang}, the default language: keep this template in ${lang} and enabled, and create the other language as a new template`
       : hadDefault
         ? `${base}; disable the other languages of ${reason} first, or keep the ${lang} template enabled`
         : `${base}; enable or restore it first`;
-    throw new MockHttpError(400, 'INVALID_REQUEST', message, { defaultLocale: lang, reason });
+    throw new MockHttpError(400, 'INVALID_REQUEST', message, {
+      defaultLocale: lang,
+      reason,
+      case: kase,
+    });
   }
 }
 
@@ -502,25 +512,35 @@ export default {
   }),
 
   // ---- records ----
-  // Answers 114: the filters are accountId (an id) and triggerReason (one of the four), exact, and
-  // may be used together; a value that is not valid is 400 with its ref and OUT_OF_RANGE.
+  // Answers 114 and requests 114: the filters are accountId (an id) and triggerReason (one of the
+  // four), exact, and may be used together; from and to (YYYY-MM-DD, a UTC day, both included, each can
+  // be left out) filter on the creation time. A value that is not valid is 400 with its ref and
+  // OUT_OF_RANGE; of the dates `from` is checked first, and a `to` before `from` is named `to`.
   'GET /api/admin/push/records': guard('PUSH:VIEW', (req) => {
     const details: Detail[] = [];
     const text = (name: string) => (isText(req.query[name]) ? req.query[name] : '');
     const accountId = text('accountId');
     const reason = text('triggerReason');
+    const from = text('from');
+    const to = text('to');
     if (accountId !== '' && !RECORD_ID.test(accountId)) {
       details.push({ ref: 'accountId', reason: 'OUT_OF_RANGE' });
     }
     if (reason !== '' && !TRIGGER_REASONS.includes(reason)) {
       details.push({ ref: 'triggerReason', reason: 'OUT_OF_RANGE' });
     }
+    if (from !== '' && !validDay(from)) details.push({ ref: 'from', reason: 'OUT_OF_RANGE' });
+    else if (to !== '' && !validDay(to)) details.push({ ref: 'to', reason: 'OUT_OF_RANGE' });
+    else if (from !== '' && to !== '' && to < from)
+      details.push({ ref: 'to', reason: 'OUT_OF_RANGE' });
     if (details.length > 0) throw fail(details);
     const rows = pushState.records
       .filter(
         (r) =>
           (accountId === '' || r.accountId.toLowerCase() === accountId.toLowerCase()) &&
-          (reason === '' || r.triggerReason === reason),
+          (reason === '' || r.triggerReason === reason) &&
+          (from === '' || r.createdAt.slice(0, 10) >= from) &&
+          (to === '' || r.createdAt.slice(0, 10) <= to),
       )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
     return ok(paginateQuery(rows, req));

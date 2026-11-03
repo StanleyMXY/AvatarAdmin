@@ -35,6 +35,16 @@ const messages: Record<string, string> = {
   'reason.NOT_FOUND': 'The item you named does not exist.',
   'reason.DISABLED': 'It is disabled and cannot be chosen.',
   'reason.CURRENCY_MISMATCH': 'The currency differs from the currency used for campaign costs.',
+  'reason.LAST_OTP_CHANNEL':
+    'This is the last enabled OTP channel. While phone sign-in is on or phone-number accounts exist, at least one enabled OTP channel must remain, so it cannot be deleted, switched off or changed to another type. Enable or create another OTP channel first.',
+  'reason.COUNTRY_LOSES_OTP_CHANNEL':
+    'After this change a country that is served by an enabled OTP channel now would have none. While phone sign-in is on or phone-number accounts exist, every country that may receive codes must stay served by an enabled OTP channel. Create another OTP channel, or widen the countries of another one, first.',
+  'reason.LAST_OTP_TEMPLATE':
+    'This is the last enabled OTP template. While phone sign-in is on or phone-number accounts exist, at least one enabled OTP template must remain, so it cannot be deleted, switched off or changed to another type. Enable or create another one first.',
+  'reason.LAST_ENGLISH_FALLBACK_TEMPLATE':
+    'This is the last enabled OTP template in English (en) for every country (no country set). While phone sign-in is on or phone-number accounts exist, one must remain, so it cannot be deleted, switched off, or changed in language, country or type. Enable or create another one first.',
+  'reason.NEGATIVE': 'The amount is below 0.',
+  'reason.TOO_MANY_DECIMALS': 'The amount has more than two decimals.',
 };
 
 export default messages;

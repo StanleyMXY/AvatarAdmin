@@ -6,7 +6,9 @@ import type {
   AdminRole,
   AdminStatus,
   AdminUser,
+  AuditAdmin,
   AuditLog,
+  AuditMeta,
   AuditQuery,
   Page,
   Paging,
@@ -182,3 +184,40 @@ export const deletePermission = (code: string): Promise<unknown> =>
 
 export const listAuditLogs = (query: AuditQuery): Promise<Page<AuditLog>> =>
   readPage('/audit-logs', query);
+
+const textList = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v !== '') : [];
+
+/**
+ * `GET /audit-logs/meta` (`AUDIT:VIEW`): every action and object type the audit log can hold, in the
+ * order of the character codes. The values are used exactly as they are, case included. Anything
+ * that is not a list of text counts as an empty list.
+ */
+export async function getAuditMeta(): Promise<AuditMeta> {
+  const data = (await apiRequest<unknown>({ method: 'GET', url: '/audit-logs/meta' })) as {
+    actions?: unknown;
+    targetTypes?: unknown;
+  } | null;
+  return { actions: textList(data?.actions), targetTypes: textList(data?.targetTypes) };
+}
+
+/**
+ * `GET /audit-logs/admins` (`AUDIT:VIEW`): the administrators that exist, by user name, for the filter
+ * "administrator". Only the id and the user name; an administrator who was deleted is not in it.
+ * (`GET /admins` stays closed to someone who has `AUDIT:VIEW` alone.)
+ */
+export async function listAuditAdmins(): Promise<AuditAdmin[]> {
+  const data = await apiRequest<unknown>({ method: 'GET', url: '/audit-logs/admins' });
+  const items = (data as { items?: unknown } | null)?.items;
+  if (!Array.isArray(items)) return [];
+  const rows: AuditAdmin[] = [];
+  for (const item of items) {
+    const { id, username } = (typeof item === 'object' && item !== null ? item : {}) as {
+      id?: unknown;
+      username?: unknown;
+    };
+    if ((typeof id === 'string' || typeof id === 'number') && typeof username === 'string')
+      rows.push({ id: String(id), username });
+  }
+  return rows;
+}

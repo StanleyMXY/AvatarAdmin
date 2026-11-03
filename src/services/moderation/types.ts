@@ -53,15 +53,18 @@ export type ModerationQuery = {
   pageSize: number;
   status?: ModerationStatus;
   source?: ModerationSource;
+  /** One of the seven types; the backend filters, so the pages and the total are those of the type (answer 61). */
+  contentType?: ModerationContentType;
 };
 
 /**
  * What `GET /moderation/records/{id}/content` answers. `FILE` has `text` only when there is a text
- * that belongs to the file (today the transcript of a voice sample).
+ * that belongs to the file (today the transcript of a voice sample), and `expiresAt` (UTC): the moment
+ * the signed address stops working (backend answer 134). `TEXT` has no `expiresAt`.
  */
 export type ModerationContent =
   | { kind: 'TEXT'; text: string }
-  | { kind: 'FILE'; mediaType: string; url: string; text?: string };
+  | { kind: 'FILE'; mediaType: string; url: string; expiresAt?: string; text?: string };
 
 export type ModerationDecision = 'APPROVE' | 'REJECT';
 

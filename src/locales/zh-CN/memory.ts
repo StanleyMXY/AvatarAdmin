@@ -55,6 +55,8 @@ const messages: Record<string, string> = {
     '1 到 8192 的整数。同名模型登记过的维度不能再改，要换维度就换一个新名字。',
   'memory.model.dimensionsInvalid': '请填写 1 到 8192 的整数',
   'memory.model.submit': '登记',
+  'memory.model.conflictRegistered':
+    'embedding 模型冲突：同名模型已按 {dimensions} 维登记，维度不能更改。请换一个新名字登记。',
   'memory.model.registered': '模型已登记',
   'memory.model.empty': '还没有登记的模型',
   'memory.model.params': '参数',

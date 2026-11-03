@@ -101,15 +101,29 @@ export async function listPendingBatches(): Promise<{ items: PendingBatch[] }> {
   return { items: answer.items.map(normalizePending) };
 }
 
-/** `GET /usage/models` (`COST:VIEW`). */
-export async function listUsageModels(query: {
+export type ModelQuery = {
+  /** One of the resource types (`RESOURCE_TYPES`); left out: all. */
+  resourceType?: string;
+  /** `true`: the models with a price in force; `false`: the ones without; left out: all. */
+  hasActivePrice?: boolean;
   page: number;
   pageSize: number;
-}): Promise<Page<UsageModel>> {
+};
+
+/**
+ * `GET /usage/models` (`COST:VIEW`): the backend filters and pages (`resourceType`, `hasActivePrice`),
+ * and `total` is the number of models kept. A value it does not know is a 400 without `details`.
+ */
+export async function listUsageModels(query: ModelQuery): Promise<Page<UsageModel>> {
+  const { hasActivePrice, resourceType, ...paging } = query;
   return apiRequest<Page<UsageModel>>({
     method: 'GET',
     url: '/usage/models',
-    params: { ...query },
+    params: {
+      ...paging,
+      ...(resourceType ? { resourceType } : {}),
+      ...(hasActivePrice === undefined ? {} : { hasActivePrice: String(hasActivePrice) }),
+    },
   });
 }
 

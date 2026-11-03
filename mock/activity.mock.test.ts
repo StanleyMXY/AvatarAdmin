@@ -453,6 +453,7 @@ describe('the task configurations', () => {
         'status',
         'createdAt',
         'updatedAt',
+        'hasRecords',
       ].sort(),
     );
     expect((await get(CONFIGS, { taskName: 'OPEN THE' })).body.data.total).toBe(1);
@@ -565,6 +566,70 @@ describe('the task configurations', () => {
     const bad = await send(CONFIG_STATUS, { status: 'PAUSED' }, { id: '1' });
     expect(bad.status).toBe(400);
     expect(refs(bad)).toEqual(['status']);
+  });
+});
+
+describe('hasRecords of a task configuration (contract 28.2)', () => {
+  const flagsOf = (reply: { body: { data: { items: { id: string; hasRecords: unknown }[] } } }) =>
+    Object.fromEntries(reply.body.data.items.map((c) => [c.id, c.hasRecords]));
+
+  it('every item of the list says with a boolean whether the configuration has records', async () => {
+    const reply = await get(CONFIGS, { pageSize: '50' });
+    expect(flagsOf(reply)).toEqual({
+      '1': true,
+      '2': true,
+      '3': true,
+      '4': false,
+      '5': false,
+      '6': false,
+    });
+  });
+
+  it('the single configuration says it too, and answers 404 for one that does not exist', async () => {
+    const GET_ONE = 'GET /api/admin/tasks/configs/:id';
+    expect((await get(GET_ONE, {}, { id: '2' })).body.data).toMatchObject({
+      id: '2',
+      hasRecords: true,
+    });
+    expect((await get(GET_ONE, {}, { id: '5' })).body.data.hasRecords).toBe(false);
+    expect((await get(GET_ONE, {}, { id: '404' })).status).toBe(404);
+    expect((await get(GET_ONE, {}, { id: '2' }, 'finance')).status).toBe(403);
+  });
+
+  it('what the three writes answer carries it as well, also after the records appear', async () => {
+    const created = await send(CONFIG_CREATE, task());
+    expect(created.body.data.hasRecords).toBe(false);
+    const updated = await send(CONFIG_UPDATE, task({ taskType: 'call_seconds', targetValue: 90 }), {
+      id: '5',
+    });
+    expect(updated.body.data.hasRecords).toBe(false);
+    const stopped = await send(CONFIG_STATUS, { status: 'DISABLED' }, { id: '1' });
+    expect(stopped.body.data.hasRecords).toBe(true);
+    // A record appears for task 5: the flag follows, and the type and target are fixed from then on.
+    activityState.taskRecords.push({ ...activityState.taskRecords[0], id: '900', taskId: '5' });
+    const again = await send(
+      CONFIG_UPDATE,
+      task({ taskName: 'Same type', taskType: 'call_seconds', targetValue: 90 }),
+      {
+        id: '5',
+      },
+    );
+    expect(again.status).toBe(200);
+    expect(again.body.data.hasRecords).toBe(true);
+    const changed = await send(CONFIG_UPDATE, task({ taskType: 'call_seconds', targetValue: 91 }), {
+      id: '5',
+    });
+    expect(changed.status).toBe(409);
+  });
+
+  it('a PUT that sends the type and target as they are stored is not a change, so it does not get 409', async () => {
+    const reply = await send(
+      CONFIG_UPDATE,
+      task({ taskType: 'text_messages', targetValue: 20, rewardCredits: 4 }),
+      { id: '3' },
+    );
+    expect(reply.status).toBe(200);
+    expect(reply.body.data).toMatchObject({ rewardCredits: 4, hasRecords: true });
   });
 });
 

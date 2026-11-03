@@ -196,6 +196,23 @@ describe('the cost list', { timeout: 30000 }, () => {
     );
   });
 
+  it('is on page 1 each time other filters are applied, also when they are the ones that were in force on page 2 (all campaigns, one campaign, all campaigns)', async () => {
+    const { calls, user } = await openCosts();
+    await user.click(document.querySelector('.ant-pagination-item-2') as HTMLElement);
+    await waitFor(() => expect(costReads(calls).some((r) => r.get('page') === '2')).toBe(true));
+    await chooseOption(user, 'Campaign', /spring_th/);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(costReads(calls).some((r) => r.has('campaignId'))).toBe(true));
+    const select = screen.getByRole('combobox', { name: 'Campaign' }).closest('.ant-select');
+    expect(select?.querySelector('.ant-select-clear')).not.toBeNull();
+    await user.click(select?.querySelector('.ant-select-clear') as HTMLElement);
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(costReads(calls).at(-1)?.has('campaignId')).toBe(false));
+    expect(
+      costReads(calls).map((r) => `${r.has('campaignId') ? 'one' : 'all'}:${r.get('page')}`),
+    ).toEqual(['all:1', 'all:2', 'one:1', 'all:1']);
+  });
+
   it('reads again when Search is pressed with the filters that are already in force', async () => {
     const { calls, user } = await openCosts();
     const before = costReads(calls).length;

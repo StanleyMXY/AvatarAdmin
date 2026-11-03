@@ -29,22 +29,22 @@ const messages: Record<string, string> = {
   'sms.guard.action.change': 'You are about to change it so that it stops serving codes.',
   'sms.guard.signInOn':
     'Phone sign-in is on (auth.phone_login_enabled): the backend refuses this change.',
-  'sms.guard.signInOff':
-    'Phone sign-in is off (auth.phone_login_enabled): the backend does not refuse for this reason.',
+  'sms.guard.signInOff': 'Phone sign-in is off (auth.phone_login_enabled).',
   'sms.guard.signInUnknown':
-    'Your account cannot read whether phone sign-in is on (auth.phone_login_enabled). If it is on, the backend refuses this change.',
-  'sms.guard.accounts':
-    'The backend also refuses while accounts that sign in with a phone number exist, because they need SMS to delete their accounts. This page cannot see whether there are any.',
+    'This page could not read whether phone sign-in is on (auth.phone_login_enabled). If it is on, the backend refuses this change.',
+  'sms.guard.accountsSome':
+    'Accounts that sign in with a phone number: {count}. They need SMS to delete their accounts, so the backend refuses this change.',
+  'sms.guard.accountsNone': 'No account signs in with a phone number.',
+  'sms.guard.accountsUnknown':
+    'This page could not read how many accounts sign in with a phone number. If there are any, the backend refuses this change, because they need SMS to delete their accounts.',
   'sms.guard.final': 'The backend decides. If it refuses, nothing changes.',
   'sms.guard.ok': 'Continue',
 
   // ---- channels ----
-  'sms.channels.lastRefused':
-    'Nothing was changed. While phone sign-in is on or phone-number accounts exist, at least one enabled OTP channel must remain, and every country that may receive codes must still be served by an enabled OTP channel. Enable or create another channel, or widen the countries of another one, first, then change this one.',
   'sms.channels.note.selection':
     'For a country, the enabled OTP channel with the smallest priority number is used. When a send fails, it is not retried on another channel.',
   'sms.channels.note.credentials':
-    'Credentials are write-only: they are never shown again after saving. When you edit a channel, add no entries to keep the saved ones.',
+    'Credentials are write-only: they are never shown again after saving. When you edit a channel, leave every credential field blank to keep the saved ones.',
   'sms.channels.new': 'New channel',
   'sms.channels.readOnly':
     'You can only view channels. Changing them needs the permission to configure SMS channels.',
@@ -81,17 +81,24 @@ const messages: Record<string, string> = {
   'sms.channels.hostsHelp': 'This provider only allows these hosts: {hosts}',
   'sms.channels.credentialsNew': 'Optional now; they can be added later by editing the channel.',
   'sms.channels.credentialsSet':
-    'Credentials are set. Add no entries to keep them; adding entries replaces all of them, so enter every name and value again.',
+    'Credentials are set. Leave every field blank to keep them; filling them in replaces all of them, so fill in every field.',
   'sms.channels.credentialsNotSet': 'No credentials are set yet.',
   'sms.channels.credentialsWriteOnly': 'Write-only: saved credentials are never shown.',
-  'sms.channels.credentialName': 'Credential name',
-  'sms.channels.credentialValue': 'Credential value',
-  'sms.channels.credentialAdd': 'Add a credential',
-  'sms.channels.credentialRemove': 'Remove this credential',
-  'sms.channels.credentialRemoveShort': 'Remove',
-  'sms.channels.credentialNameRequired': 'Enter a name for this value',
-  'sms.channels.credentialValueRequired': 'Enter a value for this name',
-  'sms.channels.credentialNameDuplicate': 'This name is used twice',
+  'sms.channels.credentialsNone': 'This provider needs no credentials.',
+  'sms.channels.credentialsChooseProvider':
+    'Choose a provider first: the credentials to enter depend on it.',
+  'sms.channels.credentialsUnknownProvider':
+    'The backend does not list this provider, so the credentials it needs are not known and none can be entered here.',
+  'sms.channels.credentialsSwitched':
+    'The provider was changed. The saved credentials belong to the previous provider, so fill in every field.',
+  'sms.channels.credentialsIncomplete':
+    'Fill in every credential of this provider, or leave all of them blank. Missing: {names}.',
+  'sms.channels.credentialsRequired':
+    'Fill in every credential of this provider. Missing: {names}.',
+  'sms.channels.credentialsRefused.EMPTY_NOT_ALLOWED':
+    'The backend says that a credential this provider needs is missing. Reload the page, fill in every field and save again.',
+  'sms.channels.credentialsRefused.OUT_OF_RANGE':
+    'The backend says that a credential name is not one this provider uses. Reload the page (the names may have changed) and fill in the fields again.',
   'sms.channels.extConfigHelp':
     'A JSON object, for example the appId and the sender IDs by country. Leave empty for none.',
   'sms.channels.countriesHelp':
@@ -130,8 +137,6 @@ const messages: Record<string, string> = {
   // ---- templates ----
   'sms.templates.note.rule':
     'How a template is chosen for a send: first the one for the country of the number and the language of the user (the Accept-Language request header), then one in the same language for any country, and last the English one. When no template can be used, the send fails. While phone sign-in is on or phone-number accounts exist, at least one enabled OTP template in English (en) with no country must remain; the backend refuses the change that would remove it.',
-  'sms.templates.lastRefused':
-    'Nothing was changed. While phone sign-in is on or phone-number accounts exist, at least one enabled OTP template must remain, and one of them must be an enabled OTP template in English (en) for every country (no country set). Enable or create another one first, then change this one.',
   'sms.templates.new': 'New template',
   'sms.templates.empty': 'No templates',
   'sms.templates.col.code': 'Code',

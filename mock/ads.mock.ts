@@ -28,6 +28,7 @@ import {
   type MockUnit,
   type MockUpload,
   mediaUrlOf,
+  notSkippableFullScreenCount,
   thumbnailUrlOf,
   usernameOf,
 } from './_core/adsData';
@@ -50,7 +51,7 @@ import { daysIn, rangeOf, text } from './_core/statRange';
 type Detail = { ref: string; reason: string };
 
 const CAMPAIGN_READ: PermissionCode[] = ['ADS:CAMPAIGN', 'ADS:UNIT', 'ADS:CREATIVE'];
-const PLACEMENT_READ: PermissionCode[] = ['ADS:PLACEMENT', 'ADS:UNIT'];
+const PLACEMENT_READ: PermissionCode[] = ['ADS:PLACEMENT', 'ADS:UNIT', 'ADS:CREATIVE'];
 const UNIT_READ: PermissionCode[] = ['ADS:UNIT', 'ADS:CREATIVE'];
 const ANY_ADS: PermissionCode[] = [
   'ADS:CAMPAIGN',
@@ -369,7 +370,7 @@ function uploadOf(id: string): MockUpload {
   if (upload.kind !== 'AD_MEDIA') {
     throw fail([{ ref: 'uploadId', reason: 'OUT_OF_RANGE' }], 'The upload is of another kind');
   }
-  if (upload.used) throw invalidState('USED', 'The upload belongs to another object already');
+  if (upload.used) throw invalidState('CONSUMED', 'The upload belongs to another object already');
   return upload;
 }
 
@@ -761,7 +762,13 @@ export default {
     return ok(null);
   }),
 
-  'GET /api/admin/ads/meta': guard(ANY_ADS, () => ok({ geoConfigured: adsState.geoConfigured })),
+  'GET /api/admin/ads/meta': guard(ANY_ADS, () =>
+    ok({
+      geoConfigured: adsState.geoConfigured,
+      creativeAspectTolerancePercent: toleranceOf(),
+      notSkippableFullScreenCount: notSkippableFullScreenCount(),
+    }),
+  ),
 
   // ---- creatives ----
   'GET /api/admin/ads/creatives': guard('ADS:CREATIVE', (req) => {

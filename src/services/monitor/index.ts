@@ -68,11 +68,20 @@ export type PipelineQuery = {
   source?: string;
 };
 
+export type PipelineAnswer = {
+  items: PipelinePoint[];
+  truncated: boolean;
+  /**
+   * Every source that reported in the last `monitor.max_range_days` days, once each, by code point;
+   * it does not depend on `from`, `to` or `source`, so a source that stopped reporting is in it
+   * although the range has no point of it.
+   */
+  sources: string[];
+};
+
 /** `GET /monitor/pipeline` (`MONITOR:VIEW`): points by time, oldest first; `truncated` when there were more than the limit. */
-export const getPipeline = (
-  query: PipelineQuery,
-): Promise<{ items: PipelinePoint[]; truncated: boolean }> =>
-  apiRequest<{ items: PipelinePoint[]; truncated: boolean }>({
+export const getPipeline = (query: PipelineQuery): Promise<PipelineAnswer> =>
+  apiRequest<PipelineAnswer>({
     method: 'GET',
     url: '/monitor/pipeline',
     params: { ...query },

@@ -78,7 +78,22 @@ export type Attribution = {
 };
 
 /**
- * `GET /users/{id}` (backend reply, item 6): the columns of `User` and five derived fields. The
+ * The deletion of the account that is not over (`SCHEDULED`, `PENDING`, `RUNNING` or `FAILED`), as
+ * `GET /users/{id}` carries it (backend answer 60). `requestedBy` is null when the user asked for it
+ * themselves; `requestedByUsername` is null then too, and also when the administrator who asked has
+ * been deleted (`requestedBy` stays).
+ */
+export type OpenDeletion = {
+  id: string;
+  status: string;
+  executeAfter: string | null;
+  requestedBy: string | null;
+  requestedByUsername: string | null;
+  createdAt: string;
+};
+
+/**
+ * `GET /users/{id}` (backend reply, item 6): the columns of `User` and six derived fields. The
  * backend never returns the persona, a password hash or a third-party login identifier.
  */
 export type UserDetail = {
@@ -109,6 +124,8 @@ export type UserDetail = {
   counts: AssetCounts;
   /** `null` when the account has no attribution record. */
   attribution: Attribution | null;
+  /** `null` when no deletion is open; absent in an older answer, which reads the same. */
+  deletion?: OpenDeletion | null;
 };
 
 /**

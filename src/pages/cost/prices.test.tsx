@@ -7,6 +7,7 @@ import { monitorStore, raiseAlert, resetMonitorStore } from '../../../mock/_core
 import * as configMock from '../../../mock/config.mock';
 import * as costMock from '../../../mock/cost.mock';
 import * as monitorMock from '../../../mock/monitor.mock';
+import { failRequests, refuseRequests, SERVER_ERROR } from '../../../tests/failureLanguage';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
@@ -440,7 +441,7 @@ describe('pending prices', () => {
       expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')).toHaveLength(1);
     });
 
-    it('keeps the dialog open and shows the general sentence when the backend refused (the bands have a gap): it gives no details and its own words are not shown', async () => {
+    it('keeps the dialog open and names the band field when the backend refused (the bands have a gap): the words of the code and of the reason, not the backend words', async () => {
       const { user } = await open();
       const card = await cardOf(BATCH.pendingGap);
       await user.click(card.getByRole('button', { name: 'Confirm' }));
@@ -455,8 +456,10 @@ describe('pending prices', () => {
           'Some input is not valid. Please check the fields and try again.',
         ),
       );
-      // the backend gives no details for the bands: the general sentence is all there is
-      expect(dialog.textContent).not.toContain('The value is outside the allowed range.');
+      // the backend names the lower bound of the second band; the line says which band and which field
+      expect(dialog.textContent).toContain(
+        'Band 2: lower bound (tokens): The value is outside the allowed range.',
+      );
       expect(dialog.textContent).not.toContain('cannot confirm');
       expect(costState.batches.find((b) => b.batchId === BATCH.pendingGap)?.status).toBe(
         'PENDING_REVIEW',
@@ -1323,26 +1326,143 @@ describe('enter a price by hand', () => {
       expect(callsTo(calls, 'POST', '/api/admin/usage/prices')).toHaveLength(1);
     });
 
-    it('keeps the dialog and the entered values when the backend refuses, and shows only the general sentence: the backend gives no details for a price, so there is no reason to show', async () => {
-      const { user } = await open(ALL, {
-        tab: 'Enter by hand',
-        meta: { allowedCurrencies: ['USD', 'EUR'] },
-      });
-      await fillLlm(user);
-      await chooseOption(user, 'Currency', 'EUR');
-      const dialog = await save(user);
-      await user.click(within(dialog).getByRole('button', { name: 'Save the price' }));
-      await waitFor(() =>
-        expect(dialog.textContent).toContain(
+    describe('a price the backend refuses field by field (`data.details`, `ref` is the path of the field)', () => {
+      const refusal = (ref: string) => screen.queryByTestId(`refusal-${ref}`);
+      const TOO_BIG = '2000000';
+      const OUT_OF_RANGE = 'The value is outside the allowed range.';
+
+      const twoBands = async (user: ReturnType<typeof userEvent.setup>) => {
+        await user.type(field('Provider'), 'provider-z.example');
+        await user.type(field('Model'), 'model-z');
+        await user.type(field('Band 1: upper bound (tokens)'), '1000');
+        await user.type(field('Band 1: input price'), '0.4');
+        await user.type(field('Band 1: output price'), '1.2');
+        await user.click(screen.getByRole('button', { name: 'Add a band' }));
+        await user.type(field('Band 2: input price'), '0.8');
+        await user.type(field('Band 2: output price'), '2.4');
+      };
+      const send = async (user: ReturnType<typeof userEvent.setup>) => {
+        const dialog = await save(user);
+        await user.click(within(dialog).getByRole('button', { name: 'Save the price' }));
+      };
+
+      it('puts the reason under the band field that was refused, closes the dialog, and keeps what was typed', async () => {
+        const { user, calls } = await open(ALL, { tab: 'Enter by hand' });
+        await twoBands(user);
+        await user.clear(field('Band 2: input price'));
+        await user.type(field('Band 2: input price'), TOO_BIG);
+        await send(user);
+        await waitFor(() => expect(refusal('bands[1].inputPrice')).not.toBeNull());
+        expect(refusal('bands[1].inputPrice')?.textContent).toBe(OUT_OF_RANGE);
+        // the hint belongs to the field: assistive technology reads it with the field
+        expect(field('Band 2: input price')).toHaveAccessibleDescription(OUT_OF_RANGE);
+        expect(field('Band 2: input price')).toBeInvalid();
+        for (const other of [
+          'Band 1: input price',
+          'Band 1: output price',
+          'Band 2: output price',
+          'Band 2: upper bound (tokens)',
+          'Provider',
+          'Model',
+        ]) {
+          expect(field(other)).toHaveAccessibleDescription('');
+        }
+        // only the field is named: the dialog is closed, the typed values are still there, one request was made
+        await dialogsClosed();
+        expect((field('Model') as HTMLInputElement).value).toBe('model-z');
+        expect((field('Band 2: input price') as HTMLInputElement).value).toBe(TOO_BIG);
+        expect(callsTo(calls, 'POST', '/api/admin/usage/prices')).toHaveLength(1);
+        // the words of the error code sit above the form; the backend's own words are nowhere
+        expect(screen.getByTestId('manual-refused').textContent).toContain(
           'Some input is not valid. Please check the fields and try again.',
-        ),
-      );
-      // no details came, so no field and no reason is named, and the English words of the backend are not shown
-      expect(dialog.textContent).not.toContain('The value is outside the allowed range.');
-      expect(dialog.textContent).not.toMatch(/invalid price|allowed_currencies|currency/i);
-      expect(costState.batches.some((b) => b.model === 'model-z')).toBe(false);
-      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-      expect((field('Model') as HTMLInputElement).value).toBe('model-z');
+        );
+        expect(document.body.textContent).not.toContain('invalid price');
+        expect(costState.batches.some((b) => b.model === 'model-z')).toBe(false);
+      });
+
+      it('takes a hint away when its field is edited, and leaves the hints of the other fields', async () => {
+        const { user } = await open(ALL, { tab: 'Enter by hand' });
+        await twoBands(user);
+        await user.clear(field('Band 2: input price'));
+        await user.type(field('Band 2: input price'), TOO_BIG);
+        await user.clear(field('Band 1: output price'));
+        await user.type(field('Band 1: output price'), TOO_BIG);
+        await send(user);
+        await waitFor(() => expect(refusal('bands[1].inputPrice')).not.toBeNull());
+        expect(refusal('bands[0].outputPrice')?.textContent).toBe(OUT_OF_RANGE);
+        await user.clear(field('Band 2: input price'));
+        expect(refusal('bands[1].inputPrice')).toBeNull();
+        expect(field('Band 2: input price')).toHaveAccessibleDescription('');
+        expect(refusal('bands[0].outputPrice')).not.toBeNull();
+        expect(screen.getByTestId('manual-refused')).toBeInTheDocument();
+        await user.clear(field('Band 1: output price'));
+        expect(refusal('bands[0].outputPrice')).toBeNull();
+        // every hint is gone, so the sentence above the form is gone too
+        expect(screen.queryByTestId('manual-refused')).toBeNull();
+      });
+
+      it('names the unit price of a type that has one, and the currency the backend does not allow', async () => {
+        const { user } = await open(ALL, {
+          tab: 'Enter by hand',
+          meta: { allowedCurrencies: ['USD', 'EUR'] },
+        });
+        await chooseOption(user, 'Resource type', 'Cloud rendering');
+        await user.type(field('Provider'), 'p');
+        await user.type(field('Model'), 'm');
+        await user.type(field('Price per unit'), '1000000.01');
+        await chooseOption(user, 'Currency', 'EUR');
+        await send(user);
+        await waitFor(() => expect(refusal('currency')).not.toBeNull());
+        expect(refusal('currency')?.textContent).toBe(OUT_OF_RANGE);
+        expect(refusal('unitPrice')?.textContent).toBe(OUT_OF_RANGE);
+        expect(field('Price per unit')).toHaveAccessibleDescription(OUT_OF_RANGE);
+      });
+
+      it('says the reason in Chinese too, from the words of the reason code', async () => {
+        const { user } = await open(ALL, { tab: '手填价格', locale: 'zh-CN' });
+        await user.type(screen.getByRole('textbox', { name: '提供方' }), 'p');
+        await user.type(screen.getByRole('textbox', { name: '模型' }), 'm');
+        await user.type(screen.getByRole('textbox', { name: '第 1 档：输入价' }), TOO_BIG);
+        await user.type(screen.getByRole('textbox', { name: '第 1 档：输出价' }), '1');
+        await user.click(screen.getByRole('button', { name: '保存价格' }));
+        const dialog = await screen.findByRole('dialog');
+        await user.click(within(dialog).getByRole('button', { name: '保存价格' }));
+        await waitFor(() => expect(refusal('bands[0].inputPrice')).not.toBeNull());
+        expect(refusal('bands[0].inputPrice')?.textContent).toBe('超出允许的范围');
+      });
+
+      it('a refusal that names a field the form has no place for is a line above the form, with the band and the field named', async () => {
+        const { user } = await open(ALL, { tab: 'Enter by hand' });
+        await fillLlm(user);
+        refuseRequests(
+          (path, method) => method === 'POST' && path === '/api/admin/usage/prices',
+          [
+            { ref: 'bands[7].inputMinTokens', reason: 'OUT_OF_RANGE' },
+            { ref: 'something.new', reason: 'EMPTY_NOT_ALLOWED' },
+            { ref: 'bands', reason: 'SOMETHING_NEW' },
+          ],
+        );
+        await send(user);
+        const above = await screen.findByTestId('manual-refused');
+        expect(above.textContent).toContain(
+          'Band 8: lower bound (tokens): The value is outside the allowed range.',
+        );
+        expect(above.textContent).toContain('It must not be empty.');
+        // a reason this app has no words for is not shown as the backend's own word
+        expect(above.textContent).not.toContain('SOMETHING_NEW');
+        expect(field('Band 1: input price')).toHaveAccessibleDescription('');
+      });
+
+      it('a refusal that is not about fields stays in the dialog as before (and the fields have no hints)', async () => {
+        const { user } = await open(ALL, { tab: 'Enter by hand' });
+        await fillLlm(user);
+        failRequests((path, method) => method === 'POST' && path === '/api/admin/usage/prices');
+        const dialog = await save(user);
+        await user.click(within(dialog).getByRole('button', { name: 'Save the price' }));
+        await waitFor(() => expect(dialog.textContent).toContain(SERVER_ERROR.en));
+        expect(screen.queryByTestId('manual-refused')).toBeNull();
+        expect(refusal('bands[0].inputPrice')).toBeNull();
+      });
     });
   });
 
@@ -1398,30 +1518,135 @@ describe('models', () => {
     expect(rowOf('model-large-1').getAttribute('data-unpriced')).toBe('false');
   });
 
-  it('filters to the models without a price in force, and back', async () => {
-    const { user } = await open(ALL, { tab: 'Models' });
+  const modelReads = (calls: { method: string; url: string }[]) =>
+    calls.filter((c) => c.method === 'GET' && c.url.startsWith('/api/admin/usage/models'));
+  const queryOf = (url: string) => Object.fromEntries(new URL(url, 'http://x').searchParams);
+  const bodyRows = () => [...document.querySelectorAll('.ant-table-tbody > tr.ant-table-row')];
+  const lastQuery = (calls: { method: string; url: string }[]) =>
+    queryOf(modelReads(calls).at(-1)?.url ?? '');
+  const manyUnpriced = (count: number) => () => {
+    for (let i = 0; i < count; i += 1) {
+      costState.models.push({
+        id: `extra-${i}`,
+        resourceType: 'MATTING',
+        provider: 'extra.example',
+        model: `extra-model-${String(i).padStart(2, '0')}`,
+        syncAdapter: null,
+        syncModelId: null,
+        firstSeenAt: '2026-09-01T00:00:00Z',
+        lastSeenAt: '2026-10-01T00:00:00Z',
+      });
+    }
+  };
+  const ONLY_UNPRICED = { name: 'Only models without a price in force' };
+
+  it('asks the server for the models without a price in force (hasActivePrice=false), and back; the page filters nothing itself', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models' });
     await screen.findAllByText('model-large-1');
-    await user.click(
-      screen.getByRole('checkbox', { name: 'Only models without a price in force' }),
+    expect(lastQuery(calls)).not.toHaveProperty('hasActivePrice');
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(lastQuery(calls).hasActivePrice).toBe('false'));
+    await waitFor(() =>
+      expect(bodyRows().length).toBe(
+        costState.models.filter((m) => !['1', '2', '4', '5', '7', '8', '10'].includes(m.id)).length,
+      ),
     );
-    const rows = [...document.querySelectorAll('.ant-table-tbody > tr.ant-table-row')];
-    expect(rows.length).toBe(
-      costState.models.filter((m) => !['1', '2', '4', '5', '7', '8', '10'].includes(m.id)).length,
-    );
-    expect(rows.every((r) => r.getAttribute('data-unpriced') === 'true')).toBe(true);
-    await user.click(
-      screen.getByRole('checkbox', { name: 'Only models without a price in force' }),
-    );
-    expect(document.querySelectorAll('.ant-table-tbody > tr.ant-table-row').length).toBe(
-      costState.models.length,
+    expect(bodyRows().every((r) => r.getAttribute('data-unpriced') === 'true')).toBe(true);
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(bodyRows().length).toBe(costState.models.length));
+    expect(lastQuery(calls)).not.toHaveProperty('hasActivePrice');
+  });
+
+  it('opens with the filter from the address already asked for: the first read has it, there is no read of everything first', async () => {
+    const { calls } = await open(ALL, { search: '?tab=models&hasPrice=false' });
+    await screen.findAllByText('matting-model-besar');
+    expect(modelReads(calls).length).toBeGreaterThan(0);
+    for (const read of modelReads(calls)) expect(queryOf(read.url).hasActivePrice).toBe('false');
+  });
+
+  it('asks the server for one page at a time: a long list is paged by the server and the pager counts what the server counts', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models', prepare: manyUnpriced(15) });
+    await screen.findAllByText('model-large-1');
+    // 10 models of the preset and 15 more: 25 in all, 20 on the first page, read in one request
+    expect(bodyRows()).toHaveLength(20);
+    expect(modelReads(calls)).toHaveLength(1);
+    expect(lastQuery(calls)).toMatchObject({ page: '1', pageSize: '20' });
+    await user.click(screen.getByTitle('2'));
+    await waitFor(() => expect(bodyRows()).toHaveLength(5));
+    expect(lastQuery(calls)).toMatchObject({ page: '2', pageSize: '20' });
+    // a filter starts again from the first page, and the pager counts the filtered list
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(lastQuery(calls).hasActivePrice).toBe('false'));
+    expect(lastQuery(calls).page).toBe('1');
+    // 3 of the 10 models of the preset have no price in force, and the 15 more: 18 in all, one page
+    await waitFor(() => expect(bodyRows()).toHaveLength(18));
+    expect(screen.queryByTitle('2')).toBeNull();
+  });
+
+  it('starts from the first page each time the filter changes, also when it comes back to the value it had on page 2 (off, on, off)', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models', prepare: manyUnpriced(25) });
+    await screen.findAllByText('model-large-1');
+    // 10 models of the preset and 25 more: 35 in all, 20 on a page
+    await user.click(screen.getByTitle('2'));
+    await waitFor(() => expect(lastQuery(calls).page).toBe('2'));
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(lastQuery(calls).hasActivePrice).toBe('false'));
+    expect(lastQuery(calls).page).toBe('1');
+    await waitFor(() => expect(bodyRows()).toHaveLength(20));
+    // off again: the unfiltered list from its first page, not from the page it was left on
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(lastQuery(calls)).not.toHaveProperty('hasActivePrice'));
+    expect(lastQuery(calls).page).toBe('1');
+    expect(
+      modelReads(calls).map((r) => {
+        const q = queryOf(r.url);
+        return `${q.hasActivePrice ?? 'all'}:${q.page}`;
+      }),
+    ).toEqual(['all:1', 'all:2', 'false:1', 'all:1']);
+    // and the page is the first one of the list that comes back
+    await waitFor(() => expect(screen.getByTitle('1')).toHaveClass('ant-pagination-item-active'));
+  });
+
+  it('asks the server for one resource type (resourceType=MATTING), together with the other filter', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models' });
+    await screen.findAllByText('model-large-1');
+    await chooseOption(user, 'Resource type', 'Matting');
+    await waitFor(() => expect(bodyRows()).toHaveLength(1));
+    expect(lastQuery(calls).resourceType).toBe('MATTING');
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() =>
+      expect(lastQuery(calls)).toMatchObject({ resourceType: 'MATTING', hasActivePrice: 'false' }),
     );
   });
 
-  it('filters by resource type', async () => {
-    const { user } = await open(ALL, { tab: 'Models' });
+  it('keeps the two filters when the tab is left and opened again', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models' });
     await screen.findAllByText('model-large-1');
     await chooseOption(user, 'Resource type', 'Matting');
-    expect(document.querySelectorAll('.ant-table-tbody > tr.ant-table-row')).toHaveLength(1);
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(lastQuery(calls).hasActivePrice).toBe('false'));
+    await user.click(screen.getByRole('tab', { name: 'Current prices' }));
+    await user.click(screen.getByRole('tab', { name: 'Models' }));
+    await waitFor(() =>
+      expect(lastQuery(calls)).toMatchObject({ resourceType: 'MATTING', hasActivePrice: 'false' }),
+    );
+    expect(screen.getByRole('checkbox', ONLY_UNPRICED)).toBeChecked();
+  });
+
+  it('says the words of the error code when the server refuses the read, with a retry that reads again', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models' });
+    await screen.findAllByText('model-large-1');
+    failRequests((path, method) => method === 'GET' && path === '/api/admin/usage/models');
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    expect(await screen.findByText(new RegExp(SERVER_ERROR.en))).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('message of INTERNAL_ERROR');
+    const before = modelReads(calls).length;
+    vi.unstubAllGlobals();
+    const again = useMockBackend(metaMock, costMock, monitorMock, configMock);
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(bodyRows().length).toBeGreaterThan(0));
+    expect(lastQuery(again).hasActivePrice).toBe('false');
+    expect(before).toBeGreaterThan(0);
   });
 
   it('shows "By hand" for a model with no adapter and the adapter code otherwise', async () => {

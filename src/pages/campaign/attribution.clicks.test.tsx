@@ -269,6 +269,24 @@ describe('the click details', { timeout: 30000 }, () => {
     expect(clickReads(calls)[before].get('page')).toBe('1');
   });
 
+  it('is on page 1 each time other filters are applied, also when they are the ones that were in force on page 2 (no filter, status, no filter)', async () => {
+    const { calls, user } = await load();
+    await user.click(document.querySelector('.ant-pagination-item-2') as HTMLElement);
+    await waitFor(() => expect(clickReads(calls).some((r) => r.get('page') === '2')).toBe(true));
+    await chooseOption(user, 'Status', 'Matched');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(clickReads(calls).some((r) => r.has('status'))).toBe(true));
+    await chooseOption(user, 'Status', 'All');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(clickReads(calls).at(-1)?.has('status')).toBe(false));
+    expect(clickReads(calls).map((r) => `${r.get('status') ?? 'all'}:${r.get('page')}`)).toEqual([
+      'all:1',
+      'all:2',
+      'MATCHED:1',
+      'all:1',
+    ]);
+  });
+
   it('offers the three states and no other', async () => {
     const { user } = await load();
     await user.click(screen.getByRole('combobox', { name: 'Status' }));

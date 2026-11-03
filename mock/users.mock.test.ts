@@ -233,6 +233,7 @@ describe('GET /users/{id}', () => {
         'companionship',
         'counts',
         'attribution',
+        'deletion',
       ].sort(),
     );
     expect(detail.loginMethods).toEqual(expect.arrayContaining(['EMAIL', 'GOOGLE']));
@@ -259,6 +260,90 @@ describe('GET /users/{id}', () => {
       currentStreak: 0,
       lastInteractionDate: null,
       lastInteractionAt: null,
+    });
+  });
+
+  describe('deletion: the task of the account that is not finished (backend answer 60)', () => {
+    const KEYS = [
+      'createdAt',
+      'executeAfter',
+      'id',
+      'requestedBy',
+      'requestedByUsername',
+      'status',
+    ];
+
+    it('is null for an account without a deletion and for one whose deletions are all finished', async () => {
+      expect((await get(DETAIL, 'root', {}, { id: USER.rich })).body.data.deletion).toBeNull();
+      // finished tasks (COMPLETED, CANCELED) are not open: they do not show
+      usersState.deletions.push({
+        ...usersState.deletions[0],
+        id: '7001',
+        accountId: USER.rich,
+        status: 'CANCELED',
+        canceledAt: '2026-10-01T00:00:00Z',
+      });
+      usersState.deletions.push({
+        ...usersState.deletions[0],
+        id: '7002',
+        accountId: USER.rich,
+        status: 'COMPLETED',
+        completedAt: '2026-10-02T00:00:00Z',
+      });
+      expect((await get(DETAIL, 'root', {}, { id: USER.rich })).body.data.deletion).toBeNull();
+    });
+
+    it('has the six fields of the task that is open: the user own request has no administrator', async () => {
+      const { body } = await get(DETAIL, 'root', {}, { id: USER.pendingDeletion });
+      const deletion = body.data.deletion;
+      expect(Object.keys(deletion).sort()).toEqual(KEYS);
+      expect(deletion).toMatchObject({
+        status: 'SCHEDULED',
+        requestedBy: null,
+        requestedByUsername: null,
+      });
+      const task = usersState.deletions.find((t) => t.accountId === USER.pendingDeletion);
+      expect(deletion.id).toBe(task?.id);
+      expect(deletion.executeAfter).toBe(task?.executeAfter);
+      expect(deletion.createdAt).toBe(task?.createdAt);
+    });
+
+    it('names the administrator who started it', async () => {
+      const { body } = await get(DETAIL, 'root', {}, { id: '2003' });
+      expect(body.data.deletion).toMatchObject({
+        status: 'SCHEDULED',
+        requestedBy: adminOf('root').id,
+        requestedByUsername: 'root',
+      });
+    });
+
+    it('keeps requestedBy and has no name when the administrator who started it is gone', async () => {
+      const task = usersState.deletions.find((t) => t.accountId === '2003');
+      if (task) task.requestedBy = '9999';
+      const { body } = await get(DETAIL, 'root', {}, { id: '2003' });
+      expect(body.data.deletion).toMatchObject({ requestedBy: '9999', requestedByUsername: null });
+    });
+
+    it('shows the task while it runs, and one that is in the queue, and follows a start and a cancel', async () => {
+      expect((await get(DETAIL, 'root', {}, { id: USER.deleting })).body.data.deletion.status).toBe(
+        'RUNNING',
+      );
+      const started = await send(
+        START,
+        'root',
+        { reason: 'Cliente pidió la baja' },
+        { id: USER.rich },
+      );
+      expect(started.status).toBe(200);
+      const open = (await get(DETAIL, 'root', {}, { id: USER.rich })).body.data.deletion;
+      expect(open).toMatchObject({
+        status: 'SCHEDULED',
+        requestedBy: adminOf('root').id,
+        requestedByUsername: 'root',
+      });
+      expect(open.executeAfter).toBe(started.body.data.scheduledAt);
+      await send(CANCEL, 'root', {}, { id: USER.rich });
+      expect((await get(DETAIL, 'root', {}, { id: USER.rich })).body.data.deletion).toBeNull();
     });
   });
 

@@ -1,20 +1,9 @@
 import { useIntl } from '@umijs/max';
-import {
-  Alert,
-  App,
-  Button,
-  Flex,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Select,
-  Switch,
-  Typography,
-} from 'antd';
+import { Alert, App, Form, Input, InputNumber, Modal, Select, Switch, Typography } from 'antd';
 import { type FailureLines, useFailureView } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { ApiError } from '../../request/errors';
 import {
   createChannel,
   SMS_TYPES,
@@ -23,14 +12,17 @@ import {
   updateChannel,
 } from '../../services/sms';
 import { failureToForm, failureWords } from '../../utils/failureToForm';
+import { setFieldReasons } from '../../utils/fieldReasons';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
+import { CredentialFields } from './CredentialFields';
 import {
   apiUrlProblem,
   buildChannelBody,
   type ChannelFormValues,
+  type CredentialValues,
   countryCodeProblem,
-  credentialProblems,
+  credentialsProblem,
   normalizeCountries,
 } from './channelRules';
 import { type Coverage, keepsCoverage } from './lastOtp';
@@ -71,6 +63,20 @@ const FIELDS = [
 const DEFAULT_PRIORITY = 100;
 const CODE_FORMAT = /^[A-Za-z0-9_-]{1,64}$/;
 
+/** The reasons that a refused save names for the `credentials` (a name missing, or one the provider does not use). */
+function credentialsRefusals(error: unknown): ('EMPTY_NOT_ALLOWED' | 'OUT_OF_RANGE')[] {
+  if (!(error instanceof ApiError)) return [];
+  const found = error.details
+    .filter((d) => d.ref === 'credentials')
+    .map((d) => d.reason)
+    .filter(
+      (reason): reason is 'EMPTY_NOT_ALLOWED' | 'OUT_OF_RANGE' =>
+        reason === 'EMPTY_NOT_ALLOWED' || reason === 'OUT_OF_RANGE',
+    );
+  // The last one is the one shown, as it is for any field.
+  return found.slice(-1);
+}
+
 /** The channel as the question about the last OTP channel reads it. */
 export const asCoverage = (c: Partial<SmsChannel>): Coverage => ({
   id: plainText(c.id),
@@ -100,12 +106,15 @@ function extConfigText(value: unknown): string {
 }
 
 /**
- * New or edit channel. The credentials are write-only rows of a name and a value: there is no row when
- * the dialog opens, whatever the backend sent, and the request carries them (as a map of names to text
- * values) only when a whole row was typed; no row leaves the key out, which tells the backend to keep
- * what it holds. A row with entries replaces everything stored, so the person types all of them again. The code cannot be
- * changed after it was written, and the switch has its own request. Mounted only while it is open, so
- * that nothing typed in one dialog is there in the next.
+ * New or edit channel. The credentials are write-only: one box for each name that the chosen
+ * provider declares (`credentialNames` of `GET /sms/meta`), the names are fixed, and there is nothing
+ * in the boxes when the dialog opens, whatever the backend sent. The request carries them (a map of
+ * those names to text values) only when every box was filled; all blank leaves the key out, which
+ * tells the backend to keep what it holds; some filled and some blank is refused here, because the
+ * backend wants exactly the declared names. Changing the provider of a channel to another one that
+ * needs credentials asks for all of them (what is saved belongs to the old provider). The code cannot
+ * be changed after it was written, and the switch has its own request. Mounted only while it is open,
+ * so that nothing typed in one dialog is there in the next.
  */
 export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }: Props) {
   const intl = useIntl();
@@ -116,7 +125,14 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
   const { view: failure, show, clear } = useFailureView<FailureLines>();
   const editing = channel !== null;
   const providerCode = Form.useWatch('providerCode', form);
-  const hosts = providers.find((p) => p.code === providerCode)?.allowedHosts ?? [];
+  const provider = providers.find((p) => p.code === providerCode);
+  const hosts = provider?.allowedHosts ?? [];
+  // The names this provider declares; none is known for one that the backend does not list.
+  const credentialNames = provider?.credentialNames ?? [];
+  // What is saved belongs to the provider the channel has now: another one needs its own, whole.
+  const switched =
+    editing && provider !== undefined && providerCode !== plainText(channel.providerCode);
+  const mustFill = switched && credentialNames.length > 0;
 
   const providerOptions = providers.map((p) => ({ value: p.code, label: p.code }));
   const current = channel ? plainText(channel.providerCode) : '';
@@ -143,10 +159,26 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
       priority: values.priority,
     } as ChannelFormValues;
     try {
-      if (channel) await updateChannel(plainText(channel.id), buildChannelBody(input, 'update'));
-      else await createChannel(buildChannelBody(input, 'create'));
+      if (channel) {
+        await updateChannel(
+          plainText(channel.id),
+          buildChannelBody(input, 'update', credentialNames),
+        );
+      } else {
+        await createChannel(buildChannelBody(input, 'create', credentialNames));
+      }
     } catch (error) {
       failureToForm(intl, form, error, FIELDS, {}, { generalReason: true });
+      // The two refusals of the credentials have a text of their own, written for this box.
+      setFieldReasons(
+        form,
+        intl,
+        credentialsRefusals(error).map((reason) => ({
+          name: 'credentials',
+          write: (words) =>
+            words.formatMessage({ id: `sms.channels.credentialsRefused.${reason}` }),
+        })),
+      );
       // The refusal about the last channel names no field: its words stand alone at the top.
       show((words) => ({
         text: guardedFailureText(words, error),
@@ -195,7 +227,7 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
           name: plainText(channel?.name),
           providerCode: channel ? plainText(channel.providerCode) : undefined,
           apiUrl: plainText(channel?.apiUrl),
-          credentials: [],
+          credentials: {},
           extConfig: channel ? extConfigText(channel.extConfig) : '',
           countries: channel ? normalizeCountries(channel.countries) : [],
           smsType: channel && SMS_TYPES.includes(channel.smsType) ? channel.smsType : undefined,
@@ -208,6 +240,10 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
           enabled: false,
         }}
         onFinish={(values) => run(values)}
+        // What was typed for one provider is not carried to another: the boxes start empty again.
+        onValuesChange={(changed) => {
+          if ('providerCode' in changed) form.resetFields(['credentials']);
+        }}
       >
         <RevalidateOnLocaleChange />
         {editing ? (
@@ -278,7 +314,9 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
           <Input dir="ltr" />
         </Form.Item>
         <Form.Item
+          name="credentials"
           label={t('sms.channels.field.credentials')}
+          dependencies={['providerCode']}
           extra={
             <>
               {t(
@@ -288,82 +326,38 @@ export function ChannelModal({ channel, providers, all, ask, onClose, onSaved }:
                     ? 'sms.channels.credentialsSet'
                     : 'sms.channels.credentialsNotSet',
               )}{' '}
-              {t('sms.channels.credentialsWriteOnly')}
+              {t('sms.channels.credentialsWriteOnly')}{' '}
+              {!providerCode
+                ? t('sms.channels.credentialsChooseProvider')
+                : provider === undefined
+                  ? t('sms.channels.credentialsUnknownProvider')
+                  : credentialNames.length === 0
+                    ? t('sms.channels.credentialsNone')
+                    : switched
+                      ? t('sms.channels.credentialsSwitched')
+                      : null}
             </>
           }
+          rules={[
+            {
+              validator: async (_, value: CredentialValues | undefined) => {
+                const problem = credentialsProblem(value, credentialNames, mustFill);
+                if (problem) {
+                  throw new Error(
+                    t(
+                      problem.kind === 'REQUIRED'
+                        ? 'sms.channels.credentialsRequired'
+                        : 'sms.channels.credentialsIncomplete',
+                      { names: problem.missing.map(plainText).join(', ') },
+                    ),
+                  );
+                }
+              },
+            },
+          ]}
         >
-          <Form.List name="credentials">
-            {(rows, { add, remove }, { errors }) => (
-              <Flex vertical gap={8}>
-                {rows.map((row) => (
-                  <Flex key={row.key} gap={8} align="flex-start">
-                    <Form.Item
-                      name={[row.name, 'name']}
-                      style={{ flex: 1, marginBottom: 0 }}
-                      dependencies={[['credentials']]}
-                      rules={[
-                        {
-                          validator: async () => {
-                            const problem = credentialProblems(form.getFieldValue('credentials'))[
-                              row.name
-                            ]?.name;
-                            if (problem === 'REQUIRED')
-                              throw new Error(t('sms.channels.credentialNameRequired'));
-                            if (problem === 'DUPLICATE')
-                              throw new Error(t('sms.channels.credentialNameDuplicate'));
-                          },
-                        },
-                      ]}
-                    >
-                      <Input
-                        aria-label={t('sms.channels.credentialName')}
-                        placeholder={t('sms.channels.credentialName')}
-                        autoComplete="off"
-                        spellCheck={false}
-                        dir="ltr"
-                      />
-                    </Form.Item>
-                    <Form.Item
-                      name={[row.name, 'value']}
-                      style={{ flex: 1, marginBottom: 0 }}
-                      dependencies={[['credentials']]}
-                      rules={[
-                        {
-                          validator: async () => {
-                            const problem = credentialProblems(form.getFieldValue('credentials'))[
-                              row.name
-                            ]?.value;
-                            if (problem === 'REQUIRED')
-                              throw new Error(t('sms.channels.credentialValueRequired'));
-                          },
-                        },
-                      ]}
-                    >
-                      <Input.Password
-                        aria-label={t('sms.channels.credentialValue')}
-                        placeholder={t('sms.channels.credentialValue')}
-                        autoComplete="new-password"
-                        visibilityToggle={false}
-                        dir="ltr"
-                      />
-                    </Form.Item>
-                    <Button
-                      aria-label={t('sms.channels.credentialRemove')}
-                      onClick={() => remove(row.name)}
-                    >
-                      {t('sms.channels.credentialRemoveShort')}
-                    </Button>
-                  </Flex>
-                ))}
-                <div>
-                  <Button onClick={() => add({ name: '', value: '' })}>
-                    {t('sms.channels.credentialAdd')}
-                  </Button>
-                </div>
-                <Form.ErrorList errors={errors} />
-              </Flex>
-            )}
-          </Form.List>
+          {/* Keyed by the provider: the boxes of another provider start empty, nothing typed for one is carried to the next. */}
+          <CredentialFields key={providerCode ?? ''} names={credentialNames} />
         </Form.Item>
         <Form.Item
           name="extConfig"

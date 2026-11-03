@@ -176,14 +176,46 @@ describe('permissions (contract 23.6)', () => {
 });
 
 describe('the meta', () => {
-  it('lists the registered providers with their host lists and the test sends left today', async () => {
+  it('has exactly the providers, the test sends left, whether phone sign-in is on and the number of phone-number accounts', async () => {
     const answer = await get(META);
+    expect(Object.keys(answer.body.data).sort()).toEqual([
+      'phoneAccountCount',
+      'phoneLoginEnabled',
+      'providers',
+      'testRemainingToday',
+    ]);
     expect(answer.body.data).toEqual({
       providers: SMS_PROVIDERS,
       testRemainingToday: TEST_PER_DAY,
+      phoneLoginEnabled: false,
+      phoneAccountCount: smsState.phoneAccounts,
     });
     expect(SMS_PROVIDERS.length).toBeGreaterThan(1);
     expect(SMS_PROVIDERS.every((p) => p.allowedHosts.length > 0)).toBe(true);
+  });
+
+  it('gives each provider exactly code, allowedHosts and credentialNames, the stub with none', async () => {
+    const providers = (await get(META)).body.data.providers as Record<string, unknown>[];
+    for (const provider of providers) {
+      expect(Object.keys(provider).sort()).toEqual(['allowedHosts', 'code', 'credentialNames']);
+      expect(Array.isArray(provider.credentialNames)).toBe(true);
+    }
+    expect(providers.find((p) => p.code === 'test-stub')?.credentialNames).toEqual([]);
+    expect(providers.find((p) => p.code === 'gateway-b')?.credentialNames).toEqual([
+      'apiKey',
+      'apiSecret',
+    ]);
+  });
+
+  it('follows auth.phone_login_enabled and the phone-number accounts, for an administrator with the SMS code only', async () => {
+    phoneLoginOn();
+    smsState.phoneAccounts = 7;
+    const answer = await getAs(META, ['SMS:TEMPLATE']);
+    expect([
+      answer.status,
+      answer.body.data.phoneLoginEnabled,
+      answer.body.data.phoneAccountCount,
+    ]).toEqual([200, true, 7]);
   });
 });
 
@@ -357,8 +389,8 @@ describe('updating a channel', () => {
     // {} keeps them too (the other way to say "unchanged"); a map with entries replaces the whole set
     await send(CHANNEL_UPDATE, { ...patch, credentials: {} }, { id });
     expect(channelBy('gw_th_otp').credentials).toEqual({ apiKey: 'seed-secret-1' });
-    await send(CHANNEL_UPDATE, { ...patch, credentials: { token: 'fresh-one' } }, { id });
-    expect(channelBy('gw_th_otp').credentials).toEqual({ token: 'fresh-one' });
+    await send(CHANNEL_UPDATE, { ...patch, credentials: { apiKey: 'fresh-one' } }, { id });
+    expect(channelBy('gw_th_otp').credentials).toEqual({ apiKey: 'fresh-one' });
   });
 
   // What the real backend does with `credentials` (answers 5): a null value is 400 EMPTY_NOT_ALLOWED
@@ -425,15 +457,157 @@ describe('updating a channel', () => {
     expect([created.status, created.body.data.hasCredentials]).toEqual([200, false]);
   });
 
-  it('accepts an empty name and an empty value, and stores them', async () => {
+  it('accepts an empty value for a name the provider declares, and stores it', async () => {
     const id = channelBy('gw_th_otp').id;
     const { channelCode: _code, enabled: _e, ...patch } = goodChannel();
     expect(
-      (await send(CHANNEL_UPDATE, { ...patch, credentials: { '': 'v', key: '' } }, { id })).status,
+      (await send(CHANNEL_UPDATE, { ...patch, credentials: { apiKey: '' } }, { id })).status,
     ).toBe(200);
-    expect(channelBy('gw_th_otp').credentials).toEqual({ '': 'v', key: '' });
-    const created = await send(CHANNEL_CREATE, goodChannel({ credentials: { '   ': '' } }));
+    expect(channelBy('gw_th_otp').credentials).toEqual({ apiKey: '' });
+    const created = await send(CHANNEL_CREATE, goodChannel({ credentials: { apiKey: '' } }));
     expect([created.status, created.body.data.hasCredentials]).toEqual([200, true]);
+  });
+
+  // The updated interface document 23.4: given credentials must have exactly the names the provider
+  // declares in the meta; nothing is stored by a refused request.
+  describe('credential names', () => {
+    const refusals: [string, Record<string, unknown>, string][] = [
+      ['a name missing (gateway-b needs two)', { apiKey: 'k' }, 'credentials:EMPTY_NOT_ALLOWED'],
+      ['a name the provider does not use', { apiKey: 'k', extra: 'x' }, 'credentials:OUT_OF_RANGE'],
+      ['a misspelt name', { apikey: 'k' }, 'credentials:EMPTY_NOT_ALLOWED'],
+      ['the empty name', { '': 'v' }, 'credentials:EMPTY_NOT_ALLOWED'],
+    ];
+    it.each(refusals)(
+      'refuses %s on a create and on an update (ref credentials)',
+      async (name, credentials, expected) => {
+        const provider = name.includes('gateway-b') ? 'gateway-b' : 'gateway-a';
+        const apiUrl = provider === 'gateway-b' ? 'https://gw.example.org/api/otp' : undefined;
+        const id = channelBy(provider === 'gateway-b' ? 'gw_sea_otp' : 'gw_th_otp').id;
+        const before = JSON.stringify(smsState.channels.get(id));
+        const {
+          channelCode: _code,
+          enabled: _e,
+          ...patch
+        } = goodChannel({
+          providerCode: provider,
+          ...(apiUrl ? { apiUrl } : {}),
+        });
+        const updated = await send(CHANNEL_UPDATE, { ...patch, credentials }, { id });
+        expect([updated.status, updated.body.code, refsOf(updated)]).toEqual([
+          400,
+          'INVALID_REQUEST',
+          [expected],
+        ]);
+        expect(JSON.stringify(smsState.channels.get(id))).toBe(before);
+        const count = smsState.channels.size;
+        const created = await send(
+          CHANNEL_CREATE,
+          goodChannel({ providerCode: provider, ...(apiUrl ? { apiUrl } : {}), credentials }),
+        );
+        expect([created.status, refsOf(created)]).toEqual([400, [expected]]);
+        expect(smsState.channels.size).toBe(count);
+      },
+    );
+
+    it('takes all the names of a provider that declares two', async () => {
+      const created = await send(
+        CHANNEL_CREATE,
+        goodChannel({
+          providerCode: 'gateway-b',
+          apiUrl: 'https://gw.example.org/api/otp',
+          credentials: { apiKey: 'ñandú', apiSecret: '密钥 مفتاح' },
+        }),
+      );
+      expect([created.status, created.body.data.hasCredentials]).toEqual([200, true]);
+      expect(channelBy('gw_new').credentials).toEqual({ apiKey: 'ñandú', apiSecret: '密钥 مفتاح' });
+    });
+
+    it('refuses any credentials for a provider that declares none (the stub)', async () => {
+      const created = await send(
+        CHANNEL_CREATE,
+        goodChannel({
+          providerCode: 'test-stub',
+          apiUrl: 'https://stub.example.com/send',
+          credentials: { apiKey: 'k' },
+        }),
+      );
+      expect(refsOf(created)).toEqual(['credentials:OUT_OF_RANGE']);
+      const none = await send(
+        CHANNEL_CREATE,
+        goodChannel({
+          providerCode: 'test-stub',
+          apiUrl: 'https://stub.example.com/send',
+          credentials: {},
+        }),
+      );
+      expect([none.status, none.body.data.hasCredentials]).toEqual([200, false]);
+    });
+
+    it('does not check the names of credentials that are absent, null or {} (they mean unchanged)', async () => {
+      const id = channelBy('gw_sea_otp').id;
+      const {
+        channelCode: _code,
+        enabled: _e,
+        credentials: _c,
+        ...patch
+      } = goodChannel({
+        providerCode: 'gateway-b',
+        apiUrl: 'https://gw.example.org/api/otp',
+        countries: ['ID', 'VN'],
+      });
+      for (const credentials of [undefined, null, {}]) {
+        const body = credentials === undefined ? patch : { ...patch, credentials };
+        expect((await send(CHANNEL_UPDATE, body, { id })).status).toBe(200);
+      }
+      expect(channelBy('gw_sea_otp').credentials).toEqual({
+        apiKey: 'seed-secret-2',
+        apiSecret: 'seed-secret-2b',
+      });
+    });
+
+    it('refuses an update that changes the provider to one that needs credentials without giving them, because what is stored belongs to the old provider', async () => {
+      const id = channelBy('gw_all_backup').id; // test-stub, no credentials
+      const {
+        channelCode: _code,
+        enabled: _e,
+        credentials: _c,
+        ...patch
+      } = goodChannel({
+        providerCode: 'gateway-a',
+        apiUrl: 'https://sms.example.com/v1/send',
+        countries: [],
+      });
+      for (const credentials of [undefined, null, {}]) {
+        const body = credentials === undefined ? patch : { ...patch, credentials };
+        const answer = await send(CHANNEL_UPDATE, body, { id });
+        expect([answer.status, refsOf(answer)]).toEqual([400, ['credentials:EMPTY_NOT_ALLOWED']]);
+      }
+      expect(channelBy('gw_all_backup').providerCode).toBe('test-stub');
+      const given = await send(
+        CHANNEL_UPDATE,
+        { ...patch, credentials: { apiKey: 'new-key' } },
+        { id },
+      );
+      expect(given.status).toBe(200);
+      expect(channelBy('gw_all_backup')).toMatchObject({
+        providerCode: 'gateway-a',
+        credentials: { apiKey: 'new-key' },
+      });
+    });
+
+    it('lets an update change to a provider that needs none, with no credentials', async () => {
+      const id = channelBy('gw_th_otp').id;
+      const {
+        channelCode: _code,
+        enabled: _e,
+        credentials: _c,
+        ...patch
+      } = goodChannel({
+        providerCode: 'test-stub',
+        apiUrl: 'https://stub.example.com/send',
+      });
+      expect((await send(CHANNEL_UPDATE, patch, { id })).status).toBe(200);
+    });
   });
 
   it('keeps what the body leaves out or sends as null (answers 78); {} replaces the extension, [] clears the countries', async () => {
@@ -484,7 +658,7 @@ describe('updating a channel', () => {
   it('accepts a value of any language and an empty map on a create (no credentials then)', async () => {
     const created = await send(
       CHANNEL_CREATE,
-      goodChannel({ credentials: { ผู้ใช้: 'ñandú', مفتاح: '密钥' } }),
+      goodChannel({ credentials: { apiKey: 'ñandú ผู้ใช้ مفتاح 密钥' } }),
     );
     expect(created.status).toBe(200);
     const empty = await send(
@@ -545,7 +719,7 @@ describe('the last enabled OTP channel (contract 23.4)', () => {
     expect(smsState.channels.get(id)).toMatchObject({ smsType: 'OTP', countries: ['TH'] });
   });
 
-  it('refuses with the detail SmsChannel / OUT_OF_RANGE, for the case of no channel left and for a country left without one (answers 41)', async () => {
+  it('names a country that loses its channel with COUNTRY_LOSES_OTP_CHANNEL (ref SmsChannel) when other OTP channels are left, never OUT_OF_RANGE (updated interface document 23.4)', async () => {
     phoneLoginOn();
     smsState.phoneAccounts = 0;
     const id = channelBy('gw_th_otp').id;
@@ -553,12 +727,30 @@ describe('the last enabled OTP channel (contract 23.4)', () => {
     expect([off.status, off.body.code, off.body.data]).toEqual([
       400,
       'INVALID_REQUEST',
-      { details: [{ ref: 'SmsChannel', reason: 'OUT_OF_RANGE' }] },
+      { details: [{ ref: 'SmsChannel', reason: 'COUNTRY_LOSES_OTP_CHANNEL' }] },
     ]);
     const narrow = await send(CHANNEL_UPDATE, goodChannel({ countries: ['VN'] }), { id });
-    expect(refsOf(narrow)).toEqual(['SmsChannel:OUT_OF_RANGE']);
+    expect(refsOf(narrow)).toEqual(['SmsChannel:COUNTRY_LOSES_OTP_CHANNEL']);
     const del = await send(CHANNEL_DELETE, {}, { id });
-    expect(refsOf(del)).toEqual(['SmsChannel:OUT_OF_RANGE']);
+    expect(refsOf(del)).toEqual(['SmsChannel:COUNTRY_LOSES_OTP_CHANNEL']);
+  });
+
+  it('names the last enabled OTP channel with LAST_OTP_CHANNEL (ref SmsChannel) when none would be left', async () => {
+    phoneLoginOn();
+    smsState.phoneAccounts = 0;
+    for (const c of smsState.channels.values()) {
+      if (c.channelCode !== 'gw_th_otp') c.enabled = false;
+    }
+    const id = channelBy('gw_th_otp').id;
+    const off = await send(CHANNEL_ENABLED, { enabled: false }, { id });
+    expect([off.status, off.body.code, off.body.data]).toEqual([
+      400,
+      'INVALID_REQUEST',
+      { details: [{ ref: 'SmsChannel', reason: 'LAST_OTP_CHANNEL' }] },
+    ]);
+    expect(refsOf(await send(CHANNEL_DELETE, {}, { id }))).toEqual(['SmsChannel:LAST_OTP_CHANNEL']);
+    const type = await send(CHANNEL_UPDATE, goodChannel({ smsType: 'MARKETING' }), { id });
+    expect(refsOf(type)).toEqual(['SmsChannel:LAST_OTP_CHANNEL']);
   });
 
   it('is protected also when phone sign-in is off but there are phone-number accounts', async () => {
@@ -733,7 +925,7 @@ describe('the templates', () => {
     }) => {
       expect([answer.status, answer.body.code]).toEqual([400, 'INVALID_REQUEST']);
       expect(answer.body.message).toBe(EN_MESSAGE);
-      expect(refsOf(answer)).toEqual(['SmsTemplate:OUT_OF_RANGE']);
+      expect(refsOf(answer)).toEqual(['SmsTemplate:LAST_ENGLISH_FALLBACK_TEMPLATE']);
     };
 
     it('refuses to switch off, delete, move to another language, give a country, or turn into another type the only such template, while other OTP templates are on', async () => {
@@ -837,7 +1029,7 @@ describe('the templates', () => {
       ).toBe(200);
     });
 
-    it('answers the rule of the last OTP template first, with its own message, and the same detail SmsTemplate / OUT_OF_RANGE as the other case (answers 41)', async () => {
+    it('answers the rule of the last OTP template first, with its own message and its own reason LAST_OTP_TEMPLATE (ref SmsTemplate)', async () => {
       for (const t of smsState.templates.values())
         if (t.templateCode !== 'otp_en') t.enabled = false;
       const answer = await send(
@@ -849,7 +1041,7 @@ describe('the templates', () => {
         'The last enabled OTP template cannot be removed while phone sign-in is on or phone-number accounts exist',
       );
       expect(answer.body.data).toEqual({
-        details: [{ ref: 'SmsTemplate', reason: 'OUT_OF_RANGE' }],
+        details: [{ ref: 'SmsTemplate', reason: 'LAST_OTP_TEMPLATE' }],
       });
     });
   });

@@ -20,7 +20,7 @@ const APPLE_HOST = 'apps.apple.com';
 const ALLOWED_PARAMS = ['id', 'hl', 'gl'];
 // `hl` and `gl` (contract 24.2): a language or a region, such as `en`, `pt-BR`, `zh_Hans`, `es-419`.
 const LANGUAGE_VALUE = /^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})?$/;
-// What an application id looks like, used only when the channel has no package name to compare with.
+// What an application id looks like, used only when the backend gives no package name to compare with.
 const APPLICATION_ID = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/;
 // `/<country>/app/<name>/id<digits>` or `/app/id<digits>`.
 const IOS_PATH = /^(?:\/[A-Za-z]{2}\/app\/[^/]+\/id[0-9]+|\/app\/id[0-9]+)$/;
@@ -59,8 +59,9 @@ function checkAndroidQuery(query: string, packageName: string): StoreUrlCheck {
  * /store/apps/details and the parameter `id` with the package name (contract 24.2) and, at most once each, `hl` and `gl`; no other parameter, no port, no user information, no
  * fragment; the host in any case, the path exactly. IOS: host `apps.apple.com`, the path in one of
  * the two shapes of the contract. The link also has to pass the one rule of contract 1.7
- * (`validateServerLink`), and that rule is applied first. `packageName` is the package of the
- * channel; when it is not known, the `id` only has to look like an application id.
+ * (`validateServerLink`), and that rule is applied first. `packageName` is the one the backend
+ * checks Google Play links against (`GET /meta`, not the package registered on the channel); when it is
+ * not known, the `id` is not compared with a package name and only has to look like an application id.
  */
 export function validateStoreUrl(
   platform: StorePlatform,

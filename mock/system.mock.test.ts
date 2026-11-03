@@ -42,6 +42,8 @@ describe('the endpoints and the permissions they ask for', () => {
         'DELETE /api/admin/roles/:id',
         'GET /api/admin/admins',
         'GET /api/admin/audit-logs',
+        'GET /api/admin/audit-logs/admins',
+        'GET /api/admin/audit-logs/meta',
         'GET /api/admin/roles',
         'POST /api/admin/admins',
         'POST /api/admin/admins/:id/reset-password',
@@ -73,6 +75,8 @@ describe('the endpoints and the permissions they ask for', () => {
       ['PUT /api/admin/permissions/:code', ['PERMISSION:MANAGE']],
       ['DELETE /api/admin/permissions/:code', ['PERMISSION:MANAGE']],
       ['GET /api/admin/audit-logs', ['AUDIT:VIEW']],
+      ['GET /api/admin/audit-logs/meta', ['AUDIT:VIEW']],
+      ['GET /api/admin/audit-logs/admins', ['AUDIT:VIEW']],
     ];
     for (const [key, codes] of needs) {
       expect((await call(system[key], {})).status, key).toBe(401);
@@ -276,7 +280,7 @@ describe('PUT /admins/:id', () => {
     expect([taken.status, taken.body.code, taken.body.data]).toEqual([
       409,
       'INVALID_STATE',
-      { status: 'ACTIVE' },
+      { status: 'ACTIVE', reason: 'SELF_PROTECTED' },
     ]);
     expect(systemState.extras.get('1002')?.roleIds).toEqual(['1']);
     for (const body of [
@@ -289,7 +293,7 @@ describe('PUT /admins/:id', () => {
         JSON.stringify(body),
         409,
         'INVALID_STATE',
-        { status: 'ACTIVE' },
+        { status: 'ACTIVE', reason: 'SELF_PROTECTED' },
       ]);
     }
     expect(adminOf('root').superAdmin).toBe(true);
@@ -303,10 +307,10 @@ describe('PUT /admins/:id', () => {
       roleIds: rolesOf,
       superAdmin: true,
     });
-    expect([refused.status, refused.body.code, refused.body.message]).toEqual([
+    expect([refused.status, refused.body.code, refused.body.data]).toEqual([
       403,
       'ADMIN_FORBIDDEN',
-      'Only a super administrator sets or clears the super administrator flag',
+      { reason: 'SUPER_FLAG' },
     ]);
     expect(adminOf('newhire').superAdmin).toBe(false);
     const same = await put('support', '1005', {
@@ -380,18 +384,20 @@ describe('POST /admins/:id/status', () => {
         status,
         409,
         'INVALID_STATE',
-        { status: 'ACTIVE' },
+        { status: 'ACTIVE', reason: 'SELF_PROTECTED' },
       ]);
     }
-    withCodes('support', ['ADMIN:MANAGE']);
-    // a super administrator holds every code: only someone who holds them all reaches the rule of the last one
     withCodes('support', [...PERMISSION_CODES]);
     const last = await setStatus('support', '1001', 'DISABLED');
-    expect([last.status, last.body.code]).toEqual([409, 'INVALID_STATE']);
+    expect([last.status, last.body.code, last.body.data]).toEqual([
+      403,
+      'ADMIN_FORBIDDEN',
+      { reason: 'SUPER_TARGET' },
+    ]);
     expect(adminOf('root').status).toBe('ACTIVE');
-    // with a second enabled super administrator the first can be disabled
+    // with a second enabled super administrator the first can be disabled (by a super administrator)
     adminOf('finance').superAdmin = true;
-    expect((await setStatus('support', '1001', 'DISABLED')).status).toBe(200);
+    expect((await setStatus('finance', '1001', 'DISABLED')).status).toBe(200);
   });
 
   it('refuses a status that is not ACTIVE or DISABLED, before it looks for the administrator', async () => {
@@ -435,16 +441,72 @@ describe('reset password, reset authenticator, delete', () => {
     expect([self.status, self.body.code, self.body.data]).toEqual([
       409,
       'INVALID_STATE',
-      { status: 'ACTIVE' },
+      { status: 'ACTIVE', reason: 'SELF_PROTECTED' },
     ]);
     withCodes('support', [...PERMISSION_CODES]);
+    // holding every code does not make a non-super operator a super administrator (SUPER_TARGET)
     const last = await run('DELETE /api/admin/admins/:id', 'support', { params: { id: '1001' } });
-    expect([last.status, last.body.code]).toEqual([409, 'INVALID_STATE']);
+    expect([last.status, last.body.code, last.body.data]).toEqual([
+      403,
+      'ADMIN_FORBIDDEN',
+      { reason: 'SUPER_TARGET' },
+    ]);
+    expect(store.admins.has('1001')).toBe(true);
     const before = systemState.audit.filter((r) => r.adminId === '1004').length;
     const gone = await run('DELETE /api/admin/admins/:id', 'root', { params: { id: '1004' } });
     expect(gone.status).toBe(200);
     expect(store.admins.has('1004')).toBe(false);
     expect(systemState.audit.filter((r) => r.adminId === '1004')).toHaveLength(before);
+  });
+});
+
+// The two 409 INVALID_STATE that a session of one request at a time cannot meet: the last enabled
+// super administrator (a second super administrator changed at the same moment) and a change of a super
+// administrator that is under way. `systemState.race` makes the next write on a super administrator
+// other than the operator meet one of them.
+describe('409 INVALID_STATE data.reason of a race between super administrators (backend answer 22)', () => {
+  const routes = (id: string) =>
+    [
+      ['PUT /api/admin/admins/:id', { username: 'finance', roleIds: adminRoleIds('finance') }],
+      ['POST /api/admin/admins/:id/status', { status: 'DISABLED' }],
+      ['POST /api/admin/admins/:id/reset-password', { newPassword: GOOD_PASSWORD }],
+      ['POST /api/admin/admins/:id/reset-totp', {}],
+      ['DELETE /api/admin/admins/:id', undefined],
+    ].map(([key, body]) => run(key as keyof typeof system, 'root', { params: { id }, body }));
+  const answers = (id: string) => Promise.all(routes(id));
+
+  it.each(['LAST_SUPER_ADMIN', 'CONCURRENT_CHANGE'] as const)(
+    'answers %s with the current status, on all five routes, and changes nothing',
+    async (race) => {
+      adminOf('finance').superAdmin = true;
+      systemState.race = race;
+      const before = JSON.stringify([adminOf('finance'), systemState.extras.get('1003')]);
+      for (const answer of await answers('1003')) {
+        expect([answer.status, answer.body.code, answer.body.data]).toEqual([
+          409,
+          'INVALID_STATE',
+          { status: 'ACTIVE', reason: race },
+        ]);
+      }
+      expect(JSON.stringify([adminOf('finance'), systemState.extras.get('1003')])).toBe(before);
+      expect(store.admins.has('1003')).toBe(true);
+    },
+  );
+
+  it('does not touch an administrator who is not a super administrator, and the own account stays SELF_PROTECTED', async () => {
+    systemState.race = 'CONCURRENT_CHANGE';
+    const other = await run('POST /api/admin/admins/:id/reset-totp', 'root', {
+      params: { id: '1004' },
+    });
+    expect(other.status).toBe(200);
+    const own = await run('DELETE /api/admin/admins/:id', 'root', { params: { id: '1001' } });
+    expect(own.body.data).toEqual({ status: 'ACTIVE', reason: 'SELF_PROTECTED' });
+  });
+
+  it('is off after resetSystemStore', async () => {
+    systemState.race = 'LAST_SUPER_ADMIN';
+    resetSystemStore();
+    expect(systemState.race).toBeNull();
   });
 });
 
@@ -780,6 +842,96 @@ describe('the permission tree', () => {
   });
 });
 
+// The choices of the audit filters (backend answers 45 and 46): the values the backend can write, and
+// the administrators that exist, for anyone who may read the log.
+describe('GET /audit-logs/meta and GET /audit-logs/admins', () => {
+  const META = 'GET /api/admin/audit-logs/meta' as const;
+  const ADMINS = 'GET /api/admin/audit-logs/admins' as const;
+
+  it('gives {actions, targetTypes}, each a list of text in the order of the character codes, without a duplicate', async () => {
+    const { status, body } = await run(META, 'root');
+    expect(status).toBe(200);
+    expect(Object.keys(body.data).sort()).toEqual(['actions', 'targetTypes']);
+    for (const list of [body.data.actions, body.data.targetTypes] as string[][]) {
+      expect(list.length).toBeGreaterThan(10);
+      expect(list.every((value) => typeof value === 'string' && value !== '')).toBe(true);
+      expect(new Set(list).size).toBe(list.length);
+      expect(list).toEqual([...list].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+    }
+  });
+
+  it('keeps the case of the object types as the backend writes it: four in capitals, the rest in camel case with a capital first letter', async () => {
+    const { targetTypes } = (await run(META, 'root')).body.data as { targetTypes: string[] };
+    for (const value of ['NOTIFICATION', 'PUSH_SCHEDULE', 'PUSH_TASK', 'PUSH_TEMPLATE']) {
+      expect(targetTypes, value).toContain(value);
+    }
+    expect(targetTypes.some((value) => /^[A-Z][a-z]+[A-Za-z]*$/.test(value))).toBe(true);
+    // the order is that of the character codes, not of a language: 'USER' before 'User'
+    expect(targetTypes.indexOf('USER')).toBeLessThan(targetTypes.indexOf('User'));
+  });
+
+  it('lists every value this mock writes into the log, in the seed and in the writes of its routes', async () => {
+    const { actions, targetTypes } = (await run(META, 'root')).body.data as {
+      actions: string[];
+      targetTypes: string[];
+    };
+    await run('POST /api/admin/roles', 'root', {
+      body: { name: 'Meta test', remark: null, permissionCodes: ['USER:VIEW'] },
+    });
+    await run('POST /api/admin/admins/:id/reset-totp', 'root', { params: { id: '1004' } });
+    await run('POST /api/admin/permissions', 'root', {
+      body: {
+        code: 'META:X',
+        parent: null,
+        type: 'MENU',
+        sortOrder: 900,
+        nameZh: '甲',
+        nameEn: 'X',
+      },
+    });
+    for (const row of systemState.audit) {
+      expect(actions, row.action).toContain(row.action);
+      expect(targetTypes, String(row.targetType)).toContain(String(row.targetType));
+    }
+  });
+
+  it('gives {items: [{id, username}]}: every administrator that exists, only those two fields, by username', async () => {
+    const { status, body } = await run(ADMINS, 'root');
+    expect(status).toBe(200);
+    expect(Object.keys(body.data)).toEqual(['items']);
+    const items = body.data.items as { id: string; username: string }[];
+    expect(items).toHaveLength(store.admins.size);
+    for (const item of items) expect(Object.keys(item).sort()).toEqual(['id', 'username']);
+    const names = items.map((item) => item.username);
+    expect(names).toEqual([...names].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+    expect(JSON.stringify(body)).not.toMatch(/password|status|roles|lastLoginAt|superAdmin/);
+  });
+
+  it('leaves out an administrator who was deleted, and shows one who was made', async () => {
+    await run('DELETE /api/admin/admins/:id', 'root', { params: { id: '1004' } });
+    await run('POST /api/admin/admins', 'root', {
+      body: { username: 'ñandú-สมชาย', password: GOOD_PASSWORD, roleIds: [], superAdmin: false },
+    });
+    const items = (await run(ADMINS, 'root')).body.data.items as { id: string; username: string }[];
+    expect(items.some((item) => item.id === '1004')).toBe(false);
+    expect(items.some((item) => item.username === 'ñandú-สมชาย')).toBe(true);
+  });
+
+  it('is open to AUDIT:VIEW alone, while GET /admins stays closed to it', async () => {
+    withCodes('support', ['AUDIT:VIEW']);
+    expect((await run(META, 'support')).status).toBe(200);
+    expect((await run(ADMINS, 'support')).status).toBe(200);
+    expect((await run('GET /api/admin/admins', 'support')).status).toBe(403);
+  });
+
+  it('writes no audit row for a read', async () => {
+    const before = systemState.audit.length;
+    await run(META, 'root');
+    await run(ADMINS, 'root');
+    expect(systemState.audit).toHaveLength(before);
+  });
+});
+
 describe('GET /audit-logs', () => {
   const list = (query: Record<string, unknown> = {}) =>
     run('GET /api/admin/audit-logs', 'root', { query });
@@ -870,25 +1022,27 @@ describe('GET /audit-logs', () => {
 });
 
 // An administrator who is not a super administrator can only hand out, change and act on what they
-// hold themselves (the four 403 ADMIN_FORBIDDEN rules of the backend, `data` null, nothing changed).
+// hold themselves (the 403 ADMIN_FORBIDDEN rules of the backend, `data.reason` names the rule, nothing
+// changed).
 describe('what an administrator may grant: only what they hold', () => {
   const MESSAGES = {
-    grant: 'Administrators can only grant permissions they hold',
-    ownRole: 'Administrators cannot change a role they hold',
-    role: 'Administrators can only change roles whose permissions they hold',
-    admin: 'Administrators can only act on administrators whose permissions they hold',
+    grant: 'GRANT_NOT_HELD',
+    ownRole: 'OWN_ROLE',
+    role: 'ROLE_NOT_HELD',
+    admin: 'ADMIN_NOT_HELD',
+    superTarget: 'SUPER_TARGET',
+    superFlag: 'SUPER_FLAG',
   };
   // `support` holds these (and the role "1" of the preset, which holds the support codes).
   const HELD = ['ADMIN:MANAGE', 'ROLE:MANAGE', 'USER:VIEW', 'STATS:VIEW', 'AUDIT:VIEW'];
   const refused = (
-    answer: { status: number; body: { code: string; data: unknown; message: string } },
-    message: string,
+    answer: { status: number; body: { code: string; data: unknown } },
+    reason: string,
   ) => {
-    expect([answer.status, answer.body.code, answer.body.data, answer.body.message]).toEqual([
+    expect([answer.status, answer.body.code, answer.body.data]).toEqual([
       403,
       'ADMIN_FORBIDDEN',
-      null,
-      message,
+      { reason },
     ]);
   };
   const roleBody = (permissionCodes: string[], name = 'Created by support') => ({
@@ -1068,14 +1222,58 @@ describe('what an administrator may grant: only what they hold', () => {
       expect((await run('DELETE /api/admin/admins/:id', 'support', target)).status).toBe(200);
     });
 
-    it('treats a super administrator as holding every code: a non-super operator cannot act on one', async () => {
+    it('refuses a non-super operator who acts on a super administrator with SUPER_TARGET on all five routes, even when the operator holds every code', async () => {
+      const target = { params: { id: '1001' } };
+      const before = JSON.stringify([adminOf('root'), systemState.extras.get('1001')]);
+      for (const codes of [HELD, [...PERMISSION_CODES]]) {
+        withCodes('support', codes);
+        const answers = [
+          await run('PUT /api/admin/admins/:id', 'support', {
+            ...target,
+            body: { username: 'root', roleIds: adminRoleIds('root') },
+          }),
+          await run('POST /api/admin/admins/:id/status', 'support', {
+            ...target,
+            body: { status: 'DISABLED' },
+          }),
+          await run('POST /api/admin/admins/:id/reset-password', 'support', {
+            ...target,
+            body: { newPassword: GOOD_PASSWORD },
+          }),
+          await run('POST /api/admin/admins/:id/reset-totp', 'support', target),
+          await run('DELETE /api/admin/admins/:id', 'support', target),
+        ];
+        for (const answer of answers) refused(answer, MESSAGES.superTarget);
+      }
+      expect(JSON.stringify([adminOf('root'), systemState.extras.get('1001')])).toBe(before);
+    });
+
+    it('refuses a non-super operator who sets or clears the super administrator flag with SUPER_FLAG, after the roles they hand out are checked', async () => {
+      const rolesOf = adminRoleIds('newhire');
+      const before = store.admins.size;
       refused(
-        await run('POST /api/admin/admins/:id/reset-password', 'support', {
-          params: { id: '1001' },
-          body: { newPassword: GOOD_PASSWORD },
+        await run('POST /api/admin/admins', 'support', {
+          body: { username: 'anna', password: GOOD_PASSWORD, roleIds: [], superAdmin: true },
         }),
-        MESSAGES.admin,
+        MESSAGES.superFlag,
       );
+      expect(store.admins.size).toBe(before);
+      refused(
+        await run('PUT /api/admin/admins/:id', 'support', {
+          params: { id: '1005' },
+          body: { username: 'newhire', roleIds: rolesOf, superAdmin: true },
+        }),
+        MESSAGES.superFlag,
+      );
+      // the roles are checked before the flag: both wrong, the roles are named
+      refused(
+        await run('PUT /api/admin/admins/:id', 'support', {
+          params: { id: '1005' },
+          body: { username: 'newhire', roleIds: ['2'], superAdmin: true },
+        }),
+        MESSAGES.grant,
+      );
+      expect(adminOf('newhire').superAdmin).toBe(false);
     });
 
     it('does not restrict a super administrator', async () => {

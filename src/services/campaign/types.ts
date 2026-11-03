@@ -103,10 +103,11 @@ export type CostQuery = {
 export type { CostRow } from './parseCostBatch';
 
 /**
- * What a batch import did: `count`, the rows written (added and overwritten together; the backend
- * does not say how many of each, `overwritten` is a request to it and not read).
+ * The answer of the batch of costs: `count` rows were written (the overwritten ones included),
+ * `overwritten` of them replaced a cost the campaign had on that day; null when the answer has none
+ * that can be right (the old shape was `{ count }` only). The rows that were new are `count - overwritten`.
  */
-export type BatchCostsResult = { count: number };
+export type BatchCostsResult = { count: number; overwritten: number | null };
 
 // ---- performance (投放效果, ATTRIBUTION:VIEW) ----
 

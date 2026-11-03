@@ -103,7 +103,7 @@ const HIGHER_THAN_120 =
   'It must be higher than 120, the highest version number of the other versions of this channel (drafts and taken-down versions included)';
 const HIGHER_THAN_110 =
   'It must be higher than 110, the highest version number of the other versions of this channel (drafts and taken-down versions included)';
-const PLAY_URL = 'https://play.google.com/store/apps/details?id=app.example.play';
+const PLAY_URL = 'https://play.google.com/store/apps/details?id=com.example.avatar';
 const typeUrl = async (
   user: ReturnType<typeof userEvent.setup>,
   form: ReturnType<typeof within>,
@@ -478,20 +478,20 @@ describe('the rules of the form', { timeout: 60000 }, () => {
     await fillCommon(user, form);
     const cases: [string, string][] = [
       [
-        'http://play.google.com/store/apps/details?id=app.example.play',
+        'http://play.google.com/store/apps/details?id=com.example.avatar',
         'The link must start with lowercase https://.',
       ],
       [
-        'https://play.google.com.evil.com/store/apps/details?id=app.example.play',
+        'https://play.google.com.evil.com/store/apps/details?id=com.example.avatar',
         enUS['appVersions.storeUrl.androidHost'],
       ],
       [
         'https://play.google.com/store/apps/details?id=other.app',
-        enUS['appVersions.storeUrl.idMismatch'],
+        enUS['appVersions.storeUrl.idMismatch'].replace('{package}', 'com.example.avatar'),
       ],
       [`${PLAY_URL}&referrer=x`, enUS['appVersions.storeUrl.queryKey']],
       [
-        'https://play.google.com:443/store/apps/details?id=app.example.play',
+        'https://play.google.com:443/store/apps/details?id=com.example.avatar',
         enUS['appVersions.storeUrl.port'],
       ],
       [`${PLAY_URL}#x`, enUS['appVersions.storeUrl.fragment']],
@@ -507,6 +507,62 @@ describe('the rules of the form', { timeout: 60000 }, () => {
     await waitFor(() => expect(form.queryByText(enUS['appVersions.storeUrl.fragment'])).toBeNull());
     await user.click(submit(form));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+  });
+
+  describe('the package name of the store link is the one the backend checks against', () => {
+    // The backend compares the id with its environment value (`GET /meta`'s
+    // googlePlayPackageName), not with the package name registered on the channel: here they differ.
+    const ENV_URL = 'https://play.google.com/store/apps/details?id=com.example.avatar';
+    const CHANNEL_URL = 'https://play.google.com/store/apps/details?id=app.example.play';
+
+    it('lets the id of the environment value through and refuses the id the channel registered', async () => {
+      signIn('root', { meta: { ...META_LOCALES, googlePlayPackageName: 'com.example.avatar' } });
+      expect(channelsState.channels.get('play')?.packageName).toBe('app.example.play');
+      const { calls, user } = await load();
+      const form = await openNew(user);
+      await pickChannel(user, form, /Android store/);
+      await fillCommon(user, form);
+      expect(form.getByText(/details\?id=com\.example\.avatar\./)).toBeTruthy();
+
+      await typeUrl(user, form, CHANNEL_URL);
+      const mismatch = enUS['appVersions.storeUrl.idMismatch'].replace(
+        '{package}',
+        'com.example.avatar',
+      );
+      expect(await form.findByText(mismatch)).toBeTruthy();
+      await user.click(submit(form));
+      await settled();
+      expect(writesOf(calls)).toHaveLength(0);
+
+      await typeUrl(user, form, ENV_URL);
+      await waitFor(() => expect(form.queryByText(mismatch)).toBeNull());
+      await user.click(submit(form));
+      await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+      expect(writesOf(calls)[0].body).toMatchObject({ storeUrl: ENV_URL });
+    });
+
+    it.each([
+      ['null', null],
+      ['missing', undefined],
+    ])(
+      'does not compare the id with any package name when the environment value is %s',
+      async (_, value) => {
+        const { googlePlayPackageName: _dropped, ...rest } = META_LOCALES;
+        signIn('root', {
+          meta: value === null ? { ...rest, googlePlayPackageName: null } : rest,
+        });
+        const { user } = await load();
+        const form = await openNew(user);
+        await pickChannel(user, form, /Android store/);
+        await fillCommon(user, form);
+        for (const url of [CHANNEL_URL, ENV_URL]) {
+          await typeUrl(user, form, url);
+          await settled();
+          expect(form.queryByText(/The id must be/), url).toBeNull();
+        }
+        expect(form.getByText(/details\?id=the package name of the app\./)).toBeTruthy();
+      },
+    );
   });
 
   it('does not carry the link typed for one channel over to another channel', async () => {
@@ -654,13 +710,13 @@ describe('editing a draft', { timeout: 60000 }, () => {
     expect(within(active).queryByRole('button', { name: 'Edit' })).toBeNull();
   });
 
-  it('shows the words of the error code when the draft was activated meanwhile', async () => {
+  it('says the state of the version when the draft was activated meanwhile', async () => {
     const { user } = await load();
     const draft = versionBy('play', 120);
     const form = await openEdit(user, draft.id);
     must(appVersionsState.versions.get(draft.id)).status = 'ACTIVE';
     await user.click(submit(form));
-    expect(await form.findByText(enUS['error.INVALID_STATE'])).toBeTruthy();
+    expect(await form.findByText(/The state of this version is "Active" now/)).toBeTruthy();
   });
 });
 
@@ -854,6 +910,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     );
     await user.click(submit(form));
     expect(await form.findByText(enUS['appVersions.apk.rejected'])).toBeTruthy();
+    expect(form.getByText(enUS['appVersions.state.CONSUMED'])).toBeTruthy();
     expect(form.queryByTestId('apk-info')).toBeNull();
     const before = writesOf(calls).length;
     await user.click(submit(form));
@@ -861,14 +918,12 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     expect(writesOf(calls).length).toBe(before);
   });
 
-  // Answers 47: a 409 INVALID_STATE with no data is a channel that is off or a version in the wrong
-  // state, not the upload; the file is still good, and the words are those of the code. Only
-  // data.status === "CONSUMED" is the upload.
+  // Contract 24.2: only data.status === "CONSUMED" is the upload; a state of a version and DISABLED
+  // (a channel that is off) are told in their own words and the file is still good. Without a
+  // status that is one of those, the words are those of the code.
   it.each([
-    ['no data (a channel that is off)', null],
+    ['no data', null],
     ['an empty object', {}],
-    ['a state of a version', { status: 'DRAFT' }],
-    ['the state of the channel', { status: 'DISABLED' }],
     ['the old guess USED', { status: 'USED' }],
     ['a status that is not text', { status: 5 }],
     ['consumed in small letters', { status: 'consumed' }],
@@ -904,7 +959,7 @@ describe('a DIRECT channel: the APK', { timeout: 60000 }, () => {
     await form.findByTestId('apk-info');
     must(channelsState.channels.get('direct')).enabled = false;
     await user.click(submit(form));
-    expect(await form.findByText(enUS['error.INVALID_STATE'])).toBeTruthy();
+    expect(await form.findByText(enUS['appVersions.state.DISABLED'])).toBeTruthy();
     expect(form.getByTestId('apk-info')).toBeTruthy();
   });
 

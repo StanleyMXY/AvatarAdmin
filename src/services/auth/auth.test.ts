@@ -115,6 +115,7 @@ describe('getMe', () => {
           mustChangePassword: false,
           permissions: ['USER:VIEW'],
           passwordMinLength: 12,
+          roleIds: ['12', '3'],
         }),
       ),
     );
@@ -127,7 +128,19 @@ describe('getMe', () => {
       mustChangePassword: false,
       permissions: ['USER:VIEW'],
       passwordMinLength: 12,
+      roleIds: ['12', '3'],
     });
+  });
+
+  it('reads the ids of the roles of the administrator (backend answer 19), as a clean list of text', () => {
+    expect(normalizeMe({ roleIds: ['3', '12', 7, null, '', 'ก'] }).roleIds).toEqual([
+      '3',
+      '12',
+      'ก',
+    ]);
+    for (const raw of [undefined, null, 'x', 5, {}]) {
+      expect(normalizeMe({ roleIds: raw }).roleIds).toEqual([]);
+    }
   });
 
   it('treats missing fields as missing, without an error', async () => {
@@ -139,6 +152,7 @@ describe('getMe', () => {
       mustChangePassword: false,
       permissions: [],
       passwordMinLength: undefined,
+      roleIds: [],
     });
   });
 });
@@ -160,6 +174,7 @@ describe('normalizeMe', () => {
       mustChangePassword: false,
       permissions: ['A:B', 'C:D'],
       passwordMinLength: undefined,
+      roleIds: [],
     });
   });
 
@@ -185,6 +200,23 @@ describe('getAdminMeta', () => {
     );
     expect(await getAdminMeta()).toEqual({ maxRecipients: null, uploadMaxBytes: 1048576 });
     expect(calls[0].url).toBe('/api/admin/meta');
+  });
+
+  it('returns the five values other pages use, and a googlePlayPackageName that is null (the backend has no package name in its environment)', async () => {
+    setToken('tok');
+    const five = {
+      monitorMaxRangeDays: 7,
+      taskTypes: ['daily_login', 'call_seconds', 'text_messages'],
+      entitlementLimitMax: 1000000,
+      creativeAspectTolerancePercent: 3,
+      googlePlayPackageName: null,
+    };
+    stubFetch(() => jsonResponse(200, envelope('200', five)));
+    expect(await getAdminMeta()).toEqual(five);
+    stubFetch(() =>
+      jsonResponse(200, envelope('200', { ...five, googlePlayPackageName: 'com.example.avatar' })),
+    );
+    expect((await getAdminMeta()).googlePlayPackageName).toBe('com.example.avatar');
   });
 
   it('returns nothing, not an error, when the endpoint is missing or the network fails', async () => {

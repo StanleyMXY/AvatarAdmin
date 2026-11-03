@@ -3,7 +3,11 @@ import { Alert, App, Flex, Form, Input, InputNumber, Modal } from 'antd';
 import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
-import { MEMORY_NAME_PATTERN, registerEmbeddingModel } from '../../services/memory';
+import {
+  MEMORY_NAME_PATTERN,
+  registerEmbeddingModel,
+  registeredDimensionsOf,
+} from '../../services/memory';
 import { detailReasons, setFieldReasons } from '../../utils/fieldReasons';
 import { trimSpec } from '../../utils/trimSpec';
 
@@ -32,7 +36,7 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const [form] = Form.useForm<Values>();
-  const { text: failure, fail, clear } = useFailure();
+  const { text: failure, fail, failWith, clear } = useFailure();
 
   const send = useSingleFlight(async (values: Values) => {
     clear();
@@ -50,7 +54,18 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
       if (placed.length > 0) {
         setFieldReasons(form, intl, placed);
       } else {
-        fail(error);
+        // A name that is registered with other dimensions: say which ones (the backend reads them
+        // before the call), so that the person can decide on a new name. The memory service's
+        // own sentence is in one language and is not shown.
+        const registered = registeredDimensionsOf(error);
+        if (registered === undefined) fail(error);
+        else
+          failWith((words) =>
+            words.formatMessage(
+              { id: 'memory.model.conflictRegistered' },
+              { dimensions: registered },
+            ),
+          );
       }
       return;
     }

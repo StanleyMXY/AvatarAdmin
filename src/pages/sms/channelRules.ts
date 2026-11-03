@@ -42,33 +42,30 @@ export function normalizeCountries(list: unknown): string[] {
   return [...seen];
 }
 
-/** One row of the credentials as the form holds it. */
-export type CredentialRow = { name?: string; value?: string };
-
-export type CredentialProblem = { name?: 'REQUIRED' | 'DUPLICATE'; value?: 'REQUIRED' } | null;
-
 const filled = (text: string | undefined): boolean => trimSpec(text ?? '') !== '';
 
+/** The credentials as the form holds them: the text typed for each name the provider declares. */
+export type CredentialValues = Record<string, string | undefined>;
+
+export type CredentialsProblem = { kind: 'INCOMPLETE' | 'REQUIRED'; missing: string[] } | null;
+
 /**
- * What is wrong with each row: a name without a value, a value without a name, a name used by an
- * earlier row (compared after the ends are cut, and in the case typed). A row with neither is left
- * out of the request and has no problem.
+ * What is wrong with the credential fields of a provider that declares `names` (its
+ * `credentialNames` in `GET /sms/meta`). Credentials are sent whole or not at all: the backend wants
+ * exactly the declared names, so a field filled while another is blank is `INCOMPLETE`. All blank
+ * is fine, it keeps what is saved, unless `required` (a new provider cannot use what was saved for
+ * the old one; then it is `REQUIRED`). A provider that declares none has no fields and no problem.
  */
-export function credentialProblems(
-  rows: readonly CredentialRow[] | undefined,
-): CredentialProblem[] {
-  const seen = new Set<string>();
-  return (rows ?? []).map((row) => {
-    const hasName = filled(row?.name);
-    const hasValue = filled(row?.value);
-    if (!hasName && !hasValue) return null;
-    if (!hasName) return { name: 'REQUIRED' };
-    if (!hasValue) return { value: 'REQUIRED' };
-    const name = trimSpec(row.name as string);
-    if (seen.has(name)) return { name: 'DUPLICATE' };
-    seen.add(name);
-    return null;
-  });
+export function credentialsProblem(
+  values: CredentialValues | undefined,
+  names: readonly string[],
+  required: boolean,
+): CredentialsProblem {
+  if (names.length === 0) return null;
+  const missing = names.filter((name) => !filled(values?.[name]));
+  if (missing.length === 0) return null;
+  if (missing.length === names.length) return required ? { kind: 'REQUIRED', missing } : null;
+  return { kind: 'INCOMPLETE', missing };
 }
 
 export type ChannelFormValues = {
@@ -76,7 +73,7 @@ export type ChannelFormValues = {
   name: string;
   providerCode: string;
   apiUrl: string;
-  credentials?: CredentialRow[];
+  credentials?: CredentialValues;
   extConfig?: string;
   countries?: string[];
   smsType: SmsType;
@@ -90,30 +87,43 @@ export function extConfigOf(text: string | undefined): Record<string, unknown> |
   return trimmed === '' ? null : (JSON.parse(trimmed) as Record<string, unknown>);
 }
 
-export function buildChannelBody(values: ChannelFormValues, mode: 'create'): ChannelInput;
-export function buildChannelBody(values: ChannelFormValues, mode: 'update'): ChannelPatch;
+export function buildChannelBody(
+  values: ChannelFormValues,
+  mode: 'create',
+  credentialNames?: readonly string[],
+): ChannelInput;
+export function buildChannelBody(
+  values: ChannelFormValues,
+  mode: 'update',
+  credentialNames?: readonly string[],
+): ChannelPatch;
 export function buildChannelBody(
   values: ChannelFormValues,
   mode: 'create' | 'update',
+  credentialNames?: readonly string[],
 ): ChannelInput | ChannelPatch;
 /**
- * The body of a create or an update. The credentials are in it only when a whole row was typed
- * (a name and a value); no row, or rows left blank, leaves the key out, so that the backend keeps
- * what it holds (the page has no way to clear them: `{}` and null mean "unchanged" too). With rows,
- * the map replaces everything stored. No field of an update is null: null would keep the stored value.
- * An update has neither the code nor the switch: the code cannot change, and the switch has its own
- * request.
+ * The body of a create or an update. The credentials are in it only when every name the provider
+ * declares (`credentialNames`) was filled: then they are exactly those names, as text, and replace
+ * everything stored; nothing typed, a name left blank (the form refuses that first) or a provider
+ * that declares none leaves the key out, so that the backend keeps what it holds (the page has no
+ * way to clear them: `{}` and null mean "unchanged" too). No field of an update is null: null would
+ * keep the stored value. An update has neither the code nor the switch: the code cannot change, and
+ * the switch has its own request.
  */
 export function buildChannelBody(
   values: ChannelFormValues,
   mode: 'create' | 'update',
+  credentialNames: readonly string[] = [],
 ): ChannelInput | ChannelPatch {
-  // Whole rows only, as a map of names to text values; a row left blank is not sent.
-  const credentials = Object.fromEntries(
-    (values.credentials ?? [])
-      .filter((row) => filled(row?.name) && filled(row?.value))
-      .map((row) => [trimSpec(row.name as string), trimSpec(row.value as string)]),
-  );
+  const whole =
+    credentialNames.length > 0 &&
+    credentialNames.every((name) => filled(values.credentials?.[name]));
+  const credentials = whole
+    ? Object.fromEntries(
+        credentialNames.map((name) => [name, trimSpec(values.credentials?.[name] as string)]),
+      )
+    : {};
   const common = {
     name: trimSpec(values.name),
     providerCode: values.providerCode,

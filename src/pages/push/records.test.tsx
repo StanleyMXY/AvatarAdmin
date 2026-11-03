@@ -74,20 +74,20 @@ describe('the send record page: the list', { timeout: 30000 }, () => {
     await waitFor(() => expect(bodyRows().length).toBe(12));
   });
 
-  // Answers 114: the backend filters by account and by trigger reason, not by local date.
+  // Answers 114: the backend filters by account, by trigger reason and by creation day, not by local date.
   describe('the filters', () => {
     const ACCOUNT = '00000000-0000-4000-8000-00000000abcd';
     const filterBox = () => screen.getByRole('search');
 
-    it('offers an account id and a trigger reason, and no date', async () => {
+    it('offers an account id, a trigger reason and the creation day (off until asked for; see recordsDate.test.tsx)', async () => {
       backend();
       renderPage(<RecordsPage />);
       await waitFor(() => expect(bodyRows().length).toBe(20));
       const box = within(filterBox());
       expect(box.getByRole('textbox', { name: 'Account ID' })).toBeInTheDocument();
       expect(box.getByRole('combobox', { name: 'Trigger reason' })).toBeInTheDocument();
-      expect(box.queryByLabelText(/date/i)).toBeNull();
-      expect(screen.getByText(/not by date/)).toBeInTheDocument();
+      expect(box.getByRole('checkbox', { name: /created in a date range/ })).not.toBeChecked();
+      expect(screen.queryByText(/not by date/)).toBeNull();
     });
 
     it('sends the account of a record and shows only its records, from page 1', async () => {
@@ -419,13 +419,105 @@ describe('the send record page: the result for each token', { timeout: 30000 }, 
     expect(screen.getByText('t-1')).toBeInTheDocument();
   });
 
+  it('shows the platform and the last 6 characters of the token of each result, and a dash for both on a record from before they were recorded', async () => {
+    backend();
+    const rows = pushState.deliveries.filter((d) => d.pushId === recordId(2));
+    expect(rows).toHaveLength(3);
+    rows[0].platform = 'ANDROID';
+    rows[0].tokenSuffix = 'aB3dE9';
+    rows[1].platform = 'IOS';
+    rows[1].tokenSuffix = 'ก๑๒x_ز';
+    rows[2].platform = null;
+    rows[2].tokenSuffix = null;
+    const user = userEvent.setup();
+    renderPage(<RecordsPage />);
+    await expand(user, 1);
+    const detail = await screen.findByTestId('deliveries');
+    const headers = [...detail.querySelectorAll('th')].map((th) => th.textContent);
+    expect(headers).toEqual(['Token', 'Platform', 'Last 6 of token', 'Result', 'Sent at']);
+    const lines = within(detail)
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => [...row.querySelectorAll('td')].map((td) => td.textContent));
+    expect(lines.map((l) => l.slice(0, 3))).toEqual([
+      [rows[0].pushTokenId, 'Android', 'aB3dE9'],
+      [rows[1].pushTokenId, 'iOS', 'ก๑๒x_ز'],
+      [rows[2].pushTokenId, '—', '—'],
+    ]);
+  });
+
+  it('shows a platform it does not know as it is and a dash for a platform that is not text', async () => {
+    stubFetch(({ url }) => {
+      const u = new URL(url, 'http://localhost');
+      if (u.pathname === '/api/admin/push/records') {
+        return jsonResponse(
+          200,
+          envelope('200', {
+            items: [
+              {
+                id: 'x1',
+                accountId: 'a',
+                pushType: 'recall',
+                triggerReason: 'daily_recall',
+                localDate: '2026-10-01',
+                createdAt: '2026-10-01T10:00:00.000Z',
+              },
+            ],
+            total: 1,
+          }),
+        );
+      }
+      return jsonResponse(
+        200,
+        envelope('200', {
+          id: 'x1',
+          deliveries: [
+            {
+              id: 'd1',
+              pushTokenId: 't-1',
+              result: 'FAILED',
+              platform: 'HUAWEI',
+              tokenSuffix: 'zz9',
+            },
+            { id: 'd2', pushTokenId: 't-2', result: 'FAILED', platform: 7, tokenSuffix: null },
+            { id: 'd3', pushTokenId: 't-3', result: 'FAILED' },
+          ],
+        }),
+      );
+    });
+    const user = userEvent.setup();
+    renderPage(<RecordsPage />);
+    await expand(user, 0);
+    const detail = await screen.findByTestId('deliveries');
+    const lines = within(detail)
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => [...row.querySelectorAll('td')].map((td) => td.textContent).slice(0, 3));
+    expect(lines).toEqual([
+      ['t-1', 'HUAWEI', 'zz9'],
+      ['t-2', '—', '—'],
+      ['t-3', '—', '—'],
+    ]);
+  });
+
   it('draws in Chinese', async () => {
     backend();
+    const rows = pushState.deliveries.filter((d) => d.pushId === recordId(2));
+    rows[0].platform = 'IOS';
+    rows[0].tokenSuffix = 'Qw8rT2';
     const user = userEvent.setup();
     renderPage(<RecordsPage />, 'zh-CN');
     await expand(user, 1);
     const detail = await screen.findByTestId('deliveries');
     expect(within(detail).getByText('对每个 token 的发送结果')).toBeInTheDocument();
     expect(within(detail).getByText('Token 已失效')).toBeInTheDocument();
+    expect([...detail.querySelectorAll('th')].map((th) => th.textContent)).toEqual([
+      'Token',
+      '平台',
+      'Token 末 6 位',
+      '结果',
+      '发送时间',
+    ]);
+    expect(within(detail).getByText('Qw8rT2')).toBeInTheDocument();
   });
 });

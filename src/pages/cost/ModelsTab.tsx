@@ -1,26 +1,13 @@
 import { useAccess, useIntl } from '@umijs/max';
-import {
-  Alert,
-  App,
-  Button,
-  Checkbox,
-  Flex,
-  Input,
-  Select,
-  Spin,
-  Table,
-  Tag,
-  Typography,
-  theme,
-} from 'antd';
+import { App, Button, Checkbox, Flex, Input, Select, Tag, Typography, theme } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ACTIONS_COLUMN } from '../../components/actionsColumn';
+import { PagedTable } from '../../components/PagedTable';
 import { type Kept, useKeptState } from '../../hooks/useKeptState';
-import { useLatestRead } from '../../hooks/useLatestRead';
+import { useServerPage } from '../../hooks/useServerPage';
 import {
   listUsageModels,
-  loadAllPages,
   RESOURCE_TYPES,
   SYNC_ADAPTERS,
   type UsageModel,
@@ -141,8 +128,6 @@ export function ModelsTab({
   const { token } = theme.useToken();
   const access = useAccess() as unknown as Access;
   const canPrice = access.canAccess('COST:PRICE');
-  const fetcher = useCallback(() => loadAllPages(listUsageModels), []);
-  const { data, failure, reload } = useLatestRead(fetcher);
   const ownBox = useRef<Kept['current']>({}) as Kept;
   const box = kept ?? ownBox;
   const [onlyUnpriced, setOnlyUnpriced] = useKeptState(
@@ -153,13 +138,12 @@ export function ModelsTab({
   const [type, setType] = useKeptState<string | undefined>(box, 'models.type', undefined);
   const [editing, setEditing] = useState<UsageModel | null>(null);
 
-  const rows = useMemo(
-    () =>
-      (data?.items ?? []).filter(
-        (m) => (!onlyUnpriced || m.hasActivePrice !== true) && (!type || m.resourceType === type),
-      ),
-    [data, onlyUnpriced, type],
-  );
+  // The backend filters and pages: the two filters are parameters, and the total is the filtered count.
+  const list = useServerPage(listUsageModels, {
+    ...(type ? { resourceType: type } : {}),
+    ...(onlyUnpriced ? { hasActivePrice: false } : {}),
+  });
+  const reload = list.reload;
 
   const columns: ColumnsType<UsageModel> = [
     {
@@ -250,43 +234,18 @@ export function ModelsTab({
           }))}
         />
       </Flex>
-      {failure ? (
-        <Alert
-          type="error"
-          showIcon
-          title={t('pages.common.loadFailed', { message: failure })}
-          action={
-            <Button size="small" onClick={reload}>
-              {t('pages.common.retry')}
-            </Button>
-          }
-        />
-      ) : null}
-      {data === null && !failure ? <Spin /> : null}
-      {data && !data.complete ? (
-        <Alert
-          type="warning"
-          showIcon
-          title={t('cost.common.truncated', { shown: data.items.length, total: data.total })}
-        />
-      ) : null}
-      {data ? (
-        <Table<UsageModel>
-          size="small"
-          rowKey="id"
-          columns={columns}
-          dataSource={rows}
-          pagination={{ pageSize: 20, showSizeChanger: true }}
-          scroll={{ x: 'max-content' }}
-          locale={{ emptyText: t('cost.models.empty') }}
-          onRow={(m) =>
-            ({
-              'data-unpriced': m.hasActivePrice === true ? 'false' : 'true',
-              style: m.hasActivePrice === true ? undefined : { background: token.colorErrorBg },
-            }) as React.HTMLAttributes<HTMLElement>
-          }
-        />
-      ) : null}
+      <PagedTable<UsageModel>
+        state={list}
+        rowKey="id"
+        columns={columns}
+        emptyText={t('cost.models.empty')}
+        onRow={(m) =>
+          ({
+            'data-unpriced': m.hasActivePrice === true ? 'false' : 'true',
+            style: m.hasActivePrice === true ? undefined : { background: token.colorErrorBg },
+          }) as React.HTMLAttributes<HTMLElement>
+        }
+      />
       {editing ? (
         <EditModel
           key={editing.id}

@@ -691,7 +691,7 @@ describe('the form: the file', { timeout: 60000 }, () => {
     expect(bad.textContent).toMatch(/at most 10 MB is allowed/);
   });
 
-  it('works out the ratio check again when another unit is chosen, and uses the tolerance of the configuration when it can read it', async () => {
+  it('works out the ratio check again when another unit is chosen, and uses the tolerance that the ads meta gives', async () => {
     saved.set('ads.creative_aspect_tolerance_percent', {
       value: 20,
       updatedAt: '2026-10-25T00:00:00.000Z',
@@ -704,6 +704,49 @@ describe('the form: the file', { timeout: 60000 }, () => {
     await pickUnit(user, form, '1');
     choose(png('c.png'));
     expect(await form.findByText(/The file fits the placement app_open/)).toBeInTheDocument();
+  });
+
+  it('an administrator with ADS:CREATIVE only reads the placements and the tolerance from the ads, never the system configuration, and gets the ratio check with that tolerance', async () => {
+    signIn('support', { codes: ['ADS:CREATIVE'] });
+    saved.set('ads.creative_aspect_tolerance_percent', {
+      value: 20,
+      updatedAt: '2026-10-25T00:00:00.000Z',
+      updatedBy: '1001',
+      updatedByUsername: 'root',
+    });
+    nextMedia({ width: 1080, height: 2200, bytes: 1000 });
+    const { calls, user } = await load();
+    const form = await open(user);
+    await pickUnit(user, form, '1');
+    choose(png('c.png'));
+    // 1080 x 2200 is 12.7% off 9:16: it fits only because the tolerance of 20 percent was read.
+    expect(await form.findByText(/The file fits the placement app_open/)).toBeInTheDocument();
+    const urls = calls.map((c) => c.url);
+    expect(urls).toContain('/api/admin/ads/placements');
+    expect(urls).toContain('/api/admin/ads/meta');
+    expect(urls.filter((u) => u.startsWith('/api/admin/config'))).toEqual([]);
+  });
+
+  it('when the meta cannot be read, the ratio is not compared with a tolerance that is guessed', async () => {
+    backend();
+    overrideFetch(async ({ url }) =>
+      url.pathname === '/api/admin/ads/meta' ? jsonAnswer(500, 'INTERNAL_ERROR', null) : undefined,
+    );
+    saved.set('ads.creative_aspect_tolerance_percent', {
+      value: 20,
+      updatedAt: '2026-10-25T00:00:00.000Z',
+      updatedBy: '1001',
+      updatedByUsername: 'root',
+    });
+    nextMedia({ width: 1080, height: 2200, bytes: 1000 });
+    const user = userEvent.setup();
+    renderPage(<CreativesPage />);
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    const form = await open(user);
+    await pickUnit(user, form, '1');
+    choose(png('d.png'));
+    expect(await form.findByText(/The file fits the placement app_open/)).toBeInTheDocument();
+    expect(form.queryByText(/The ratio/)).toBeNull();
   });
 
   it('says that the file cannot be compared when the placements cannot be read, and leaves it to the server', async () => {

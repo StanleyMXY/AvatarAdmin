@@ -6,6 +6,7 @@ import * as monitorMock from '../../../mock/monitor.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
+import { signInAsAdmin } from '../../../tests/signInAsAdmin';
 import PipelinePage from './pipeline';
 import { signIn } from './testSetup';
 
@@ -35,8 +36,14 @@ const SAMPLE = [
   point('agent-server-1', T2, null, 2, null),
   point('agent-server-2', T2, 0.7, null, null),
 ];
-const fixed = (items: unknown[], truncated = false) =>
-  stubFetch(async () => jsonResponse(200, envelope('200', { items, truncated })));
+const fixed = (items: unknown[], truncated = false, sources?: string[]) =>
+  stubFetch(async () =>
+    jsonResponse(
+      200,
+      envelope('200', { items, truncated, sources: sources ?? [...new Set(items.map(sourceOf))] }),
+    ),
+  );
+const sourceOf = (item: unknown) => (item as { source: string }).source;
 
 type ChartPoint = { at: number; source: string; value: number | null };
 const charts = (): ChartPoint[][] =>
@@ -160,6 +167,95 @@ describe('the range and the source', { timeout: 30000 }, () => {
         hours * 3600_000,
       );
     }
+  });
+
+  describe('the longest range comes from GET /meta (monitorMaxRangeDays)', () => {
+    const offered = () =>
+      screen
+        .getAllByRole('radio')
+        .map((r) => r.closest('label')?.textContent ?? r.getAttribute('value'));
+    const ALL_FIVE = ['Last hour', 'Last 6 hours', 'Last 24 hours', 'Last 3 days', 'Last 7 days'];
+
+    it('offers the ranges up to that many days: 3 days takes the 7-day range away', async () => {
+      signInAsAdmin('reviewer', { codes: VIEW, meta: { monitorMaxRangeDays: 3 } });
+      const calls = useMockBackend(monitorMock);
+      renderPage(<PipelinePage />);
+      await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+      expect(offered()).toEqual(ALL_FIVE.slice(0, 4));
+    });
+
+    it('1 day leaves the three ranges within a day, and the first read is still the last 24 hours', async () => {
+      signInAsAdmin('reviewer', { codes: VIEW, meta: { monitorMaxRangeDays: 1 } });
+      const calls = useMockBackend(monitorMock);
+      renderPage(<PipelinePage />);
+      await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+      expect(offered()).toEqual(ALL_FIVE.slice(0, 3));
+      const query = new URL(calls[0].url, 'http://x').searchParams;
+      expect(Date.parse(query.get('to') ?? '') - Date.parse(query.get('from') ?? '')).toBe(
+        24 * 3600_000,
+      );
+    });
+
+    for (const meta of [{ monitorMaxRangeDays: 7 }, { monitorMaxRangeDays: 30 }, {}]) {
+      it(`offers all five when the backend allows 7 days or more, and when meta could not be read (the 7 days held before): ${JSON.stringify(meta)}`, async () => {
+        signInAsAdmin('reviewer', { codes: VIEW, meta });
+        const calls = useMockBackend(monitorMock);
+        renderPage(<PipelinePage />);
+        await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+        expect(offered()).toEqual(ALL_FIVE);
+      });
+    }
+  });
+
+  it('offers the sources the backend names, so one that stopped reporting can be chosen although the range has no point of it', async () => {
+    const calls = fixed(SAMPLE, false, [
+      'agent-server-1',
+      'agent-server-2',
+      'agent-server-9-stopped',
+    ]);
+    const user = userEvent.setup();
+    renderPage(<PipelinePage />);
+    await waitFor(() => expect(screen.getAllByTestId('chart-line').length).toBeGreaterThan(0));
+    await user.click(screen.getByRole('combobox', { name: 'Source' }));
+    const names = (
+      await screen.findAllByText(/^agent-server-/, { selector: '.ant-select-item-option-content' })
+    ).map((o) => o.textContent);
+    expect(names).toEqual(['agent-server-1', 'agent-server-2', 'agent-server-9-stopped']);
+    expect(calls.length).toBe(1);
+  });
+
+  it('takes the list of sources from the newest answer, also when a source is chosen and the points are of that one only', async () => {
+    let wanted: string | null = null;
+    stubFetch(async ({ url }) => {
+      wanted = new URL(url, 'http://x').searchParams.get('source');
+      const items = SAMPLE.filter((p) => wanted === null || p.source === wanted);
+      return jsonResponse(
+        200,
+        envelope('200', {
+          items,
+          truncated: false,
+          sources: ['agent-server-1', 'agent-server-2', 'agent-server-3'],
+        }),
+      );
+    });
+    const user = userEvent.setup();
+    renderPage(<PipelinePage />);
+    await waitFor(() => expect(screen.getAllByTestId('chart-line').length).toBeGreaterThan(0));
+    await user.click(screen.getByRole('combobox', { name: 'Source' }));
+    const options = await screen.findAllByText('agent-server-2', {
+      selector: '.ant-select-item-option-content',
+    });
+    await user.click(options[options.length - 1]);
+    await waitFor(() => expect(wanted).toBe('agent-server-2'));
+    await user.click(screen.getByRole('combobox', { name: 'Source' }));
+    // agent-server-3 never had a point in any answer, and is on offer all the same
+    expect(
+      (
+        await screen.findAllByText('agent-server-3', {
+          selector: '.ant-select-item-option-content',
+        })
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it('keeps the sources it has seen in the list when one is chosen, and sends the choice', async () => {

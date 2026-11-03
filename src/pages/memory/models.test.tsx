@@ -101,7 +101,7 @@ describe('registering a model', { timeout: 30000 }, () => {
     expect(await screen.findByText('e5-base', { selector: 'td' })).toBeInTheDocument();
   });
 
-  it('shows the words of the code for a 409 MEMORY_MODEL_CONFLICT and never the sentence of the memory service, which is in one language only', async () => {
+  it('shows the words of the code for a 409 MEMORY_MODEL_CONFLICT with the dimensions the name was registered with, and never the sentence of the memory service, which is in one language only', async () => {
     useMockBackend(memoryMock, configMock);
     const user = userEvent.setup();
     renderPage(<ModelsPage />);
@@ -109,12 +109,62 @@ describe('registering a model', { timeout: 30000 }, () => {
     fill(dialog, { name: 'bge-m3', url: 'https://tei.internal.example', dimensions: '768' });
     await user.click(within(dialog).getByRole('button', { name: 'Register' }));
     expect(
-      await within(dialog).findByText(/registered with a different dimension/),
+      await within(dialog).findByText(/already registered with 1024 dimensions/),
     ).toBeInTheDocument();
     expect(within(dialog).queryByText(/vector table cannot change/)).toBeNull();
+    expect(dialog.textContent).not.toContain('Model bge-m3 is already registered');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(memoryStore.models.get('bge-m3')?.dimensions).toBe(1024);
   });
+
+  it('says the same in Chinese, with the dimensions', async () => {
+    useMockBackend(memoryMock, configMock);
+    const user = userEvent.setup();
+    renderPage(<ModelsPage />, 'zh-CN');
+    await user.click(await screen.findByRole('button', { name: /登记模型/ }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('模型名'), { target: { value: 'bge-m3' } });
+    fireEvent.change(within(dialog).getByLabelText('TEI 地址'), {
+      target: { value: 'https://tei.internal.example' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('维度'), { target: { value: '768' } });
+    await user.click(within(dialog).getByRole('button', { name: /登\s*记/ }));
+    expect(await within(dialog).findByText(/1024 维/)).toBeInTheDocument();
+    expect(dialog.textContent).not.toContain('vector table');
+  });
+
+  it.each([
+    ['null', null],
+    ['not a number', '1024'],
+    ['zero', 0],
+    ['negative', -3],
+    ['not whole', 12.5],
+    ['missing', undefined],
+  ])(
+    'shows the text of the code without dimensions when registeredDimensions is %s',
+    async (_name, registeredDimensions) => {
+      stubFetch(async ({ init }) =>
+        (init.method ?? 'GET') === 'GET'
+          ? jsonResponse(200, envelope('200', { items: [] }))
+          : jsonResponse(
+              409,
+              envelope('MEMORY_MODEL_CONFLICT', {
+                detail: 'Model x is registered',
+                registeredDimensions,
+              }),
+            ),
+      );
+      const user = userEvent.setup();
+      renderPage(<ModelsPage />);
+      const dialog = await openRegister(user);
+      fill(dialog, {});
+      await user.click(within(dialog).getByRole('button', { name: 'Register' }));
+      expect(
+        await within(dialog).findByText(/registered with a different dimension/),
+      ).toBeInTheDocument();
+      expect(dialog.textContent).not.toMatch(/null|undefined|NaN|1024|12\.5/);
+    },
+  );
 
   it('does not show a detail in any script, Thai, Arabic or a long string with no space, even when the answer carries one', async () => {
     const detail = `ไม่สามารถ مرحبا ${'z'.repeat(2000)}`;

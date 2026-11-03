@@ -7,6 +7,7 @@
 import { createHash } from 'node:crypto';
 import type { AppVersion } from '../../src/services/appVersions/types';
 import { multilingualSamples } from './fixtures';
+import { META_DEFAULTS } from './meta';
 import { findAdminByUsername } from './store';
 
 export type MockVersion = AppVersion;
@@ -27,6 +28,11 @@ type AppVersionsStore = {
   next: { version: number; upload: number };
   /** False while `upload.public_base_url` is "not configured": the upload answers 503. */
   apkAvailable: boolean;
+  /**
+   * True makes the activation of a DIRECT version answer 400 with a message only (`data` is null):
+   * the stored file is missing, its size or SHA-256 differs from the record.
+   */
+  storedFileFault: boolean;
   /** True makes the next upload answer 400 INVALID_FILE (a file without a v2 signature, for example). */
   nextApkRefusal: boolean;
 };
@@ -111,7 +117,8 @@ function seed(now: Date): AppVersionsStore {
     });
   };
 
-  const PLAY = 'https://play.google.com/store/apps/details?id=app.example.play';
+  // The id is the backend's environment value (GET /meta), not the package registered on the channel.
+  const PLAY = `https://play.google.com/store/apps/details?id=${META_DEFAULTS.googlePlayPackageName}`;
   add('play', 'ANDROID', {
     versionName: '1.0.0',
     versionCode: 100,
@@ -210,6 +217,7 @@ function seed(now: Date): AppVersionsStore {
     next: { version: n + 1, upload: 1 },
     apkAvailable: true,
     nextApkRefusal: false,
+    storedFileFault: false,
   };
 }
 

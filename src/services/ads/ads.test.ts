@@ -260,14 +260,39 @@ describe('the creatives', () => {
 });
 
 describe('the meta and the options', () => {
-  it('says whether the geo database is configured, and nothing when the answer is not a boolean', async () => {
-    const calls = answer({ geoConfigured: false });
-    expect(await getAdsMeta()).toEqual({ geoConfigured: false });
+  it('says whether the geo database is configured, the tolerance of the ratio check and the count of creatives that cannot be skipped, and nothing for a value of another type', async () => {
+    const calls = answer({
+      geoConfigured: false,
+      creativeAspectTolerancePercent: 3,
+      notSkippableFullScreenCount: 2,
+    });
+    expect(await getAdsMeta()).toEqual({
+      geoConfigured: false,
+      creativeAspectTolerancePercent: 3,
+      notSkippableFullScreenCount: 2,
+    });
     expect(calls[0].url).toBe('/api/admin/ads/meta');
-    answer({ geoConfigured: 'no' });
-    expect(await getAdsMeta()).toEqual({ geoConfigured: null });
+    answer({
+      geoConfigured: 'no',
+      creativeAspectTolerancePercent: '3',
+      notSkippableFullScreenCount: -1,
+    });
+    expect(await getAdsMeta()).toEqual({
+      geoConfigured: null,
+      creativeAspectTolerancePercent: null,
+      notSkippableFullScreenCount: null,
+    });
+    answer({ notSkippableFullScreenCount: 1.5, creativeAspectTolerancePercent: null });
+    expect(await getAdsMeta()).toMatchObject({
+      creativeAspectTolerancePercent: null,
+      notSkippableFullScreenCount: null,
+    });
     answer(null);
-    expect(await getAdsMeta()).toEqual({ geoConfigured: null });
+    expect(await getAdsMeta()).toEqual({
+      geoConfigured: null,
+      creativeAspectTolerancePercent: null,
+      notSkippableFullScreenCount: null,
+    });
   });
 
   it('reads every page of a list, and stops at an empty page whatever the total says', async () => {

@@ -107,3 +107,9 @@ export type PermissionPatch = {
   sortOrder: number;
   parent: string | null;
 };
+
+/** `GET /audit-logs/meta`: the values the audit log can hold, in the backend's order, to be used exactly as they are. */
+export type AuditMeta = { actions: string[]; targetTypes: string[] };
+
+/** A row of `GET /audit-logs/admins`: the administrators that exist, for the filter. Only these two fields. */
+export type AuditAdmin = { id: string; username: string };

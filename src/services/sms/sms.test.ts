@@ -123,14 +123,24 @@ describe('the channels', () => {
 });
 
 describe('the meta of the channels', () => {
-  it('reads the providers with their hosts and the number of test sends left today', async () => {
+  it('reads the providers with their hosts and credential names, the test sends left today, whether phone sign-in is on and how many accounts have a phone number', async () => {
     answer({
-      providers: [{ code: 'gateway-a', allowedHosts: ['sms.example.com'] }],
+      providers: [
+        { code: 'gateway-a', allowedHosts: ['sms.example.com'], credentialNames: ['apiKey'] },
+        { code: 'local-stub', allowedHosts: [], credentialNames: [] },
+      ],
       testRemainingToday: 3,
+      phoneLoginEnabled: true,
+      phoneAccountCount: 12,
     });
     expect(await getSmsMeta()).toEqual({
-      providers: [{ code: 'gateway-a', allowedHosts: ['sms.example.com'] }],
+      providers: [
+        { code: 'gateway-a', allowedHosts: ['sms.example.com'], credentialNames: ['apiKey'] },
+        { code: 'local-stub', allowedHosts: [], credentialNames: [] },
+      ],
       testRemainingToday: 3,
+      phoneLoginEnabled: true,
+      phoneAccountCount: 12,
     });
   });
 
@@ -138,23 +148,33 @@ describe('the meta of the channels', () => {
     answer({
       providers: [
         { code: 5 },
-        { code: 'ok', allowedHosts: 'x' },
+        { code: 'ok', allowedHosts: 'x', credentialNames: 'apiKey' },
         null,
-        { code: 'b', allowedHosts: ['h', 2] },
+        { code: 'b', allowedHosts: ['h', 2], credentialNames: ['k', 7, null] },
       ],
       testRemainingToday: -2,
+      phoneLoginEnabled: 'yes',
+      phoneAccountCount: -1,
     });
     expect(await getSmsMeta()).toEqual({
       providers: [
-        { code: 'ok', allowedHosts: [] },
-        { code: 'b', allowedHosts: ['h'] },
+        { code: 'ok', allowedHosts: [], credentialNames: [] },
+        { code: 'b', allowedHosts: ['h'], credentialNames: ['k'] },
       ],
       testRemainingToday: null,
+      phoneLoginEnabled: null,
+      phoneAccountCount: null,
     });
     answer(null);
-    expect(await getSmsMeta()).toEqual({ providers: [], testRemainingToday: null });
-    answer({ providers: [], testRemainingToday: 2.9 });
-    expect((await getSmsMeta()).testRemainingToday).toBe(2);
+    expect(await getSmsMeta()).toEqual({
+      providers: [],
+      testRemainingToday: null,
+      phoneLoginEnabled: null,
+      phoneAccountCount: null,
+    });
+    answer({ providers: [], testRemainingToday: 2.9, phoneAccountCount: 3.7 });
+    const meta = await getSmsMeta();
+    expect([meta.testRemainingToday, meta.phoneAccountCount]).toEqual([2, 3]);
   });
 });
 

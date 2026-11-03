@@ -1,10 +1,22 @@
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import { Link, useAccess, useIntl } from '@umijs/max';
-import { Alert, Button, Flex, Input, Select, Spin, Table, Tooltip, Typography } from 'antd';
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Flex,
+  Input,
+  Select,
+  Spin,
+  Table,
+  Tooltip,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useState } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { PAGE_SIZE_OPTIONS } from '../../components/PagedListTable';
+import { DateRangeUtc, type DayRange } from '../../components/stat/DateRangeUtc';
 import { useFailure } from '../../hooks/useFailure';
 import { useLatestCall } from '../../hooks/useLatestCall';
 import {
@@ -18,16 +30,32 @@ import {
   TRIGGER_REASONS,
   type TriggerReason,
 } from '../../services/push';
-import { codeText, instantText } from '../../utils/displayText';
+import { codeText, instantText, instantUtcText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
+import { lastNDaysUtc } from '../../utils/utcDay';
+
+/** The width of the range picker of `DateRangeUtc`, which the column of the day filter is held to. */
+const DATE_COLUMN_WIDTH = 366;
 
 /** An account id as the backend takes it for the filter: 36 characters, hex digits in five groups. */
 const ACCOUNT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type Draft = { accountId: string; triggerReason: TriggerReason | undefined };
-const NO_DRAFT: Draft = { accountId: '', triggerReason: undefined };
+type Draft = {
+  accountId: string;
+  triggerReason: TriggerReason | undefined;
+  /** Only the records created in `range` (UTC days); off, no date is sent. */
+  byDay: boolean;
+  range: DayRange;
+};
+/** The range that is on offer when the day filter is switched on. */
+const newDraft = (): Draft => ({
+  accountId: '',
+  triggerReason: undefined,
+  byDay: false,
+  range: lastNDaysUtc(7),
+});
 
 /** An account id: any text, cut to two lines; a link to the user when the administrator may see users. */
 function AccountCell({ accountId }: { accountId: unknown }) {
@@ -108,6 +136,16 @@ function Deliveries({ id }: { id: string }) {
       ),
     },
     {
+      title: t('push.records.col.platform'),
+      dataIndex: 'platform',
+      render: (value: unknown) => codeText(intl, 'push.platform', value) || DASH,
+    },
+    {
+      title: t('push.records.col.tokenSuffix'),
+      dataIndex: 'tokenSuffix',
+      render: (value: unknown) => plainText(value) || DASH,
+    },
+    {
       title: t('push.records.col.result'),
       dataIndex: 'result',
       render: (value: unknown) => codeText(intl, 'push.result', value) || DASH,
@@ -140,11 +178,11 @@ export default function RecordsPage() {
     intl.formatMessage({ id }, values);
   const [paging, setPaging] = useState({ page: 1, pageSize: 20 });
   // The filters being typed, and the ones the last Search applied (the list follows the second).
-  const [draft, setDraft] = useState<Draft>(NO_DRAFT);
+  const [draft, setDraft] = useState<Draft>(newDraft);
   const [applied, setApplied] = useState<RecordFilters>({});
   const [accountProblem, setAccountProblem] = useState(false);
   const [data, setData] = useState<Page<PushRecord> | null>(null);
-  const { text: failure, fail, clear } = useFailure();
+  const { text: failure, error: failed, fail, clear } = useFailure();
   const [loading, setLoading] = useState(true);
   const begin = useLatestCall();
 
@@ -157,7 +195,11 @@ export default function RecordsPage() {
       setData(page);
       clear();
     } catch (error) {
-      if (isCurrent()) fail(error);
+      if (isCurrent()) {
+        // The rows of the read before belong to another filter: under the error bar there are none.
+        setData(null);
+        fail(error);
+      }
     } finally {
       if (isCurrent()) setLoading(false);
     }
@@ -178,11 +220,12 @@ export default function RecordsPage() {
     setApplied({
       ...(accountId === '' ? {} : { accountId }),
       ...(draft.triggerReason ? { triggerReason: draft.triggerReason } : {}),
+      ...(draft.byDay ? { from: draft.range.from, to: draft.range.to } : {}),
     });
     setPaging((p) => ({ ...p, page: 1 }));
   };
   const reset = () => {
-    setDraft(NO_DRAFT);
+    setDraft(newDraft());
     setAccountProblem(false);
     setApplied({});
     setPaging((p) => ({ ...p, page: 1 }));
@@ -223,7 +266,8 @@ export default function RecordsPage() {
     {
       title: t('push.records.col.createdAt'),
       dataIndex: 'createdAt',
-      render: (value: unknown) => instantText(intl.locale, value),
+      // UTC, like the day filter that counts it.
+      render: (value: unknown) => instantUtcText(intl.locale, value),
     },
   ];
 
@@ -263,6 +307,23 @@ export default function RecordsPage() {
           }))}
           onChange={(value) => setDraft((d) => ({ ...d, triggerReason: value ?? undefined }))}
         />
+        {/* As wide as the range picker (366px): the line that says why the dates were refused wraps
+            under it, and does not widen this column and push Search and Reset to the next row. */}
+        <Flex vertical gap={4} style={{ maxWidth: DATE_COLUMN_WIDTH }}>
+          <Checkbox
+            checked={draft.byDay}
+            onChange={(e) => setDraft((d) => ({ ...d, byDay: e.target.checked }))}
+          >
+            {t('push.records.filter.dateRange')}
+          </Checkbox>
+          {draft.byDay ? (
+            <DateRangeUtc
+              value={draft.range}
+              onChange={(range) => setDraft((d) => ({ ...d, range }))}
+              refused={failed ?? undefined}
+            />
+          ) : null}
+        </Flex>
         <Button type="primary" onClick={search}>
           {t('push.records.filter.search')}
         </Button>

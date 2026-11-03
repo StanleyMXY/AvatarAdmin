@@ -6,6 +6,7 @@ import {
   monitorStore,
   PIPELINE_MAX_POINTS,
   PIPELINE_MAX_RANGE_DAYS,
+  PIPELINE_SILENT_SOURCES,
   PIPELINE_SOURCES,
   PIPELINE_STEP_MS,
 } from './_core/monitorData';
@@ -102,7 +103,18 @@ export default {
       }
     }
     const truncated = points.length > PIPELINE_MAX_POINTS;
-    return ok({ items: truncated ? points.slice(-PIPELINE_MAX_POINTS) : points, truncated });
+    // Every source with a snapshot in the last `monitor.max_range_days` days, once each, by code
+    // point, whatever from, to and source say (contract 14.1).
+    const named = monitorStore.pipelineEmpty
+      ? []
+      : [...PIPELINE_SOURCES, ...PIPELINE_SILENT_SOURCES].sort((a, b) =>
+          a < b ? -1 : a > b ? 1 : 0,
+        );
+    return ok({
+      items: truncated ? points.slice(-PIPELINE_MAX_POINTS) : points,
+      truncated,
+      sources: named,
+    });
   }),
 
   'GET /api/admin/alerts': guard('MONITOR:VIEW', (req) => {

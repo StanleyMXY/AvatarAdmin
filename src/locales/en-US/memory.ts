@@ -61,6 +61,8 @@ const messages: Record<string, string> = {
     'A whole number from 1 to 8192. A registered name keeps its dimensions; to change them, use a new name.',
   'memory.model.dimensionsInvalid': 'Enter a whole number from 1 to 8192',
   'memory.model.submit': 'Register',
+  'memory.model.conflictRegistered':
+    'Embedding model conflict: a model with this name is already registered with {dimensions} dimensions, and that cannot change. Register the model under a new name.',
   'memory.model.registered': 'Model registered',
   'memory.model.empty': 'No model is registered yet',
   'memory.model.params': 'Parameters',

@@ -21,6 +21,12 @@
 
 全量测试在云端要 25 到 30 分钟（机器负载高时），本地空闲时会快很多；负载高时偶尔有 5 秒默认超时的用例，单独重跑会过，不是代码问题。
 
+### 本批次（2026-11-03 后端实现了 28 个请求编号）摘要
+
+后端把我们提的 41 项改动请求里建议做的 33 项（对应 28 个请求编号）全部实现了，另 8 项确认不做（说明在 `docs/backend-inputs/2026-11-03-avatar-backend-admin-change-requests-implemented.md`，更新后的接口文档是同目录的 `2026-11-03-backend-task-java-backend-updated.md`）。这个仓库按它要做的事分五类（逐项做到哪一步，以各组报告为准）：类型定义和页面改成后端实际的形状（订阅令牌末 6 位、`fileRef` 删除、`kind` 创建后只读、短信四个专用原因等）；假后端与后端实际行为对齐；测试；开发计划（`docs/superpowers/plans/2026-10-21-avatar-admin-frontend.md` 新增"后端的实现（2026-11-03）"一节，各任务已改）；给后端、给改契约的人的文件（`docs/contract-requests/` 里的状态、版本差异、缺口）。各代码组的报告是 `docs/superpowers/handoff/reports/impl-c1-report.md` 至 `impl-c6-report.md`（c6 是文档组）。
+
+数字（改了多少处、没做几处、没运行几项、阻塞几项、全量测试、类型检查、代码检查）：**等主会话在全部检查跑完后补在这里。**
+
 ## 二、本地怎么起来
 
 1. Node 要 `^22.22.1 || >=24.0.0`（下限来自 lint-staged 17.6.0、pro-components、vitest 4.1.10 的 engines）。云端的 Node 是 22.22.0，略低于这个下限，测试能跑；本地请用满足的版本。`.npmrc` 里的 `legacy-peer-deps=true` 不要去掉。
@@ -51,9 +57,9 @@
 - `src/components/`：共用组件。`src/hooks/`：共用钩子。`src/utils/`：共用函数。`tests/`：测试助手、扫描器、桩。
 - `docs/`：
   - `docs/shared-snapshots/`：规格和契约的**只读**快照（正本在 AvatarApp 的 `main`）。
-  - `docs/backend-inputs/`：后端写给前端的文件（字段名以它们为准），包括 2026-11-02 的回答和新版接口文档（后者与旧快照差别见 `docs/contract-requests/2026-11-02-contract-version-diff.md`）。
+  - `docs/backend-inputs/`：后端写给前端的文件（字段名以它们为准），包括 2026-11-02 的回答和新版接口文档（后者与旧快照差别见 `docs/contract-requests/2026-11-02-contract-version-diff.md`），以及 2026-11-03 的实现说明和更新接口文档（与上一版的差别见 `docs/contract-requests/2026-11-03-contract-version-diff.md`）。
   - `docs/contract-requests/`：我们对后端的提问和对规格、契约的变更请求（见第五节）。
-  - `docs/superpowers/plans/2026-10-21-avatar-admin-frontend.md`：开发计划，已并入后端的回答。
+  - `docs/superpowers/plans/2026-10-21-avatar-admin-frontend.md`：开发计划，已并入后端的回答和 2026-11-03 的实现。
   - `docs/superpowers/handoff/`：执行约定、账本、各任务和各批修复的报告（`reports/`，约 100 份）、评审文件、决定。
 
 ## 四、项目的"记忆"：规则、负责人的决定、写法
@@ -108,20 +114,24 @@
 
 ## 五、接下来要做的事
 
-### 1. 等后端回答或改代码，然后前端跟进
+### 1. 等后端告知或确认，然后前端跟进
 
-- **41 项向后端提出的改动请求**，在 `docs/contract-requests/2026-11-02-requests-to-backend.md`。后端自己的建议：做 33 项、不做 8 项；后端这次**没有改任何代码**。清单每项写了：请求什么、后端怎么建议、前端现在怎么处理、**后端做了之后前端要改什么**。**是否转给后端由负责人决定，目前还没有转。**
-  - 对前端影响最大的几项：订阅购买令牌只返回末 6 位（现在响应里有完整令牌，前端只能不显示）；四类"只能授出自己持有的权限"的 403 带原因代码；`GET /me` 加 `roleIds`；批量成本导入返回 `overwritten`（现在只能写"已导入 n 行"）；渠道包 409 带确定的 `data.status`；审核记录加 `contentType` 筛选；形象目录的筛选。
-- **后端回答里没有完全核实的 17 条**：前端按答案写的保守做法处理，列在同一个清单文件的"未完全核实"一节；后端核实后可能要微调。
-- **新差异请求**：每组做完时写的 `docs/contract-requests/2026-11-02-new-differences-*.md`（a1 到 a5、b1 到 b4），是"后端没写清、前端按最小做法开发"的细节，也等后端回答。
-- **发给后端的清单**：`docs/contract-requests/for-backend.md`（140 条问题，已全部标"已答"）和索引 `docs/contract-requests/README.md`。
+**41 项向后端提出的改动请求不再是待办**：2026-11-03 后端实现了建议做的 33 项（28 个请求编号），前端已按它落实（落实情况见各代码组的报告，数字等主会话核对后补）；另 8 项后端确认不做，前端的做法不变——额度包整行提交、不发 `expectedUpdatedAt`（30 号）；开启手机号登录被拒时读 `data.details` 判断缺哪几项（42 号）；游客留存不提供 `unknown`（52 号）；审核队列的等待时长由前端按创建时间算、最老一条取 `oldestPendingSeconds`（62 号）；客服反馈列表把 `pageSize` 设小（65 号）；成本币种从 `GET /config` 读或用成本行里的 `currency`（67 号的 `attributionCostCurrency`）；前端提前校验币种格式（70 号）；漏斗步骤继续用逗号分隔（93 号）。19 号的 `GET /roles` 加 `heldByMe`、60 号的 `GET /account-deletions` 加 `accountId` 筛选后端也没做，前端分别用 `/me.roleIds` 和用户详情的 `deletion` 满足。逐项状态在 `docs/contract-requests/2026-11-02-requests-to-backend.md`。
+
+**仍在后端一侧的事**（2026-11-03 数过，不含本批次各组新写的 `2026-11-03-new-differences-<组号>.md`，那些数等主会话收齐后补）：
+
+- 等后端告知：1 件——后端实现说明第五节第 1 条，后端的全量集成测试，以及应用服务、后台任务两个模块的测试，要等后端持续集成的结果（推送发送逻辑在这两个模块里）。联调时要多看一眼推送记录详情的 `platform`、`tokenSuffix`。
+- 要向后端确认细节：4 处，在 `docs/contract-requests/2026-11-03-contract-gaps.md`——G1（任务配置带未改字段的 `PUT` 的检查顺序）、G3（内容类型、资源类型的大小写和检查顺序）、G5（价格 400 的 `ref` 路径下标从几起）、G7（版本号大小比较失败的 400 有没有 `details`）。
+- 部分核实的结论：17 条里第 45、137 条已解决，**还剩 15 条**，每条缺什么在 `requests-to-backend.md` 的"未完全核实"一节；要靠对着真实后端联调确认。
+- 各组新差异：2026-11-02 的 9 个文件共 43 个小节，其中 10 个已因本批次标了"后端已于 2026-11-03 回答/实现"或"已采纳"，其余 33 个小节不变，是否转给后端由负责人定。
+- 向后端问的 140 条问题：全部已答，没有待回答的（`docs/contract-requests/for-backend.md` 的"仍待回答的"一节按 2026-11-03 重新数过）。
 
 ### 2. 规格和契约文档的修改（在 AvatarApp 的 `main` 上，由负责人决定谁来改）
 
 - 设计文档 `docs/admin-frontend-design.md`：要改的 16 条在 `docs/contract-requests/2026-10-31-design-doc-changes-from-backend-d1.md`（位置、行为、检查顺序、错误、测试）；另有角色页对 403 的说法（现在写"展示后端 message"，按负责人的规则应是"显示按码翻译的文字，需要区分时由后端给 `data.reason`"）、对话框对含有未持有权限的角色的提示。
-- 接口文档（契约）`docs/backend-task-java-backend.md`：17.4 告警类型十四种改成十八种、17.5 补 25（现在是 26）个设置键并改 3 个键的范围——见 `docs/contract-requests/2026-10-31-contract-17-4-17-5-changes-from-backend-d1.md`；接口文档与后端代码互相矛盾的 11 条（前端按代码开发）——见 `docs/contract-requests/2026-11-02-contract-contradictions.md`。
-- **文档改完、快照换成新版之后，前端有一个收尾清理**（步骤写在 `docs/superpowers/handoff/reports/diff-b1-report.md` 末尾）：把 `docs/shared-snapshots/backend-task-java-backend.md` 换成新版；重新生成 `errorCodes.generated.json` 和配置键清单（`npm run gen:error-codes`、`npm run gen:config-keys`）；从 `src/pages/config/extraConfigKeys.ts` 删掉 26 个"契约采纳前的额外键"，删 `NEXT_CONTRACT` 的用法；更新 `src/locales/parity.test.ts` 里的 225 和 25（现在是 26）；批量导入的两个原因码 `NEGATIVE`、`TOO_MANY_DECIMALS` 等接口文档写进 `INVALID_REQUEST` 一行后，再从批量导入对话框的语言文件挪进共用的 `reason.*`，并把"14 个"的断言改成 16 个。
-- 未处理的新版接口文档差异里，**新增页面行为**的部分（例如更多筛选）没有做，需要时看 `docs/contract-requests/2026-11-02-contract-version-diff.md`。
+- 接口文档（契约）`docs/backend-task-java-backend.md`：2026-11-03 对照更新接口文档核对过，`docs/contract-requests/2026-10-31-contract-17-4-17-5-changes-from-backend-d1.md` 的请求**已被采纳**（17.4 告警类型十八种及四个新类型的行、17.5 的 25 个键及编辑权限、三个键的范围、`GET /alerts` 的参数校验、`moderation.model_check_enabled`），只剩第 2.5 节第三行没写（保存 `auth.phone_login_enabled` 被拒时 400 的 `details`，在 `2026-11-03-contract-gaps.md` 的 G8），采纳情况写在那份请求文件末尾；接口文档与后端代码互相矛盾的 11 条（`2026-11-02-contract-contradictions.md`）里 9 条已被更新接口文档采纳，没采纳的是审计筛选长度的口径一条和代码里过时注释一条（见该文件末尾 2026-11-03 一节）；另有接口文档里还缺的 8 处写成了 `2026-11-03-contract-gaps.md`。设计文档的 16 条（`2026-10-31-design-doc-changes-from-backend-d1.md`）和角色页对 403 的说法不在更新接口文档的范围内，仍待在 AvatarApp 的 `main` 上改；其中 403 现在有 `data.reason`，角色页的说法可以直接写成"按 `data.reason` 显示按码翻译的文字"。
+- **快照换成新版之后，前端有一个收尾清理**（步骤原来写在 `docs/superpowers/handoff/reports/diff-b1-report.md` 末尾；现状：接口文档的 17.4/17.5 变更已被采纳，新版是 2026-11-03 的更新接口文档 `docs/backend-inputs/2026-11-03-backend-task-java-backend-updated.md`，它的 1.4 原因代码清单已经包含 `NEGATIVE`、`TOO_MANY_DECIMALS` 和短信保护的四个原因，用 `scripts/contractErrors.ts` 的 `reasonCodes` 数过共 35 个，错误码 81 个）。快照 `docs/shared-snapshots/backend-task-java-backend.md` 仍是旧版，等负责人整份替换；替换后：①重新生成 `errorCodes.generated.json` 和配置键清单（`npm run gen:error-codes`、`npm run gen:config-keys`）；②从 `src/pages/config/extraConfigKeys.ts` 删 26 个"契约采纳前的额外键"，删 `NEXT_CONTRACT` 的用法（`scripts/contractErrors.ts`，它指向哪份文档以代码为准）；③更新 `src/locales/parity.test.ts` 里的 225 和 25（现在是 26）；④批量导入的 `NEGATIVE`、`TOO_MANY_DECIMALS` 和短信四个原因：更新接口文档已经写进清单，按计划任务 3 应放在共用的 `reason.*`，断言是 35 个，不再是"14 个"或"16 个"——这一步本批次是否已做，以各代码组报告为准，主会话核对后在这里补一句。
+- 未处理的新版接口文档差异里，**新增页面行为**的部分（例如更多筛选）没有做，需要时看 `docs/contract-requests/2026-11-02-contract-version-diff.md`；2026-11-03 的更新接口文档与上一版的差别，以及其中有影响但不在 28 个编号里的 13 条，看 `docs/contract-requests/2026-11-03-contract-version-diff.md`。
 
 ### 3. 云端做不了的验证（"未运行 3 项"）——**本地请优先做**
 
@@ -141,7 +151,7 @@
 - 整条 `PUT /admins/{id}` 必须带当前角色，列表里读到的角色已过期时会覆盖别人刚做的角色变更——这是接口本身的限制。
 - 带 `/` 的内置权限节点码（如 `MENU:/system/audit`）的修改和删除请求在真实后端上很可能调不通（后端会话的推断，未验证）。
 - 验证码第 5 次错误的"再错将被锁定"提示按后端默认的 5 次计数，页面不知道配置里实际的上限。
-- 审核记录的类型筛选、形象目录的上下架和适用风格筛选，后端不支持，页面只能对本页内容过滤，页数和总数仍包含所有类型。
+- 形象目录的上下架和适用风格筛选，后端不支持（`GET /cosmetics` 只认 `kind`），页面只能对本页内容过滤，页数和总数仍包含所有的行。审核记录的内容类型筛选后端 2026-11-03 起支持（`contentType`），页面改为发参数，分页和总数正确。
 - 浏览器关闭标签页不经过站内路由，不会弹未保存提示。
 
 ## 六、文档索引（按用途）
@@ -160,3 +170,5 @@
 | 发给后端的问题和改动请求 | `docs/contract-requests/`（先看 `README.md`、`for-backend.md`、`2026-11-02-requests-to-backend.md`） |
 | 规格和契约快照（只读） | `docs/shared-snapshots/` |
 | 部署 | `docs/deploy.md`、`README.md` 的 Deployment |
+
+核对于 2026-11-03

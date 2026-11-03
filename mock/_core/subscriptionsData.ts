@@ -34,6 +34,7 @@ export type SubscriptionRow = {
   id: string;
   accountId: string | null;
   store: string;
+  /** As stored: the whole Google purchase token is here; the answers give only its last six characters. */
   storeRef: string;
   linkedPurchaseToken: string | null;
   productId: string;
@@ -59,7 +60,10 @@ export type EventRow = {
   subscriptionId: string | null;
   accountId: string | null;
   store: string;
+  /** As stored: for a Google event it starts with the whole purchase token; the answers cut it. */
   sourceEventId: string;
+  /** As stored (a Google payload has the whole purchase token in it); the answers rename and cut it. */
+  payload: Record<string, unknown>;
   type: string;
   subtype: string | null;
   eventSignedAt: string;
@@ -280,6 +284,34 @@ const EVENT_TYPES: [string, string | null][] = [
   ['REFUND', null],
 ];
 
+/** The decoded notification of an event, as the store sent it (a Google one carries the purchase token). */
+const seedPayload = (
+  subscription: SubscriptionRow,
+  type: string,
+  signedAt: string,
+): Record<string, unknown> =>
+  subscription.store === 'GOOGLE'
+    ? {
+        version: '1.0',
+        packageName: 'app.avatar.mock',
+        eventTimeMillis: String(Date.parse(signedAt)),
+        subscriptionNotification: {
+          version: '1.0',
+          notificationType: type,
+          purchaseToken: subscription.storeRef,
+          subscriptionId: subscription.productId,
+        },
+      }
+    : {
+        notificationType: type,
+        data: {
+          transactionInfo: {
+            originalTransactionId: subscription.storeRef,
+            productId: subscription.productId,
+          },
+        },
+      };
+
 const seedEvents = (subscriptions: SubscriptionRow[]): EventRow[] => {
   const events: EventRow[] = [];
   subscriptions.forEach((subscription, i) => {
@@ -292,7 +324,11 @@ const seedEvents = (subscriptions: SubscriptionRow[]): EventRow[] => {
         subscriptionId: subscription.id,
         accountId: subscription.accountId,
         store: subscription.store,
-        sourceEventId: `evt-${subscription.id}-${k}`,
+        sourceEventId:
+          subscription.store === 'GOOGLE'
+            ? `${subscription.storeRef}:${Date.parse(signedAt)}`
+            : `evt-${subscription.id}-${k}`,
+        payload: seedPayload(subscription, type, signedAt),
         type,
         subtype,
         eventSignedAt: signedAt,
@@ -405,6 +441,47 @@ const slot = holder.__avatarAdminMockSubscriptions;
 
 /** The live state; read it again after `resetSubscriptionsStore()`, which replaces it. */
 export const subscriptionsState = (): SubscriptionsState => slot.current;
+
+/** The last six characters of a Google purchase token (the whole value when it is shorter). */
+const lastSix = (value: string): string => [...value].slice(-6).join('');
+
+/** A subscription as the answers give it: no whole Google token (`storeRef` null, no `linkedPurchaseToken`), the suffixes instead. */
+export function publicSubscription(row: SubscriptionRow) {
+  const { linkedPurchaseToken, ...rest } = row;
+  return {
+    ...rest,
+    storeRef: row.store === 'GOOGLE' ? null : row.storeRef,
+    storeRefSuffix: row.storeRef ? lastSix(row.storeRef) : null,
+    linkedPurchaseTokenSuffix: linkedPurchaseToken ? lastSix(linkedPurchaseToken) : null,
+  };
+}
+
+const renameTokens = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(renameTokens);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, inner]) =>
+      key === 'purchaseToken' || key === 'pendingRefundToken'
+        ? [`${key}Suffix`, typeof inner === 'string' ? lastSix(inner) : inner]
+        : [key, renameTokens(inner)],
+    ),
+  );
+};
+
+/** An event as the answers give it; only a Google one hides anything: the part of `sourceEventId` before its first colon is cut to six characters, and the token keys of the payload are renamed. */
+export function publicEvent(row: EventRow) {
+  const status = row.error !== null ? 'FAILED' : row.processedAt !== null ? 'PROCESSED' : 'PENDING';
+  if (row.store !== 'GOOGLE') return { ...row, status };
+  const colon = row.sourceEventId.indexOf(':');
+  const head = colon === -1 ? row.sourceEventId : row.sourceEventId.slice(0, colon);
+  const tail = colon === -1 ? '' : row.sourceEventId.slice(colon);
+  return {
+    ...row,
+    status,
+    sourceEventId: `${lastSix(head)}${tail}`,
+    payload: renameTokens(row.payload),
+  };
+}
 
 export function resetSubscriptionsStore(): void {
   slot.current = seed();

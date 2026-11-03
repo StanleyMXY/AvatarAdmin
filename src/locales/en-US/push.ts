@@ -83,6 +83,12 @@ const messages: Record<string, string> = {
   'push.templates.enabledOf': 'On: {reason}, {locale}',
   'push.templates.defaultLanguageRequired':
     '{reason} needs an enabled template in the default language ({defaultLocale}). Enable that one first. To switch it off, delete it or change it, first switch off the other languages of {reason}. If it is the only enabled template, keep it in {defaultLocale} and enabled, and create the other language as a new template.',
+  'push.templates.defaultCase.DEFAULT_MISSING':
+    '{reason} needs an enabled template in the default language ({defaultLocale}) before another language can be on. Enable the {defaultLocale} template of {reason} first, then enable or create the other languages.',
+  'push.templates.defaultCase.DEFAULT_REQUIRED_BY_OTHERS':
+    'The {defaultLocale} template of {reason} cannot be switched off, deleted, or changed to another language or reason while its other languages are enabled. To do that, switch off the other languages of {reason} first.',
+  'push.templates.defaultCase.DEFAULT_MOVED_AWAY':
+    'The {defaultLocale} template is the only enabled template of {reason}, so it cannot be changed to another language. Keep it in {defaultLocale} and enabled, and create a new template for the other language.',
   'push.templates.exists':
     'A template for this reason and language exists already. Edit that one instead.',
   'push.templates.reason': 'Trigger reason',
@@ -190,14 +196,17 @@ const messages: Record<string, string> = {
   'push.records.filter.accountInvalid':
     'An account ID has 36 characters: digits, letters a to f and hyphens, as 00000000-0000-4000-8000-000000000011.',
   'push.records.filter.note':
-    'The backend filters by account and trigger reason only, not by date.',
+    'Filters by account, trigger reason and the day the record was created: UTC days, both ends included (the local date column is not a filter).',
+  'push.records.filter.dateRange': 'Only records created in a date range (UTC)',
   'push.records.col.type': 'Type',
   'push.records.col.reason': 'Trigger reason',
   'push.records.col.localDate': 'Local date',
-  'push.records.col.createdAt': 'Created at',
+  'push.records.col.createdAt': 'Created at (UTC)',
   'push.records.localDate.tip': 'The day in the time zone of the account when the push was sent.',
   'push.records.deliveries': 'Result for each token',
   'push.records.col.token': 'Token',
+  'push.records.col.platform': 'Platform',
+  'push.records.col.tokenSuffix': 'Last 6 of token',
   'push.records.col.result': 'Result',
   'push.records.col.sentAt': 'Sent at',
   'push.records.noDeliveries': 'No result was recorded for this push.',

@@ -4,12 +4,17 @@ import { Alert, Button, Card, Empty, Flex, Segmented, Select, Spin, Typography }
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFailure } from '../../hooks/useFailure';
 import { getPipeline, type PipelinePoint } from '../../services/monitor';
+import { useAdminMeta } from '../../session/useSession';
 import { axisTextStyle, getChartTheme } from '../../theme/chartTheme';
 import { useThemeMode } from '../../theme/modes';
+import { monitorMaxRangeDaysOf } from '../../utils/metaValues';
 
 const HOUR_MS = 3600_000;
 
-/** The time ranges on offer, in hours; the longest is what the backend allows (`monitor.max_range_days`, 7). */
+/**
+ * The time ranges on offer, in hours. Those longer than the backend allows (`monitor.max_range_days`,
+ * `monitorMaxRangeDays` of `GET /meta`, 7 when it could not be read) are not offered.
+ */
 const RANGES = { '1h': 1, '6h': 6, '24h': 24, '3d': 72, '7d': 168 } as const;
 type RangeKey = keyof typeof RANGES;
 
@@ -56,6 +61,8 @@ export default function PipelinePage() {
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
 
+  const maxHours = monitorMaxRangeDaysOf(useAdminMeta()) * 24;
+  const offered = (Object.keys(RANGES) as RangeKey[]).filter((key) => RANGES[key] <= maxHours);
   const [range, setRange] = useState<RangeKey>('24h');
   const [source, setSource] = useState<string | undefined>(undefined);
   const [known, setKnown] = useState<string[]>([]);
@@ -77,9 +84,8 @@ export default function PipelinePage() {
         setPoints(answer.items);
         setTruncated(answer.truncated === true);
         clear();
-        setKnown((before) =>
-          [...new Set([...before, ...answer.items.map((p) => p.source)])].sort(),
-        );
+        // The backend names every source of the last days, also those with no point in this range.
+        setKnown(Array.isArray(answer.sources) ? answer.sources : []);
       })
       .catch((error) => {
         if (!live) return;
@@ -118,7 +124,7 @@ export default function PipelinePage() {
             aria-label={t('monitor.pipeline.range')}
             value={range}
             onChange={(value) => setRange(value as RangeKey)}
-            options={(Object.keys(RANGES) as RangeKey[]).map((key) => ({
+            options={offered.map((key) => ({
               value: key,
               label: t(`monitor.pipeline.range.${key}`),
             }))}

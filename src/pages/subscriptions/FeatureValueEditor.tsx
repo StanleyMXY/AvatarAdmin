@@ -1,7 +1,9 @@
 import { useIntl } from '@umijs/max';
-import { Flex, Input, InputNumber, Radio, Switch } from 'antd';
+import { Flex, Input, InputNumber, Radio, Switch, Typography } from 'antd';
 import { useRef } from 'react';
 import type { FeatureValue } from '../../services/subscriptions';
+import { useAdminMeta } from '../../session/useSession';
+import { entitlementLimitMaxOf } from '../../utils/metaValues';
 
 export type FeatureValueEditorProps = {
   /** The kind of the switch: a yes/no, a number limit, or a text. */
@@ -37,6 +39,8 @@ export function FeatureValueEditor({
 }: FeatureValueEditorProps) {
   const intl = useIntl();
   const t = (id: string) => intl.formatMessage({ id });
+  // The largest value of a limit (`entitlement.limit_max`), when `GET /meta` gave it.
+  const largest = entitlementLimitMaxOf(useAdminMeta());
   // The value typed before the person looked at another state comes back with "value".
   const lastValue = useRef<unknown>(value.mode === 'VALUE' ? value.value : emptyValue(type));
   if (value.mode === 'VALUE') lastValue.current = value.value;
@@ -72,17 +76,27 @@ export function FeatureValueEditor({
     }
     if (type === 'LIMIT') {
       return (
-        <InputNumber
-          aria-label={
-            label ? `${label}: ${t('subscriptions.value.value')}` : t('subscriptions.value.value')
-          }
-          min={0}
-          precision={0}
-          style={{ width: 140 }}
-          value={typeof value.value === 'number' ? value.value : null}
-          disabled={disabled}
-          onChange={(next) => onChange({ mode: 'VALUE', value: next })}
-        />
+        <>
+          <InputNumber
+            aria-label={
+              label ? `${label}: ${t('subscriptions.value.value')}` : t('subscriptions.value.value')
+            }
+            min={0}
+            precision={0}
+            style={{ width: 140 }}
+            value={typeof value.value === 'number' ? value.value : null}
+            disabled={disabled}
+            onChange={(next) => onChange({ mode: 'VALUE', value: next })}
+          />
+          {largest !== undefined ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {intl.formatMessage(
+                { id: 'subscriptions.value.largest' },
+                { max: intl.formatNumber(largest) },
+              )}
+            </Typography.Text>
+          ) : null}
+        </>
       );
     }
     return (

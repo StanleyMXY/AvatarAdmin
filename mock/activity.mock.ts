@@ -18,13 +18,15 @@ import {
 } from './_core/activityData';
 import { guard } from './_core/auth';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
+import { META_DEFAULTS } from './_core/meta';
 import { paginateQuery } from './_core/paginate';
 import { validDay } from './_core/statRange';
 
 type Detail = { ref: string; reason: string };
 
 const LIFECYCLES = ['DRAFT', 'ACTIVE', 'ENDED', 'DISABLED'];
-const TASK_TYPES = ['daily_login', 'call_seconds', 'text_messages'];
+// The types the backend code declares: the same list `GET /meta` gives as `taskTypes`.
+const TASK_TYPES: string[] = [...META_DEFAULTS.taskTypes];
 const TASK_STATUSES = ['ENABLED', 'DISABLED'];
 const RECORD_STATUSES = ['IN_PROGRESS', 'CLAIMABLE', 'REWARDED', 'EXPIRED'];
 const TASK_NAME_MAX = 100;
@@ -153,15 +155,16 @@ const stop = (list: MockActivity[], now: string) => {
 
 // ---- daily tasks ----
 
-const configOut = (c: MockTaskConfig) => ({ ...c });
+const hasRecords = (taskId: string) => activityState.taskRecords.some((r) => r.taskId === taskId);
+
+/** Every configuration the backend answers carries `hasRecords`: whether a task record exists for it. */
+const configOut = (c: MockTaskConfig) => ({ ...c, hasRecords: hasRecords(c.id) });
 
 const findConfig = (id: string): MockTaskConfig => {
   const found = activityState.taskConfigs.find((c) => c.id === id);
   if (!found) throw notFound('task');
   return found;
 };
-
-const hasRecords = (taskId: string) => activityState.taskRecords.some((r) => r.taskId === taskId);
 
 /** The checks of a new or edited task configuration (contract 28.2). */
 function taskFields(body: Record<string, unknown>) {
@@ -347,6 +350,10 @@ export default {
     const page = paginateQuery(rows, req);
     return ok({ items: page.items.map(configOut), total: page.total });
   }),
+
+  'GET /api/admin/tasks/configs/:id': guard('TASK:VIEW', (req) =>
+    ok(configOut(findConfig(idOf(req)))),
+  ),
 
   'POST /api/admin/tasks/configs': guard('TASK:MANAGE', (req) => {
     const fields = taskFields(bodyOf(req));

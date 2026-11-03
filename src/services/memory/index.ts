@@ -1,4 +1,5 @@
 import { apiRequest } from '../../request/apiClient';
+import { ApiError } from '../../request/errors';
 
 /** An embedding model that an account without any assignment uses (contract 16.3). */
 export const DEFAULT_EMBEDDING_MODEL = 'bge-m3';
@@ -72,6 +73,19 @@ export const registerEmbeddingModel = async (
 ): Promise<void> => {
   await apiRequest<unknown>({ method: 'PUT', url: `/memory/embedding-models/${path(name)}`, body });
 };
+
+/**
+ * The dimension an embedding model name was registered with, when a 409 `MEMORY_MODEL_CONFLICT` says
+ * it: `data` is `{detail, registeredDimensions}` and `registeredDimensions` is that whole number, or
+ * null when the backend could not read it. `detail` is the memory service's own sentence, in one
+ * language, and is never read here. Anything else (another error, null, a value that is not a
+ * positive whole number) gives undefined.
+ */
+export function registeredDimensionsOf(error: unknown): number | undefined {
+  if (!(error instanceof ApiError) || error.code !== 'MEMORY_MODEL_CONFLICT') return undefined;
+  const value = (error.data as { registeredDimensions?: unknown } | null)?.registeredDimensions;
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
 
 /** `GET /accounts/{id}/memory` (`MEMORY:VIEW`): the tier now and the history of model assignments. */
 export const getAccountMemory = (accountId: string): Promise<AccountMemory> =>

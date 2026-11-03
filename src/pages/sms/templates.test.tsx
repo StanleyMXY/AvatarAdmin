@@ -457,7 +457,9 @@ describe('the switch of a template', () => {
     );
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(
-      await screen.findByText(/an enabled OTP template in English \(en\) for every country/),
+      await screen.findByText(
+        /last enabled OTP template in English \(en\) for every country \(no country set\)\. While phone sign-in is on/,
+      ),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('The last enabled OTP template in language en');
     await waitFor(() => expect(switchOf('otp_en')).toBeChecked());
@@ -516,7 +518,9 @@ describe('the switch of a template', () => {
     expect(
       within(ask).getByText(/Phone sign-in is off \(auth\.phone_login_enabled\)/),
     ).toBeInTheDocument();
-    expect(within(ask).getByText(/accounts that sign in with a phone number/)).toBeInTheDocument();
+    expect(
+      within(ask).getByText(/Accounts that sign in with a phone number: 3/),
+    ).toBeInTheDocument();
     await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
     await settled();
     expect(writesOf(calls)).toHaveLength(0);
@@ -539,7 +543,7 @@ describe('the switch of a template', () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    // The same detail (SmsTemplate / OUT_OF_RANGE) as for the English template: one fixed text for both cases.
+    // The detail SmsTemplate / LAST_OTP_TEMPLATE has a text of its own (the English one has another).
     expect(
       await screen.findByText(/at least one enabled OTP template must remain/),
     ).toBeInTheDocument();
@@ -577,7 +581,7 @@ describe('deleting a template', () => {
         ? jsonAnswer(
             400,
             'INVALID_REQUEST',
-            { details: [{ ref: 'SmsTemplate', reason: 'OUT_OF_RANGE' }] },
+            { details: [{ ref: 'SmsTemplate', reason: 'LAST_OTP_TEMPLATE' }] },
             'SECRET BACKEND WORDS',
           )
         : undefined,
@@ -630,7 +634,9 @@ describe('deleting a template', () => {
     );
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
     expect(
-      await screen.findByText(/an enabled OTP template in English \(en\) for every country/),
+      await screen.findByText(
+        /last enabled OTP template in English \(en\) for every country \(no country set\)\. While phone sign-in is on/,
+      ),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('The value is outside the allowed range');
     expect(template('otp_en').enabled).toBe(true);
@@ -651,6 +657,27 @@ describe('deleting a template', () => {
     await waitFor(() => expect(rows().some((tr) => cellsOf(tr)[0] === 'otp_en')).toBe(false));
   });
 
+  it('asks a plain delete question for the last OTP template when the meta says that the backend does not guard it, and sends the delete only when it is confirmed', async () => {
+    only('otp_en');
+    smsState.phoneAccounts = 0;
+    const { calls, user } = await load();
+    await user.click(within(await rowOf('otp_en')).getByRole('button', { name: 'Delete' }));
+    const ask = await screen.findByRole('dialog');
+    expect(within(ask).getAllByText('Delete this template?').length).toBeGreaterThan(0);
+    expect(within(ask).queryByText(/Phone sign-in is/)).toBeNull();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+    await dialogsClosed();
+    expect((await rowOf('otp_en')).textContent).toContain('otp_en');
+    await user.click(within(await rowOf('otp_en')).getByRole('button', { name: 'Delete' }));
+    const again = (await screen.findAllByRole('dialog')).at(-1) as HTMLElement;
+    await user.click(within(again).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    await waitFor(() => expect(rows().some((tr) => cellsOf(tr)[0] === 'otp_en')).toBe(false));
+  });
+
   it('does not ask for a template that is off, even when it is OTP', async () => {
     only('otp_en');
     const { calls, user } = await load();
@@ -662,7 +689,8 @@ describe('deleting a template', () => {
 });
 
 describe('the English template for every country in the form (e2)', () => {
-  const refuseTexts = /an enabled OTP template in English \(en\) for every country/;
+  const refuseTexts =
+    /last enabled OTP template in English \(en\) for every country \(no country set\)/;
 
   it('shows the words of the code at the top of the dialog when the language is moved away, keeps the dialog open and the other fields filled, and sends one request', async () => {
     const { calls, user } = await load();
