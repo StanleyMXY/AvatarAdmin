@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { EllipsisPopoverText } from '../../components/EllipsisPopoverText';
 import { MaskedText } from '../../components/MaskedText';
 import { StatusTag } from '../../components/StatusTag';
-import { USER_STATUSES, type UserDetail } from '../../services/users';
+import { DELETION_STATUSES, USER_STATUSES, type UserDetail } from '../../services/users';
 import { formatInstant } from '../../utils/format';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
@@ -24,9 +24,27 @@ export function useStatusOptions() {
 }
 
 /**
+ * Who started a deletion, in words: the user themselves (no administrator behind the request), the
+ * administrator by name, or an administrator who has been deleted since (only the id is left, cut to
+ * eight characters like the other places that show an id without a name).
+ */
+function requesterWords(
+  intl: ReturnType<typeof useIntl>,
+  deletion: NonNullable<UserDetail['deletion']>,
+): string {
+  const by = plainText(deletion.requestedBy);
+  if (by === '') return intl.formatMessage({ id: 'users.overview.deletionByUser' });
+  const name = plainText(deletion.requestedByUsername);
+  if (name !== '') return name;
+  return intl.formatMessage({ id: 'users.overview.deletionByGoneAdmin' }, { id: by.slice(0, 8) });
+}
+
+/**
  * 概览: the profile (with the companion name; an empty one is a dash), the state with the ban reason
  * and time, the care data and the asset counts. The e-mail and phone number are what the backend
  * gave: masked, with a note on which permission shows them whole, unless the administrator holds it.
+ * An account whose deletion is not over has a section that says its state, the planned run and who
+ * asked for it, from the detail itself (the list of deletion tasks is not read).
  */
 export function OverviewTab({ user }: { user: UserDetail }) {
   const intl = useIntl();
@@ -51,6 +69,13 @@ export function OverviewTab({ user }: { user: UserDetail }) {
   const methods = Array.isArray(user.loginMethods) ? user.loginMethods : [];
   const care = user.companionship ?? ({} as Partial<UserDetail['companionship']>);
   const counts = user.counts ?? ({} as Partial<UserDetail['counts']>);
+  const deletion = user.deletion ?? null;
+  const deletionOptions = Object.fromEntries(
+    DELETION_STATUSES.map((status) => [
+      status,
+      { label: labelOf(intl, 'users.deletionStatus', status), color: STATUS_COLORS[status] },
+    ]),
+  );
 
   const section = (title: string, items: ReturnType<typeof item>[]) => (
     <Descriptions
@@ -144,6 +169,30 @@ export function OverviewTab({ user }: { user: UserDetail }) {
         ),
         item('bannedAt', t('users.overview.bannedAt'), when(user.bannedAt)),
       ])}
+      {deletion === null
+        ? null
+        : section(t('users.overview.deletion'), [
+            item(
+              'deletion-status',
+              t('users.overview.deletionStatus'),
+              <StatusTag status={plainText(deletion.status)} options={deletionOptions} />,
+            ),
+            item(
+              'deletion-executeAfter',
+              t('users.overview.deletionExecuteAfter'),
+              when(deletion.executeAfter),
+            ),
+            item(
+              'deletion-requestedBy',
+              t('users.overview.deletionRequestedBy'),
+              <EllipsisPopoverText text={requesterWords(intl, deletion)} lines={2} width={320} />,
+            ),
+            item(
+              'deletion-createdAt',
+              t('users.overview.deletionCreatedAt'),
+              when(deletion.createdAt),
+            ),
+          ])}
       {section(t('users.overview.care'), [
         item('interactions', t('users.overview.interactions'), count(care.interactionCount)),
         item('streak', t('users.overview.streak'), count(care.currentStreak)),
