@@ -5,6 +5,15 @@ const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-
 
 /** An instant in the browser's time zone and the given locale; text that is not an instant comes back unchanged. */
 export function formatInstant(iso: string, locale: string): string {
+  return formatInstantIn(iso, locale, undefined);
+}
+
+/** The same in UTC, whatever the browser's time zone is (for a column next to a filter by UTC day). */
+export function formatInstantUtc(iso: string, locale: string): string {
+  return formatInstantIn(iso, locale, 'UTC');
+}
+
+function formatInstantIn(iso: string, locale: string, timeZone: 'UTC' | undefined): string {
   if (!ISO_INSTANT.test(iso)) return iso;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
@@ -16,6 +25,7 @@ export function formatInstant(iso: string, locale: string): string {
     minute: '2-digit',
     second: '2-digit',
     hourCycle: 'h23',
+    timeZone,
   }).format(date);
 }
 

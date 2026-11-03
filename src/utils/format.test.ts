@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { withTimeZone } from '../../tests/withTimeZone';
-import { formatBytes, formatBytesPair, formatInstant } from './format';
+import { formatBytes, formatBytesPair, formatInstant, formatInstantUtc } from './format';
 
 describe('formatInstant', () => {
   const ISO = '2026-10-21T17:30:00Z';
@@ -45,6 +45,31 @@ describe('formatInstant', () => {
         notAnInstant,
       );
     }
+  });
+});
+
+describe('formatInstantUtc', () => {
+  const ISO = '2026-10-31T06:04:51Z';
+
+  it('shows the same time in every time zone of the browser, and not the local one', () => {
+    const shown = ['Asia/Singapore', 'America/Los_Angeles', 'Pacific/Kiritimati'].map((zone) =>
+      withTimeZone(zone, () => formatInstantUtc(ISO, 'en-US')),
+    );
+    expect(new Set(shown).size).toBe(1);
+    expect(shown[0]).toContain('10/31/2026');
+    expect(shown[0]).toContain('06:04:51');
+    expect(withTimeZone('America/Los_Angeles', () => formatInstant(ISO, 'en-US'))).toContain(
+      '10/30/2026',
+    );
+  });
+
+  it('formats by locale, takes an offset, and returns what it cannot parse unchanged', () => {
+    expect(formatInstantUtc(ISO, 'zh-CN')).toContain('2026');
+    expect(formatInstantUtc('2026-10-31T07:04:51+01:00', 'en-US')).toBe(
+      formatInstantUtc(ISO, 'en-US'),
+    );
+    for (const bad of ['', 'ไม่ใช่วันที่', '2026-10-31', '2026-10-31T06:04:51'])
+      expect(formatInstantUtc(bad, 'en-US')).toBe(bad);
   });
 });
 

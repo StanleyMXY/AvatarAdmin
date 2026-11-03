@@ -195,7 +195,7 @@ const messages: Record<string, string> = {
   'push.records.col.type': '类型',
   'push.records.col.reason': '触发原因',
   'push.records.col.localDate': '本地日期',
-  'push.records.col.createdAt': '创建时间',
+  'push.records.col.createdAt': '创建时间（UTC）',
   'push.records.localDate.tip': '发送时按账号所在时区算的那一天。',
   'push.records.deliveries': '对每个 token 的发送结果',
   'push.records.col.token': 'Token',

@@ -6,6 +6,7 @@ import pushMock from '../../../mock/push.mock';
 import { useMockBackend } from '../../../tests/mockBackend';
 import { jsonAnswer, overrideFetch } from '../../../tests/pageHelpers';
 import { renderPage } from '../../../tests/renderPage';
+import { withTimeZone } from '../../../tests/withTimeZone';
 import RecordsPage from './records';
 import { signIn } from './testSetup';
 
@@ -183,6 +184,20 @@ describe('the creation day filter of the send records', { timeout: 30000 }, () =
     expect(document.querySelector('.ant-pagination-item-2')).toBeNull();
   });
 
+  it('shows the creation time in UTC, as the day filter counts it, and says so in the column title (the browser is in Los Angeles)', async () => {
+    await withTimeZone('America/Los_Angeles', async () => {
+      // 31 October 06:04:51 UTC is 30 October 23:04:51 in Los Angeles
+      pushState.records[0].createdAt = '2026-10-31T06:04:51.000Z';
+      useMockBackend({ default: pushMock });
+      renderPage(<RecordsPage />);
+      await waitFor(() => expect(bodyRows().length).toBe(20));
+      expect(screen.getByRole('columnheader', { name: 'Created at (UTC)' })).toBeInTheDocument();
+      const first = bodyRows().find((row) => row.textContent?.includes('10/31/2026'));
+      expect(first?.textContent).toContain('10/31/2026, 06:04:51');
+      expect(document.body.textContent).not.toContain('23:04:51');
+    });
+  });
+
   it('says it in Chinese too', async () => {
     useMockBackend({ default: pushMock });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -192,5 +207,6 @@ describe('the creation day filter of the send records', { timeout: 30000 }, () =
       within(filterBox()).getByRole('checkbox', { name: /只看创建日期在某个范围内的记录/ }),
     );
     expect(screen.getByText(/UTC 日，含首尾/)).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '创建时间（UTC）' })).toBeInTheDocument();
   });
 });

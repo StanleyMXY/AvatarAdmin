@@ -30,7 +30,7 @@ import {
   TRIGGER_REASONS,
   type TriggerReason,
 } from '../../services/push';
-import { codeText, instantText } from '../../utils/displayText';
+import { codeText, instantText, instantUtcText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
@@ -263,7 +263,8 @@ export default function RecordsPage() {
     {
       title: t('push.records.col.createdAt'),
       dataIndex: 'createdAt',
-      render: (value: unknown) => instantText(intl.locale, value),
+      // UTC, like the day filter that counts it.
+      render: (value: unknown) => instantUtcText(intl.locale, value),
     },
   ];
 

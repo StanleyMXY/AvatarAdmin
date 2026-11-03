@@ -1,4 +1,4 @@
-import { formatInstant } from './format';
+import { formatInstant, formatInstantUtc } from './format';
 import { plainText } from './plainText';
 import { DASH, formatCount } from './ratio';
 
@@ -51,6 +51,11 @@ export function describeLink(
 /** An instant of the backend in the interface language, or a dash when there is none (a value that is not text is none). */
 export function instantText(locale: string, value: unknown): string {
   return typeof value === 'string' && value !== '' ? formatInstant(value, locale) : DASH;
+}
+
+/** The same in UTC, for a column whose title says (UTC). */
+export function instantUtcText(locale: string, value: unknown): string {
+  return typeof value === 'string' && value !== '' ? formatInstantUtc(value, locale) : DASH;
 }
 
 /** A count from the backend with thousands separators; a dash for anything that is not a number. */
