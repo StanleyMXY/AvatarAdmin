@@ -36,6 +36,9 @@ import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
 import { lastNDaysUtc } from '../../utils/utcDay';
 
+/** The width of the range picker of `DateRangeUtc`, which the column of the day filter is held to. */
+const DATE_COLUMN_WIDTH = 366;
+
 /** An account id as the backend takes it for the filter: 36 characters, hex digits in five groups. */
 const ACCOUNT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -304,7 +307,9 @@ export default function RecordsPage() {
           }))}
           onChange={(value) => setDraft((d) => ({ ...d, triggerReason: value ?? undefined }))}
         />
-        <Flex vertical gap={4}>
+        {/* As wide as the range picker (366px): the line that says why the dates were refused wraps
+            under it, and does not widen this column and push Search and Reset to the next row. */}
+        <Flex vertical gap={4} style={{ maxWidth: DATE_COLUMN_WIDTH }}>
           <Checkbox
             checked={draft.byDay}
             onChange={(e) => setDraft((d) => ({ ...d, byDay: e.target.checked }))}
