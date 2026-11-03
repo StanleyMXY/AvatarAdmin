@@ -11,6 +11,7 @@ import {
   renderWithLocaleSwitch,
 } from '../../../tests/failureLanguage';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { jsonAnswer, overrideFetch } from '../../../tests/pageHelpers';
 import AccountMemoryTab from './AccountMemoryTab';
 import ModelsPage from './models';
 import { signIn } from './testSetup';
@@ -85,6 +86,32 @@ describe('the failures of the memory pages follow the language', { timeout: 6000
     fireEvent.change(within(dialog).getByLabelText('Dimensions'), { target: { value: '768' } });
     await user.click(within(dialog).getByRole('button', { name: 'Register' }));
     await expectFailureFollowsLanguage(view);
+  });
+
+  it('the model name that is registered with other dimensions says which ones, in the language of the moment', async () => {
+    useMockBackend(memoryMock, { default: configMock });
+    overrideFetch(({ method, url }) =>
+      method === 'PUT' && url.pathname.includes('embedding-models')
+        ? jsonAnswer(409, 'MEMORY_MODEL_CONFLICT', {
+            detail: 'Model e5-base is already registered with 1024 dimensions',
+            registeredDimensions: 1024,
+          })
+        : undefined,
+    );
+    const user = userEvent.setup();
+    const view = renderWithLocaleSwitch(<ModelsPage />);
+    await user.click(await screen.findByRole('button', { name: 'Register a model' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Model name'), { target: { value: 'e5-base' } });
+    fireEvent.change(within(dialog).getByLabelText('TEI address'), {
+      target: { value: 'https://tei.internal.example/v2' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Dimensions'), { target: { value: '768' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Register' }));
+    await expectFailureFollowsLanguage(view, {
+      allowed: /embedding/,
+      words: { en: 'already registered with 1024 dimensions', zh: '已按 1024 维登记' },
+    });
   });
 
   it('the memory of an account that could not be read', async () => {
