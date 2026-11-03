@@ -133,6 +133,14 @@ Run `npm audit` again before each release; a new advisory in a package that is i
 
 - Test files end in `.test.ts` or `.test.tsx` and sit next to the code under `src/`, `mock/`,
   `config/`, `scripts/`, or in `tests/`.
+- The whole suite (about 450 files, about 9,000 cases) starts one worker process per core by
+  default. On a machine with many cores and little free memory (measured: 32 cores, about 10 GB
+  free) the workers run out of memory and Vitest dies without a result. There, run
+  `npx vitest run --maxWorkers=8 --testTimeout=60000`; that finished in about 20 minutes. A busy
+  machine can also hit the 5 second default timeout of a heavy page test; the longer timeout
+  above avoids it.
+- Line endings are LF in every checkout (`.gitattributes`). A checkout with CRLF fails
+  `npm run lint` and the tests that read the checked-in tables.
 - `@umijs/max` and `@ant-design/plots` are aliased to `tests/stubs/umi-max.tsx` and
   `tests/stubs/plots.tsx` (see `vitest.config.ts`); application code imports the real package
   names. The Umi stub is steered with `setTestAccess`, `setTestInitialState`, `setTestLocation`
