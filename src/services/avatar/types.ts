@@ -69,11 +69,11 @@ export type CosmeticCreate = CosmeticFields & {
 };
 
 /**
- * The whole cosmetic is sent to update it: `kind` and `enabled` too, with the values it has now
- * (the kind is never changed from here; the key is left out, the backend takes it only if it is
- * the one the item has).
+ * The whole cosmetic is sent to update it: `enabled` too, with the value it has now. The key and
+ * the kind are fixed once the item exists, so both are left out and the backend keeps them (it
+ * would refuse either with a value other than the one the item has: 400, `OUT_OF_RANGE`).
  */
-export type CosmeticUpdate = CosmeticFields & { kind: CosmeticKind; enabled: boolean };
+export type CosmeticUpdate = CosmeticFields & { enabled: boolean };
 
 // ---- actions (ACTION:MANAGE) ----
 

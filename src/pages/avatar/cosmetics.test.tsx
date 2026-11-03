@@ -544,7 +544,7 @@ describe('the cosmetic catalog page: new item', { timeout: 60000 }, () => {
 });
 
 describe('the cosmetic catalog page: edit', { timeout: 60000 }, () => {
-  it('shows the key and the type but does not let them change, sends no key and sends the kind and the enabled state it has', async () => {
+  it('shows the key and the type but does not let them change, sends neither, and sends the enabled state it has', async () => {
     const calls = backend();
     const user = userEvent.setup();
     renderPage(<CosmeticsPage />);
@@ -565,7 +565,8 @@ describe('the cosmetic catalog page: edit', { timeout: 60000 }, () => {
     expect(writesOf(calls)[0]).toMatchObject({ method: 'PUT', url: '/api/admin/cosmetics/3' });
     const body = writesOf(calls)[0].body as Record<string, unknown>;
     expect('key' in body).toBe(false);
-    expect(body).toMatchObject({ kind: 'OUTFIT', enabled: true });
+    expect('kind' in body).toBe(false);
+    expect(body).toMatchObject({ enabled: true });
     expect('previewUploadId' in body).toBe(false);
     expect(body).toMatchObject({ generationSpec: 'a green evening dress', creditPrice: 150 });
     await dialogsClosed();
