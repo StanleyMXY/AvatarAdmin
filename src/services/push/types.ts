@@ -182,6 +182,10 @@ export type PushDelivery = {
   pushTokenId: string;
   result: string;
   sentAt: string;
+  /** `ANDROID` or `IOS`, noted when the push was sent; `null` for a result from before it was noted. */
+  platform: PushPlatform | null;
+  /** The last 6 characters of the token, noted when it was sent (so it is there after the token is deleted); `null` as `platform`. */
+  tokenSuffix: string | null;
 };
 
 /** The filters of the list of records: an account id and a trigger reason, exact, together or alone. The backend has no filter by local date. */

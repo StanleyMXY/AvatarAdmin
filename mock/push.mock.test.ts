@@ -932,11 +932,33 @@ describe('records', () => {
     const r = await get(RECORD, {}, { id: (withMany as { id: string }).id });
     expect(r.body.data.deliveries.length).toBeGreaterThanOrEqual(2);
     expect(Object.keys(r.body.data.deliveries[0]).sort()).toEqual(
-      ['id', 'pushId', 'pushTokenId', 'result', 'sentAt'].sort(),
+      ['id', 'platform', 'pushId', 'pushTokenId', 'result', 'sentAt', 'tokenSuffix'].sort(),
     );
     const results = new Set(pushState.deliveries.map((d) => d.result));
     expect(results).toEqual(new Set(['ACCEPTED', 'INVALID_TOKEN', 'FAILED']));
     expect((await get(RECORD, {}, { id: 'zzz' })).status).toBe(404);
+  });
+
+  it('records the platform and the last 6 characters of the token with each result, and null for both on a record from before they were recorded', async () => {
+    for (const d of pushState.deliveries) {
+      expect(d.platform === null || d.platform === 'ANDROID' || d.platform === 'IOS').toBe(true);
+      expect(d.tokenSuffix === null || /^.{6}$/.test(d.tokenSuffix)).toBe(true);
+      // both are written together, so neither is null alone
+      expect(d.platform === null).toBe(d.tokenSuffix === null);
+    }
+    const platforms = new Set(pushState.deliveries.map((d) => d.platform));
+    expect(platforms).toEqual(new Set(['ANDROID', 'IOS', null]));
+    const oldest = pushState.records[pushState.records.length - 1];
+    const detail = await get(RECORD, {}, { id: oldest.id });
+    for (const d of detail.body.data.deliveries) {
+      expect(d.platform).toBeNull();
+      expect(d.tokenSuffix).toBeNull();
+    }
+    const newest = await get(RECORD, {}, { id: pushState.records[0].id });
+    for (const d of newest.body.data.deliveries) {
+      expect(['ANDROID', 'IOS']).toContain(d.platform);
+      expect(d.tokenSuffix).toHaveLength(6);
+    }
   });
 });
 

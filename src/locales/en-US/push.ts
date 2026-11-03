@@ -198,6 +198,8 @@ const messages: Record<string, string> = {
   'push.records.localDate.tip': 'The day in the time zone of the account when the push was sent.',
   'push.records.deliveries': 'Result for each token',
   'push.records.col.token': 'Token',
+  'push.records.col.platform': 'Platform',
+  'push.records.col.tokenSuffix': 'Last 6 of token',
   'push.records.col.result': 'Result',
   'push.records.col.sentAt': 'Sent at',
   'push.records.noDeliveries': 'No result was recorded for this push.',

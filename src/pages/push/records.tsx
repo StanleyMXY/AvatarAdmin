@@ -108,6 +108,16 @@ function Deliveries({ id }: { id: string }) {
       ),
     },
     {
+      title: t('push.records.col.platform'),
+      dataIndex: 'platform',
+      render: (value: unknown) => codeText(intl, 'push.platform', value) || DASH,
+    },
+    {
+      title: t('push.records.col.tokenSuffix'),
+      dataIndex: 'tokenSuffix',
+      render: (value: unknown) => plainText(value) || DASH,
+    },
+    {
       title: t('push.records.col.result'),
       dataIndex: 'result',
       render: (value: unknown) => codeText(intl, 'push.result', value) || DASH,

@@ -191,6 +191,8 @@ const messages: Record<string, string> = {
   'push.records.localDate.tip': '发送时按账号所在时区算的那一天。',
   'push.records.deliveries': '对每个 token 的发送结果',
   'push.records.col.token': 'Token',
+  'push.records.col.platform': '平台',
+  'push.records.col.tokenSuffix': 'Token 末 6 位',
   'push.records.col.result': '结果',
   'push.records.col.sentAt': '发送时间',
   'push.records.noDeliveries': '这次推送没有记录到发送结果。',
