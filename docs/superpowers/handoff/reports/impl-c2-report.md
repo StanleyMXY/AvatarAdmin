@@ -37,7 +37,7 @@
 
 ## 检查结果
 
-- 相关测试：见交给主会话的消息里的数字（`mock/{system,auth,users,moderation}`、`src/pages/{system,users,moderation}`、`src/services/{system,auth,moderation,users}`、`src/locales`、`tests`、`storedFailureText`）。负载高时 `roles.test.tsx` 里权限树的几个用例会撞上文件里写死的 30 秒超时（`vi.setConfig`），负载低时全过；不是代码问题。
+- 相关测试：60 个文件、2034 个用例全部通过，0 失败（`mock/{system,auth,users,moderation}`、`src/pages/{system,users,moderation}`、`src/services/{system,auth,moderation,users}`、`src/locales`、`tests`、`storedFailureText`）。负载高时 `roles.test.tsx` 里权限树的几个用例会撞上文件里写死的 30 秒超时（`vi.setConfig`），负载低时全过；不是代码问题。
 - `tsc --noEmit`：本组文件 0 错误；全仓库还有别的组文件里的错误（`src/pages/activity/failureLanguage.test.tsx`、`src/pages/campaign/accounts.batch.test.tsx`），不是本组的。
 - `biome check`：本组改过的文件 0 诊断。
 
