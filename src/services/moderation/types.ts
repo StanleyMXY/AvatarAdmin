@@ -53,6 +53,8 @@ export type ModerationQuery = {
   pageSize: number;
   status?: ModerationStatus;
   source?: ModerationSource;
+  /** One of the seven types; the backend filters, so the pages and the total are those of the type (answer 61). */
+  contentType?: ModerationContentType;
 };
 
 /**

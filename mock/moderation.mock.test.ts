@@ -159,18 +159,73 @@ describe('GET /moderation/records', () => {
     expect(both.every((r) => r.status === 'PENDING_REVIEW' && r.source === 'REPORT')).toBe(true);
   });
 
-  it('ignores a query parameter it does not know, content type among them: no 400, no filtering, the total of all types', async () => {
-    const plain = await get(RECORDS, 'reviewer', { pageSize: '200' });
-    for (const query of [
-      { contentType: 'ACTION_CLIP' },
-      { contentType: 'GIF' },
-      { colour: 'red' },
-    ]) {
-      const answer = await get(RECORDS, 'reviewer', { pageSize: '200', ...query });
-      expect(answer.status, JSON.stringify(query)).toBe(200);
-      expect(answer.body.data.total).toBe(plain.body.data.total);
-      expect(answer.body.data.items).toEqual(plain.body.data.items);
+  it('filters by contentType on the server: the rows, the total and the pages are those of that type only (backend answer 61)', async () => {
+    const all = await get(RECORDS, 'reviewer', { pageSize: '200' });
+    const types = [
+      'AVATAR',
+      'VOICE',
+      'MESSAGE',
+      'PERSONA',
+      'COMPANION_NAME',
+      'AVATAR_IMAGE',
+      'ACTION_CLIP',
+    ];
+    let sum = 0;
+    for (const contentType of types) {
+      const answer = await get(RECORDS, 'reviewer', { pageSize: '200', contentType });
+      expect(answer.status, contentType).toBe(200);
+      const items = answer.body.data.items as { contentType: string }[];
+      expect(
+        items.every((row) => row.contentType === contentType),
+        contentType,
+      ).toBe(true);
+      expect(answer.body.data.total, contentType).toBe(items.length);
+      sum += items.length;
     }
+    expect(sum).toBe(all.body.data.total);
+    // the total follows the filter across pages: page 2 of a small page size is still that type
+    const paged = await get(RECORDS, 'reviewer', {
+      page: '2',
+      pageSize: '2',
+      contentType: 'AVATAR',
+    });
+    const avatar = await get(RECORDS, 'reviewer', { pageSize: '200', contentType: 'AVATAR' });
+    expect(paged.body.data.total).toBe(avatar.body.data.total);
+    expect(paged.body.data.items).toEqual(avatar.body.data.items.slice(2, 4));
+    // together with the other two filters
+    const both = await get(RECORDS, 'reviewer', {
+      pageSize: '200',
+      contentType: 'AVATAR',
+      status: 'PENDING_REVIEW',
+      source: 'REPORT',
+    });
+    expect(
+      (both.body.data.items as { contentType: string; status: string; source: string }[]).every(
+        (row) =>
+          row.contentType === 'AVATAR' &&
+          row.status === 'PENDING_REVIEW' &&
+          row.source === 'REPORT',
+      ),
+    ).toBe(true);
+  });
+
+  it('refuses a contentType that is not one of the seven, case included, as 400 INVALID_REQUEST with details [{ref: contentType, reason: OUT_OF_RANGE}]', async () => {
+    for (const contentType of ['GIF', 'avatar', 'Avatar', ' AVATAR', 'AVATAR,VOICE']) {
+      const { status, body } = await get(RECORDS, 'reviewer', { contentType });
+      expect([contentType, status, body.code, body.data.details]).toEqual([
+        contentType,
+        400,
+        'INVALID_REQUEST',
+        [{ ref: 'contentType', reason: 'OUT_OF_RANGE' }],
+      ]);
+    }
+  });
+
+  it('ignores a query parameter it does not know: no 400, no filtering', async () => {
+    const plain = await get(RECORDS, 'reviewer', { pageSize: '200' });
+    const answer = await get(RECORDS, 'reviewer', { pageSize: '200', colour: 'red' });
+    expect(answer.status).toBe(200);
+    expect(answer.body.data.items).toEqual(plain.body.data.items);
   });
 
   it('refuses a value that is not in the list and a paging that is out of range, naming the parameter', async () => {

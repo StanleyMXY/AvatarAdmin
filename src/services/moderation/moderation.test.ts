@@ -23,16 +23,17 @@ const body = (call: { init: RequestInit }) => JSON.parse(call.init.body as strin
 const WIDE_SPACE = String.fromCodePoint(0x3000);
 
 describe('the moderation services', () => {
-  it('lists with the paging and the two filters of the backend, and leaves out the ones that are not set', async () => {
+  it('lists with the paging and the three filters of the backend, and leaves out the ones that are not set', async () => {
     const calls = answer({ items: [], total: 0 });
     await listModerationRecords({
       page: 2,
       pageSize: 50,
       status: 'PENDING_REVIEW',
       source: 'COMPLAINT',
+      contentType: 'ACTION_CLIP',
     });
     expect(calls[0].url).toBe(
-      '/api/admin/moderation/records?page=2&pageSize=50&status=PENDING_REVIEW&source=COMPLAINT',
+      '/api/admin/moderation/records?page=2&pageSize=50&status=PENDING_REVIEW&source=COMPLAINT&contentType=ACTION_CLIP',
     );
     await listModerationRecords({ page: 1, pageSize: 20 });
     expect(calls[1].url).toBe('/api/admin/moderation/records?page=1&pageSize=20');
