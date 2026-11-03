@@ -55,38 +55,82 @@ function priceOk(value: unknown): boolean {
 const isBound = (n: unknown): n is number =>
   typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
 
-/** The band rules of 14.2: whole numbers, first from 0, next = previous + 1, only the last has no upper bound. */
-function bandsProblem(bands: unknown): boolean {
-  if (!Array.isArray(bands) || bands.length === 0 || bands.length > MAX_BANDS) return true;
-  for (let i = 0; i < bands.length; i += 1) {
-    const b = bands[i] as Partial<MockBand> | null;
-    if (typeof b !== 'object' || b === null || !isBound(b.inputMinTokens)) return true;
-    const last = i === bands.length - 1;
-    if (last ? b.inputMaxTokens !== null : !isBound(b.inputMaxTokens)) return true;
-    if (i === 0 && b.inputMinTokens !== 0) return true;
-    if (i > 0) {
-      const before = bands[i - 1] as MockBand;
-      if (b.inputMinTokens !== (before.inputMaxTokens as number) + 1) return true;
-    }
-    if (!last && (b.inputMaxTokens as number) < b.inputMinTokens) return true;
-  }
-  return false;
+/**
+ * One bound of a band as typed: a whole number from 0 up. Nothing is `EMPTY_NOT_ALLOWED`, a number
+ * with a fraction (or a text) `NOT_AN_INTEGER`, a negative or too large whole number `OUT_OF_RANGE`.
+ */
+function boundReason(value: unknown): string | null {
+  if (value === null || value === undefined) return 'EMPTY_NOT_ALLOWED';
+  if (typeof value !== 'number' || !Number.isInteger(value)) return 'NOT_AN_INTEGER';
+  return isBound(value) ? null : 'OUT_OF_RANGE';
 }
 
-const bandPricesProblems = (bands: unknown[]): Detail[] =>
+/**
+ * The band rules of 14.2 (whole numbers, the first from 0, the next = the previous + 1, only the
+ * last has no upper bound), as `data.details`: `ref` is the path of the field (`bands[1].inputMinTokens`),
+ * `reason` one of the three the contract allows. A gap and an overlap have no reason of their own:
+ * both are `OUT_OF_RANGE` of the lower bound that does not follow the one before.
+ */
+function bandsDetails(bands: unknown): Detail[] {
+  if (!Array.isArray(bands) || bands.length === 0)
+    return [{ ref: 'bands', reason: 'EMPTY_NOT_ALLOWED' }];
+  if (bands.length > MAX_BANDS) return [{ ref: 'bands', reason: 'OUT_OF_RANGE' }];
+  const out: Detail[] = [];
+  for (let i = 0; i < bands.length; i += 1) {
+    const b = bands[i] as Partial<MockBand> | null;
+    if (typeof b !== 'object' || b === null || Array.isArray(b)) {
+      out.push({ ref: `bands[${i}]`, reason: 'OUT_OF_RANGE' });
+      continue;
+    }
+    const last = i === bands.length - 1;
+    const minRef = `bands[${i}].inputMinTokens`;
+    const maxRef = `bands[${i}].inputMaxTokens`;
+    const minReason = boundReason(b.inputMinTokens);
+    if (minReason !== null) out.push({ ref: minRef, reason: minReason });
+    else if (i === 0 && b.inputMinTokens !== 0) out.push({ ref: minRef, reason: 'OUT_OF_RANGE' });
+    else if (i > 0) {
+      const before = (bands[i - 1] as Partial<MockBand> | null)?.inputMaxTokens;
+      // The band before has no usable upper bound: it was named on its own line.
+      if (isBound(before) && b.inputMinTokens !== before + 1)
+        out.push({ ref: minRef, reason: 'OUT_OF_RANGE' });
+    }
+    if (last) {
+      if (b.inputMaxTokens !== null && b.inputMaxTokens !== undefined)
+        out.push({ ref: maxRef, reason: 'OUT_OF_RANGE' });
+    } else {
+      const maxReason = boundReason(b.inputMaxTokens);
+      if (maxReason !== null) out.push({ ref: maxRef, reason: maxReason });
+      else if (isBound(b.inputMinTokens) && (b.inputMaxTokens as number) < b.inputMinTokens)
+        out.push({ ref: maxRef, reason: 'OUT_OF_RANGE' });
+    }
+  }
+  return out;
+}
+
+/** A price that is not given is `EMPTY_NOT_ALLOWED`; one that is not a price in the contract's form `OUT_OF_RANGE`. */
+const priceReason = (value: unknown): string | null =>
+  value === null || value === undefined || value === ''
+    ? 'EMPTY_NOT_ALLOWED'
+    : priceOk(value)
+      ? null
+      : 'OUT_OF_RANGE';
+
+const bandPricesDetails = (bands: unknown[]): Detail[] =>
   bands.flatMap((raw, i) => {
+    if (typeof raw !== 'object' || raw === null) return [];
     const b = raw as Partial<MockBand>;
     const out: Detail[] = [];
-    if (!priceOk(b.inputPrice)) out.push({ ref: `bands[${i}].inputPrice`, reason: 'OUT_OF_RANGE' });
+    const input = priceReason(b.inputPrice);
+    if (input) out.push({ ref: `bands[${i}].inputPrice`, reason: input });
+    // The cached input price may be left out (null): it is then charged at the input price.
     if (
       b.cachedInputPrice !== null &&
       b.cachedInputPrice !== undefined &&
       !priceOk(b.cachedInputPrice)
-    ) {
+    )
       out.push({ ref: `bands[${i}].cachedInputPrice`, reason: 'OUT_OF_RANGE' });
-    }
-    if (!priceOk(b.outputPrice))
-      out.push({ ref: `bands[${i}].outputPrice`, reason: 'OUT_OF_RANGE' });
+    const output = priceReason(b.outputPrice);
+    if (output) out.push({ ref: `bands[${i}].outputPrice`, reason: output });
     return out;
   });
 
@@ -213,22 +257,18 @@ export default {
     const effectiveFrom = day(body.effectiveFrom);
     if (effectiveFrom === null) problems.push({ ref: 'effectiveFrom', reason: 'OUT_OF_RANGE' });
     if (resourceType === 'LLM') {
-      if (bandsProblem(body.bands)) problems.push({ ref: 'bands', reason: 'OUT_OF_RANGE' });
-      else problems.push(...bandPricesProblems(body.bands as unknown[]));
+      problems.push(...bandsDetails(body.bands));
+      if (Array.isArray(body.bands)) problems.push(...bandPricesDetails(body.bands));
       if (body.unitPrice !== undefined && body.unitPrice !== null)
         problems.push({ ref: 'unitPrice', reason: 'OUT_OF_RANGE' });
     } else if (resourceType in UNITS) {
-      if (!priceOk(body.unitPrice)) problems.push({ ref: 'unitPrice', reason: 'OUT_OF_RANGE' });
+      const unitPrice = priceReason(body.unitPrice);
+      if (unitPrice) problems.push({ ref: 'unitPrice', reason: unitPrice });
       if (body.bands !== undefined && body.bands !== null)
         problems.push({ ref: 'bands', reason: 'OUT_OF_RANGE' });
     }
-    // The backend gives a message and no details for a price it refuses (reply 111): no ref, no reason.
-    if (problems.length > 0)
-      throw new MockHttpError(
-        400,
-        'INVALID_REQUEST',
-        `invalid price: ${problems.map((p) => p.ref).join(', ')}`,
-      );
+    // `data.details` = [{ ref: the path of the field, reason }], reasons EMPTY_NOT_ALLOWED, OUT_OF_RANGE, NOT_AN_INTEGER.
+    if (problems.length > 0) throw invalidRequest('invalid price', problems);
 
     const created: MockBatch = {
       batchId: newBatchId(),
@@ -277,10 +317,11 @@ export default {
       throw invalidRequest('currency must be one of usage_price.allowed_currencies', [
         { ref: 'currency', reason: 'OUT_OF_RANGE' },
       ]);
-    // The bands are checked again on confirm (contract 14.2).
-    // a gap, an overlap or a bad price in the bands: a message and no details (backend reply 111)
-    if (target.bands && bandsProblem(target.bands))
-      throw new MockHttpError(400, 'INVALID_REQUEST', 'cannot confirm: bands');
+    // The bands are checked again on confirm (contract 14.2), with the details of a hand-entered price.
+    if (target.bands) {
+      const wrong = bandsDetails(target.bands);
+      if (wrong.length > 0) throw invalidRequest('cannot confirm: bands', wrong);
+    }
     requireStatus(target, 'PENDING_REVIEW');
     target.effectiveFrom = effectiveFrom;
     target.currency = currency as string;

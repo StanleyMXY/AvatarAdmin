@@ -210,6 +210,8 @@ const messages: Record<string, string> = {
     'The date is in the future: nothing is charged at this price before then, and an open "model has no price" alert stays open.',
   'cost.manual.saved': 'The price was saved.',
 
+  'cost.refused.field': '{field}: {reason}',
+  'cost.refused.generic': 'The backend did not accept this value.',
   'cost.bands.empty': 'Add at least one band.',
   'cost.bands.minMissing': 'Every band needs a lower bound.',
   'cost.bands.notInteger': 'Bounds are whole numbers, not below 0.',
