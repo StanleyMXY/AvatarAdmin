@@ -368,7 +368,8 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
             const cell = (key: keyof BandDraft, props: React.ComponentProps<typeof Input>) => {
               const ref = `bands[${index}].${BAND_REF[key]}`;
               return (
-                <Flex vertical gap={2} style={{ width: 130 }}>
+                // A plain box: twenty bands of five boxes are drawn again at every keystroke.
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: 130 }}>
                   <Input
                     value={band[key]}
                     onChange={(e) => setBand(index, { [key]: e.target.value })}
@@ -377,7 +378,7 @@ export function ManualTab({ allowedCurrencies, onSaved, kept }: Props) {
                     {...refusedProps(ref)}
                   />
                   {hint(ref)}
-                </Flex>
+                </div>
               );
             };
             return (
