@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { MENUS } from '../../config/menus';
 import routes from '../../config/routes';
 import { parseConfigRows } from '../../scripts/configKeys';
-import { errorTable, NEXT_CONTRACT, readContract, reasonCodes } from '../../scripts/contractErrors';
+import { errorTable, reasonCodes } from '../../scripts/contractErrors';
 import { extractPermissionCodes, parseExclusions } from '../../scripts/permissionCodes';
 import type { AdminRoute } from '../access/canAccess';
 import { PERMISSION_CODES } from '../access/permissionCodes';
@@ -268,14 +268,12 @@ describe('full coverage of the texts against the sources of truth', () => {
     (language) => {
       const dict = dictOf(language);
       const reasons = reasonCodes(contractText());
-      expect(reasons.length).toBeGreaterThanOrEqual(14);
+      expect(reasons).toHaveLength(36);
       for (const code of reasons) expect(dict[`reason.${code}`]?.trim(), code).toBeTruthy();
-      // The texts of the reason codes of the new contract version are written before it is adopted.
-      const next = reasonCodes(readContract(NEXT_CONTRACT));
       const have = Object.keys(dict)
         .filter((key) => key.startsWith('reason.'))
         .map((key) => key.slice('reason.'.length));
-      expect(have.sort()).toEqual([...new Set([...reasons, ...next])].sort());
+      expect(have.sort()).toEqual([...reasons].sort());
     },
   );
 
@@ -284,9 +282,10 @@ describe('full coverage of the texts against the sources of truth', () => {
     (language) => {
       const dict = dictOf(language);
       const rows = parseConfigRows(contractText());
-      expect(rows.length).toBe(225);
+      expect(rows.length).toBe(251);
       expect(rows.map((r) => r.key)).toEqual(configKeys.map((k) => k.key));
-      expect(EXTRA_CONFIG_KEYS).toHaveLength(26);
+      // The contract lists every key of the backend, so there is no key it does not know yet.
+      expect(EXTRA_CONFIG_KEYS).toHaveLength(0);
       for (const key of [...rows.map((r) => r.key), ...EXTRA_CONFIG_KEYS]) {
         expect(dict[`config.${key}.label`]?.trim(), `${key} label`).toBeTruthy();
         expect(dict[`config.${key}.desc`]?.trim(), `${key} desc`).toBeTruthy();

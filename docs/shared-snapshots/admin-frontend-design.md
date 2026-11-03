@@ -61,7 +61,7 @@
 - 流程：先提交用户名和密码 → 响应：
   - 401 `ADMIN_INVALID_CREDENTIALS`：提示账号或密码错误；
   - 401 `ADMIN_TOTP_REQUIRED`：显示验证码输入框，用同一次输入的账号密码和验证码重新提交；
-  - 401 `ADMIN_TOTP_INVALID`：提示验证码错误，清空验证码框；
+  - 401 `ADMIN_TOTP_INVALID`：提示验证码错误，清空验证码框。管理员的二次验证密钥在库里解不开（数据损坏等原因）时，登录同样答这个码，并和输错验证码一样计入二次验证的锁定次数；前端分不出这两种情形，提示文字补“如果确认验证码没有输错仍然失败，请联系超级管理员重置二次验证”（恢复办法：有权限的超级管理员对该管理员做“重置二次验证”，`POST /admins/{id}/reset-totp`，Java §17.2）；
   - 200 `ENROLL_REQUIRED`：进入绑定页（3.2）；
   - 200 且带令牌：存 `sessionStorage`，调 `GET /api/admin/me` 取用户名、`superAdmin`、权限码，然后跳回跳地址或 `/dashboard`。
 - 防重复提交：提交期间禁用按钮并用标志位挡住重复点击（dramaBox-admin 同样如此，因为它的会话版本号有竞态 [子代理读码 dramaBox-admin/src/pages/user/login/index.tsx]）。
@@ -70,7 +70,7 @@
 
 ### 3.2 绑定认证器页 `/user/enroll`
 
-- 显示 `otpauthUri` 生成的二维码，说明用任意兼容 TOTP 的认证器扫描，输入第一个验证码，提交 `POST /api/admin/auth/totp/enroll {enrollToken, totp}`；`enrollToken` 10 分钟有效、一次性，过期则回登录页重来 [核实 Java §17.2]。
+- 显示 `otpauthUri` 生成的二维码，说明用任意兼容 TOTP 的认证器扫描，输入第一个验证码，提交 `POST /api/admin/auth/totp/enroll {enrollToken, totp}`；`enrollToken` 10 分钟有效、一次性，过期则回登录页重来；绑定时待确认的密钥解不开时，`POST /api/admin/auth/totp/enroll` 答 401 `ADMIN_INVALID_TOKEN`，并且这个 `enrollToken` 作废，前端和过期时一样回登录页重来（它和登录之后令牌过期是同一个码，请求层不会把它当成别的错误）[核实 Java §17.2]。
 - 页面不显示、不缓存 `enrollToken` 以外的任何凭据。
 
 ### 3.3 首次登录与改密码
@@ -85,7 +85,7 @@
 - 菜单按 `access` 过滤，没有任何可见子项的父菜单也隐藏；总览只需登录，但卡片按权限显示（5.1）。
 - 页面内按钮和列：用 `useAccess().canAccess(code)`。Java 接口声明了更细权限码的操作（`SUBSCRIPTION:GRANT`、`MODERATION:REVIEW`、`CREDIT:REVIEW`、`STATS:LAND`、`USER:EMAIL_VIEW` 等），按那个码控制，不只看页面的查看码。
 - 后端是最终裁决：前端隐藏不等于安全，写操作仍由 Java 校验并返回 403 `ADMIN_FORBIDDEN`。
-- 权限变化的生效：Java 每次请求按管理员 → 角色 → 权限码加载，缓存不超过 `admin.permission_cache_seconds`（Java §17.3）。前端的权限列表在每次进入应用时取一次，另外在收到 403 `ADMIN_FORBIDDEN` 时重新取一次；不用定时器轮询。
+- 权限变化的生效：改角色的权限码、创建或删除角色、给管理员换角色、创建或删除管理员、删除自定义权限节点、启动时同步内置权限树，提交之后受影响管理员的下一次请求，在每个 admin 实例上都按新权限判断；缓存服务不可用时最长 `admin.permission_cache_seconds`（默认 30 秒）后生效，查权限本身不因此失败。超级管理员不受影响（Java §17.3）。前端的权限列表在每次进入应用时取一次，另外在收到 403 `ADMIN_FORBIDDEN` 时重新取一次；不用定时器轮询。
 
 ### 3.5 外壳
 
@@ -248,7 +248,7 @@
 
 ### 5.5 通话
 
-- **会话列表**：`SESSION:VIEW`，筛选账号 ID、是否游客（`guest`）、`requestedAt` 时间范围、是否进行中、是否被到点强制结束；列 `id`、账号 ID（游客会话显示"游客"，没有跳转）、设备（游客会话才有，前 8 位）、`requestedAt`、`startedAt`、`endedAt`、`durationSeconds`、`modelTier`、`language`；点账号 ID 跳用户详情，游客会话没有这个链接 [核实 Java §17.4 通话行]。
+- **会话列表**：`SESSION:VIEW`，筛选账号 ID、是否游客（`guest`）、`requestedAt` 时间范围、是否进行中、是否被到点强制结束；列 `id`、账号 ID（游客会话显示"游客"，没有跳转）、设备（游客会话才有，前 8 位）、`requestedAt`、`startedAt`、`endedAt`、`durationSeconds`、`modelTier`、`language`；点账号 ID 跳用户详情，游客会话没有这个链接。会话详情（`GET /sessions/{id}`）多一个字段 `maxDurationMinutes`：整数（分钟，不小于 0，不为空），是发起这次通话时记下的 `session.max_duration_minutes`，之后管理员改设置不影响已发起的通话，用来解释“为什么这次通话的截止时间和现在的设置不一样”；列表的九列不变 [核实 Java §17.4 通话行]。
 - **通话分析**：`STATS:VIEW`，数据同 `/stats/daily`（`ALL`）：通话次数、通话人数、通话总分钟、人均通话分钟、人均通话次数的趋势图和明细表；日期范围、落地条（`daily-business`）。这是 dramaBox-admin"内容分析"的类比（它分析的是剧的播放和互动，这里分析通话）[推断：类比]。
 - **通话质量**：`STATS:VIEW`，数据 `/stats/session-quality`。6 张卡片：接通成功率（`connected / (connected + agentUnavailable)`）、平均接通耗时（`joinMsSum / connected`）、接通耗时 ≤2 秒占比、>10 秒占比、额度限制次数（`limitReached`）、用户未进入次数（`discardedUserNotJoined`）；趋势图（接通成功率）；堆叠柱状图（四档接通耗时，四档互斥，每个会话只落在一档，总和等于接通数）；明细表。dramaBox-admin 的播放质量页有"超过阈值的卡片红框"，本页同样：接通成功率低于 95% 或 >10 秒占比超过 5% 时红框，阈值取自构建配置，不写死在页面里 [子代理读码 dramaBox-admin/src/pages/event/playback/pages.tsx；阈值数字是我定的，需运营确认]。落地条：`session-quality`。
 
@@ -256,14 +256,14 @@
 
 - **事件汇总** `/analytics/summary`：日期范围（默认 7 天，不超过 `analytics.live_max_range_days`）、查询；表格：事件名、触发次数（`pv`）、去重账号数（`uv`），可排序，默认按 `pv` 降序，前端分页 50 [核实 Java §17.4；子代理读码 dramaBox-admin/src/pages/event/summary]。无落地条（现查）。
 - **事件明细** `/analytics/detail`：筛选账号 ID、设备 ID、事件名（联想来自 `event-names`）、时间范围（必填）；列事件名、账号、设备、接收时间（`receivedAt`，统计用）、客户端时间（`clientTime`，不可信，仅供排查）、平台、App 版本、国家、IP（默认掩码，持有 `ANALYTICS:IP_VIEW` 才显示完整）；展开行显示 `params` 和 `context` 的格式化 JSON [核实 Java §17.4、§7.2]。
-- **漏斗分析** `/analytics/funnel`：已保存漏斗选择框（预设带"系统预设"标签）、日期范围、步骤（可输入的多选，选项来自 `event-names`）、`windowHours`（同一账号完成相邻两步之间允许的最长间隔，是本项目新增的参数，dramaBox 的漏斗没有）；按钮：查询、另存为、编辑、删除（预设不可改，`ANALYTICS:FUNNEL_MANAGE` 才能写）；结果是漏斗图（步骤、去重账号数、相邻步骤转化率）加表格。预设：注册漏斗、激活漏斗、付费漏斗（Java §17.4）。提示面板：说明"同一账号按顺序在窗口内依次完成各步骤才算"。去重人数不跨日聚合，多日范围结果就是整个范围内的去重人数 [核实 Java §17.4；子代理读码 dramaBox-admin/src/pages/event/funnel]。
+- **漏斗分析** `/analytics/funnel`：已保存漏斗选择框（预设带"系统预设"标签）、日期范围、步骤（可输入的多选，选项来自 `event-names`）、`windowHours`（同一账号完成相邻两步之间允许的最长间隔，是本项目新增的参数，dramaBox 的漏斗没有）；按钮：查询、另存为、编辑、删除（预设不可改，`ANALYTICS:FUNNEL_MANAGE` 才能写）；结果是漏斗图（步骤、去重账号数、相邻步骤转化率）加表格。预设：注册漏斗、激活漏斗、付费漏斗（Java §17.4）。提示面板：说明"同一账号按顺序在窗口内依次完成各步骤才算"。去重人数不跨日聚合，多日范围结果就是整个范围内的去重人数。漏斗查询有并发上限：参数合格、但这个 admin 实例同时在算的漏斗已达 `analytics.funnel_max_concurrency`（默认 2）时，立刻答 429 `RATE_LIMITED`，不排队，响应没有 `data`，也没有 `Retry-After` 头，所以页面没有倒计时可显示，提示稍后再试（关键设计点表“错误处理”一行已定 429 提示稍后重试）；参数不合格的请求在名额满时仍先得 400；保存的漏斗（`/analytics/funnels`）不受这个上限 [核实 Java §17.4；子代理读码 dramaBox-admin/src/pages/event/funnel]。
 
 ### 5.7 用户
 
 - **用户列表**：筛选账号 ID、邮箱（完整邮箱精确匹配）、手机号（完整 E.164 精确匹配）、状态、注册渠道、流量类型（付费、自然）、媒体来源；列账号 ID、邮箱（掩码，持有 `USER:EMAIL_VIEW` 才显示完整）、手机号（掩码只留末 4 位，持有 `USER:PHONE_VIEW` 才显示完整；手机号注册的账号邮箱为空）、状态、注册渠道、流量类型、创建时间、时区、会话语言；点账号 ID 进详情 [核实 Java §17.4]。
 - **用户详情**（页面，带页签）：概览（资料（含伴侣名字 `companionName`，没有设置时显示为空）、状态、封禁原因与时间、养成数据、资产数量）、形象与服装（`GET /accounts/{id}/avatars`：形象（含形象名字）及其外观（风格、状态、预览图、创建时间）、拥有的服装及来源；预览图是用户的脸，查看写审计日志；"赠送服装"按钮需 `COSMETIC:GRANT`，选条目、必填理由，写审计日志；Java §17.4）、归因（来源、匹配方式、媒体来源、活动、安装时间、注册时间）、会话（`GET /users/{id}/sessions`）、设备（平台、App 版本、最近活跃、token 末 6 位）、认证事件（5.7a）、订阅与权益、额度、记忆（各页签需对应查看权限）。"订阅与权益"页签除了生效值和来源，还有发放、撤销限时权益（`SUBSCRIPTION:GRANT`）：发放表单字段为权益、天数、理由（必填），`POST /accounts/{id}/promo-entitlements`；撤销 `POST /promo-entitlements/{id}/revoke`；页面注明"不影响商店里的订阅"。这是给某个账号更高记忆档位的唯一办法（Java §16.2）[核实 Java §17.4]。
 - **发起、取消删除**（`USER:DELETION`，用户详情里）：替无法使用应用的用户（例如被封禁后联系客服的用户）发起删除或取消删除。发起：弹窗必填理由（1 到 200 个字符，只进审计日志，不要写用户的内容），写明“与用户自己申请相同，有宽限期，不会立即删除；核对用户身份是客服流程的责任”；状态已是待删除或删除中时按钮禁用（后端 409 `INVALID_STATE`）。取消：只在待删除（`PENDING_DELETION`）且宽限期内可用。账号状态为待删除或删除中时，发放限时权益、新建额度申请、指派 embedding 模型的按钮禁用（后端返回 403 `ACCOUNT_DELETION_SCHEDULED` 或 `ACCOUNT_DELETING`）[核实 Java §17.4 状态矩阵]。
-- **封禁、解封**（`USER:BAN`）：状态为待删除（`PENDING_DELETION`）或删除中（`DELETING`）的账号，封禁按钮禁用（后端返回 409 `INVALID_STATE`）；封禁弹窗必填理由（1 到 500 个字符），旁边写明"这是写给用户看的文字，只有一种语言"；弹窗确认文字写明"封禁会立即结束该账号进行中的通话，不作废登录令牌，解封后原令牌继续可用"[核实 Java §17.4 用户管理行]。
+- **封禁、解封**（`USER:BAN`）：状态为待删除（`PENDING_DELETION`）或删除中（`DELETING`）的账号，封禁按钮禁用（后端返回 409 `INVALID_STATE`）；封禁弹窗必填理由（1 到 500 个字符），旁边写明"这是写给用户看的文字，只有一种语言"；弹窗确认文字写明"封禁会结束该账号进行中的通话（通常立即结束；个别通话没能立即结束时，后台会在一个扫描间隔（`session.deadline_scan_seconds`）内以结束原因 `BANNED` 结束它们，通话记录页稍后会显示它们已结束），不作废登录令牌，解封后原令牌继续可用"[核实 Java §17.4 用户管理行]。
 - **账号删除任务**：列任务 ID、账号 ID、状态（`SCHEDULED` 宽限期内、`CANCELED` 已取消、`PENDING`、`RUNNING`、`FAILED`、`COMPLETED`）、用户选的删除原因（`reason`：`NOT_USEFUL`、`TOO_EXPENSIVE`、`PRIVACY_CONCERN`、`TECHNICAL_PROBLEMS`、`FOUND_ALTERNATIVE`、`OTHER`，用户没选或后台代发起的为空）、预定执行时间（`executeAfter`）、重试次数、最近错误、创建与完成时间；`FAILED` 行有"重试"；重试次数超过 `deletion.alert_after_failures` 的行高亮（同时 Java 会写一条 `DELETION_FAILED` 告警） [核实 Java §17.4、§17.5]。
 - **用户列表导出**（`USER:EXPORT`）：列表右上角有“导出 Excel”按钮（只对持有 `USER:EXPORT` 的管理员显示），调 `GET /users/export`，参数和当前筛选一致，规则同统计页的导出（`fetch` 带 `Authorization` 头取回后保存，导出中显示进度，超过行数上限时显示后端的提示）；邮箱和手机号按 `USER:EMAIL_VIEW`、`USER:PHONE_VIEW` 掩码，不含 IP、内容和资产。依据：dramaBox 有用户列表导出，导出和手机号完整显示是两个单独的权限码 [核实 审计 D5]。
 
@@ -278,7 +278,7 @@
 - **队列**：列 ID、内容类型（形象、声音、消息、persona、伴侣名字 `COMPANION_NAME`、生成的标准图 `AVATAR_IMAGE`、动作片段 `ACTION_CLIP`）、来源（自动、举报、投诉 `COMPLAINT`）、自动判定级别、类别、分数、状态、创建时间；筛选状态、来源；默认按待处理时长排序；页面顶部显示最老一条待处理的等待时长（Java §11.4：政策要求举报必须真的被处理）[核实 Java §11.4、§17.4]。
 - **详情**：记录字段；内容区只对持有 `MODERATION:REVIEW` 的管理员显示，只持有 `MODERATION:VIEW` 的管理员看到记录字段和"无权查看内容"的提示，页面入口仍是 `MODERATION:VIEW`（Java §17.4：`GET /moderation/records/{id}/content` 需要 `REVIEW` 并写审计日志）；内容区取 `GET /moderation/records/{id}/content`：文本直接显示，文件按 `mediaType` 用图片、音频、视频播放器显示（地址为短时效签名地址，过期后重新取，不缓存）；页面写明"查看会被记录"；举报来源的记录显示举报理由和补充说明；`BLOCKED` 的记录没有内容区，显示"自动拦截，未保存原文"；`COMPANION_NAME` 的待审记录（审核服务故障时先保存的名字）显示用户当前的名字，记录对应的名字已被用户改过时接口返回 404 `CONTENT_NOT_STORED`，同样没有内容区 [核实 Java §17.4、§18]。
 - **判定**（`MODERATION:REVIEW`）：`APPROVE`/`REJECT`、`note`（通过时选填，拒绝时必填）；确认弹窗先展示这次判定对该类内容的后果，文字取自 Java §11.4 的效果表 [核实 Java §11.4]。
-- **文本规则**（`MODERATION:CONFIG`）：词表编辑，每条规则是匹配文本（1 到 200 个字符）、匹配方式（`SUBSTRING` 子串，适合中文、泰文等没有空格的文字；`WORD` 整词，适合拉丁文字；`REGEX` 正则，保存时校验能否编译）、级别（`REVIEW` 进复核，`BLOCK` 直接拦截）、备注；最多 `moderation.text_rules_max` 条；说明文字写明匹配前会做规范化（不分大小写，去掉零宽字符）、正则有执行时间预算、规则命中 `BLOCK` 时内容不会再发给审核服务 [核实 Java §11.2、§17.4]。
+- **文本规则**（`MODERATION:CONFIG`）：词表编辑，每条规则是匹配文本（1 到 200 个字符）、匹配方式（`SUBSTRING` 子串，适合中文、泰文等没有空格的文字；`WORD` 整词，适合拉丁文字；`REGEX` 正则，保存时校验能否编译）、级别（`REVIEW` 进复核，`BLOCK` 直接拦截）、备注；最多 `moderation.text_rules_max` 条；说明文字写明匹配前会做规范化（不分大小写，去掉零宽字符）、正则有执行时间预算、规则命中 `BLOCK` 时内容不会再发给审核服务；`SUBSTRING` 和 `WORD` 规则在规范化之后另外做形近字折叠（把另一种文字里长得一样的字母折成同一个；只折叠另一种文字的形近字，ASCII 和同一文字内的字母不折叠）：用西里尔字母写的规则同时命中大小写两种写法，用形近字母替换了拉丁字母的文本也会命中拉丁写法的规则；`REGEX` 规则不折叠，行为不变。已知副作用：全大写的俄语词可能命中用拉丁字母写的规则，土耳其语里带无点 ı 的词可能命中对应的拉丁字母规则。保存时 `SUBSTRING`、`WORD` 的匹配文本规范化并折叠后去空白为空，仍是 `EMPTY_NOT_ALLOWED` [核实 Java §11.2、§17.4]。
 - **审核统计**：日期范围；按日、按内容类型和来源的新增、通过、拒绝、自动拦截数；已处理记录的平均处理时长；当前最老待处理的等待时长（Java §17.4）。
 
 ### 5.9 养成管理
@@ -294,7 +294,7 @@
 - **功能开关**：列 key、类型、范围（永久、周期、终身）、默认值、额度单价、说明；`PUT …/default` 改默认值（即免费用户的限制）；额度单价只有永久的 `LIMIT` 开关可编辑，其余行的该单元格禁用 [核实 Java §15.3]；`avatar.looks_max`（每个形象的外观数上限）和 `credits.period_grant`（订阅每期赠送的额度数）的额度单价也禁用，`credits.period_grant` 的默认值和权益功能值不能选"不限"（Java §15.3）。通话额度的三个键（`call.daily_minutes`、`call.monthly_minutes`、`call.lifetime_minutes`）的"默认值"单元格有三种显示：数字、不限、未配置；**三个键都没有配置时**页面顶部显示红条"通话额度未配置，免费用户不能通话"（只配其中一个不显示）。文字额度的两个键（`chat.daily_messages`、`chat.monthly_messages`）规则完全相同：默认值单元格有三种显示，**两个键都没有配置时**页面顶部另显示红条"文字额度未配置，免费用户不能发文字"，保存权益的功能值时同样提醒；`UNSET` 对这五个额度键有效。保存权益的功能值或订阅商品映射时，如果这个权益没有配置 `call.daily_minutes`、`call.monthly_minutes`，而默认值也没有配置，显示提醒"这个权益的订阅用户通话不受日额度、月额度限制"。`call.lifetime_minutes` 不出现在权益的功能值里（它只对免费账号生效，后端拒绝保存）；它的说明里写明：只影响之后创建的账号，已有账号的发放值不变，创建时没配置的账号在配置之后第一次发起会话时记入当时的值。
 - **商品映射**：列商店、商品 ID、对应权益、在售开关、排序。商品价格在商店后台，这里没有 [核实 Java §15.3]。
 - **事件重处理**（页面入口 `SUBSCRIPTION:VIEW`，"重新处理"和"已处理"需 `SUBSCRIPTION:GRANT`，没有就不显示按钮）：列表看 `FAILED`，每行"重新处理"；另有"需人工关注"筛选（`needsAttention=true`，例如 Google 的待审退款通知），每行"已处理"按钮（`POST /subscription-events/{id}/ack`）。
-- **订阅统计**（`FINANCE:VIEW`）：活跃订阅数、新增、续订、取消、过期、退款次数，按商店和商品分；页面用文字写明"金额是标价不是实收，沙盒订阅不计入"。没有退款操作 [核实 Java §17.4]。
+- **订阅统计**（`FINANCE:VIEW`）：活跃订阅数、新增、续订、取消、过期、退款次数，按商店和商品分；每行带 `listPriceAmount`（十进制字符串，例如 `"24.99"`，去掉尾零，不经浮点）和 `listPriceCurrency`；Google 行的值是当天该商品最后一条带价格的事件的 `recurringPrice` 和币种；当天没有任何事件带价格（例如预付计划，或事件是后端改动前处理的）时两个字段都是 `null`，页面显示“—”；苹果行不变；页面用文字写明"金额是标价不是实收，沙盒订阅不计入"。没有退款操作 [核实 Java §17.4]。
 - **额度包**（`SUBSCRIPTION:CONFIG`）：列商店、商品 ID、额度数、在售开关、排序。
 - **调账申请与审核**（dramaBox-admin 的"金币调账审核"的对应页面 [子代理读码 dramaBox-admin/src/pages/wallet/wallet-coin-adjust-request]）：列表筛选状态、账号 ID；列账号 ID、类型（发放/调整）、变动额度（带正负号）、理由、状态、申请人、审核人、审核备注、申请与审核时间。新建申请（`SUBSCRIPTION:GRANT`）：账号 ID、类型、额度、理由；通过（`CREDIT:REVIEW`）：备注可选；驳回：备注必填。申请人本人的申请，审核按钮禁用并提示，后端仍会返回 `SELF_REVIEW_FORBIDDEN`。
 - **额度账户** `/credits/accounts`（`SUBSCRIPTION:VIEW`）：筛选账号 ID（精确）、余额范围；列账号 ID（点开进用户详情的“额度”页签）、余额（为负时用醒目颜色）、累计获得、累计消耗、更新时间；按更新时间倒序，分页。依据：dramaBox-admin 的金币账户页 [审计 行 62]，接口见 Java §15.9。
@@ -304,8 +304,8 @@
 
 ### 5.11 推送
 
-- **模板**（`PUSH:TEMPLATE`）：按触发原因加语言管理标题、正文、链接类型与目标、图片地址；顶部是"触发原因 × 语言"的完整性矩阵，语言列表取配置项 `app.supported_locales`（初始只有 `en`；往里加语言之前客户端要先有翻译，Java §17.5），缺的格子标红；每个召回触发原因必须在列表里的每种语言上都有模板才允许启用，保存时的最终校验在后端（Java §8.4）。图片用 `POST /uploads/image` 上传，只允许 jpg/png 且不超过 `upload.push_image_max_bytes`，上传中禁止提交；提交模板或任务时只带上传返回的 `uploadId`（图片地址由后端从上传记录填，不能手填） [核实 Java §8.4、§17.4；校验取自 子代理读码 dramaBox-admin/src/pages/push/pushImageField.ts]。
-- **手动推送任务**（`PUSH:SEND`）：创建表单字段：受众（全部含游客、仅注册账号、仅游客、账号 ID 列表）、平台和语言筛选（账号 ID 列表时不可选）、标题、正文、链接类型与目标、图片、发送时间（立即或定时）；列表列：状态（`PENDING`、`RUNNING`、`DONE`、`CANCELLED`）、已发数、失败数、创建人、计划时间；`PENDING` 行可取消 [核实 Java §8.5、§18]。
+- **模板**（`PUSH:TEMPLATE`）：按触发原因加语言管理标题、正文、链接类型与目标、图片地址；顶部是"触发原因 × 语言"的完整性矩阵，语言列表取配置项 `app.supported_locales`（初始只有 `en`；往里加语言之前客户端要先有翻译，Java §17.5），缺的格子（取自 `GET /push/templates` 的 `missingLocales`）标成“回退到默认语言”的信息，不是错误，保存也不被拒。`GET /push/templates` 的响应是 `{items:[…], missingLocales:{daily_recall:[…], streak_at_risk:[…]}}`：两个召回原因各一个数组，列出 `app.supported_locales` 里还没有启用模板的语言，按该设置的顺序，全都有则为空数组，原因下没有任何启用模板时是整个语言清单；不受 `triggerReason`、`locale` 过滤影响（过滤只缩小 `items`）。每个召回触发原因（`daily_recall`、`streak_at_risk`），只要它有至少一条启用的模板，就必须有一条默认语言（`push.default_locale`，默认 `en`）的启用模板；这是唯一的硬规则，一条启用模板都没有的原因没有这个要求。其他语言的模板可选，缺的语言发送时回退到默认语言（两者都没有就跳过该账号）；语言标签区分大小写地精确比较，列表之外的语言也可以有模板。保存时的最终校验在后端（Java §8.4）：每次写入后按“写入之后的状态”判断，不满足则整个保存被拒、什么都不写——创建（`enabled=true`）、编辑（编辑前或编辑后任一状态是启用；改原因时旧原因也判）、停用、删除模板，以及保存或恢复默认 `push.default_locale`（新默认语言下，每个有启用模板的原因都要有该语言的启用模板）；停用状态的模板不计入。保存 `app.supported_locales` 永远不会因为召回模板被拒绝。运营怎么用：一个原因的第一条要启用的模板必须是默认语言的，之后其他语言任意顺序；任何非默认语言随时可以停用、改、删；默认语言那条只有在同一原因下别的语言都已停用后才能停用或删除（它是唯一启用的模板时随时可以）；要整体关掉一个原因，先停其他语言，最后停默认语言；想把 `push.default_locale` 改成别的语言，先为每个有启用模板的原因启用该语言的模板。模板写入被拒时（400 `INVALID_REQUEST`）`data` 为 `{defaultLocale, reason, case}`（默认语言和触发原因），页面按 `case` 显示不同的做法提示：`DEFAULT_MISSING`（该原因启用了其他语言、却没有启用的默认语言模板：先启用或恢复默认语言的模板）、`DEFAULT_REQUIRED_BY_OTHERS`（这次写入会停用或改走默认语言模板，而其他语言仍启用：先停用该原因的其他语言）、`DEFAULT_MOVED_AWAY`（该原因唯一启用的模板是默认语言的，却要被改成别的语言：保留这条默认语言模板，另建新模板）；保存或恢复默认 `push.default_locale` 被拒时的字段见 5.15。图片用 `POST /uploads/image` 上传，只允许 jpg/png 且不超过 `upload.push_image_max_bytes`，上传中禁止提交；提交模板或任务时只带上传返回的 `uploadId`（图片地址由后端从上传记录填，不能手填） [核实 Java §8.4、§17.4；校验取自 子代理读码 dramaBox-admin/src/pages/push/pushImageField.ts]。
+- **手动推送任务**（`PUSH:SEND`）：创建表单字段：受众（全部含游客、仅注册账号、仅游客、账号 ID 列表）、平台和语言筛选（账号 ID 列表时不可选）、标题、正文、链接类型与目标、图片、发送时间（立即或定时）；列表列：状态（`PENDING`、`RUNNING`、`DONE`、`CANCELLED`）、已发数、失败数、创建人、计划时间；`PENDING` 行可取消；推送执行器停机超过 `push.schedule_catchup_minutes` 之后，已经开始但还没有发出任何一条的任务显示 `CANCELLED`，备注（`note`）为 `MISSED`（不再晚发，以前它停在 `RUNNING`）；已经发出过一部分的任务接着发剩下的收件人，已发过的不重发 [核实 Java §8.5、§18]。
 - **周期推送** `/push/schedules`（`PUSH:SEND`）：列表列：重复方式、发送时刻与时区、起止日期、启用开关、受众、下次生成时间；创建和编辑表单：重复方式（每天、每周选星期、每月选几号，31 日在短月取月末的提示）、发送时刻、时区（IANA 下拉，默认 UTC，说明"固定时区，不是每个用户的当地时间"）、起止日期、受众与筛选、标题、正文、链接、图片；删除等于停用，已生成的任务保留 [核实 Java §8.5、§17.4]。
 - **发送记录**（`PUSH:VIEW`）：列账号、类型、触发原因、本地日期、创建时间；展开行显示对每个 token 的发送结果。
 - **推送效果**（`STATS:VIEW`）：日期范围、触发原因筛选；按日、按触发原因的发送数、送达成功数、送达失败数、点开数、点开率（`pushesOpened / pushesSent`，列提示写明"点开数记在点开当天，与发送日不一定是同一天"）；趋势图加明细表；落地条 `push`。dramaBox-admin 没有推送效果页；它的缺口分析指出的是推送投递与送达回写没有实现、表里没有送达数字段 [子代理读码 dramaBox/docs/gap-analysis-admin-design.md 第一部分.6]，推送效果页是本项目自己的。
@@ -322,32 +322,34 @@
 
 照 dramaBox-admin 的"投放管理"模块：投放效果、投放账户（含投放成本页签）、归因明细 [核实 dramaBox 后台笔记 `docs/_scratch_dramabox_admin_modules_b.md` 3.3、`_scratch_dramabox_admin_stats.md` 的 stat-proxy-daily]；后端见 Java §10。这一块在最初的后台设计里漏掉了（没有被采纳也没有被明确排除），2026-10-05 补上。
 
-- **投放效果** `/campaign/stats`（`ATTRIBUTION:VIEW`，读汇总表，有"重新落地该日"，需要 `STATS:LAND`）：筛选日期范围（默认 7 天）、投放账户；汇总表列：投放账户编码、名称、访问量（`pageViews`）、点击数、点击率、安装数、注册数、安装率（安装数 ÷ 点击数，dramaBox 叫匹配率）、注册转化率（注册数 ÷ 安装数）、总花费、CPA（总花费 ÷ 注册数）、CPI（总花费 ÷ 安装数），分母为 0 显示"—"；按日明细表（`groupBy=day`，日期加同上各列；选了投放账户时是该账户的逐日，没选时是全部投放账户合计的逐日；每页 20 行）。"未归因"行显示当天认领后没有匹配上的安装数，并显示它占（匹配安装加未归因安装）的比例，用来看自然量。比率分母为 0 一律显示"—"。图表加表格同时存在。导出按钮（统计导出，Java §17.6）。顶部有"如何阅读此报表"。
+- **投放效果** `/campaign/stats`（`ATTRIBUTION:VIEW`，读汇总表，有"重新落地该日"，需要 `STATS:LAND`）：筛选日期范围（默认 7 天）、投放账户；汇总表列：投放账户编码、名称、访问量（`pageViews`）、点击数、点击率、安装数、注册数、安装率（安装数 ÷ 点击数，dramaBox 叫匹配率）、注册转化率（注册数 ÷ 安装数）、总花费、CPA（总花费 ÷ 注册数）、CPI（总花费 ÷ 安装数），分母为 0 显示"—"；按日明细表（`groupBy=day`，日期加同上各列；选了投放账户时是该账户的逐日，没选时是全部投放账户合计的逐日；每页 20 行）。"未归因"行显示当天认领后没有匹配上的安装数，并显示它占（匹配安装加未归因安装）的比例，用来看自然量。比率分母为 0 一律显示"—"。图表加表格同时存在。导出按钮（统计导出，Java §17.6）。范围错误和别的统计页相同（含导出）：`from` 晚于 `to` → `details[0].ref` 是 `from`；范围超过 `stats.max_range_days` → `ref` 是 `to`；日期格式不对或年份小于 1 → 原因 `OUT_OF_RANGE`。顶部有"如何阅读此报表"。
 - **投放账户与成本** `/campaign/accounts`（`ATTRIBUTION:MANAGE`，两个页签）：
-  - **投放账户**：列表列：投放 ID（`code`，可复制）、显示名称、关联渠道包（标签）、Facebook、Google、TikTok 像素（悬浮显示编号）、状态开关（立即提交，没有二次确认）、创建时间、操作；搜索关键字（编码或名称）和状态筛选。创建和编辑弹窗（宽 640，三个分区）：基本信息（`code` 只在创建时可填，`^[a-z0-9_-]{3,32}$`，创建后只读；显示名称；媒体来源；活动名；UTM 媒介，默认 `cpc`；广告组；广告；备注）、像素配置（Facebook 像素编号、**Facebook 访问令牌**（密码框；已设置时只显示"已设置"，**不回显明文**，留空表示不修改；dramaBox 在编辑时把令牌回显到浏览器，这个不照搬）、Google 像素编号、TikTok 像素编号）、关联渠道包（复选框，选项取自 `/channels`，Java §24.7）。操作：编辑、生成链接，**没有删除**，只有状态开关。
+  - **投放账户**：列表列：投放 ID（`code`，可复制）、显示名称、关联渠道包（标签）、Facebook、Google、TikTok 像素（悬浮显示编号）、状态开关（立即提交，没有二次确认）、创建时间、操作；搜索关键字（编码或名称）和状态筛选。创建和编辑弹窗（宽 640，三个分区）：基本信息（`code` 只在创建时可填，`^[a-z0-9_-]{3,32}$`，创建后只读；显示名称；媒体来源；活动名；UTM 媒介，默认 `cpc`；广告组；广告；备注）、像素配置（Facebook 像素编号、**Facebook 访问令牌**（密码框；已设置时只显示"已设置"，**不回显明文**，留空表示不修改；dramaBox 在编辑时把令牌回显到浏览器，这个不照搬）、Google 像素编号、TikTok 像素编号）、关联渠道包（复选框，选项取自 `/channels`，Java §24.7）。操作：编辑、生成链接，**没有删除**，只有状态开关。投放账户的转化回传凭证不能用时会有一条告警（5.14）；管理员在这里重新填写访问令牌或像素编号并保存（`PUT /attribution/campaigns/{id}`）时，该账户那条打开的告警自动关闭。
   - **生成链接弹窗**（宽 640）：平台单选（Facebook、Google、TikTok，选择时把 UTM Source 默认成平台名）、UTM Source、UTM Medium（占位 `cpc`）、UTM Campaign；点"生成"先检查该账户有没有这个平台的像素编号，没有则提示"请先配置该平台的像素编号"；有则调 `GET /attribution/campaigns/{id}/link`，显示链接和复制按钮；弹窗里同时显示该 `code` 的落地页接口地址（`POST /api/attribution/click`，给直接下载 APK 的落地页用）和"链接根地址没有配置"的提示（Java §10.4、§10.5）。
-  - **投放成本**：筛选投放账户和日期范围；列：显示名称、日期、花费（两位小数）、币种（固定为 `attribution.cost_currency`）、备注、录入者、创建时间、操作（编辑、删除，行内确认）。工具栏"录入花费"（弹窗宽 480：投放账户必选，编辑时只读；日期必选，默认今天，编辑时只读；花费必填、不小于 0、两位小数；币种只读；备注）和"批量录入"（弹窗宽 720，两个页签：JSON——文本框，接受一个数组，或每行一个对象；CSV——选 `.csv` 文件由浏览器解析，表头 `campaign_code,stat_date,cost,currency,remark`，日期接受 `YYYY-MM-DD`、`YYYY/MM/DD`、`YYYY.MM.DD`，提供模板下载 `attribution-cost-template.csv`（两行示例）；任一行不合法整批拒绝，并按行显示原因）；提交 `POST /attribution/costs/batch`，已存在的日期按覆盖处理，提交前提示这一点。
+  - **投放成本**：筛选投放账户和日期范围；列：显示名称、日期、花费（两位小数）、币种（固定为 `attribution.cost_currency`）、备注、录入者、创建时间、操作（编辑、删除，行内确认）。工具栏"录入花费"（弹窗宽 480：投放账户必选，编辑时只读；日期必选，默认今天，编辑时只读；花费必填、不小于 0、两位小数；币种只读；备注）和"批量录入"（弹窗宽 720，两个页签：JSON——文本框，接受一个数组，或每行一个对象；CSV——选 `.csv` 文件由浏览器解析，表头 `campaign_code,stat_date,cost,currency,remark`，日期接受 `YYYY-MM-DD`、`YYYY/MM/DD`、`YYYY.MM.DD`，提供模板下载 `attribution-cost-template.csv`（两行示例）；任一行不合法整批拒绝，并按行显示原因）；提交 `POST /attribution/costs/batch`，已存在的日期按覆盖处理，提交前提示这一点。**成本币种锁**：只要有任何一条投放成本，`attribution.cost_currency` 就不能改成与当前有效值不同的币种，`DELETE`（恢复默认 `USD`）而当前不是 `USD` 时同样不能；保存与当前相同的值永远通过。要换币种：先逐行 `DELETE /attribution/costs/{id}` 删光全部成本，再改设置。批量和单条录入的 `currency` 仍必须等于这个设置。同一瞬间写入的成本行可能带旧币种（报表忽略它们，和其他币种的行一样）：这是防误操作，不是事务保证。被拒时 400 `INVALID_REQUEST`，`details` 为 `[{"ref":"attribution.cost_currency","reason":"OUT_OF_RANGE"}]`，什么都不存，在设置页的该行显示。
 - **归因明细** `/campaign/attribution`（`ATTRIBUTION:VIEW`，现查，没有落地条），三个页签：
   - **点击明细**：筛选点击时间范围（默认 7 天）、投放账户、状态（待认领、已匹配、已过期）、关键字（IP 或 UTM）；列：ID、点击时间、投放账户、状态标签、客户端 IP（默认掩码，持有 `ANALYTICS:IP_VIEW` 才显示完整）、渠道（商店跳转或 APK 下载）、UTM Source、UTM Medium、UTM Campaign、认领时间。点击记录只保留 `attribution.click_retention_days` 天，页面注明。
   - **安装与注册**（两个来源的 `AttributionRecord`）：列事件名、事件时间、转化类型、广告类型、媒体来源、campaign、adset、ad、安装时间、是否再营销、平台、国家、App 版本、成本、账号 ID（可空，点击跳用户详情）、**来源**（`APPSFLYER`/`SELF`）、**匹配方式**（`APK_BLOCK` 安装包签名块、`REFERRER` 商店来源、`FINGERPRINT` 指纹兜底；指纹兜底会漏、也可能错配，列提示写明可信度较低）、投放账户、注册时间；可按来源、匹配方式、时间筛选 [核实 Java §18 AttributionRecord]。
   - **汇总**：按 `groupBy`（来源、媒体来源、campaign）切换，表格加条形图；列安装数、激活数、成本（有则显示，没有则为空）。两个来源分列、不相加（同一次安装可能各记一条，Java §10.3）。没有收入数据，所以没有 ROI 列。
-- **归因参数** `/campaign/settings`（`ATTRIBUTION:MANAGE`）：`attribution.*` 各键的表单：链接根地址、Android 商店链接、其他设备的跳转地址（三个 URL 键按 Java §1.7 校验，保存时按 §10.4 的规则限制主机，错误原因照后端 `data.details` 显示）、点击保留天数、指纹窗口小时数、没有账号的记录保留天数、成本币种、批量录入上限，渲染同 5.15。页面说明匹配顺序：安装包签名块 → 商店来源 → 同 IP 指纹兜底；兜底之后仍没有匹配上的就是自然流量 [核实 Java §10.4、§17.5]。
+- **归因参数** `/campaign/settings`（`ATTRIBUTION:MANAGE`）：`attribution.*` 各键的表单：链接根地址、Android 商店链接、其他设备的跳转地址（三个 URL 键按 Java §1.7 校验，保存时按 §10.4 的规则限制主机，错误原因照后端 `data.details` 显示）、点击保留天数、指纹窗口小时数、没有账号的记录保留天数、成本币种（已有任何一条投放成本时不能改，见投放成本页签）、批量录入上限，渲染同 5.15。页面说明匹配顺序：安装包签名块 → 商店来源 → 同 IP 指纹兜底；兜底之后仍没有匹配上的就是自然流量 [核实 Java §10.4、§17.5]。
 - **不做**：dramaBox-admin 归因页的点击标识（`fbclid`、`gclid`）列，本后端不存；iOS 的归因只靠 AppsFlyer，自建归因只统计 Android（Java §10）。
 
 ### 5.14 客服、记忆服务、系统监控
 
 - **客服**：列类别（`BUG`、`QUESTION`、`SUGGESTION`、`OTHER`）、账号 ID、转发状态（`PENDING`、`FORWARDED`、`FAILED`）、转发引用、创建时间；详情显示正文和 `context`（App 版本、系统版本、设备型号、语言、最近错误）；`FAILED` 行有"重试"（`SUPPORT:MANAGE`）；不做回复和工单（Java §12）。
-- **记忆服务**：档位列表和详情（`top_k`、`recency_channel_enabled`、`recency_channel_count`、`consolidation_enabled`、`consolidation_threshold`）；修改档位（`MEMORY:TIER_CONFIG`）表单顶部提示"修改会立即影响该档位下所有账号"，名字不在列表里时先确认"将新建档位 X"（没有删除档位的接口）；embedding 模型列表，注册（`MEMORY:MODEL_REGISTER`）提示"先把 TEI 容器启动好再注册"，同名不同维度返回 409 `MEMORY_MODEL_CONFLICT` 时原样展示 `detail`；账号维度（用户详情的"记忆"页签）显示指派历史，指派模型（`MEMORY:MODEL_ASSIGN`）警告"只影响之后的新写入，已有历史不会重新计算，旧记忆大概率检索不到"；不提供给单个账号手动指派档位，不做记忆内容浏览 [核实 Java §16.2–16.4]。
+- **记忆服务**：档位列表和详情（`top_k`、`recency_channel_enabled`、`recency_channel_count`、`consolidation_enabled`、`consolidation_threshold`）；修改档位（`MEMORY:TIER_CONFIG`）表单顶部提示"修改会立即影响该档位下所有账号"，名字不在列表里时先确认"将新建档位 X"（没有删除档位的接口）；embedding 模型列表，注册（`MEMORY:MODEL_REGISTER`）提示"先把 TEI 容器启动好再注册"，同名不同维度返回 409 `MEMORY_MODEL_CONFLICT` 时原样展示 `detail`；账号维度（用户详情的"记忆"页签，读 `GET /accounts/{id}/memory`，响应除了 `tier`、`embeddingAssignments` 还有 `truncated`（布尔，账号的指派多于最新的 200 条时为真）和 `totalCount`（该账号的全部指派数）；`truncated` 为真时页面写“只显示最新 200 条，共 N 条”）显示指派历史，指派模型（`MEMORY:MODEL_ASSIGN`）警告"只影响之后的新写入，已有历史不会重新计算，旧记忆大概率检索不到"；不提供给单个账号手动指派档位，不做记忆内容浏览 [核实 Java §16.2–16.4]。
 - **系统监控**：时间序列图：GPU 利用率、报错数与报错率，按 `source` 筛选；用量与费用（LLM 和形象渲染各资源类型）不在这里，页面上有一个链接跳到成本报表（Java §14.2），空值不画点；没有数据时显示"暂无数据"，不是错误 [核实 Java §14、§17.4]。
-- **告警** `/monitor/alerts`（查看 `MONITOR:VIEW`，“关闭”按钮需要 `MONITOR:MANAGE`，没有就不显示）：`GET /alerts?status=&type=`；列类型（账号删除失败、订阅未确认、额度购买未消耗、额度购买入账前已被消耗、额度余额与流水不一致、档位同步失败、短信每日总量达到上限、免费通话总分钟数过高、模型没有价格（`USAGE_PRICE_MISSING`，各资源类型）、LLM 价格同步失败、形象数据删除超时（`AVATAR_DELETION_OVERDUE`）、照片里的人投诉超时（`LIKENESS_COMPLAINT_OVERDUE`）、形象生成门槛未配置（`GENERATION_CONFIG_MISSING`）、外观驱动资源包准备失败（`LOOK_PACKAGE_PREPARE_FAILED`））、关联账号、关联对象、详情、状态、创建时间；点关联账号跳用户详情；"关闭"调 `POST /alerts/{id}/resolve`（写审计日志）；对象恢复后后端自动置为已解决。看板上有未处理告警数的卡片 [核实 Java §17.4 后台告警]。
+- **告警** `/monitor/alerts`（查看 `MONITOR:VIEW`，“关闭”按钮需要 `MONITOR:MANAGE`，没有就不显示）：`GET /alerts?status=&type=`；列类型（账号删除失败、订阅未确认、额度购买未消耗、额度购买入账前已被消耗、额度余额与流水不一致、档位同步失败、短信每日总量达到上限、免费通话总分钟数过高、模型没有价格（`USAGE_PRICE_MISSING`，各资源类型）、LLM 价格同步失败、形象数据删除超时（`AVATAR_DELETION_OVERDUE`）、照片里的人投诉超时（`LIKENESS_COMPLAINT_OVERDUE`）、形象生成门槛未配置（`GENERATION_CONFIG_MISSING`）、外观驱动资源包准备失败（`LOOK_PACKAGE_PREPARE_FAILED`）、广告投放转化回传凭证不能用（`POSTBACK_CREDENTIAL_FAILED`）、商店通知事件处理失败（`SUBSCRIPTION_EVENT_FAILED`）、客服反馈转发失败（`SUPPORT_FORWARD_FAILED`）、统计重新落地失败（`STAT_RELAND_FAILED`）；共十八种，类型筛选的选项就是这十八种，见 Java §17.4）、关联账号、关联对象、详情、状态、创建时间；点关联账号跳用户详情；"关闭"调 `POST /alerts/{id}/resolve`（写审计日志）；对象恢复后后端自动置为已解决。`status` 筛选只能是 `OPEN` 或 `RESOLVED`，`type` 只能是这十八种之一，否则 400 `INVALID_REQUEST`（`details` 的 `ref` 是参数名）；不带参数表示全部，空字符串也是 400，所以筛选下拉不提供空值选项。四种较新类型的说明（页面的类型文字取自这里）：`SUPPORT_FORWARD_FAILED`——客服反馈转发给客服工具的次数用尽；关联对象是这条反馈，关联账号是反馈所属账号（可点进用户详情），详情固定为 `attempts_exhausted`，同一个反馈同一时刻只有一条打开的；对这条反馈点“重试”（`POST /support/feedback/{id}/retry`，反馈回到 `PENDING`）时，同一操作里这条告警自动关闭，重试后又失败会开一条新的，也可以手动关闭（对反馈没有副作用），重试没有改变任何东西（反馈不存在、反馈不是 `FAILED`）时告警保持打开；`POSTBACK_CREDENTIAL_FAILED`——广告投放活动的转化回传凭证不能用；关联对象是投放账户，没有关联账号，同一账户一条打开的；详情是广告平台返回的错误码（可能为空），或固定值 `token_unreadable`（存着的访问令牌打不开）、`pixel_id_malformed`（存着的像素编号格式不对），已经打开的告警后来不同原因的失败会替换它的详情；该账户停止回传，管理员重新填写令牌或像素编号时，或该账户的回传发送成功时自动关闭；`SUBSCRIPTION_EVENT_FAILED`——一个商店通知事件因商店不可用连续处理失败、达到重试上限后被放弃，且该事件没有关联到任何订阅；关联对象是该事件，关联账号是事件的账号（已知时）；事件随后被处理成功，或运营对该事件点“已处理”（`POST /subscription-events/{id}/ack`）时自动关闭，“重新处理”本身不关闭它；`STAT_RELAND_FAILED`（英文标签 'Statistics re-landing failed'）——统计日重新落地连续失败 5 次（成本回填给旧用量补了价格之后，某个统计日被标记为需要重新落地）；关联对象形如 `usage-cost:2026-10-10`（落地任务名和统计日），没有关联账号，详情只是异常类名，同一个统计日一条打开的；该日期落地成功时自动关闭，也可以手动关闭（该日期仍然失败时会再次打开）；在此期间该日期按逐步加长的间隔重试，最长 6 小时一次。看板上有未处理告警数的卡片 [核实 Java §17.4 后台告警]。
 
 ### 5.15 系统配置 `/config`
 
 - `GET /config` 只返回当前管理员有权编辑的键：持有 `CONFIG:MANAGE` 得到全部，只持有模块权限码（`COMPANIONSHIP:CONFIG`、`PUSH:CONFIG`、`INVITE:CONFIG`、`MODERATION:CONFIG`、`COMPLAINT:MANAGE` 等，按 Java §17.5 每个键的编辑权限）得到那些码对应的键，不会 403（Java §17.4），所以养成管理和召回参数页可以直接用它。
 - 前端维护配置键的 schema：`src/pages/config/configSchema.ts` 里每个键有分组、类型（数字、字符串、布尔、JSON）、默认值、校验、标签与说明的语言键；`GET /config` 提供当前值、默认值、所需编辑权限。这是 dramaBox-admin 的做法（schema 在前端，页面对未识别的键给出警告）[子代理读码 dramaBox-admin/src/pages/plat/plat-app-config/configSchema.ts]，所以 `GET /config` 不需要返回说明文字。
-- 页面按键的前缀分组（`auth.`、`admin.`、`ratelimit.`、`chat.`、`upload.`、`generation.`、`session.`、`events.`、`stats.`、`analytics.`、`recall.`、`export.`、`deletion.`、`subscription.`、`credits.`、`guest.`、`avatar.`、`render.`、`moderation.`、`complaint.`、`usage.`、`usage_price.` 等），每行显示当前值、默认值、是否已被修改；只有持有该键所需编辑权限的管理员才能编辑，其余只读 [核实 Java §17.5]。
+- 页面按键的前缀分组（`auth.`、`admin.`、`ratelimit.`、`chat.`、`upload.`、`generation.`、`session.`、`events.`、`stats.`、`analytics.`、`recall.`、`export.`、`deletion.`、`subscription.`、`credits.`、`guest.`、`avatar.`、`render.`、`moderation.`、`complaint.`、`usage.`、`usage_price.`、`integrity.`、`push.`、`memory.`、`attribution.`、`abuse.`、`ads.`、`app.`、`appversion.`、`call.`、`companionship.`、`email.`、`entitlement.`、`internal.`、`invite.`、`maintenance.`、`milestone.`、`monitor.`、`notification.`、`persona.`、`pipeline_metrics.`、`retry.`、`sms.`、`support.`、`tasks.`、`tokens.`、`voice.` 等，以契约 17.5 的键为准），每行显示当前值、默认值、是否已被修改；只有持有该键所需编辑权限的管理员才能编辑，其余只读 [核实 Java §17.5]。
 - 未在 schema 里的键，页面顶部警告"存在未识别的配置项：…"，只读显示；JSON 值解析失败时该行禁用保存。
-- 保存：一次只保存一个键（`PUT /config/{key}`），后端校验失败返回 `INVALID_REQUEST` 时在该行下展示 `message` 和 `data.details`（整数键不小于 1、关系约束等规则见 Java §17.5 开头）；保存成功时若响应带 `warnings`（例如关闭手机号登录时的现有手机号账号数、短信白名单里没有通道覆盖的国家、跳过倒计时过长），在该行下用警告样式展示，不阻止保存（Java §17.4）。
+- 保存：一次只保存一个键（`PUT /config/{key}`），后端校验失败返回 `INVALID_REQUEST` 时在该行下展示 `data.details` 对应的按原因翻译的文字（整数键不小于 1、关系约束等规则见 Java §17.5 开头），并用下面几个 `data` 字段：保存 `app.supported_locales` 时有语言没有随版本发布的通知模板文件：`data.missingLanguages`（没有文件的语言标签数组，按请求里的顺序），`details` 为 `[{"ref":"app.supported_locales","reason":"OUT_OF_RANGE"}]`，比较不区分大小写、整个标签要匹配（`pt` 不能用 `pt-BR` 的文件），`DELETE`（回到 `["en"]`）永远通过；保存或恢复默认 `push.default_locale` 时某个有启用模板的召回原因没有新语言的启用模板：`data.defaultLocale`（要保存的语言）和 `data.reasons`（缺它的召回原因，字母序），`details` 为 `[{"ref":"push.default_locale","reason":"OUT_OF_RANGE"}]`；保存 `auth.phone_login_enabled` 为 `true` 被拒时，`details` 依次最多四条，只列缺的：`sms.allowed_country_codes` 没设或为空、`sms.daily_global_cap` 没设（这两条 `reason` 是 `EMPTY_NOT_ALLOWED`，`ref` 是设置键，显示在对应设置行），没有启用的验证码渠道（`ref` 是固定词 `SmsChannel`），没有合格的短信模板（`ref` 是固定词 `SmsTemplate`）——`ref` 是固定词时页面把文字显示在提交的那一行，不能丢；`usage_price.default_currency`、`usage_price.allowed_currencies`：默认币种必须在允许列表里（区分大小写），违反时 `details` 同时列两个键，保存的键在前，`reason` 都是 `OUT_OF_RANGE`，同一个错误出现在两个键的行下，`DELETE` 这两个键之一按代码里的默认值判断；`attribution.cost_currency`：见 5.13；`chat.message_retention_days`、`guest.device_retention_days` 与 `stats.land_window_days` 的关系：保存时 400，`details` 里写出两个键，`reason` 是 `OUT_OF_RANGE`；`push.schedule_catchup_minutes` 与 `push.task_poll_seconds`：`push.schedule_catchup_minutes × 60 ≥ 600 + push.task_poll_seconds`，保存或恢复默认任一个键时检查，违反时 400，`details` 先写保存的键、再写另一个键，`reason` 都是 `OUT_OF_RANGE`，页面在两个字段上都写出这条规则作提示（默认值下催补分钟数至少是 11）；保存成功时若响应带 `warnings`（例如关闭手机号登录时的现有手机号账号数、短信白名单里没有通道覆盖的国家、跳过倒计时过长），在该行下用警告样式展示，不阻止保存（Java §17.4）。
+- 运营规则：给 `app.supported_locales` 加语言的顺序是“通知模板文件随版本发布 → 把语言加进设置”，不能先改设置再等文件；要把 `usage_price.default_currency` 改成新币种，先把它加进 `usage_price.allowed_currencies`，要把当前默认币种从允许列表里去掉，先改默认币种。
+- 范围变化：`chat.moderation_deadline_ms` 范围是整数 100 到 2500（以前 100 到 2900）；`recall.window_minutes`、`recall.scan_interval_minutes` 是整数 1 到 1440（以前没有上限）；`push.schedule_catchup_minutes` 是整数 1 到 10080。在这些范围收紧之前保存的值继续有效，直到该键再被保存。
 - 六个需要在行内写明风险的键，文字取自 Java §17.5 的说明列：`render.cloud_enabled`（默认 `false`，打开会产生服务器成本）、`moderation.underage_reject_below_age`（估计岁数低于它就拒绝照片；默认 16 是推断，要实测目标市场人群的年龄误差后调整）、`complaint.likeness_due_hours`（照片里的人投诉的处理时限，超过写告警）、`guest.call_minutes_total`（未配置游客不能通话；重装应用可以重置额度，要设得很小）、`chat.model_tiers_allowed`（增加新档位前必须先在 AvatarAgent 的 `LLM_TIERS` 里加同名档位并部署）、`chat.conversation_languages`（不能比 AvatarAgent 的识别和合成服务都会说的语言更长）。
 - 各模块的局部配置（养成管理、召回参数）渲染方式与本页一致，只显示自己负责的键。
 
@@ -355,8 +357,9 @@
 
 - **管理员**（`ADMIN:MANAGE`）：列用户名、是否超级管理员、状态、必须改密码、角色、最近登录、创建时间。表单：用户名（创建后不可改）、初始密码（规则同 3.3，创建后 `mustChangePassword` 为真）、角色（**多选**，Java 是管理员—角色多对多；dramaBox-admin 是单角色 [子代理读码 dramaBox-admin/src/pages/system/admin-user/UserEdit.tsx]）、超级管理员标志。行操作：启用/停用（不能停用自己，最后一个启用的超级管理员不能被停用）、重置密码、重置二次验证、删除；这些是 dramaBox-admin 做不到的（它没有停用管理员和重置 TOTP 的路径）[子代理读码 报告 §3.1]。
 - **角色**（`ROLE:MANAGE`）：列表加新建、编辑、删除；角色仍分配给管理员时删除失败，展示 `ROLE_IN_USE`。分配权限用可勾选的树：勾选父节点同时勾选全部子节点，保存时整体替换该角色的权限集合；树来自 `GET /permissions`（每个节点有 `parent`，为空表示根） [子代理读码 dramaBox-admin/src/pages/system/admin-role/RolePermission.tsx；核实 Java §17.3]。
-- **权限树**（读取 `ROLE:MANAGE` 或 `PERMISSION:MANAGE`，增删改需要 `PERMISSION:MANAGE`）：树形表格，列节点名称（按界面语言取 `nameZh`/`nameEn`）、权限码、类型（菜单、功能）、排序、是否内置；操作：新增节点（选父节点、类型、码、中英文名称、排序；码创建后只读）、编辑（**内置节点只能改名称和排序**，码和父节点不可改，不可删除；自定义节点可改名称、排序、父节点）、删除自定义节点（行内确认；有子节点时失败，展示 `PERMISSION_HAS_CHILDREN`）。页面顶部写明："自定义节点可以分配给角色，用来给权限分组或为以后的页面预留，对现有接口没有效力；接口和页面只检查系统内置的权限码"（Java §17.3）。
-- **审计日志**（`AUDIT:VIEW`）：筛选管理员、动作、对象类型、对象 ID、时间范围；列管理员、动作、对象类型、对象 ID、详情、时间 [核实 Java §17.4]。
+- **授予规则**（管理员和角色两页共用，Java §17.4 系统管理行）：管理员只能授出、操作自己持有的权限（“持有”指操作者各角色权限码的并集，保存时按最新数据判断）。违反时 403 `ADMIN_FORBIDDEN`，什么都不改，`data` 为 `{"reason":"<原因>"}`：① `POST /roles`：`permissionCodes` 里有操作者没有的码（`GRANT_NOT_HELD`）；② `PUT /roles/{id}`：操作者不能改自己被分配的角色（`OWN_ROLE`），角色原有的码不全是操作者持有的（`ROLE_NOT_HELD`），请求里新的码不全是操作者持有的（`GRANT_NOT_HELD`）；`DELETE /roles/{id}`：角色原有的码必须是操作者持有的（`ROLE_NOT_HELD`）；③ `POST /admins`、`PUT /admins/{id}`：`roleIds` 里各角色的码合起来必须是操作者持有的（`GRANT_NOT_HELD`）；④ `PUT /admins/{id}`、`POST /admins/{id}/status`、`POST /admins/{id}/reset-password`、`POST /admins/{id}/reset-totp`、`DELETE /admins/{id}`：目标管理员当前持有的码必须是操作者持有的（`ADMIN_NOT_HELD`）；另有 `SUPER_TARGET`（非超级管理员操作超级管理员）、`SUPER_FLAG`（非超级管理员设置或清除 `superAdmin`）。`superAdmin=true` 的操作者不受前四条限制。管理员写操作的 409 `INVALID_STATE` 的 `data` 为 `{"status":"<目标管理员的当前状态>","reason":"<原因>"}`：`SELF_PROTECTED`（对自己：改自己的角色或 `superAdmin`、改自己的状态、删除自己）、`LAST_SUPER_ADMIN`（最后一个启用的超级管理员会被停用、删除或清除 `superAdmin`）、`CONCURRENT_CHANGE`（同时有另一个对超级管理员的修改在进行，稍后重试）。前端不复刻规则逻辑，也不预先禁用权限树里操作者没有的节点；403 时提示无权限、不跳转（关键设计点表“错误处理”一行），并按 `reason` 显示原因。各接口的检查顺序以 Java §17.4 系统管理行为准，前端不依赖顺序。
+- **权限树**（读取 `ROLE:MANAGE` 或 `PERMISSION:MANAGE`，增删改需要 `PERMISSION:MANAGE`）：树形表格，列节点名称（按界面语言取 `nameZh`/`nameEn`）、权限码、类型（菜单、功能）、排序、是否内置；操作：新增节点（选父节点、类型、码、中英文名称、排序；码创建后只读）、编辑（**内置节点只能改名称和排序**，码和父节点不可改，不可删除；自定义节点可改名称、排序、父节点）、删除自定义节点（行内确认；有子节点时失败，展示 `PERMISSION_HAS_CHILDREN`）。页面顶部写明："自定义节点可以分配给角色，用来给权限分组或为以后的页面预留，对现有接口没有效力；接口和页面只检查系统内置的权限码"（Java §17.3）。节点的类型（菜单、功能）创建后不能改：`PUT /permissions/{code}` 请求里改 `type` 得 400（`details` 的 `ref` 是 `type`），编辑表单里类型只读。
+- **审计日志**（`AUDIT:VIEW`）：筛选管理员、动作、对象类型、对象 ID、时间范围（`action`、`targetType` 最多 64 个码点，`targetId` 最多 255 个码点，更长的值 400 `INVALID_REQUEST`，输入框设 `maxLength`）；列管理员、动作、对象类型、对象 ID、详情、时间 [核实 Java §17.4]。
 
 ### 5.17 应用内广告
 
@@ -373,13 +376,13 @@
 
 依据：dramaBox-admin 的"短信管理"三个页面 [子代理读码 dramaBox-admin `src/pages/sms/*`]，后端见 Java 第二十三节；去掉“查看验证码”（用户 2026-10-05 确认，验证码只存哈希）；导出保留（dramaBox 有，权限 `SMS:RECORD:EXPORT`）。
 
-- **渠道** `/sms/channels`：列渠道编码、名称、供应商、服务的国家、优先级、启用开关（立即生效）、是否已配置凭据；表单：渠道编码（创建时填，唯一，创建后不可改）、名称、供应商（下拉，选项来自 `GET /sms/meta` 的已注册适配器；接口地址的主机白名单也来自它）、接口地址（https）、凭据（密码框；编辑时留空表示不修改，**页面永远拿不到已保存的凭据**）、扩展配置（JSON，含 `appId` 和按国家的发送方 ID）、国家（多选，空表示全部）、类型（`OTP` 或 `MARKETING`，创建时必填，发验证码只用 `OTP` 通道）、优先级（同一国家有多个通道时取数值最小的一个；发送失败时不会切换到别的通道）、启用。**测试发送**按钮：弹窗填号码，正文固定为测试文案，显示当天剩余次数（取自 `GET /sms/meta` 的 `testRemainingToday`）；需要 `SMS:CHANNEL:CONFIG`。删除或停用前提示：它是唯一启用的通道且手机号登录已开启时不能删除、不能停用。
-- **模板** `/sms/templates`：列模板编码、名称、类型、语言、国家、内容、供应商模板编号、启用；表单：模板编码（创建时填，创建后不可改）、名称、类型（`OTP` 或 `MARKETING`，创建时必填，发验证码只用 `OTP` 模板）、语言、国家（可空）、内容（`OTP` 模板必须含 `{code}`，可用 `{minutes}`、`{appName}`，页面实时校验）、供应商模板编号（可空）、启用。页面顶部提示选模板的规则：先按号码国家和用户语言（取请求头 `Accept-Language`）匹配，其次同语言不限国家，最后回退英文；没有任何可用模板时发送会失败。
+- **渠道** `/sms/channels`：列渠道编码、名称、供应商、服务的国家、优先级、启用开关（立即生效）、是否已配置凭据；表单：渠道编码（创建时填，唯一，创建后不可改）、名称、供应商（下拉，选项来自 `GET /sms/meta` 的已注册适配器；接口地址的主机白名单也来自它）、接口地址（https）、凭据（密码框；编辑时留空表示不修改，**页面永远拿不到已保存的凭据**；`credentials` 里的名字和值都不能是 `null`，否则 400 `INVALID_REQUEST`、`details` 为 `[{"ref":"credentials","reason":"EMPTY_NOT_ALLOWED"}]`，值可以是空字符串；要保持凭据不变，不带 `credentials` 字段，或带 `null` 或 `{}`）、扩展配置（JSON，含 `appId` 和按国家的发送方 ID）、国家（多选，空表示全部）、类型（`OTP` 或 `MARKETING`，创建时必填，发验证码只用 `OTP` 通道）、优先级（同一国家有多个通道时取数值最小的一个；发送失败时不会切换到别的通道）、启用。**测试发送**按钮：弹窗填号码，正文固定为测试文案，显示当天剩余次数（取自 `GET /sms/meta` 的 `testRemainingToday`）；需要 `SMS:CHANNEL:CONFIG`。删除或停用前提示：它是唯一启用的通道且手机号登录已开启时不能删除、不能停用。
+- **模板** `/sms/templates`：列模板编码、名称、类型、语言、国家、内容、供应商模板编号、启用；表单：模板编码（创建时填，创建后不可改）、名称、类型（`OTP` 或 `MARKETING`，创建时必填，发验证码只用 `OTP` 模板）、语言、国家（可空）、内容（`OTP` 模板必须含 `{code}`，可用 `{minutes}`、`{appName}`，页面实时校验）、供应商模板编号（可空）、启用。页面顶部提示选模板的规则：先按号码国家和用户语言（取请求头 `Accept-Language`）匹配，其次同语言不限国家，最后回退英文；没有任何可用模板时发送会失败。始终要有至少一个 `smsType=OTP`、启用、`locale` 等于 `en`（不区分大小写，`EN` 算，`en-GB`、`en-US` 不算）、`country` 为空的模板（选模板规则末尾回退到的那个）。守卫条件：`auth.phone_login_enabled` 为真，或至少有一个手机号账号；这时创建不受影响，写入后仍有别的合格模板就不受影响，已经缺合格模板的旧状态不拦无关的编辑，只拦“拿掉最后一个合格模板”（修改、启用、停用、删除都判），原来的“最后一个启用的 OTP 模板”守卫先判。违反时 400 `INVALID_REQUEST`，`details` 为 `[{"ref":"SmsTemplate","reason":"LAST_ENGLISH_FALLBACK_TEMPLATE"}]`（`ref` 是固定词 `SmsTemplate`，不是设置键）；保存 `auth.phone_login_enabled` 为 `true` 缺合格模板时见 5.15。没有合格模板时发验证码仍是 503 `SMS_SEND_FAILED`。
 - **发送记录** `/sms/records`：只读；筛选消息 ID、供应商消息 ID、号码（完整号码精确匹配）、投递渠道（短信或推送）、通道、用途、发送状态、送达状态、是否已使用、时间范围；列消息 ID、供应商消息 ID、号码（默认掩码，持有 `SMS:RECORD:PHONE_VIEW` 才显示完整）、国家、用途、投递渠道（验证码走推送的行没有供应商消息 ID 和送达状态）、通道、发送状态、送达状态、是否已使用（验证码被成功校验的时间）、失败原因、创建与发送时间；正文显示已把验证码替换为 `****` 的内容。没有“查看验证码”（验证码只存哈希，不提供）。页面右上角有“导出 Excel”按钮（只对持有 `SMS:RECORD:EXPORT` 的管理员显示），调 `GET /sms/records/export`，参数和当前筛选一致，规则同统计页的导出：`fetch` 带 `Authorization` 头取回后保存，导出中显示进度，超过行数上限时显示后端的提示；导出的号码按 `SMS:RECORD:PHONE_VIEW` 掩码。
 
 ### 5.18a 邮件模板
 
-后端见 Java 2.2.1、17.4。只有英文一份，目前有五个模板：`REGISTER_CODE`（注册验证码）、`PASSWORD_RESET`（密码重置）、`DELETION_CONFIRM`（网页删除确认）、`PASSWORD_CHANGED`（密码已更改通知）、`LIKENESS_COMPLAINT_RECEIVED`（照片里的人投诉的确认邮件）。列表显示模板编码、标题、是否被改过、最后修改人和时间；编辑页有标题（1 到 200 个字符）、正文、该模板的占位符说明和必含项（`REGISTER_CODE` 必含 `{code}`，`PASSWORD_RESET` 必含 `{resetLink}`，`DELETION_CONFIRM` 必含 `{confirmLink}` 和 `{subscriptionNotice}`，后者由系统填订阅说明，不能删；`PASSWORD_CHANGED` 必含 `{time}`）和"恢复默认"（行内确认，恢复前显示默认文案）；保存时前端先校验必含项，后端校验失败返回 `INVALID_REQUEST` 时在表单下展示 `message`。
+后端见 Java 2.2.1、2.7、17.4。只有英文一份，目前有六个模板：`REGISTER_CODE`（注册验证码）、`PASSWORD_RESET`（密码重置）、`DELETION_CONFIRM`（网页删除确认）、`PASSWORD_CHANGED`（密码已更改通知）、`LIKENESS_COMPLAINT_RECEIVED`（照片里的人投诉的确认邮件）、`LOGIN_METHOD_ADDED`（登录方式已添加通知，账号新增登录方式后发到账号邮箱）。列表显示模板编码、标题、是否被改过、最后修改人和时间；编辑页有标题（1 到 200 个字符）、正文、该模板的占位符说明和必含项（`REGISTER_CODE` 必含 `{code}`，`PASSWORD_RESET` 必含 `{resetLink}`，`DELETION_CONFIRM` 必含 `{confirmLink}` 和 `{subscriptionNotice}`，后者由系统填订阅说明，不能删；`PASSWORD_CHANGED` 必含 `{time}`；`LOGIN_METHOD_ADDED` 必含 `{method}` 和 `{time}`，可用 `{method}`、`{time}`、`{appName}`，`{method}` 由系统填登录方式名称，`{time}` 填 UTC 时间）和"恢复默认"（行内确认，恢复前显示默认文案）；保存时前端先校验必含项，后端校验失败返回 `INVALID_REQUEST` 时在表单下展示 `message`。标题或正文含 NUL 字符时 400（正常表单敲不出来）。`LOGIN_METHOD_ADDED` 的占位符：`{method}`（登录方式名称，目前只有 `Google`）、`{time}`（添加时间，`yyyy-MM-dd HH:mm UTC`）、`{appName}`（取 `app.display_name`）；默认标题和正文由“恢复默认”从 `defaultSubject`、`defaultBody` 显示，前端不写死。
 
 ### 5.19 应用版本与渠道包
 
@@ -426,7 +429,7 @@
 
 - **成本报表** `/cost/report`（`COST:VIEW`，读汇总表；有“重新落地该日”，需 `STATS:LAND`；有“导出 Excel”，调 `GET /stats/export/usage-cost`，需 `STATS:EXPORT`）：筛选日期范围（默认 7 天）、资源类型、模型、来源（通话、文字对话、形象生成）、使用者类型（游客、免费、付费、系统、未知）、币种（含“无费用”，对应没有价格的请求）；卡片：总费用、请求数、没有价格的请求数（点击跳到价格页的“模型”页签，筛选“没有生效价格”）；趋势图：每日费用，按模型堆叠；表：按资源类型、模型、来源、使用者类型汇总的请求数、输入 token、缓存输入 token、输出 token（只有 LLM）、数量与单位（其余资源类型）、费用。**不同币种分开显示，不相加**；费用为空的请求不计入费用，页面写明“没有价格的请求只计次数”；统计日是请求发生的 UTC 日；报表顶部写明“费用按各组件上报的用量和价格表计算；LLM 费用是下限：用户打断通话时被取消的 LLM 请求可能没有用量，厂商仍会计费，LLM 对账以阿里云账单为准；自己部署的资源类型的费用取决于运营填的分摊价格”。
 - **价格** `/cost/prices`（`COST:VIEW` 可看；确认、驳回、撤回、手填、改模型登记需 `COST:PRICE`），四个页签：
-  - **待审价格**：列待审批次：模型、新价格与当前生效价格的逐档对比（输入价、缓存输入价、输出价，档位边界）、币种（下拉，选项来自 `usage_price.allowed_currencies`；确认时必须核对，因为阿里的接口没有币种字段）、提议的生效日期（可改，可改到更早的日期以覆盖已有的无价格记录）；档位不连续时“确认”被后端拒绝并显示原因；“确认”调 `POST /usage/price-batches/{batchId}/confirm`，“驳回”必填备注；页面写明“确认之前不会按这个价格计费”。
+  - **待审价格**：列待审批次：模型、新价格与当前生效价格的逐档对比（输入价、缓存输入价、输出价，档位边界）、币种（下拉，选项来自 `usage_price.allowed_currencies`；确认时必须核对，因为阿里的接口没有币种字段）、提议的生效日期（可改，可改到更早的日期以覆盖已有的无价格记录）；档位不连续时“确认”被后端拒绝并显示原因；“确认”调 `POST /usage/price-batches/{batchId}/confirm`，“驳回”必填备注；确认时批次最终用的币种（请求体给的 `currency`，没给就是批次自己的）必须在 `usage_price.allowed_currencies` 里，否则 400 `INVALID_REQUEST`，`details` 为 `[{"ref":"currency","reason":"OUT_OF_RANGE"}]`（即使请求没带 `currency`），批次保持待审，审计日志也不写，运营在请求体里给出允许列表内的 `currency` 即可确认；每日价格同步生成的批次用默认币种，“默认币种在允许列表里”的关系保证它们总能被确认；页面写明“确认之前不会按这个价格计费”。
   - **当前价格**：每个模型当前生效的批次，按档位列输入价、缓存输入价、输出价、币种、生效日期；展开看历史批次（含被驳回、被取代、已撤回的）；`ACTIVE` 批次有“撤回”按钮（备注必填），页面写明“撤回只影响之后入库的记录，已入库的费用不改”。
   - **手填价格**：表单：资源类型、提供方、模型、生效日期（可以是过去或将来）、币种（下拉）；资源类型不是 LLM 时只填一个单价（单位由资源类型决定，表单只读显示：次、秒或分钟），没有档位；LLM 填档位行（输入长度下限、上限（最后一档为空）、输入价、缓存输入价（空则按输入价）、输出价，每百万 token，可加多行）；表单实时检查档位：第一档下限 0、下一档下限 = 上一档上限 + 1、最后一档上限为空；保存即新建一批 `ACTIVE`，与已有批次同模型同生效日期时旧批被取代，页面写明“价格只追加不修改，保存后不能再改这批，需要改就再填一批”。
   - **模型**：已见过的模型：资源类型、提供方、模型、是否有生效价格（没有的标红，可按此筛选）、同步适配器（空或 `DASHSCOPE_INTL`，只有 LLM 的模型能设；空表示只能手填）、同步用的模型名、首次和最近出现时间；“同步适配器”和“同步用的模型名”可改。
@@ -448,7 +451,7 @@
 
 依据：形象渲染设计第 12 节、10.4；接口见 Java §11.6、§17.4"投诉"行。页面路由名是本文新定。
 
-- **照片里的人投诉** `/complaints/likeness`（`COMPLAINT:VIEW`）：列表筛选状态（`RECEIVED`、`INVESTIGATING`、`RESOLVED_REMOVED`、`RESOLVED_NOT_FOUND`、`REJECTED`）；列投诉 ID、联系邮箱、收到时间、到期时间（`dueAt`）、状态、处理人；按到期时间排序，已过期未结案的行高亮（同时 Java 会写 `LIKENESS_COMPLAINT_OVERDUE` 告警）。详情：说明、证据文件（查看写审计日志）、处理记录（每次流转一行：原状态、新状态、备注、管理员、时间，取自 Java 的 `LikenessComplaintEvent`）、关联的形象 ID。
+- **照片里的人投诉** `/complaints/likeness`（`COMPLAINT:VIEW`）：列表筛选状态（`RECEIVED`、`INVESTIGATING`、`RESOLVED_REMOVED`、`RESOLVED_NOT_FOUND`、`REJECTED`，另有“未结案”`OPEN`，等于 `RECEIVED` 和 `INVESTIGATING` 两个状态；不传或传空值不过滤，区分大小写，`open`、逗号分隔的多个值、带空白的值都是 400 `INVALID_REQUEST`，`data.details` 为 `[{"ref":"status","reason":"OUT_OF_RANGE"}]`；`total` 按同一个条件计数）；列投诉 ID、联系邮箱、收到时间、到期时间（`dueAt`）、状态、处理人；按到期时间排序，已过期未结案的行高亮（同时 Java 会写 `LIKENESS_COMPLAINT_OVERDUE` 告警）。详情：说明、证据文件（查看写审计日志）、处理记录（每次流转一行：原状态、新状态、备注、管理员、时间，取自 Java 的 `LikenessComplaintEvent`）、关联的形象 ID。
 - **处理**（`COMPLAINT:MANAGE`）：状态流转（`PUT /likeness-complaints/{id}/status`：状态下拉只有调查中 `INVESTIGATING`、查无此形象 `RESOLVED_NOT_FOUND`、驳回 `REJECTED`，"已删除" `RESOLVED_REMOVED` 只由下面的删除形象产生；已结案的投诉不显示流转和删除按钮，后端对它们返回 409 `INVALID_STATE`；备注选填；写审计日志）；"删除形象"输入查到的形象 ID（可多个），确认框写明"会删除这些形象及其全部外观、动作片段和文件，上传者会收到内容被拒的站内通知，不能撤销"，调 `POST /likeness-complaints/{id}/remove-avatars`，成功后投诉为 `RESOLVED_REMOVED`。页面写明"怎么找到对应的形象还没有定：在法律意见出来之前，只能按投诉人提供的上传者信息人工查找"（Java §11.6）。
 
 ## 6 界面语言
@@ -580,7 +583,7 @@
 验收：
 
 - [ ] 持有不同权限码的管理员登录后，菜单只出现其有权的项；直接访问无权的地址得到权限提示，不是白屏；超级管理员看到全部菜单
-- [ ] 登录：未带验证码 → 出现验证码框；验证码错误 → 提示并清空；未绑定 → 进入绑定页，绑定成功才进入应用；`mustChangePassword` 时只能进改密码页
+- [ ] 登录：未带验证码 → 出现验证码框；验证码错误 → 提示并清空；未绑定 → 进入绑定页，绑定成功才进入应用；`mustChangePassword` 时只能进改密码页；二次验证密钥解不开时，登录得 `ADMIN_TOTP_INVALID`、绑定得 `ADMIN_INVALID_TOKEN` 并回登录页
 - [ ] 令牌过期后任意请求跳登录页，登录后回到原页面；403 `ADMIN_FORBIDDEN` 提示无权限且不跳转
 - [ ] 每个列表页：分页、筛选、空状态、加载状态
 - [ ] 邮箱：没有 `USER:EMAIL_VIEW` 时显示掩码，有则显示完整；手机号同理（`USER:PHONE_VIEW`，掩码只留末 4 位）
@@ -590,25 +593,31 @@
 - [ ] 额度：余额为负时醒目显示并带说明；调账申请人不能审核自己的申请
 - [ ] 每个统计页：标注"UTC"；落地条只对 `STATS:LAND` 显示；趋势图缺失日期补 0；留存未到期格子显示"—"；去重人数没有跨日合计
 - [ ] 日报：平台不是 `ALL` 时业务类列显示"—"
-- [ ] 漏斗：预设只读；自定义可保存、编辑、删除
-- [ ] 系统配置：只有持有该键所需权限的管理员能编辑；JSON 值格式错误时不提交；未识别的键有警告
-- [ ] 管理员：不能停用自己；删除仍分配给管理员的角色时展示 `ROLE_IN_USE`
+- [ ] 漏斗：预设只读；自定义可保存、编辑、删除；并发上限 429，提示稍后再试，没有倒计时
+- [ ] 系统配置：只有持有该键所需权限的管理员能编辑；JSON 值格式错误时不提交；未识别的键有警告；新的 `data` 字段（`missingLanguages`、`defaultLocale`、`reasons`）和 `ref` 为 `SmsChannel`、`SmsTemplate` 的错误都显示在对应行；关系对的键（币种两个键、催补分钟数与轮询秒数）两行都显示错误
+- [ ] 管理员：不能停用自己；删除仍分配给管理员的角色时展示 `ROLE_IN_USE`；操作者只能授出、操作自己持有的权限，违反时 403 且不改任何东西，页面按 `reason` 显示原因；超级管理员不受限
 - [ ] 切换语言后菜单、标签标题、表单校验文字都随之变化，没有残留的另一种语言；切换主题模式不整页刷新
 - [ ] 活动管理（5.22）：发布或启用签到活动先探测重叠，确认框列出将被停用的活动；草稿以外的活动没有删除按钮；奖励阶梯至少一行；任务配置删除失败时提示改用停用；已有记录的任务配置的类型和目标值只读；编辑生效中的签到活动的日期范围也先探测重叠；任务记录列显示任务名称不是数字；统计页有落地条和导出；没有 `CHECKIN:MANAGE`、`TASK:MANAGE` 的管理员看不到新建和编辑
-- [ ] 成本（5.23）：没有 `COST:VIEW` 看不到成本报表和价格页；没有 `COST:PRICE` 看不到确认、驳回、撤回、手填和改模型登记的按钮；没有 `STATS:EXPORT` 看不到导出，没有 `STATS:LAND` 看不到重新落地；待审批次确认前页面写明不会按新价格计费；档位有缺口或重叠时表单拦住；币种下拉只有 `usage_price.allowed_currencies` 里的值；不同币种分开显示、不相加；费用为空的请求归在“无费用”；价格保存后没有编辑入口，只有“撤回”和再填一批；系统监控页没有成本图，只有跳到成本报表的链接
-- [ ] 投放管理（5.13）：投放账户没有删除按钮；Facebook 访问令牌编辑时不回显；批量录入任一行不合法整批拒绝并按行显示原因；投放效果比率分母为 0 显示"—"，有"未归因"行；点击明细的 IP 默认掩码；没有 `ATTRIBUTION:MANAGE` 的管理员看不到账户与成本、归因参数页
+- [ ] 成本（5.23）：没有 `COST:VIEW` 看不到成本报表和价格页；没有 `COST:PRICE` 看不到确认、驳回、撤回、手填和改模型登记的按钮；没有 `STATS:EXPORT` 看不到导出，没有 `STATS:LAND` 看不到重新落地；待审批次确认前页面写明不会按新价格计费；档位有缺口或重叠时表单拦住；币种下拉只有 `usage_price.allowed_currencies` 里的值；不同币种分开显示、不相加；费用为空的请求归在“无费用”；价格保存后没有编辑入口，只有“撤回”和再填一批；系统监控页没有成本图，只有跳到成本报表的链接；确认价格批次时币种不在允许列表里被拒
+- [ ] 投放管理（5.13）：投放账户没有删除按钮；Facebook 访问令牌编辑时不回显；批量录入任一行不合法整批拒绝并按行显示原因；投放效果比率分母为 0 显示"—"，有"未归因"行；点击明细的 IP 默认掩码；没有 `ATTRIBUTION:MANAGE` 的管理员看不到账户与成本、归因参数页；有成本行时成本币种不能改
 - [ ] 应用内广告（5.17）：投放检查清单显示；激励广告位的频控不能提交 0；已通过的素材没有编辑和删除按钮，只有暂停；素材先上传再创建，规格不符时在表单里给出原因；报表没有"独立用户"，有"游客展示"卡片和按国家页签；无广告原因枚举（含 `NOT_FOR_GUEST`）都有本地化说明
-- [ ] 短信管理（5.18）：渠道的凭据永远不回显，编辑时留空表示不修改；供应商下拉来自 `GET /sms/meta`；测试发送显示当天剩余次数；没有 `SMS:RECORD:PHONE_VIEW` 时号码掩码；`OTP` 模板缺 `{code}` 时不能保存；没有“查看验证码”；有 `SMS:RECORD:EXPORT` 才显示导出按钮，导出的号码按权限掩码
+- [ ] 短信管理（5.18）：渠道的凭据永远不回显，编辑时留空表示不修改；供应商下拉来自 `GET /sms/meta`；测试发送显示当天剩余次数；没有 `SMS:RECORD:PHONE_VIEW` 时号码掩码；`OTP` 模板缺 `{code}` 时不能保存；没有“查看验证码”；有 `SMS:RECORD:EXPORT` 才显示导出按钮，导出的号码按权限掩码；拿掉最后一个启用的英文、不限国家的验证码模板被拒（手机号登录开着或存在手机号账号时）；渠道凭据不能有 `null` 值
+- [ ] 邮件模板（5.18a）：列表有六个模板，`LOGIN_METHOD_ADDED` 显示中文用途说明；编辑 `LOGIN_METHOD_ADDED` 时正文缺 `{method}` 或 `{time}` 前端不允许保存；恢复默认后显示默认英文文案
 - [ ] 额度账户与额度流水（5.10）：没有 `SUBSCRIPTION:VIEW` 看不到这两个页面；账号 ID 筛选是精确匹配；余额为负的行用醒目颜色；流水类型筛选“获得”只出现正的变动、“消耗”只出现负的变动
 - [ ] 渠道包（5.19）：没有删除按钮；渠道码、平台、分发方式创建后只读；各统计页和版本列表的渠道包下拉都有数据；没有 `CHANNEL:MANAGE` 的管理员看不到渠道包管理页
 - [ ] 应用版本（5.19）：DIRECT 渠道的表单有 APK 上传控件，上传中不能提交，文件地址、大小、SHA-256 只读；STORE 渠道没有；激活必须勾选"新版本已经在商店对用户可见"，否则不能提交；已归档的版本没有操作；更新说明缺 `en` 不能保存；只有 `APPVERSION:ACTIVATE` 的管理员看到激活和下线按钮
 - [ ] 站内通知（5.20）：收件账号有不存在或非正常状态的，整批不发并列出这些账号；标题正文缺 `en` 或超长不能提交；列表点开能看到全部语言
 - [ ] 客户端配置（5.21）：`URL` 类型填 `http://` 或空值不能保存；预览显示每个键的来源；`phoneLoginEnabled`、`accountDeletionGraceDays`、`conversationLanguages`、`voiceTranscriptMaxChars`、`voiceMinSeconds`、`voiceMaxSeconds` 只读；一个语言的值校验失败时整个键不保存
 - [ ] 形象与装扮（5.24）：没有对应权限码的管理员看不到对应页面；服装和动作的 key 创建后只读；适用的端不选任何一项时显示"所有端"；"给已有外观补生成"有费用提示；上传声明"设为生效"前有确认；系统默认数字人新建必须勾选肖像授权，同一时刻只有一个生效
-- [ ] 投诉（5.25）：没有 `COMPLAINT:VIEW` 看不到投诉页；没有 `COMPLAINT:MANAGE` 看不到状态流转和删除形象按钮；过期未结案的行高亮；删除形象的确认框写明后果
+- [ ] 投诉（5.25）：没有 `COMPLAINT:VIEW` 看不到投诉页；没有 `COMPLAINT:MANAGE` 看不到状态流转和删除形象按钮；过期未结案的行高亮；删除形象的确认框写明后果；状态筛选有“未结案”
 - [ ] 投诉处理（5.25）：状态下拉只有 `INVESTIGATING`、`RESOLVED_NOT_FOUND`、`REJECTED`（没有 `RESOLVED_REMOVED`）；已结案的投诉不显示状态流转和删除形象按钮；详情的处理记录与 `LikenessComplaintEvent` 一致（每次流转一行：原状态、新状态、备注、管理员、时间）
 - [ ] 用户详情的"形象与服装"页签：列出形象（含形象名字）及其外观（风格、状态、预览图、创建时间）；持有这个页面所需的权限就能看，没有则 403；每次查看都有审计日志；没有 `COSMETIC:GRANT` 看不到赠送按钮；赠送必填理由
 - [ ] 内容审核队列显示生成的标准图、动作片段两种内容类型，来源筛选有"投诉"；成本报表能按资源类型筛选，非 LLM 的行显示数量与单位而不是 token
+- [ ] 告警（5.14）：十八种类型都有文字；`status`、`type` 筛选不带空值；对失败的客服反馈点“重试”后对应告警自动关闭
+- [ ] 推送模板（5.11）：“触发原因 × 语言”矩阵缺的格子是信息不是错误；默认语言规则违反时保存被拒，文字按 `data.case` 写明做法
+- [ ] 通话详情（5.5）：显示 `maxDurationMinutes`
+- [ ] 订阅统计（5.10）：Google 行的标价显示十进制字符串，没有价格时显示“—”
+- [ ] 文本规则（5.8）：说明里有形近字折叠一句
 - [ ] 全仓库没有写死的 `token=123`、MD5、外部 CDN 地址、未走语言文件的文案
 
 测试（dramaBox-admin 没有测试 [子代理读码 报告 §1.1]，本项目要有）：`access` 判断、响应封装、分页组件的响应适配、配置 schema 校验、日期口径转换各有单元测试；登录与权限过滤有组件测试；`lint` 与类型检查在提交前执行。

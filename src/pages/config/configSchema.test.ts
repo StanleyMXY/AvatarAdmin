@@ -11,8 +11,9 @@ import {
   validateValue,
 } from './configSchema';
 
-// The keys the backend has that contract 17.5 does not list yet (checklist section 2(d), the seven
-// earlier ones, and the ranges of the group B additions): key, kind, edit permission, min, max.
+// The keys the backend had before contract 17.5 listed them (checklist section 2(d), the seven
+// earlier ones, and the ranges of the group B additions; the contract lists them since 2026-11-04):
+// key, kind, edit permission, min, max.
 const EXTRA_KEYS: [string, string, string, number?, number?][] = [
   ['chat.moderation_global_concurrency', 'int', 'CONFIG:MANAGE', 1, 512],
   ['export.parallelism', 'int', 'CONFIG:MANAGE', 1, 4],
@@ -44,14 +45,13 @@ const EXTRA_KEYS: [string, string, string, number?, number?][] = [
 ];
 
 describe('CONFIG_SCHEMA', () => {
-  it('has the keys and edit permissions of the generated file first, in the same order, then the backend extras', () => {
+  it('has the keys and edit permissions of the generated file, in the same order, and no key besides', () => {
     const entries = CONFIG_SCHEMA.map((s) => ({ key: s.key, editPermission: s.editPermission }));
-    expect(entries.slice(0, generated.length)).toEqual(generated);
-    expect(entries.slice(generated.length).map((e) => e.key)).toEqual(EXTRA_KEYS.map((e) => e[0]));
-    expect(EXTRA_CONFIG_KEYS).toEqual(EXTRA_KEYS.map((e) => e[0]));
+    expect(entries).toEqual(generated);
+    expect(EXTRA_CONFIG_KEYS).toEqual([]);
   });
 
-  it('has the 26 backend extras with the kind, edit permission and range of the checklist', () => {
+  it('has the 26 keys the backend added before the contract listed them, with the kind, edit permission and range of the checklist', () => {
     expect(EXTRA_KEYS).toHaveLength(26);
     for (const [key, kind, permission, min, max] of EXTRA_KEYS) {
       const found = specOf(key);

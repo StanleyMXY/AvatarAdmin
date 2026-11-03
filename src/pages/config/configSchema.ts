@@ -149,7 +149,37 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     min: 1,
   },
   {
+    key: 'chat.message_retention_days',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'chat',
+    min: 0,
+    zeroOrMin: 32,
+  },
+  {
+    key: 'guest.device_retention_days',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'guest',
+    min: 0,
+    zeroOrMin: 91,
+    risk: true,
+  },
+  {
     key: 'integrity.check_enabled',
+    kind: 'bool',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'integrity',
+  },
+  {
+    key: 'integrity.app_attest_max_keys_per_device',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'integrity',
+    min: 1,
+  },
+  {
+    key: 'integrity.app_attest_unsupported_allowed',
     kind: 'bool',
     editPermission: 'CONFIG:MANAGE',
     group: 'integrity',
@@ -493,6 +523,13 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     group: 'avatar',
   },
   {
+    key: 'voice.source_sample_retention_days',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'voice',
+    min: 0,
+  },
+  {
     key: 'avatar.deletion_due_hours',
     kind: 'int',
     editPermission: 'CONFIG:MANAGE',
@@ -621,6 +658,12 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     min: 1,
   },
   {
+    key: 'attribution.store_click_ip',
+    kind: 'bool',
+    editPermission: 'ATTRIBUTION:MANAGE',
+    group: 'attribution',
+  },
+  {
     key: 'attribution.fingerprint_window_hours',
     kind: 'int',
     editPermission: 'ATTRIBUTION:MANAGE',
@@ -642,6 +685,19 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     // An ISO 4217 code: three uppercase letters. The backend's answer to anything else is not
     // written down, so the page does not send it (and its `OUT_OF_RANGE` stays the cost-row lock).
     pattern: /^[A-Z]{3}$/,
+  },
+  {
+    key: 'attribution.postback_enabled',
+    kind: 'bool',
+    editPermission: 'ATTRIBUTION:MANAGE',
+    group: 'attribution',
+  },
+  {
+    key: 'attribution.facebook_graph_version',
+    kind: 'string',
+    editPermission: 'ATTRIBUTION:MANAGE',
+    group: 'attribution',
+    pattern: /^v[0-9]{2}\.[0-9]$/,
   },
   {
     key: 'attribution.cost_batch_max',
@@ -708,6 +764,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     min: 1,
   },
   { key: 'events.ttl_days', kind: 'int', editPermission: 'CONFIG:MANAGE', group: 'events', min: 1 },
+  { key: 'events.store_client_ip', kind: 'bool', editPermission: 'CONFIG:MANAGE', group: 'events' },
   {
     key: 'recall.scan_interval_minutes',
     kind: 'int',
@@ -777,6 +834,13 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     group: 'push',
     min: 1,
     max: 10080,
+  },
+  {
+    key: 'push.task_poll_seconds',
+    kind: 'int',
+    editPermission: 'PUSH:CONFIG',
+    group: 'push',
+    min: 1,
   },
   { key: 'invite.reward_enabled', kind: 'bool', editPermission: 'INVITE:CONFIG', group: 'invite' },
   {
@@ -870,6 +934,36 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     min: 1,
   },
   {
+    key: 'moderation.model_check_enabled',
+    kind: 'bool',
+    editPermission: 'MODERATION:CONFIG',
+    group: 'moderation',
+  },
+  {
+    key: 'chat.moderation_global_concurrency',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'chat',
+    min: 1,
+    max: 512,
+  },
+  {
+    key: 'chat.moderation_concurrency',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'chat',
+    min: 1,
+    max: 32,
+  },
+  {
+    key: 'chat.moderation_deadline_ms',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'chat',
+    min: 100,
+    max: 2500,
+  },
+  {
     key: 'memory.tei_allowed_hosts',
     kind: 'json',
     editPermission: 'MEMORY:MODEL_REGISTER',
@@ -894,6 +988,13 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     kind: 'bool',
     editPermission: 'MODERATION:CONFIG',
     group: 'moderation',
+  },
+  {
+    key: 'moderation.record_retention_days',
+    kind: 'int',
+    editPermission: 'MODERATION:CONFIG',
+    group: 'moderation',
+    min: 0,
   },
   {
     key: 'moderation.underage_reject_below_age',
@@ -932,6 +1033,13 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'COMPLAINT:MANAGE',
     group: 'complaint',
     min: 1,
+  },
+  {
+    key: 'support.feedback_retention_days',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'support',
+    min: 0,
   },
   {
     key: 'support.rate_limit_per_hour',
@@ -976,10 +1084,25 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     min: 1,
   },
   {
+    key: 'export.parallelism',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'export',
+    min: 1,
+    max: 4,
+  },
+  {
     key: 'export.sweep_minutes',
     kind: 'int',
     editPermission: 'CONFIG:MANAGE',
     group: 'export',
+    min: 1,
+  },
+  {
+    key: 'memory.call_timeout_seconds',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'memory',
     min: 1,
   },
   {
@@ -1300,6 +1423,14 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     group: 'analytics',
     min: 1,
   },
+  {
+    key: 'analytics.funnel_max_concurrency',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'analytics',
+    min: 1,
+    max: 32,
+  },
   { key: 'admin.totp_required', kind: 'bool', editPermission: 'CONFIG:MANAGE', group: 'admin' },
   {
     key: 'admin.password_min_length',
@@ -1385,6 +1516,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     group: 'ads',
     min: 1,
   },
+  { key: 'ads.store_client_ip', kind: 'bool', editPermission: 'CONFIG:MANAGE', group: 'ads' },
   {
     key: 'ads.creative_aspect_tolerance_percent',
     kind: 'int',
@@ -1520,6 +1652,13 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     min: 1,
   },
   {
+    key: 'ratelimit.events_per_ip_per_minute',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'ratelimit',
+    min: 1,
+  },
+  {
     key: 'ratelimit.likeness_complaint_per_ip_per_hour',
     kind: 'int',
     editPermission: 'CONFIG:MANAGE',
@@ -1528,6 +1667,41 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
   },
   {
     key: 'ratelimit.sms_dlr_per_min',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'ratelimit',
+    min: 1,
+  },
+  {
+    key: 'ratelimit.apk_download_per_ip_per_min',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'ratelimit',
+    min: 1,
+  },
+  {
+    key: 'ratelimit.push_image_per_ip_per_min',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'ratelimit',
+    min: 1,
+  },
+  {
+    key: 'ratelimit.ad_media_per_ip_per_min',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'ratelimit',
+    min: 1,
+  },
+  {
+    key: 'ratelimit.app_attest_challenge_per_ip_per_hour',
+    kind: 'int',
+    editPermission: 'CONFIG:MANAGE',
+    group: 'ratelimit',
+    min: 1,
+  },
+  {
+    key: 'ratelimit.app_attest_key_per_ip_per_hour',
     kind: 'int',
     editPermission: 'CONFIG:MANAGE',
     group: 'ratelimit',

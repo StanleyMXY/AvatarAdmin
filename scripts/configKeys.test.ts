@@ -70,9 +70,9 @@ describe('the real contract table', () => {
   const contract = readFileSync('docs/shared-snapshots/backend-task-java-backend.md', 'utf8');
   const rows = parseConfigRows(contract);
 
-  it('has 225 keys, each once, and the generated file lists the same keys with the same permission', () => {
-    expect(rows).toHaveLength(225);
-    expect(new Set(rows.map((r) => r.key)).size).toBe(225);
+  it('has 251 keys, each once, and the generated file lists the same keys with the same permission', () => {
+    expect(rows).toHaveLength(251);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(251);
     expect(generated).toEqual(rows.map((r) => ({ key: r.key, editPermission: r.editPermission })));
   });
 

@@ -49,6 +49,7 @@ const PLAIN_STRINGS = new Set([
   'push.default_locale',
   'invite.reward_trigger',
   'usage_price.default_currency',
+  'attribution.facebook_graph_version',
 ]);
 
 /**

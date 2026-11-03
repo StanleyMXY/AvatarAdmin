@@ -10,14 +10,6 @@ import { readFileSync } from 'node:fs';
 /** The contract the front end follows: the snapshot of AvatarApp main (read only). */
 export const DEFAULT_CONTRACT = 'docs/shared-snapshots/backend-task-java-backend.md';
 
-/**
- * The version of the contract the backend gave on 2026-11-02 (commit e07469d1), which the snapshot
- * does not have yet. The tests check that the texts of its error and reason codes exist, so the
- * snapshot can be replaced by it without a test failing for a missing text. Delete this constant
- * and its uses when the snapshot is replaced.
- */
-export const NEXT_CONTRACT = 'docs/backend-inputs/2026-11-03-backend-task-java-backend-updated.md';
-
 /** The text of the contract at `path` (the snapshot when no path is given). */
 export function readContract(path: string = DEFAULT_CONTRACT): string {
   return readFileSync(path, 'utf8');

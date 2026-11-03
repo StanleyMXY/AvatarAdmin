@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { errorTable, NEXT_CONTRACT, readContract, reasonCodes } from '../../scripts/contractErrors';
+import { readContract, reasonCodes } from '../../scripts/contractErrors';
 import enError from './en-US/error';
 import enReason from './en-US/reason';
 import codes from './errorCodes.generated.json';
@@ -9,13 +9,6 @@ import zhReason from './zh-CN/reason';
 
 // The reason codes the contract defines in its table 1.4 (not a list written here).
 const REASON_CODES = reasonCodes(readContract());
-
-// The codes of the version of the contract that the snapshot does not have yet (NEXT_CONTRACT): the
-// texts exist before it is adopted, so replacing the snapshot does not fail a test for a missing text.
-const NEXT_ERROR_CODES = errorTable(readContract(NEXT_CONTRACT)).codes;
-const NEXT_REASON_CODES = reasonCodes(readContract(NEXT_CONTRACT));
-const ALL_ERROR_CODES = [...new Set([...codes, ...NEXT_ERROR_CODES])];
-const ALL_REASON_CODES = [...new Set([...REASON_CODES, ...NEXT_REASON_CODES])];
 
 const LOCAL_CODES = [
   'NETWORK_ERROR',
@@ -42,14 +35,16 @@ describe('errorCodes.generated.json', () => {
     expect(codes).toEqual(fromContract);
   });
 
-  it('has 79 distinct codes, including the four the backend added', () => {
-    expect(codes).toHaveLength(79);
-    expect(new Set(codes).size).toBe(79);
+  it('has 81 distinct codes, including the ones the backend added', () => {
+    expect(codes).toHaveLength(81);
+    expect(new Set(codes).size).toBe(81);
     for (const added of [
       'METHOD_NOT_ALLOWED',
       'UNSUPPORTED_MEDIA_TYPE',
       'DEPENDENCY_UNAVAILABLE',
       'TEMPORARILY_UNAVAILABLE',
+      'PAYLOAD_TOO_LARGE',
+      'FORBIDDEN',
     ]) {
       expect(codes).toContain(added);
     }
@@ -69,25 +64,11 @@ describe.each(LANGUAGES)('%s error and reason texts', (_name, error, reason) => 
     expect(reason[`reason.${code}`]?.trim()).toBeTruthy();
   });
 
-  it.each(NEXT_ERROR_CODES)(
-    'has a non-empty text for error.%s of the new contract version',
-    (code) => {
-      expect(error[`error.${code}`]?.trim()).toBeTruthy();
-    },
-  );
-
-  it.each(NEXT_REASON_CODES)(
-    'has a non-empty text for reason.%s of the new contract version',
-    (code) => {
-      expect(reason[`reason.${code}`]?.trim()).toBeTruthy();
-    },
-  );
-
-  it('has no entries other than the codes of the contract (snapshot and new version), the local codes and the reason codes', () => {
+  it('has no entries other than the codes of the contract, the local codes and the reason codes', () => {
     expect(Object.keys(error).sort()).toEqual(
-      [...ALL_ERROR_CODES, ...LOCAL_CODES].map((c) => `error.${c}`).sort(),
+      [...codes, ...LOCAL_CODES].map((c) => `error.${c}`).sort(),
     );
-    expect(Object.keys(reason).sort()).toEqual(ALL_REASON_CODES.map((c) => `reason.${c}`).sort());
+    expect(Object.keys(reason).sort()).toEqual(REASON_CODES.map((c) => `reason.${c}`).sort());
   });
 });
 

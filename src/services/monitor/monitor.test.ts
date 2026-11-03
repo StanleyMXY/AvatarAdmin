@@ -21,31 +21,30 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-/** The fourteen types the contract lists in the background alert paragraph of 17.4. */
+/** The eighteen types the contract lists in the background alert paragraph of 17.4. */
 const contractAlertTypes = (): string[] => {
   const text = readFileSync('docs/shared-snapshots/backend-task-java-backend.md', 'utf8');
   const start = text.indexOf('**后台告警（`AdminAlert`）**');
   const end = text.indexOf('**凡是能确定账号的告警', start);
   const paragraph = text.slice(start, end);
-  const list = paragraph.slice(paragraph.indexOf('共十四种'));
+  const list = paragraph.slice(paragraph.indexOf('共十八种'));
   return [...list.matchAll(/(?:：|、)`([A-Z_]+)`（/g)].map((m) => m[1]);
 };
 
 describe('the alert type table', () => {
-  it('is the fourteen types of the contract plus the four the backend added, not the thirteen of the spec', () => {
+  it('is the eighteen types of the contract and no other', () => {
     const fromContract = contractAlertTypes();
-    expect(fromContract).toHaveLength(14);
-    expect(ALERT_TYPES).toHaveLength(18);
+    expect(fromContract).toHaveLength(18);
     expect(new Set(ALERT_TYPES).size).toBe(18);
-    for (const type of fromContract) expect(ALERT_TYPES, type).toContain(type);
+    expect([...ALERT_TYPES].sort()).toEqual([...fromContract].sort());
     expect(ALERT_TYPES).toContain('LOOK_PACKAGE_PREPARE_FAILED');
-    const added = ALERT_TYPES.filter((type) => !fromContract.includes(type)).sort();
-    expect(added).toEqual([
+    for (const type of [
       'POSTBACK_CREDENTIAL_FAILED',
       'STAT_RELAND_FAILED',
       'SUBSCRIPTION_EVENT_FAILED',
       'SUPPORT_FORWARD_FAILED',
-    ]);
+    ])
+      expect(ALERT_TYPES, type).toContain(type);
   });
 
   it('has a text in both languages for every type', () => {

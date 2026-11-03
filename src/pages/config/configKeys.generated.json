@@ -36,7 +36,23 @@
     "editPermission": "CONFIG:MANAGE"
   },
   {
+    "key": "chat.message_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "guest.device_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
     "key": "integrity.check_enabled",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "integrity.app_attest_max_keys_per_device",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "integrity.app_attest_unsupported_allowed",
     "editPermission": "CONFIG:MANAGE"
   },
   {
@@ -236,6 +252,10 @@
     "editPermission": "CONFIG:MANAGE"
   },
   {
+    "key": "voice.source_sample_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
     "key": "avatar.deletion_due_hours",
     "editPermission": "CONFIG:MANAGE"
   },
@@ -312,6 +332,10 @@
     "editPermission": "ATTRIBUTION:MANAGE"
   },
   {
+    "key": "attribution.store_click_ip",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
     "key": "attribution.fingerprint_window_hours",
     "editPermission": "ATTRIBUTION:MANAGE"
   },
@@ -321,6 +345,14 @@
   },
   {
     "key": "attribution.cost_currency",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "attribution.postback_enabled",
+    "editPermission": "ATTRIBUTION:MANAGE"
+  },
+  {
+    "key": "attribution.facebook_graph_version",
     "editPermission": "ATTRIBUTION:MANAGE"
   },
   {
@@ -365,6 +397,10 @@
   },
   {
     "key": "events.ttl_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "events.store_client_ip",
     "editPermission": "CONFIG:MANAGE"
   },
   {
@@ -413,6 +449,10 @@
   },
   {
     "key": "push.schedule_catchup_minutes",
+    "editPermission": "PUSH:CONFIG"
+  },
+  {
+    "key": "push.task_poll_seconds",
     "editPermission": "PUSH:CONFIG"
   },
   {
@@ -480,6 +520,22 @@
     "editPermission": "MODERATION:CONFIG"
   },
   {
+    "key": "moderation.model_check_enabled",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "chat.moderation_global_concurrency",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.moderation_concurrency",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "chat.moderation_deadline_ms",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
     "key": "memory.tei_allowed_hosts",
     "editPermission": "MEMORY:MODEL_REGISTER"
   },
@@ -493,6 +549,10 @@
   },
   {
     "key": "moderation.age_check_enabled",
+    "editPermission": "MODERATION:CONFIG"
+  },
+  {
+    "key": "moderation.record_retention_days",
     "editPermission": "MODERATION:CONFIG"
   },
   {
@@ -514,6 +574,10 @@
   {
     "key": "complaint.retention_days",
     "editPermission": "COMPLAINT:MANAGE"
+  },
+  {
+    "key": "support.feedback_retention_days",
+    "editPermission": "CONFIG:MANAGE"
   },
   {
     "key": "support.rate_limit_per_hour",
@@ -540,7 +604,15 @@
     "editPermission": "CONFIG:MANAGE"
   },
   {
+    "key": "export.parallelism",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
     "key": "export.sweep_minutes",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "memory.call_timeout_seconds",
     "editPermission": "CONFIG:MANAGE"
   },
   {
@@ -732,6 +804,10 @@
     "editPermission": "CONFIG:MANAGE"
   },
   {
+    "key": "analytics.funnel_max_concurrency",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
     "key": "admin.totp_required",
     "editPermission": "CONFIG:MANAGE"
   },
@@ -785,6 +861,10 @@
   },
   {
     "key": "ads.log_retention_days",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ads.store_client_ip",
     "editPermission": "CONFIG:MANAGE"
   },
   {
@@ -876,11 +956,35 @@
     "editPermission": "CONFIG:MANAGE"
   },
   {
+    "key": "ratelimit.events_per_ip_per_minute",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
     "key": "ratelimit.likeness_complaint_per_ip_per_hour",
     "editPermission": "CONFIG:MANAGE"
   },
   {
     "key": "ratelimit.sms_dlr_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.apk_download_per_ip_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.push_image_per_ip_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.ad_media_per_ip_per_min",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.app_attest_challenge_per_ip_per_hour",
+    "editPermission": "CONFIG:MANAGE"
+  },
+  {
+    "key": "ratelimit.app_attest_key_per_ip_per_hour",
     "editPermission": "CONFIG:MANAGE"
   },
   {

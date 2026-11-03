@@ -8,7 +8,7 @@ AvatarApp 的管理后台前端（Umi Max + Ant Design，TypeScript）。32 个�
 
 ## 需求来源
 
-- 规格（`docs/admin-frontend-design.md`）和契约（`docs/backend-task-java-backend.md`）的正本在 AvatarApp 仓库的 `main`。本仓库 `docs/shared-snapshots/` 里是逐字节相同的只读快照（来源提交写在那里的 `README.md`）。这是负责人 2026-10-26 定的例外：不让云端会话访问 AvatarApp，所以放一份副本。不在这里改快照；契约快照是旧版，新版接口文档是 `docs/backend-inputs/2026-11-03-backend-task-java-backend-updated.md`，换快照由负责人做（步骤见交接文档 5.2）。
+- 规格（`docs/admin-frontend-design.md`）和契约（`docs/backend-task-java-backend.md`）的正本在 AvatarApp 仓库的 `main`。本仓库 `docs/shared-snapshots/` 里是逐字节相同的只读快照（来源提交写在那里的 `README.md`）。这是负责人 2026-10-26 定的例外：不让云端会话访问 AvatarApp，所以放一份副本。不在这里改快照；AvatarApp 的 `main` 上那两份有新提交时，整份替换（取法见快照 `README.md`），再重新生成 `errorCodes.generated.json`、`configKeys.generated.json`、`configDefaults.generated.json`（`npm run gen:error-codes`、`gen:config-keys`、`gen:permission-tree`，参数见 `README.md`），并跑三个一致性检查。
 - 要改规格或契约的地方，写成完整的变更请求（名称、行为、检查顺序、错误、测试）放到 `docs/contract-requests/`，再由负责人在 AvatarApp 的 `main` 上改。契约的缺口不是阻塞：写成问题文件，当前按最小做法继续。
 - 接口的字段名以 `docs/backend-inputs/` 里后端写的文件为准；后端实际行为和契约文字矛盾时，前端按后端代码的实际行为开发，矛盾写在 `docs/contract-requests/2026-11-02-contract-contradictions.md`。
 - 不改 AvatarApp、AvatarBackend 仓库里的文件；需要它们改的，写成文件。

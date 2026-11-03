@@ -4,7 +4,6 @@ import {
   DEFAULT_CONTRACT,
   errorCodesJson,
   errorTable,
-  NEXT_CONTRACT,
   readContract,
   reasonCodes,
 } from './contractErrors';
@@ -41,12 +40,12 @@ describe('errorTable', () => {
     expect(errorTable('nothing')).toEqual({ codes: [], unread: [] });
   });
 
-  it('reads all 79 rows of the real contract', () => {
+  it('reads all 81 rows of the real contract', () => {
     const real = errorTable(
       readFileSync('docs/shared-snapshots/backend-task-java-backend.md', 'utf8'),
     );
     expect(real.unread).toEqual([]);
-    expect(real.codes).toHaveLength(79);
+    expect(real.codes).toHaveLength(81);
   });
 });
 
@@ -66,42 +65,29 @@ describe('reasonCodes', () => {
     expect(reasonCodes(TABLE.replace('人看的说明', 'x'))).toEqual([]);
   });
 
-  it('finds the 14 reason codes of the real contract', () => {
+  it('finds the 36 reason codes of the real contract, in the order the row names them', () => {
     const real = reasonCodes(
       readFileSync('docs/shared-snapshots/backend-task-java-backend.md', 'utf8'),
     );
-    expect(real).toHaveLength(14);
-    expect(real[0]).toBe('ACCOUNT_NOT_FOUND');
-    expect(real[real.length - 1]).toBe('INVALID_PATTERN');
-  });
-});
-
-describe('reading a contract by its path', () => {
-  it('reads the snapshot when no path is given', () => {
-    expect(readContract()).toBe(readFileSync(DEFAULT_CONTRACT, 'utf8'));
-    expect(DEFAULT_CONTRACT).toBe('docs/shared-snapshots/backend-task-java-backend.md');
-  });
-
-  it('reads another version of the document from the path it is given', () => {
-    const next = readContract(NEXT_CONTRACT);
-    expect(next).not.toBe(readContract());
-    const { codes, unread } = errorTable(next);
-    expect(unread).toEqual([]);
-    // the two codes the new version adds to table 1.4, and nothing is dropped
-    expect(codes).toHaveLength(81);
-    const old = errorTable(readContract()).codes;
-    expect(codes.filter((code) => !old.includes(code))).toEqual(['PAYLOAD_TOO_LARGE', 'FORBIDDEN']);
-    expect(old.filter((code) => !codes.includes(code))).toEqual([]);
-  });
-
-  it('reads the 35 reason codes of the new version (the updated interface document of 2026-11-03): the 14 of the snapshot, then the 21 it adds', () => {
-    const next = reasonCodes(readContract(NEXT_CONTRACT));
-    expect(next).toHaveLength(35);
-    expect(next.slice(0, 14)).toEqual(reasonCodes(readContract()));
-    expect(next.slice(14)).toEqual([
+    expect(real).toEqual([
+      'ACCOUNT_NOT_FOUND',
+      'ACCOUNT_NOT_ACTIVE',
+      'NOT_HTTPS',
+      'INVALID_HOST',
+      'INVALID_PORT',
+      'INVALID_PATH',
+      'TOO_LONG',
+      'INVALID_EMAIL',
+      'NOT_AN_INTEGER',
+      'OUT_OF_RANGE',
+      'NOT_BOOLEAN',
+      'INVALID_LANGUAGE_TAG',
+      'EMPTY_NOT_ALLOWED',
+      'INVALID_PATTERN',
       'RESOURCE_NOT_FOUND',
       'DUPLICATE',
       'INVALID_CHARACTER',
+      'MISSING',
       'INVALID_FORMAT',
       'PACKAGE_NAME_NOT_CONFIGURED',
       'SOURCE_EXPIRED',
@@ -121,6 +107,19 @@ describe('reading a contract by its path', () => {
       'NEGATIVE',
       'TOO_MANY_DECIMALS',
     ]);
+  });
+});
+
+describe('reading a contract by its path', () => {
+  it('reads the snapshot when no path is given', () => {
+    expect(readContract()).toBe(readFileSync(DEFAULT_CONTRACT, 'utf8'));
+    expect(DEFAULT_CONTRACT).toBe('docs/shared-snapshots/backend-task-java-backend.md');
+  });
+
+  it('reads the file at the path it is given, not the snapshot', () => {
+    const other = readContract('docs/shared-snapshots/admin-frontend-design.md');
+    expect(other).toBe(readFileSync('docs/shared-snapshots/admin-frontend-design.md', 'utf8'));
+    expect(other).not.toBe(readContract());
   });
 });
 
