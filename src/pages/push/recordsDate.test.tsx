@@ -165,6 +165,24 @@ describe('the creation day filter of the send records', { timeout: 30000 }, () =
     expect(document.body.textContent).not.toContain('must not be before');
   });
 
+  it('shows no rows under the error bar when the read with the range is refused: the rows of the read before are not the rows of this filter', async () => {
+    useMockBackend({ default: pushMock });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage(<RecordsPage />);
+    await waitFor(() => expect(bodyRows().length).toBe(20));
+    overrideFetch(({ url, method }) =>
+      method === 'GET' && url.pathname === '/api/admin/push/records' && url.searchParams.has('from')
+        ? jsonAnswer(400, 'INVALID_REQUEST', { details: [{ ref: 'from', reason: 'OUT_OF_RANGE' }] })
+        : undefined,
+    );
+    await useRange(user);
+    await user.click(within(filterBox()).getByRole('button', { name: 'Search' }));
+    expect(await screen.findByText(/Failed to load/)).toBeInTheDocument();
+    await waitFor(() => expect(bodyRows()).toHaveLength(0));
+    expect(screen.getByText('No push records.')).toBeInTheDocument();
+    expect(document.querySelector('.ant-pagination-item-2')).toBeNull();
+  });
+
   it('says it in Chinese too', async () => {
     useMockBackend({ default: pushMock });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });

@@ -192,7 +192,11 @@ export default function RecordsPage() {
       setData(page);
       clear();
     } catch (error) {
-      if (isCurrent()) fail(error);
+      if (isCurrent()) {
+        // The rows of the read before belong to another filter: under the error bar there are none.
+        setData(null);
+        fail(error);
+      }
     } finally {
       if (isCurrent()) setLoading(false);
     }
