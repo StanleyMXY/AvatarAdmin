@@ -260,7 +260,7 @@ describe('the protections of the own account and of the last super administrator
         ? jsonAnswer(
             409,
             'INVALID_STATE',
-            { status: 'ACTIVE' },
+            { status: 'ACTIVE', reason: 'LAST_SUPER_ADMIN' },
             'The last enabled super administrator',
           )
         : undefined,
@@ -271,26 +271,83 @@ describe('the protections of the own account and of the last super administrator
       await screen.findByText(/The current state of the item does not allow this action/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /Possible reasons: it is the last enabled super administrator .*; or the account was changed by someone else meanwhile/,
-      ),
+      screen.getByText(/This is the last enabled super administrator: it cannot be disabled or deleted/),
     ).toBeInTheDocument();
-    // another row: the sentence of the own account is not said
-    expect(screen.queryByText(/refused this.*This is your own account/)).not.toBeInTheDocument();
+    // the other two reasons are not said
+    expect(screen.queryByText(/This is your own account/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/try again in a moment/)).not.toBeInTheDocument();
     // never the backend's own words
     expect(screen.queryByText(/The last enabled super administrator$/)).not.toBeInTheDocument();
+  });
+
+  it('says a different sentence for the same click when the backend names another reason: a change of a super administrator under way says to try again', async () => {
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: true });
+    adminOf('finance').superAdmin = true;
+    const { user } = await load();
+    await waitFor(async () => expect(await rowButton('finance', 'Disable')).toBeEnabled());
+    const disable = async () => {
+      await user.click(await rowButton('finance', 'Disable'));
+      await user.click(await screen.findByRole('button', { name: 'OK' }));
+    };
+    systemState.race = 'CONCURRENT_CHANGE';
+    await disable();
+    expect(await screen.findByText(/try again in a moment/)).toBeInTheDocument();
+    expect(screen.queryByText(/This is the last enabled super administrator/)).not.toBeInTheDocument();
+    systemState.race = 'LAST_SUPER_ADMIN';
+    await disable();
+    expect(
+      await screen.findByText(/This is the last enabled super administrator/),
+    ).toBeInTheDocument();
+    // nothing was changed by either
+    expect(adminOf('finance').status).toBe('ACTIVE');
+  });
+
+  it('says the sentence of the own account for SELF_PROTECTED, whichever row it comes back on', async () => {
+    const { user } = await load();
+    overrideFetch(({ url, method }) =>
+      method === 'POST' && url.pathname.endsWith('/status')
+        ? jsonAnswer(409, 'INVALID_STATE', { status: 'ACTIVE', reason: 'SELF_PROTECTED' }, 'x')
+        : undefined,
+    );
+    await user.click(await rowButton('reviewer', 'Disable'));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(
+      await screen.findByText(/This is your own account: you cannot change your own roles/),
+    ).toBeInTheDocument();
+  });
+
+  it('says only the text of the code for a 409 without a reason (an older answer)', async () => {
+    const { user } = await load();
+    overrideFetch(({ url, method }) =>
+      method === 'POST' && url.pathname.endsWith('/status')
+        ? jsonAnswer(409, 'INVALID_STATE', { status: 'ACTIVE' }, 'x')
+        : undefined,
+    );
+    await user.click(await rowButton('reviewer', 'Disable'));
+    await user.click(await screen.findByRole('button', { name: 'OK' }));
+    expect(
+      await screen.findByText('The current state of the item does not allow this action.'),
+    ).toBeInTheDocument();
   });
 
   it('shows a 403 of the status route as the text of its code, with the sentence of the 403 rules', async () => {
     const { user } = await load();
     const taken = overrideFetch(({ url, method }) =>
       method === 'POST' && url.pathname.endsWith('/status')
-        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', null, 'An administrator cannot disable themselves')
+        ? jsonAnswer(
+            403,
+            'ADMIN_FORBIDDEN',
+            { reason: 'ADMIN_NOT_HELD' },
+            'An administrator cannot disable themselves',
+          )
         : undefined,
     );
     await user.click(await rowButton('reviewer', 'Disable'));
     await user.click(await screen.findByRole('button', { name: 'OK' }));
     expect(await screen.findByText(/You do not have permission to do this/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/This administrator holds permissions you do not hold/),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/cannot disable themselves/)).not.toBeInTheDocument();
     expect(taken).toHaveLength(1);
   });
@@ -716,11 +773,11 @@ describe('reset password', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  it('says which rules can refuse it after the text of the code when the backend answers 403, never its words, and keeps the dialog and the page', async () => {
+  it('says which rule refused it after the text of the code when the backend answers 403 with a reason, never its words, and keeps the dialog and the page', async () => {
     const { user } = await load();
     const writes = overrideFetch(({ url, method }) =>
       method === 'POST' && url.pathname.endsWith('/reset-password')
-        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', null, 'LEAK-ñandú-ผู้ใช้-words')
+        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', { reason: 'ADMIN_NOT_HELD' }, 'LEAK-ñandú-ผู้ใช้-words')
         : undefined,
     );
     const box = await open(user);
@@ -729,7 +786,7 @@ describe('reset password', () => {
     await user.click(box.getByRole('button', { name: /Reset password$/ }));
     expect(
       await box.findByText(
-        /You do not have permission to do this\. Administrators can only grant permissions they hold\. You cannot change a role you hold, and you can only change roles and administrators whose permissions you all hold\. Nothing was changed\./,
+        /You do not have permission to do this\. This administrator holds permissions you do not hold: you can only act on administrators whose permissions you all hold\. Nothing was changed\./,
       ),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('LEAK-');
@@ -746,7 +803,7 @@ describe('reset password', () => {
     await waitForRows();
     overrideFetch(({ url, method }) =>
       method === 'POST' && url.pathname.endsWith('/reset-password')
-        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', null, 'LEAK-words')
+        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', { reason: 'ADMIN_NOT_HELD' }, 'LEAK-words')
         : undefined,
     );
     await user.click(within(await rowOf('reviewer')).getByRole('button', { name: '更多' }));
@@ -757,9 +814,31 @@ describe('reset password', () => {
     await user.type(box.getByLabelText('再输入一次密码'), PASSWORD);
     await user.click(box.getByRole('button', { name: /重置密码$/ }));
     expect(
-      await box.findByText(/^你没有执行此操作的权限。管理员只能授出自己持有的权限；/),
+      await box.findByText(/^你没有执行此操作的权限。这个管理员持有你自己没有的权限：/),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('LEAK-');
+  });
+
+  it('says a different sentence for the same operation when the rule that refuses it is another (the sentence follows data.reason, not the operation)', async () => {
+    // an administrator with ADMIN:MANAGE only: "reviewer" holds codes they lack (ADMIN_NOT_HELD)
+    signIn('support', { codes: ['ADMIN:MANAGE'], superAdmin: false });
+    const { user } = await load();
+    const press = async (box: ReturnType<typeof within>) => {
+      await user.click(box.getByRole('button', { name: /Reset password$/ }));
+    };
+    const box = await open(user);
+    await user.type(box.getByLabelText('New password'), PASSWORD);
+    await user.type(box.getByLabelText('Repeat the password'), PASSWORD);
+    await press(box);
+    const held = /This administrator holds permissions you do not hold/;
+    expect(await box.findByText(held)).toBeInTheDocument();
+    expect(box.queryByText(/This is a super administrator account/)).not.toBeInTheDocument();
+    // meanwhile the row became a super administrator in the backend (the list on the screen is old)
+    adminOf('reviewer').superAdmin = true;
+    await press(box);
+    expect(await box.findByText(/This is a super administrator account/)).toBeInTheDocument();
+    expect(box.queryByText(held)).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('sends one request for two presses', async () => {
@@ -1382,7 +1461,12 @@ describe('editing an administrator', () => {
     const { user } = await load();
     overrideFetch(({ url, method }) =>
       method === 'PUT' && url.pathname.startsWith('/api/admin/admins/')
-        ? jsonAnswer(403, 'ADMIN_FORBIDDEN', null, 'An administrator cannot change their own roles')
+        ? jsonAnswer(
+            403,
+            'ADMIN_FORBIDDEN',
+            { reason: 'SUPER_FLAG' },
+            'An administrator cannot change their own roles',
+          )
         : undefined,
     );
     const box = await edit(user, 'reviewer');
@@ -1390,6 +1474,9 @@ describe('editing an administrator', () => {
     await user.click(box.getByRole('switch', { name: 'Super administrator' }));
     await user.click(box.getByRole('button', { name: /Save$/ }));
     expect(await box.findByText(/You do not have permission to do this/)).toBeInTheDocument();
+    expect(
+      box.getByText(/Only a super administrator can set or clear the super administrator flag/),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/cannot change their own roles$/)).not.toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
@@ -1502,11 +1589,16 @@ describe('an update repeats the user name and the current roles (backend answer 
     expect(writesOf(calls)).toHaveLength(0);
   });
 
-  it('says the sentence for another row after a 409 in the dialog, never the words of the backend', async () => {
+  it('says the sentence of the reason after a 409 in the dialog, never the words of the backend', async () => {
     backend();
     overrideFetch(({ url, method }) =>
       method === 'PUT' && url.pathname.startsWith('/api/admin/admins/')
-        ? jsonAnswer(409, 'INVALID_STATE', { status: 'ACTIVE' }, 'LEAK-last super words')
+        ? jsonAnswer(
+            409,
+            'INVALID_STATE',
+            { status: 'ACTIVE', reason: 'LAST_SUPER_ADMIN' },
+            'LEAK-last super words',
+          )
         : undefined,
     );
     const user = userEvent.setup();
@@ -1516,7 +1608,7 @@ describe('an update repeats the user name and the current roles (backend answer 
     await user.click(box.getByRole('switch', { name: 'Super administrator' }));
     await user.click(box.getByRole('button', { name: /Save$/ }));
     expect(
-      await box.findByText(/Possible reasons: it is the last enabled super administrator/),
+      await box.findByText(/This is the last enabled super administrator/),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('LEAK-');
   });

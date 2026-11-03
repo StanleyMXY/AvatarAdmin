@@ -30,6 +30,8 @@ holder.__avatarAdminMockMonitor ??= { alerts: [], pipelineEmpty: false, lookPack
 export const monitorStore: MonitorStore = holder.__avatarAdminMockMonitor;
 
 export const PIPELINE_SOURCES = ['agent-server-1', 'agent-server-2', 'agent-server-3'] as const;
+/** A sender that reported within the last days but not lately: it has no point in a short range. */
+export const PIPELINE_SILENT_SOURCES = ['agent-server-retired'] as const;
 export const PIPELINE_STEP_MS = 5 * 60 * 1000;
 export const PIPELINE_MAX_RANGE_DAYS = 7;
 export const PIPELINE_MAX_POINTS = 5000;

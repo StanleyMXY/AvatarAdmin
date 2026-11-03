@@ -67,13 +67,35 @@ describe('GET /monitor/pipeline', () => {
     );
     const none = await pipeline(viewer(), { source: 'no-such-source' });
     expect(none.status).toBe(200);
-    expect(none.body.data).toEqual({ items: [], truncated: false });
+    expect(none.body.data.items).toEqual([]);
+    expect(none.body.data.truncated).toBe(false);
+  });
+
+  it('names every source that has reported in the last 7 days in sources, once each, in code point order, whatever from, to and source say', async () => {
+    const all = await pipeline(viewer());
+    const sources = all.body.data.sources as string[];
+    // a source that stopped reporting has no point in a short range and is still listed
+    expect(sources).toContain('agent-server-retired');
+    expect(new Set(all.body.data.items.map((i: { source: string }) => i.source))).not.toContain(
+      'agent-server-retired',
+    );
+    expect(new Set(sources).size).toBe(sources.length);
+    expect(sources).toEqual([...sources].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+    const now = Date.now();
+    const narrow = await pipeline(viewer(), {
+      from: new Date(now - HOUR).toISOString(),
+      to: new Date(now).toISOString(),
+      source: 'agent-server-2',
+    });
+    expect(narrow.body.data.sources).toEqual(sources);
+    const none = await pipeline(viewer(), { source: 'no-such-source' });
+    expect(none.body.data.sources).toEqual(sources);
   });
 
   it('gives an empty list when nothing has been reported at all', async () => {
     monitorStore.pipelineEmpty = true;
     const { status, body } = await pipeline(viewer());
-    expect([status, body.data]).toEqual([200, { items: [], truncated: false }]);
+    expect([status, body.data]).toEqual([200, { items: [], truncated: false, sources: [] }]);
   });
 
   it('refuses a range longer than 7 days, with the parameter as the ref', async () => {
