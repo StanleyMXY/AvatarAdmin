@@ -264,7 +264,7 @@ AvatarAdmin/
 - 403 `ADMIN_FORBIDDEN` 的处理不依赖是哪条规则拒绝的：后端对管理员权限、角色的新授予规则（任务 31）和别的权限不足都答同一个码、`data` 为 `null`，请求层照常调用 `onForbidden`、抛错，页面按自己知道的操作说明原因（不读 `message`）。
 - `setToken` 在 `sessionStorage` 抛异常时不崩溃，且令牌**没有**写进 `localStorage`。
 - `describeError`：`INVALID_REQUEST` 带 `details: [{ref:'privacyPolicyUrl', reason:'NOT_HTTPS'}]` 时，`fields` 里该项的文字取 `reason.NOT_HTTPS` 的本地化文字而不是后端英文；`reason` 不认识时退回后端 `message`；两种语言下旧快照的 14 个原因代码和接口文档新版另列的 15 个都有非空文字（`src/locales/error.test.ts` 另用 `docs/backend-inputs/` 里的新版文档检查新版 1.4 表的 81 个错误码和 29 个原因代码，快照换成新版之后不会因文字缺失失败）；`error.<码>` 缺失时用 `error.UNKNOWN` 加后端 `message`。
-- 原因代码再补两个（后端的回答第 75 条）：成本批量录入会返回 `NEGATIVE`（金额为负）和 `TOO_MANY_DECIMALS`（金额超过两位小数），接口文档 `INVALID_REQUEST` 一行的清单里没有它们，两个语言文件各补一条，上面"14 个"的断言相应改成 16 个；清单外的原因代码仍退回后端 `message`，不显示别的内容。
+- 原因代码另有两个（后端的回答第 75 条）：成本批量录入会返回 `NEGATIVE`（金额为负）和 `TOO_MANY_DECIMALS`（金额超过两位小数），接口文档 `INVALID_REQUEST` 一行的清单里没有它们。共用的 `reason.*` 只放接口文档清单里写了的原因代码（有测试守着这一点），所以这两个码的译文先放在批量导入对话框自己的语言文件里，不进 `reason.*`，上面"14 个"的断言不变；等接口文档把它们写进 `INVALID_REQUEST` 一行之后，再挪进 `reason.*` 并把断言改成 16 个。清单外的原因代码仍退回后端 `message`，不显示别的内容。
 
 - [ ] 步骤 1–5 按"任务的统一写法"
 
