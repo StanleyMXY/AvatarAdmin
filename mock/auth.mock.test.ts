@@ -11,6 +11,7 @@ import {
   TOTP_LOCKOUT_MINUTES,
   TOTP_MAX_FAILURES,
 } from './_core/store';
+import { resetSystemStore, systemState } from './_core/systemData';
 import { adminOf, bearer, call } from './_core/testing';
 import auth from './auth.mock';
 import systemPermissions from './system.permissions.mock';
@@ -30,7 +31,10 @@ const signIn = async (username: string) => {
   return result.body.data.token as string;
 };
 
-beforeEach(() => resetStore());
+beforeEach(() => {
+  resetStore();
+  resetSystemStore();
+});
 
 describe('the endpoints the mock backend serves', () => {
   it('are keyed the way Umi expects', () => {
@@ -406,6 +410,7 @@ describe('GET /me', () => {
       'mustChangePassword',
       'passwordMinLength',
       'permissions',
+      'roleIds',
       'superAdmin',
       'username',
     ]);
@@ -417,6 +422,17 @@ describe('GET /me', () => {
     });
     expect(typeof body.data.id).toBe('string');
     expect([...body.data.permissions].sort()).toEqual([...adminOf('support').permissions].sort());
+  });
+
+  it('lists the ids of the roles the administrator is given, as text, in ascending text order (backend answer 19)', async () => {
+    systemState.extras.get(adminOf('support').id)?.roleIds.splice(0, 1, '10', '9', '2');
+    const { body } = await me(await signIn('support'));
+    expect(body.data.roleIds).toEqual(['10', '2', '9']);
+    const none = await me(await signIn('root'));
+    expect(none.body.data.roleIds).toEqual([]);
+    // a role created later and given to the administrator shows at once
+    systemState.extras.get(adminOf('root').id)?.roleIds.push('7');
+    expect((await me(await signIn('root'))).body.data.roleIds).toEqual(['7']);
   });
 
   it('gives the super administrator all 79 built-in codes', async () => {

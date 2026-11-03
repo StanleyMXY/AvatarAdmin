@@ -43,6 +43,8 @@ export type Me = {
   mustChangePassword: boolean;
   permissions: string[];
   passwordMinLength: number | undefined;
+  /** The ids of the roles the administrator is given (text, ascending); empty when the answer has none. */
+  roleIds?: string[];
 };
 
 export function normalizeMe(raw: unknown): Me {
@@ -61,6 +63,9 @@ export function normalizeMe(raw: unknown): Me {
       : [],
     passwordMinLength:
       typeof length === 'number' && Number.isInteger(length) && length > 0 ? length : undefined,
+    roleIds: Array.isArray(o.roleIds)
+      ? o.roleIds.filter((id): id is string => typeof id === 'string' && id !== '')
+      : [],
   };
 }
 

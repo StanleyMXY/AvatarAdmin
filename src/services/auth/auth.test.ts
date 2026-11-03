@@ -115,6 +115,7 @@ describe('getMe', () => {
           mustChangePassword: false,
           permissions: ['USER:VIEW'],
           passwordMinLength: 12,
+          roleIds: ['12', '3'],
         }),
       ),
     );
@@ -127,7 +128,19 @@ describe('getMe', () => {
       mustChangePassword: false,
       permissions: ['USER:VIEW'],
       passwordMinLength: 12,
+      roleIds: ['12', '3'],
     });
+  });
+
+  it('reads the ids of the roles of the administrator (backend answer 19), as a clean list of text', () => {
+    expect(normalizeMe({ roleIds: ['3', '12', 7, null, '', 'ก'] }).roleIds).toEqual([
+      '3',
+      '12',
+      'ก',
+    ]);
+    for (const raw of [undefined, null, 'x', 5, {}]) {
+      expect(normalizeMe({ roleIds: raw }).roleIds).toEqual([]);
+    }
   });
 
   it('treats missing fields as missing, without an error', async () => {
@@ -139,6 +152,7 @@ describe('getMe', () => {
       mustChangePassword: false,
       permissions: [],
       passwordMinLength: undefined,
+      roleIds: [],
     });
   });
 });
@@ -160,6 +174,7 @@ describe('normalizeMe', () => {
       mustChangePassword: false,
       permissions: ['A:B', 'C:D'],
       passwordMinLength: undefined,
+      roleIds: [],
     });
   });
 

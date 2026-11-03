@@ -104,6 +104,7 @@ const messages: Record<string, string> = {
   // ---- 角色 ----
   'system.roles.note':
     '保存时角色的权限整体替换。勾选一个节点会同时勾选它下面的全部节点和它所在的页面。取消一个功能不会取消它所在的页面，所以角色可以只有页面加一部分功能；取消页面本身会把页面和它下面的全部节点一起取消。自定义节点不能分配给角色。',
+  'system.roles.ownRoleReason': '这个角色分配给了你自己，不能修改自己持有的角色。',
   'system.roles.new': '新建角色',
   'system.roles.col.name': '名称',
   'system.roles.col.remark': '备注',

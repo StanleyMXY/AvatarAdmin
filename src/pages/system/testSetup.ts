@@ -5,7 +5,8 @@ import { screen, waitFor } from '@testing-library/react';
 import { expect } from 'vitest';
 import { META_DEFAULTS } from '../../../mock/_core/meta';
 import { resetStore } from '../../../mock/_core/store';
-import { resetSystemStore, systemState } from '../../../mock/_core/systemData';
+import { extraOf, resetSystemStore, systemState } from '../../../mock/_core/systemData';
+import { adminOf } from '../../../mock/_core/testing';
 import { signInAsAdmin } from '../../../tests/signInAsAdmin';
 import { resetUmiStub } from '../../../tests/stubs/umi-max';
 
@@ -38,12 +39,18 @@ export function signIn(
   options: { codes?: string[]; superAdmin?: boolean; minLength?: number | null } = {},
 ) {
   resetAll();
+  // `GET /me` lists the ids of the roles the administrator is given, in text order (backend answer 19).
+  const roleIds = [...extraOf(adminOf(username)).roleIds].sort();
   return signInAsAdmin(username, {
     codes: options.codes,
     superAdmin: options.superAdmin,
     meta: { ...META_DEFAULTS },
-    meExtra:
-      options.minLength === null ? {} : { passwordMinLength: options.minLength ?? PASSWORD_MIN },
+    meExtra: {
+      roleIds,
+      ...(options.minLength === null
+        ? {}
+        : { passwordMinLength: options.minLength ?? PASSWORD_MIN }),
+    },
   });
 }
 
