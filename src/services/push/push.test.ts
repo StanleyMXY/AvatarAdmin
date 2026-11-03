@@ -217,7 +217,7 @@ describe('the records', () => {
     expect(calls[0].url).toBe('/api/admin/push/records?page=3&pageSize=10');
   });
 
-  it('sends the account and the trigger reason as filters only when they are given, and never a local date', async () => {
+  it('sends the account and the trigger reason as filters only when they are given, and never a local date or a day', async () => {
     const calls = answer({ items: [], total: 0 });
     await listRecords({
       page: 1,
@@ -231,6 +231,19 @@ describe('the records', () => {
     await listRecords({ page: 1, pageSize: 20, triggerReason: 'admin' });
     expect(calls[1].url).toBe('/api/admin/push/records?page=1&pageSize=20&triggerReason=admin');
     expect(calls[1].url).not.toMatch(/accountId|localDate|from=|to=/);
+  });
+
+  it('sends the creation days `from` and `to` (UTC days) as they are given, each alone or both, with the other filters', async () => {
+    const calls = answer({ items: [], total: 0 });
+    await listRecords({ page: 1, pageSize: 20, from: '2026-10-20', to: '2026-10-26' });
+    await listRecords({ page: 1, pageSize: 20, from: '2026-10-20' });
+    await listRecords({ page: 2, pageSize: 10, to: '2026-10-26', triggerReason: 'admin' });
+    expect(calls.map((c) => c.url)).toEqual([
+      '/api/admin/push/records?page=1&pageSize=20&from=2026-10-20&to=2026-10-26',
+      '/api/admin/push/records?page=1&pageSize=20&from=2026-10-20',
+      '/api/admin/push/records?page=2&pageSize=10&to=2026-10-26&triggerReason=admin',
+    ]);
+    expect(calls.every((c) => !c.url.includes('localDate'))).toBe(true);
   });
 
   it('reads the deliveries of a record, whatever the list is called, and an empty list when there is none', async () => {

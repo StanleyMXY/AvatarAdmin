@@ -74,20 +74,20 @@ describe('the send record page: the list', { timeout: 30000 }, () => {
     await waitFor(() => expect(bodyRows().length).toBe(12));
   });
 
-  // Answers 114: the backend filters by account and by trigger reason, not by local date.
+  // Answers 114: the backend filters by account, by trigger reason and by creation day, not by local date.
   describe('the filters', () => {
     const ACCOUNT = '00000000-0000-4000-8000-00000000abcd';
     const filterBox = () => screen.getByRole('search');
 
-    it('offers an account id and a trigger reason, and no date', async () => {
+    it('offers an account id, a trigger reason and the creation day (off until asked for; see recordsDate.test.tsx)', async () => {
       backend();
       renderPage(<RecordsPage />);
       await waitFor(() => expect(bodyRows().length).toBe(20));
       const box = within(filterBox());
       expect(box.getByRole('textbox', { name: 'Account ID' })).toBeInTheDocument();
       expect(box.getByRole('combobox', { name: 'Trigger reason' })).toBeInTheDocument();
-      expect(box.queryByLabelText(/date/i)).toBeNull();
-      expect(screen.getByText(/not by date/)).toBeInTheDocument();
+      expect(box.getByRole('checkbox', { name: /created in a date range/ })).not.toBeChecked();
+      expect(screen.queryByText(/not by date/)).toBeNull();
     });
 
     it('sends the account of a record and shows only its records, from page 1', async () => {

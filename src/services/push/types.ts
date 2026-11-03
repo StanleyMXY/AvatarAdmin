@@ -188,7 +188,16 @@ export type PushDelivery = {
   tokenSuffix: string | null;
 };
 
-/** The filters of the list of records: an account id and a trigger reason, exact, together or alone. The backend has no filter by local date. */
-export type RecordFilters = { accountId?: string; triggerReason?: TriggerReason };
+/**
+ * The filters of the list of records: an account id and a trigger reason, exact, together or alone,
+ * and the days the record was created on, `from` and `to` (`YYYY-MM-DD`, UTC days, both ends
+ * included, each can be left out). The backend has no filter by local date.
+ */
+export type RecordFilters = {
+  accountId?: string;
+  triggerReason?: TriggerReason;
+  from?: string;
+  to?: string;
+};
 
 export type PushRecordDetail = PushRecord & { deliveries: PushDelivery[] };

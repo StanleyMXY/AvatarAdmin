@@ -196,7 +196,8 @@ const messages: Record<string, string> = {
   'push.records.filter.accountInvalid':
     'An account ID has 36 characters: digits, letters a to f and hyphens, as 00000000-0000-4000-8000-000000000011.',
   'push.records.filter.note':
-    'The backend filters by account and trigger reason only, not by date.',
+    'Filters by account, trigger reason and the day the record was created: UTC days, both ends included (the local date column is not a filter).',
+  'push.records.filter.dateRange': 'Only records created in a date range (UTC)',
   'push.records.col.type': 'Type',
   'push.records.col.reason': 'Trigger reason',
   'push.records.col.localDate': 'Local date',

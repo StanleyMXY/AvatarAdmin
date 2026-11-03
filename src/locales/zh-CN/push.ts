@@ -189,7 +189,9 @@ const messages: Record<string, string> = {
   'push.records.filter.reset': '重置',
   'push.records.filter.accountInvalid':
     '账号编号是 36 个字符：数字、a 到 f 的字母和连字符，例如 00000000-0000-4000-8000-000000000011。',
-  'push.records.filter.note': '后端只能按账号和触发原因筛选，不能按日期。',
+  'push.records.filter.note':
+    '可按账号、触发原因和创建日期筛选：日期按 UTC 日，含首尾（“本地日期”列不是筛选条件）。',
+  'push.records.filter.dateRange': '只看创建日期在某个范围内的记录（UTC）',
   'push.records.col.type': '类型',
   'push.records.col.reason': '触发原因',
   'push.records.col.localDate': '本地日期',
