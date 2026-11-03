@@ -36,6 +36,8 @@ const messages: Record<string, string> = {
     '这是最后一个启用的验证码模板。手机号登录开启，或存在手机号账号时，必须至少保留一个启用的验证码模板，所以不能删除、停用或改成其他类型。请先启用或新建另一个。',
   'reason.LAST_ENGLISH_FALLBACK_TEMPLATE':
     '这是最后一个启用的、语言为英文（en）、不限国家的验证码模板。手机号登录开启，或存在手机号账号时，必须保留一个，所以不能删除、停用，也不能改它的语言、国家或类型。请先启用或新建另一个。',
+  'reason.NEGATIVE': '金额小于 0。',
+  'reason.TOO_MANY_DECIMALS': '金额的小数超过两位。',
 };
 
 export default messages;

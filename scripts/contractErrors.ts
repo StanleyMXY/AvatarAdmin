@@ -16,7 +16,7 @@ export const DEFAULT_CONTRACT = 'docs/shared-snapshots/backend-task-java-backend
  * snapshot can be replaced by it without a test failing for a missing text. Delete this constant
  * and its uses when the snapshot is replaced.
  */
-export const NEXT_CONTRACT = 'docs/backend-inputs/2026-11-02-backend-task-java-backend-e07469d1.md';
+export const NEXT_CONTRACT = 'docs/backend-inputs/2026-11-03-backend-task-java-backend-updated.md';
 
 /** The text of the contract at `path` (the snapshot when no path is given). */
 export function readContract(path: string = DEFAULT_CONTRACT): string {
