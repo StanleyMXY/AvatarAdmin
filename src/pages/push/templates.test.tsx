@@ -745,7 +745,7 @@ describe('the template page: the rule of the default language', { timeout: 60000
   // Switching off or deleting the en template of daily_recall while the others are on (DEFAULT_REQUIRED_BY_OTHERS).
   const requiredEn = (lang: string) =>
     new RegExp(
-      `The ${lang} template of Daily recall cannot be switched off, deleted, or changed to another language or reason while other languages of Daily recall are enabled\\. To do that, switch off the other languages of Daily recall first\\.`,
+      `The ${lang} template of Daily recall cannot be switched off, deleted, or changed to another language or reason while its other languages are enabled\\. To do that, switch off the other languages of Daily recall first\\.`,
     );
   const streakTh = () =>
     pushState.templates.find((t) => t.locale === 'th' && t.triggerReason === 'streak_at_risk');

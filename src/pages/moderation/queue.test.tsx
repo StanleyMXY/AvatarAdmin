@@ -186,81 +186,78 @@ describe('the review queue', { timeout: 30000 }, () => {
     await waitFor(() => expect(statsCalls()).toBe(2));
   });
 
-  it('asks the backend for the content type that was chosen, so the rows, the pages and the total are those of that type', async () => {
+  it('shows the rows of the content type that was chosen from the page that was read, sends no content type to the backend, and says so on the page', async () => {
     const calls = installMockBackend(moderationMock);
     const user = userEvent.setup();
     renderPage(<QueuePage />);
     await rowOf(RECORD_ID.oldestImage);
-    const everyType = moderationState.records.length;
+    // the limit of the filter is said before it is used
+    expect(screen.getByText(/only hides the other types in the page that is shown/)).toBeVisible();
+    expect(screen.queryByTestId('moderation-type-filter')).toBeNull();
     await expandSearch(user);
     await chooseOption(user, 'Content type', 'Action clip');
     await user.click(screen.getByRole('button', { name: /查\s*询|Query|Search/ }));
+    const note = await screen.findByTestId('moderation-type-filter', undefined, { timeout: 10000 });
     await waitFor(
       () => expect(screen.queryByRole('link', { name: RECORD_ID.oldestImage })).toBeNull(),
       { timeout: 10000 },
     );
     expect(screen.getByRole('link', { name: RECORD_ID.clip })).toBeInTheDocument();
-    const rows = screen
+    const types = screen
       .getAllByRole('row')
       .filter((r) => r.querySelector('a[href^="/moderation/"]'))
       .map((r) => r.textContent ?? '');
-    expect(rows.length).toBeGreaterThan(0);
-    for (const text of rows) expect(text).toContain('Action clip');
-    expect(listCalls(calls).at(-1)?.url).toBe(
-      '/api/admin/moderation/records?page=1&pageSize=20&contentType=ACTION_CLIP',
+    expect(types.length).toBeGreaterThan(0);
+    for (const text of types) expect(text).toContain('Action clip');
+    // nothing about the type reached the backend: the page and the total are the backend's
+    for (const call of listCalls(calls)) expect(call.url).not.toContain('contentType');
+    expect(listCalls(calls).at(-1)?.url).toBe('/api/admin/moderation/records?page=1&pageSize=20');
+    // the note says how many of the page are shown and that the total counts every type
+    const total = moderationState.records.length;
+    expect(note).toHaveTextContent(
+      new RegExp(`1 of the \\d+ records on this page .*Action clip.*${total}.*every type`),
     );
-    // the total of the pager is the number of records of that type, not of every type
-    const ofType = moderationState.records.filter((r) => r.contentType === 'ACTION_CLIP').length;
-    expect(ofType).toBeLessThan(everyType);
-    expect(document.querySelector('.ant-pagination')?.textContent ?? '').toContain(String(ofType));
   });
 
-  it.each([
-    ['en-US', 'Content type', 'Companion name', /only hides the other types/],
-    ['zh-CN', '内容类型', '伴侣名字', /只是把本页里其他类型的行隐藏/],
-  ] as const)(
-    'says nothing about the filter being only for the page, in %s: no such note, and no count of the page',
-    async (locale, name, option, note) => {
-      installMockBackend(moderationMock);
-      const user = userEvent.setup();
-      renderPage(<QueuePage />, locale);
-      await rowOf(RECORD_ID.oldestImage);
-      expect(screen.queryByText(note)).toBeNull();
-      await expandSearch(user);
-      await chooseOption(user, name, option);
-      await user.click(screen.getByRole('button', { name: /查\s*询|Query|Search/ }));
-      await waitFor(
-        () => expect(screen.queryByRole('link', { name: RECORD_ID.oldestImage })).toBeNull(),
-        { timeout: 10000 },
-      );
-      expect(screen.queryByTestId('moderation-type-filter')).toBeNull();
-      expect(screen.queryByText(note)).toBeNull();
-      expect(screen.queryByText(/on this page|本页 \d+ 条/)).toBeNull();
-    },
-  );
+  it('says it in Chinese, and shows the note about the limit before a type is chosen', async () => {
+    installMockBackend(moderationMock);
+    const user = userEvent.setup();
+    renderPage(<QueuePage />, 'zh-CN');
+    await rowOf(RECORD_ID.oldestImage);
+    expect(screen.getByText(/只是把本页里其他类型的行隐藏/)).toBeVisible();
+    await expandSearch(user);
+    await chooseOption(user, '内容类型', '动作片段');
+    await user.click(screen.getByRole('button', { name: /查\s*询/ }));
+    const note = await screen.findByTestId('moderation-type-filter', undefined, { timeout: 10000 });
+    expect(note).toHaveTextContent(/本页 \d+ 条记录中有 1 条是“动作片段”/);
+    expect(note).toHaveTextContent(/总数/);
+  });
 
-  it('combines the content type with the status and the source in one request, and takes it away on reset', async () => {
-    const calls = installMockBackend(moderationMock);
+  it('tells that a page can have no row of the chosen type, and takes the note away when the type is cleared', async () => {
+    installMockBackend(moderationMock);
     const user = userEvent.setup();
     renderPage(<QueuePage />);
     await rowOf(RECORD_ID.oldestImage);
     await expandSearch(user);
-    await chooseOption(user, 'Source', 'Report');
-    await chooseOption(user, 'Content type', 'Avatar photo');
+    await chooseOption(user, 'Content type', 'Companion name');
     await user.click(screen.getByRole('button', { name: /查\s*询|Query|Search/ }));
-    await waitFor(() => {
-      const last = listCalls(calls).at(-1)?.url as string;
-      expect(last).toContain('source=REPORT');
-      expect(last).toContain('contentType=AVATAR');
-    });
-    await user.click(screen.getByRole('button', { name: /重\s*置|Reset/ }));
-    await waitFor(() =>
-      expect(listCalls(calls).at(-1)?.url).toBe('/api/admin/moderation/records?page=1&pageSize=20'),
+    await waitFor(
+      () => expect(screen.queryByRole('link', { name: RECORD_ID.oldestImage })).toBeNull(),
+      {
+        timeout: 10000,
+      },
     );
+    const note = await screen.findByTestId('moderation-type-filter');
+    expect(note).toHaveTextContent(/Companion name/);
+    await user.click(screen.getByRole('button', { name: /重\s*置|Reset/ }));
+    await waitFor(() => expect(screen.queryByTestId('moderation-type-filter')).toBeNull(), {
+      timeout: 10000,
+    });
+    await rowOf(RECORD_ID.oldestImage);
   });
 
-  it('has Complaint among the sources and the generated image and the action clip among the content types', async () => {
-    installMockBackend(moderationMock);
+  it('has Complaint among the sources and the generated image and the action clip among the content types, and sends the source but not the content type', async () => {
+    const calls = installMockBackend(moderationMock);
     const user = userEvent.setup();
     renderPage(<QueuePage />);
     await rowOf(RECORD_ID.oldestImage);
@@ -292,6 +289,16 @@ describe('the review queue', { timeout: 30000 }, () => {
         ]),
       ),
     );
+    await user.keyboard('{Escape}');
+
+    await chooseOption(user, 'Source', 'Complaint');
+    await chooseOption(user, 'Content type', 'Action clip');
+    await user.click(screen.getByRole('button', { name: /查\s*询|Query|Search/ }));
+    await waitFor(() => {
+      const last = listCalls(calls).at(-1)?.url as string;
+      expect(last).toContain('source=COMPLAINT');
+    });
+    for (const call of listCalls(calls)) expect(call.url).not.toContain('contentType');
   });
 
   it('sends no filter when none is chosen', async () => {

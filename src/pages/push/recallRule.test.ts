@@ -102,7 +102,7 @@ describe('templateFailureText: one text for each case the backend names', () => 
 
   it('DEFAULT_REQUIRED_BY_OTHERS: switch off the other languages first, in English', () => {
     expect(templateFailureText(intlOf(enUS), named('DEFAULT_REQUIRED_BY_OTHERS'))).toBe(
-      'The ไทย template of Streak at risk cannot be switched off, deleted, or changed to another language or reason while other languages of Streak at risk are enabled. To do that, switch off the other languages of Streak at risk first.',
+      'The ไทย template of Streak at risk cannot be switched off, deleted, or changed to another language or reason while its other languages are enabled. To do that, switch off the other languages of Streak at risk first.',
     );
   });
 
