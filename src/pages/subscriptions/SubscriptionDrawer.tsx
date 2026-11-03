@@ -22,9 +22,6 @@ const STATE_COLORS: Record<string, string> = {
   REVOKED: 'red',
 };
 
-/** How many characters of a purchase token are shown (the push token list shows six as well). */
-const REF_SUFFIX = 6;
-
 export const SUBSCRIPTION_STATES = Object.keys(STATE_COLORS);
 
 /** The state options of the status tag and of the filter, in the current language. */
@@ -126,12 +123,19 @@ export function SubscriptionDrawer({ id, onClose }: Props) {
               key: 'ref',
               label: t('subscriptions.detail.storeRef'),
               // A Google reference is the purchase token: whoever holds it can claim the subscription
-              // by verifying it, so like a push token only its last characters are shown.
+              // by verifying it, so the backend gives only its last six characters (`storeRefSuffix`,
+              // `storeRef` is null) and the page shows those, whatever else an answer carries.
               children:
                 detail.store === 'GOOGLE' ? (
-                  `…${[...detail.storeRef].slice(-REF_SUFFIX).join('')}`
-                ) : (
+                  detail.storeRefSuffix ? (
+                    `…${plainText(detail.storeRefSuffix)}`
+                  ) : (
+                    DASH
+                  )
+                ) : detail.storeRef ? (
                   <EllipsisPopoverText text={detail.storeRef} lines={1} width={260} />
+                ) : (
+                  DASH
                 ),
             },
             { key: 'product', label: t('subscriptions.list.product'), children: detail.productId },

@@ -55,8 +55,12 @@ export type Subscription = {
   id: string;
   accountId: string | null;
   store: string;
-  storeRef: string;
-  linkedPurchaseToken: string | null;
+  /** The store's reference; null for a Google subscription (its purchase token is never sent whole). */
+  storeRef: string | null;
+  /** The last six characters of `storeRef`, for any store; null when there is none. */
+  storeRefSuffix: string | null;
+  /** The last six characters of the linked purchase token (the whole token is not sent); null when there is none. */
+  linkedPurchaseTokenSuffix: string | null;
   productId: string;
   state: SubscriptionState | string;
   currentPeriodStart: string;
@@ -90,12 +94,20 @@ export type TimelineEvent = {
 
 export type SubscriptionDetail = Subscription & { events: TimelineEvent[] };
 
-/** A row of `GET /subscription-events`: the columns of `SubscriptionEvent` (contract 15.3) without `payload`. */
+/**
+ * A row of `GET /subscription-events`. For a Google event the purchase token is only given as its
+ * last six characters: `sourceEventId` is cut to six characters before its first colon, and the
+ * `purchaseToken` / `pendingRefundToken` keys at any depth of `payload` arrive as
+ * `purchaseTokenSuffix` / `pendingRefundTokenSuffix`.
+ */
 export type SubscriptionEvent = TimelineEvent & {
   subscriptionId: string | null;
   accountId: string | null;
   store: string;
   sourceEventId: string;
+  /** The decoded notification of the store; no page shows it. */
+  payload: unknown;
+  status: 'PENDING' | 'PROCESSED' | 'FAILED';
 };
 
 /** One place a product is shown: a platform, and one channel of it (null is every channel). */

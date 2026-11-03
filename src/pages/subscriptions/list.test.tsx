@@ -5,6 +5,7 @@ import { resetStore } from '../../../mock/_core/store';
 import { resetSubscriptionsStore, subscriptionsState } from '../../../mock/_core/subscriptionsData';
 import { adminOf } from '../../../mock/_core/testing';
 import * as subscriptionsMock from '../../../mock/subscriptions.mock';
+import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { signInAs, useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { resetUmiStub, setTestAccess } from '../../../tests/stubs/umi-max';
@@ -117,6 +118,44 @@ describe('the subscription list', { timeout: 30000 }, () => {
   });
 });
 
+/** Collects the text of every answer the fake backend gives, to see what the page was handed. */
+function recordAnswers(): string[] {
+  const texts: string[] = [];
+  const mocked = globalThis.fetch;
+  vi.stubGlobal('fetch', async (...args: Parameters<typeof fetch>) => {
+    const response = await mocked(...args);
+    texts.push(await response.clone().text());
+    return response;
+  });
+  return texts;
+}
+
+const googleRow = {
+  id: '500',
+  accountId: '10000000001',
+  store: 'GOOGLE',
+  // a backend that is not yet changed would still give this; the page must not show it
+  storeRef: 'gp-token-SECRETVALUE-abc123',
+  storeRefSuffix: 'zz9876',
+  linkedPurchaseTokenSuffix: null,
+  productId: 'avatar_premium_monthly',
+  state: 'ACTIVE',
+  currentPeriodStart: '2026-10-01T00:00:00Z',
+  currentPeriodEnd: '2026-11-01T00:00:00Z',
+  gracePeriodEndsAt: null,
+  autoRenew: true,
+  environment: 'PRODUCTION',
+  acknowledgementState: 'ACKNOWLEDGED',
+  purchasedAt: '2026-09-01T00:00:00Z',
+  firstActiveAt: '2026-09-01T00:00:00Z',
+  voidedAt: null,
+  lastEventSignedAt: null,
+  periodOrderId: null,
+  lastSyncedAt: '2026-10-02T00:00:00Z',
+  createdAt: '2026-09-01T00:00:00Z',
+  updatedAt: '2026-10-02T00:00:00Z',
+};
+
 describe('the subscription detail drawer', { timeout: 30000 }, () => {
   const openFirst = async () => {
     const user = userEvent.setup();
@@ -126,18 +165,65 @@ describe('the subscription detail drawer', { timeout: 30000 }, () => {
     return await screen.findByRole('dialog');
   };
 
-  it('does not show a Google purchase token: it can claim the subscription, so only its last six characters appear, with nothing to copy', async () => {
+  it('does not show a Google purchase token: the answer has only its last six characters (storeRefSuffix), and the page shows those with nothing to copy', async () => {
     for (const s of subscriptionsState().subscriptions) {
       s.store = 'GOOGLE';
       s.storeRef = 'gp-token-SECRETVALUE-abc123';
     }
-    useMockBackend(subscriptionsMock);
+    const calls = useMockBackend(subscriptionsMock);
+    const bodies = recordAnswers();
     const dialog = await openFirst();
     await within(dialog).findAllByTestId('timeline-event');
+    expect(calls.length).toBeGreaterThan(0);
+    // the page never got the whole token, and it shows the suffix the backend gave
+    expect(bodies.join('')).not.toContain('SECRETVALUE');
+    expect(bodies.join('')).toContain('"storeRefSuffix":"abc123"');
     expect(dialog.textContent).not.toContain('SECRETVALUE');
-    expect(dialog.textContent).toContain('abc123');
+    expect(dialog.textContent).toContain('…abc123');
+    expect(document.body.textContent).not.toContain('SECRETVALUE');
     expect(within(dialog).queryByRole('button', { name: /copy/i })).toBeNull();
     expect(dialog.querySelector('.anticon-copy')).toBeNull();
+  });
+
+  it('shows the suffix and not a whole token even if an answer still carries one for a Google row', async () => {
+    const calls = stubFetch(async ({ url }) =>
+      jsonResponse(
+        200,
+        envelope(
+          '200',
+          url.includes('/subscriptions/')
+            ? { ...googleRow, events: [] }
+            : { items: [googleRow], total: 1 },
+        ),
+      ),
+    );
+    renderPage(<SubscriptionListPage />);
+    const user = userEvent.setup();
+    await user.click((await screen.findAllByRole('button', { name: 'Details' }))[0]);
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('…zz9876');
+    expect(calls.length).toBeGreaterThan(0);
+    expect(dialog.textContent).not.toContain('SECRETVALUE');
+  });
+
+  it('shows a dash for a Google row that has no suffix, never the word null', async () => {
+    stubFetch(async ({ url }) =>
+      jsonResponse(
+        200,
+        envelope(
+          '200',
+          url.includes('/subscriptions/')
+            ? { ...googleRow, storeRef: null, storeRefSuffix: null, events: [] }
+            : { items: [{ ...googleRow, storeRef: null, storeRefSuffix: null }], total: 1 },
+        ),
+      ),
+    );
+    renderPage(<SubscriptionListPage />);
+    const user = userEvent.setup();
+    await user.click((await screen.findAllByRole('button', { name: 'Details' }))[0]);
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('Store reference');
+    expect(dialog.textContent).not.toMatch(/null|undefined/);
   });
 
   it('shows the whole Apple original transaction ID, which cannot claim a subscription by itself', async () => {

@@ -342,7 +342,11 @@ describe('templates', () => {
     it('refuses to create or switch on a template of another language while the reason has none enabled in the default language, with the data of the rule and not the old missingLocales', async () => {
       const th = find('streak_at_risk', 'th');
       const switchOn = refusal(await putTemplate(update(), { id: th.id }));
-      expect(switchOn.data).toEqual({ defaultLocale: 'en', reason: 'streak_at_risk' });
+      expect(switchOn.data).toEqual({
+        defaultLocale: 'en',
+        reason: 'streak_at_risk',
+        case: 'DEFAULT_MISSING',
+      });
       expect(switchOn.message).toBe(
         'streak_at_risk needs an enabled template in en (the default language) while other languages are enabled; enable or restore it first',
       );
@@ -350,7 +354,11 @@ describe('templates', () => {
       const created = refusal(
         await send(TEMPLATE_CREATE, template({ locale: 'vi', enabled: true })),
       );
-      expect(created.data).toEqual({ defaultLocale: 'en', reason: 'streak_at_risk' });
+      expect(created.data).toEqual({
+        defaultLocale: 'en',
+        reason: 'streak_at_risk',
+        case: 'DEFAULT_MISSING',
+      });
       expect(pushState.templates).toHaveLength(before);
       expect(th.enabled).toBe(false);
     });
@@ -379,12 +387,17 @@ describe('templates', () => {
     it('refuses to switch off or delete the default-language template while other languages are on, and says what to do', async () => {
       const en = find('daily_recall', 'en');
       const off = refusal(await putTemplate(update({ enabled: false }), { id: en.id }));
-      expect(off.data).toEqual({ defaultLocale: 'en', reason: 'daily_recall' });
+      expect(off.data).toEqual({
+        defaultLocale: 'en',
+        reason: 'daily_recall',
+        case: 'DEFAULT_REQUIRED_BY_OTHERS',
+      });
       expect(off.message).toBe(
         'daily_recall needs an enabled template in en (the default language) while other languages are enabled; disable the other languages of daily_recall first, or keep the en template enabled',
       );
       const del = refusal(await send(TEMPLATE_DELETE, {}, { id: en.id }));
       expect(del.message).toBe(off.message);
+      expect(del.data).toMatchObject({ case: 'DEFAULT_REQUIRED_BY_OTHERS' });
       expect(pushState.templates.includes(en)).toBe(true);
       expect(en.enabled).toBe(true);
     });
@@ -424,7 +437,11 @@ describe('templates', () => {
       );
       const en = find('daily_recall', 'en');
       const moved = refusal(await putTemplate(update({ locale: 'th' }), { id: en.id }));
-      expect(moved.data).toEqual({ defaultLocale: 'en', reason: 'daily_recall' });
+      expect(moved.data).toEqual({
+        defaultLocale: 'en',
+        reason: 'daily_recall',
+        case: 'DEFAULT_MOVED_AWAY',
+      });
       expect(moved.message).toBe(
         'daily_recall would have no enabled template in en, the default language: keep this template in en and enabled, and create the other language as a new template',
       );
@@ -437,7 +454,10 @@ describe('templates', () => {
           id: find('daily_recall', 'en').id,
         }),
       );
-      expect(refused.data).toMatchObject({ defaultLocale: 'en' });
+      expect(refused.data).toMatchObject({
+        defaultLocale: 'en',
+        case: 'DEFAULT_REQUIRED_BY_OTHERS',
+      });
     });
 
     it('takes the default language from push.default_locale', async () => {
@@ -455,12 +475,20 @@ describe('templates', () => {
           id: find('daily_recall', 'th').id,
         }),
       );
-      expect(th.data).toEqual({ defaultLocale: 'th', reason: 'daily_recall' });
+      expect(th.data).toEqual({
+        defaultLocale: 'th',
+        reason: 'daily_recall',
+        case: 'DEFAULT_REQUIRED_BY_OTHERS',
+      });
     });
 
     it('compares the default language as written, with case: an enabled EN template is not the default en', async () => {
       const created = await send(TEMPLATE_CREATE, template({ locale: 'EN', enabled: true }));
-      expect(refusal(created).data).toEqual({ defaultLocale: 'en', reason: 'streak_at_risk' });
+      expect(refusal(created).data).toEqual({
+        defaultLocale: 'en',
+        reason: 'streak_at_risk',
+        case: 'DEFAULT_MISSING',
+      });
       // Written as the default language it is accepted, and then EN may follow.
       expect((await send(TEMPLATE_CREATE, template({ enabled: true }))).status).toBe(200);
       expect((await send(TEMPLATE_CREATE, template({ locale: 'EN', enabled: true }))).status).toBe(

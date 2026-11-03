@@ -16,6 +16,8 @@ import {
   MODEL_TIERS,
   type Mode,
   type Product,
+  publicEvent,
+  publicSubscription,
   QUOTA_KEYS,
   SUBSCRIPTION_STATES,
   subscriptionsState,
@@ -250,7 +252,7 @@ export default {
             ? 1
             : -1,
       );
-    return ok(paginateQuery(rows, req));
+    return ok(paginateQuery(rows.map(publicSubscription), req));
   }),
 
   'GET /api/admin/subscriptions/:id': guard('SUBSCRIPTION:VIEW', (req) => {
@@ -273,7 +275,7 @@ export default {
         error: e.error,
         needsAttention: e.needsAttention,
       }));
-    return ok({ ...row, events });
+    return ok({ ...publicSubscription(row), events });
   }),
 
   'GET /api/admin/accounts/:id/entitlements': guard('SUBSCRIPTION:VIEW', (req) => {
@@ -575,7 +577,7 @@ export default {
       .sort(
         (a, b) => b.eventSignedAt.localeCompare(a.eventSignedAt) || Number(b.id) - Number(a.id),
       );
-    return ok(paginateQuery(rows, req));
+    return ok(paginateQuery(rows.map(publicEvent), req));
   }),
 
   'POST /api/admin/subscription-events/:id/reprocess': guard('SUBSCRIPTION:GRANT', (req) => {
@@ -587,7 +589,7 @@ export default {
       });
     event.error = null;
     event.processedAt = daysAgoIso(0);
-    return ok(event);
+    return ok(publicEvent(event));
   }),
 
   'POST /api/admin/subscription-events/:id/ack': guard('SUBSCRIPTION:GRANT', (req) => {
@@ -598,6 +600,6 @@ export default {
         status: 'HANDLED',
       });
     event.needsAttention = false;
-    return ok(event);
+    return ok(publicEvent(event));
   }),
 };

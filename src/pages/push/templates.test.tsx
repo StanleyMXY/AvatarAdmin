@@ -739,8 +739,14 @@ describe('the template page: the link', { timeout: 60000 }, () => {
 });
 
 describe('the template page: the rule of the default language', { timeout: 60000 }, () => {
+  // Switching on the Thai template of streak_at_risk: no enabled template in en yet (DEFAULT_MISSING).
   const RULE_EN =
-    /Streak at risk needs an enabled template in the default language \(en\)\. Enable that one first\. To switch it off, delete it or change it, first switch off the other languages of Streak at risk\. If it is the only enabled template, keep it in en and enabled, and create the other language as a new template\./;
+    /Streak at risk needs an enabled template in the default language \(en\) before another language can be on\. Enable the en template of Streak at risk first, then enable or create the other languages\./;
+  // Switching off or deleting the en template of daily_recall while the others are on (DEFAULT_REQUIRED_BY_OTHERS).
+  const requiredEn = (lang: string) =>
+    new RegExp(
+      `The ${lang} template of Daily recall cannot be switched off, deleted, or changed to another language or reason while other languages of Daily recall are enabled\\. To do that, switch off the other languages of Daily recall first\\.`,
+    );
   const streakTh = () =>
     pushState.templates.find((t) => t.locale === 'th' && t.triggerReason === 'streak_at_risk');
 
@@ -850,11 +856,7 @@ describe('the template page: the rule of the default language', { timeout: 60000
     const row = await rowOf('Hello, how are you today?');
     fireEvent.click(within(row).getByRole('switch'));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect(
-      await screen.findByText(
-        /Daily recall needs an enabled template in the default language \(en\)/,
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(requiredEn('en'))).toBeInTheDocument();
     await user.click(
       within(await rowOf('Hello, how are you today?')).getByRole('button', { name: 'Delete' }),
     );
@@ -862,13 +864,7 @@ describe('the template page: the rule of the default language', { timeout: 60000
     await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
     expect(writesOf(calls)[1].method).toBe('DELETE');
     // one message for the switch and one for the delete
-    await waitFor(() =>
-      expect(
-        screen.getAllByText(
-          /Daily recall needs an enabled template in the default language \(en\)/,
-        ),
-      ).toHaveLength(2),
-    );
+    await waitFor(() => expect(screen.getAllByText(requiredEn('en'))).toHaveLength(2));
     expect(
       pushState.templates.some((t) => t.locale === 'en' && t.triggerReason === 'daily_recall'),
     ).toBe(true);
@@ -883,7 +879,7 @@ describe('the template page: the rule of the default language', { timeout: 60000
     fireEvent.click(within(await rowOf('Hello, how are you today?')).getByRole('switch'));
     expect(
       await screen.findByText(
-        '触发原因“每日召回”需要默认语言 en 的启用模板。先启用默认语言的模板；要停用、删除或改掉它，先停用“每日召回”下其他语言的模板；它是唯一启用的模板时，保持它为 en 并启用，另建其他语言的新模板。',
+        '“每日召回”下其他语言的模板仍在启用，默认语言 en 的模板不能停用、删除，也不能改成别的语言或别的触发原因。要这样做，先停用“每日召回”下其他语言的模板。',
       ),
     ).toBeInTheDocument();
   });
@@ -900,11 +896,57 @@ describe('the template page: the rule of the default language', { timeout: 60000
     // Thai is the default language now: its template of daily recall cannot go while the others are on.
     fireEvent.click(within(await rowOf('สวัสดีครับ วันนี้อากาศดีมาก')).getByRole('switch'));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    expect(await screen.findByText(requiredEn('th'))).toBeInTheDocument();
+  });
+
+  /** The list as the mock backend has it, and every PUT refused with the data of the rule of the default language. */
+  const refuseWith = (data: object) => {
+    backend();
+    const real = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL, init: RequestInit = {}) =>
+        (init.method ?? 'GET').toUpperCase() === 'PUT'
+          ? jsonResponse(400, envelope('INVALID_REQUEST', data, 'raw backend words'))
+          : real(input, init),
+      ),
+    );
+  };
+
+  it('tells the third case from the others: the only enabled template, the default one, cannot be changed to another language, and says to keep it and create a new one', async () => {
+    // The dialog cannot change the language of a template, so the answer is the backend's to give.
+    refuseWith({ defaultLocale: 'en', reason: 'daily_recall', case: 'DEFAULT_MOVED_AWAY' });
+    renderPage(<TemplatesPage />);
+    fireEvent.click(within(await rowOf('Hello, how are you today?')).getByRole('switch'));
     expect(
       await screen.findByText(
-        /Daily recall needs an enabled template in the default language \(th\)/,
+        'The en template is the only enabled template of Daily recall, so it cannot be changed to another language. Keep it in en and enabled, and create a new template for the other language.',
       ),
     ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('raw backend words');
+  });
+
+  it('says the third case in Chinese', async () => {
+    refuseWith({ defaultLocale: 'en', reason: 'daily_recall', case: 'DEFAULT_MOVED_AWAY' });
+    renderPage(<TemplatesPage />, 'zh-CN');
+    fireEvent.click(within(await rowOf('Hello, how are you today?')).getByRole('switch'));
+    expect(
+      await screen.findByText(
+        'en 的模板是“每日召回”唯一启用的模板，不能把它改成别的语言。保持它为 en 并启用，另建其他语言的新模板。',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('from a backend that gives no case, says the one text that is true in all three, with the default language and the reason of the answer', async () => {
+    refuseWith({ defaultLocale: 'en', reason: 'daily_recall' });
+    renderPage(<TemplatesPage />);
+    fireEvent.click(within(await rowOf('Hello, how are you today?')).getByRole('switch'));
+    expect(
+      await screen.findByText(
+        'Daily recall needs an enabled template in the default language (en). Enable that one first. To switch it off, delete it or change it, first switch off the other languages of Daily recall. If it is the only enabled template, keep it in en and enabled, and create the other language as a new template.',
+      ),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('raw backend words');
   });
 
   it('says the words of the code for a refusal that has no default language to name, and never the message of the backend', async () => {

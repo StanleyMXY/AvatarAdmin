@@ -246,7 +246,8 @@ function missingLocales(): Record<string, string[]> {
 }
 
 /**
- * The one hard rule of contract 8.4 and its three refusals (a5): after the write, a recall reason
+ * The one hard rule of contract 8.4 and its three refusals (a5), told apart by `data.case`
+ * (`DEFAULT_MISSING`, `DEFAULT_REQUIRED_BY_OTHERS`, `DEFAULT_MOVED_AWAY`, request 35): after the write, a recall reason
  * with an enabled template has an enabled template in the default language. `before` and `after`
  * are the template as it was and as it will be (null for a create, for a delete). A write that
  * touches no enabled template is not judged. Nothing is written when it throws.
@@ -264,12 +265,21 @@ function enforceDefaultLanguage(before: MockTemplate | null, after: MockTemplate
       before?.enabled === true && before.triggerReason === reason && before.locale === lang;
     const movedAway = hadDefault && enabled.length === 1 && enabled[0] === after;
     const base = `${reason} needs an enabled template in ${lang} (the default language) while other languages are enabled`;
+    const kase = movedAway
+      ? 'DEFAULT_MOVED_AWAY'
+      : hadDefault
+        ? 'DEFAULT_REQUIRED_BY_OTHERS'
+        : 'DEFAULT_MISSING';
     const message = movedAway
       ? `${reason} would have no enabled template in ${lang}, the default language: keep this template in ${lang} and enabled, and create the other language as a new template`
       : hadDefault
         ? `${base}; disable the other languages of ${reason} first, or keep the ${lang} template enabled`
         : `${base}; enable or restore it first`;
-    throw new MockHttpError(400, 'INVALID_REQUEST', message, { defaultLocale: lang, reason });
+    throw new MockHttpError(400, 'INVALID_REQUEST', message, {
+      defaultLocale: lang,
+      reason,
+      case: kase,
+    });
   }
 }
 

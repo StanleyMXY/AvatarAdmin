@@ -53,6 +53,37 @@ describe('the event list', { timeout: 30000 }, () => {
     expect(document.body.textContent).not.toMatch(/null|undefined/);
   });
 
+  it('is never handed a whole Google purchase token: sourceEventId and the payload carry the last six characters only, and the page shows none of the token', async () => {
+    const google = sortedEvents()
+      .slice(0, 20)
+      .filter((e) => e.store === 'GOOGLE');
+    expect(google.length).toBeGreaterThan(0);
+    for (const event of google) {
+      event.sourceEventId = `gp-token-SECRETVALUE-abc123:${event.id}`;
+      event.payload = {
+        subscriptionNotification: { purchaseToken: 'gp-token-SECRETVALUE-abc123' },
+        voidedPurchaseNotification: { pendingRefundToken: 'gp-refund-SECRETREFUND-q1w2e3' },
+      };
+    }
+    useMockBackend(subscriptionsMock);
+    const mocked = globalThis.fetch;
+    const answers: string[] = [];
+    vi.stubGlobal('fetch', async (...args: Parameters<typeof fetch>) => {
+      const response = await mocked(...args);
+      answers.push(await response.clone().text());
+      return response;
+    });
+    renderPage(<EventsPage />);
+    await waitFor(() => expect(rows()).toHaveLength(20));
+    const received = answers.join('');
+    expect(received).not.toMatch(/SECRETVALUE|SECRETREFUND/);
+    expect(received).toContain('"sourceEventId":"abc123:');
+    expect(received).toContain('"purchaseTokenSuffix":"abc123"');
+    expect(received).toContain('"pendingRefundTokenSuffix":"q1w2e3"');
+    expect(received).not.toMatch(/"purchaseToken"|"pendingRefundToken"/);
+    expect(document.body.textContent).not.toMatch(/SECRETVALUE|SECRETREFUND/);
+  });
+
   it('marks an event with an error in red and an event that needs attention with a tag', async () => {
     useMockBackend(subscriptionsMock);
     renderPage(<EventsPage />);

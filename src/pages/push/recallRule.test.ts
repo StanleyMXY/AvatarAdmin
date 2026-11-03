@@ -18,7 +18,22 @@ describe('recallRuleOf: the refusal of the rule of the default language (a5)', (
     expect(recallRuleOf(refusal({ defaultLocale: 'th', reason: 'daily_recall' }))).toEqual({
       defaultLocale: 'th',
       reason: 'daily_recall',
+      defaultCase: null,
     });
+  });
+
+  it('reads the case the backend names, and takes a case that is not text as no case', () => {
+    expect(
+      recallRuleOf(
+        refusal({ defaultLocale: 'th', reason: 'daily_recall', case: 'DEFAULT_MOVED_AWAY' }),
+      ),
+    ).toEqual({ defaultLocale: 'th', reason: 'daily_recall', defaultCase: 'DEFAULT_MOVED_AWAY' });
+    expect(
+      recallRuleOf(refusal({ defaultLocale: 'th', reason: 'daily_recall', case: 3 }))?.defaultCase,
+    ).toBeNull();
+    expect(
+      recallRuleOf(refusal({ defaultLocale: 'th', reason: 'daily_recall', case: '' }))?.defaultCase,
+    ).toBeNull();
   });
 
   it.each([
@@ -70,6 +85,57 @@ describe('templateFailureText', () => {
     expect(templateFailureText(intlOf(enUS), refusal({ x: 1 }))).toBe(
       enUS['error.INVALID_REQUEST'],
     );
+  });
+});
+
+describe('templateFailureText: one text for each case the backend names', () => {
+  const named = (kase: unknown) =>
+    refusal({ defaultLocale: 'ไทย', reason: 'streak_at_risk', case: kase });
+
+  it('DEFAULT_MISSING: enable the template of the default language first, in English', () => {
+    const text = templateFailureText(intlOf(enUS), named('DEFAULT_MISSING'));
+    expect(text).toBe(
+      'Streak at risk needs an enabled template in the default language (ไทย) before another language can be on. Enable the ไทย template of Streak at risk first, then enable or create the other languages.',
+    );
+    expect(text).not.toContain('BACKEND SENTENCE');
+  });
+
+  it('DEFAULT_REQUIRED_BY_OTHERS: switch off the other languages first, in English', () => {
+    expect(templateFailureText(intlOf(enUS), named('DEFAULT_REQUIRED_BY_OTHERS'))).toBe(
+      'The ไทย template of Streak at risk cannot be switched off, deleted, or changed to another language or reason while other languages of Streak at risk are enabled. To do that, switch off the other languages of Streak at risk first.',
+    );
+  });
+
+  it('DEFAULT_MOVED_AWAY: keep it and create a new template for the other language, in English', () => {
+    expect(templateFailureText(intlOf(enUS), named('DEFAULT_MOVED_AWAY'))).toBe(
+      'The ไทย template is the only enabled template of Streak at risk, so it cannot be changed to another language. Keep it in ไทย and enabled, and create a new template for the other language.',
+    );
+  });
+
+  it('says the three in Chinese', () => {
+    const zh = intlOf(zhCN);
+    expect(templateFailureText(zh, named('DEFAULT_MISSING'))).toBe(
+      '触发原因“连续记录将断”要先有默认语言 ไทย 的启用模板，其他语言的模板才能启用。先启用“连续记录将断”的 ไทย 模板，再启用或新建其他语言的模板。',
+    );
+    expect(templateFailureText(zh, named('DEFAULT_REQUIRED_BY_OTHERS'))).toBe(
+      '“连续记录将断”下其他语言的模板仍在启用，默认语言 ไทย 的模板不能停用、删除，也不能改成别的语言或别的触发原因。要这样做，先停用“连续记录将断”下其他语言的模板。',
+    );
+    expect(templateFailureText(zh, named('DEFAULT_MOVED_AWAY'))).toBe(
+      'ไทย 的模板是“连续记录将断”唯一启用的模板，不能把它改成别的语言。保持它为 ไทย 并启用，另建其他语言的新模板。',
+    );
+  });
+
+  it.each([
+    ['a case the page has no words for', 'SOMETHING_NEW'],
+    ['no case (an older backend)', undefined],
+    ['a case that is not text', 7],
+    ['a case that is an inherited property name', 'constructor'],
+  ])('falls back to the one text for all three for %s', (_name, kase) => {
+    const text = templateFailureText(intlOf(enUS), named(kase));
+    expect(text).toBe(
+      'Streak at risk needs an enabled template in the default language (ไทย). Enable that one first. To switch it off, delete it or change it, first switch off the other languages of Streak at risk. If it is the only enabled template, keep it in ไทย and enabled, and create the other language as a new template.',
+    );
+    expect(text).not.toContain('SOMETHING_NEW');
   });
 });
 

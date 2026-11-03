@@ -148,7 +148,8 @@ describe('GET /subscriptions', () => {
         'accountId',
         'store',
         'storeRef',
-        'linkedPurchaseToken',
+        'storeRefSuffix',
+        'linkedPurchaseTokenSuffix',
         'productId',
         'state',
         'currentPeriodStart',
@@ -239,6 +240,101 @@ describe('GET /subscriptions/{id}', () => {
     const { status, body } = await get('GET /api/admin/subscriptions/:id', root(), {}, { id: '1' });
     expect(status).toBe(404);
     expect(body.code).toBe('RESOURCE_NOT_FOUND');
+  });
+});
+
+const SECRET = 'gp-token-SECRETVALUE-abc123';
+
+describe('Google purchase tokens: the answers carry only the last six characters', () => {
+  const googleRow = () => {
+    const row = subscriptionsState().subscriptions.find((r) => r.store === 'GOOGLE');
+    if (!row) throw new Error('the seed has a Google subscription');
+    row.storeRef = SECRET;
+    (row as { linkedPurchaseToken: string | null }).linkedPurchaseToken =
+      'linked-SECRETLINK-9z8y7x';
+    return row;
+  };
+
+  it('the list and the detail give null for a Google storeRef, the suffixes, and no linkedPurchaseToken', async () => {
+    const row = googleRow();
+    const list = await get('GET /api/admin/subscriptions', root(), {
+      store: 'GOOGLE',
+      pageSize: '100',
+    });
+    const one = list.body.data.items.find((r: { id: string }) => r.id === row.id);
+    const detail = await get('GET /api/admin/subscriptions/:id', root(), {}, { id: row.id });
+    for (const item of [one, detail.body.data]) {
+      expect(item.storeRef).toBeNull();
+      expect(item.storeRefSuffix).toBe('abc123');
+      expect(item.linkedPurchaseTokenSuffix).toBe('9z8y7x');
+      expect('linkedPurchaseToken' in item).toBe(false);
+    }
+    expect(JSON.stringify(list.body)).not.toContain('SECRETVALUE');
+    expect(JSON.stringify(detail.body)).not.toContain('SECRETLINK');
+  });
+
+  it('a Google row without a linked token gives null for its suffix; Apple keeps the whole storeRef and also gets a suffix', async () => {
+    const google = googleRow();
+    (google as { linkedPurchaseToken: string | null }).linkedPurchaseToken = null;
+    const apple = subscriptionsState().subscriptions.find((r) => r.store === 'APPLE');
+    if (!apple) throw new Error('the seed has an Apple subscription');
+    apple.storeRef = '2000000123456789';
+    const g = await get('GET /api/admin/subscriptions/:id', root(), {}, { id: google.id });
+    expect(g.body.data.linkedPurchaseTokenSuffix).toBeNull();
+    const a = await get('GET /api/admin/subscriptions/:id', root(), {}, { id: apple.id });
+    expect(a.body.data.storeRef).toBe('2000000123456789');
+    expect(a.body.data.storeRefSuffix).toBe('456789');
+  });
+
+  it('a Google event gives its sourceEventId cut at the first colon to six characters, and renames the tokens at every level of the payload', async () => {
+    const event = subscriptionsState().events.find((e) => e.store === 'GOOGLE');
+    if (!event) throw new Error('the seed has a Google event');
+    event.sourceEventId = `${SECRET}:1761000000000:extra:colons`;
+    event.payload = {
+      version: '1.0',
+      subscriptionNotification: {
+        purchaseToken: SECRET,
+        pendingRefundToken: 'refund-SECRETREFUND-q1w2e3',
+      },
+      nested: [{ deeper: { purchaseToken: SECRET } }],
+    };
+    const res = await get('GET /api/admin/subscription-events', root(), { pageSize: '100' });
+    const item = res.body.data.items.find((e: { id: string }) => e.id === event.id);
+    expect(item.sourceEventId).toBe('abc123:1761000000000:extra:colons');
+    expect(item.payload).toEqual({
+      version: '1.0',
+      subscriptionNotification: {
+        purchaseTokenSuffix: 'abc123',
+        pendingRefundTokenSuffix: 'q1w2e3',
+      },
+      nested: [{ deeper: { purchaseTokenSuffix: 'abc123' } }],
+    });
+    expect(JSON.stringify(res.body)).not.toMatch(/SECRETVALUE|SECRETREFUND/);
+  });
+
+  it('an Apple event is given as it is', async () => {
+    const event = subscriptionsState().events.find((e) => e.store === 'APPLE');
+    if (!event) throw new Error('the seed has an Apple event');
+    event.sourceEventId = 'apple-notification-uuid-1';
+    event.payload = { data: { transactionInfo: { originalTransactionId: '2000000123456789' } } };
+    const res = await get('GET /api/admin/subscription-events', root(), { pageSize: '100' });
+    const item = res.body.data.items.find((e: { id: string }) => e.id === event.id);
+    expect(item.sourceEventId).toBe('apple-notification-uuid-1');
+    expect(item.payload).toEqual(event.payload);
+  });
+
+  it('the answer of reprocess and ack is masked in the same way', async () => {
+    const event = subscriptionsState().events.find((e) => e.store === 'GOOGLE' && e.error !== null);
+    if (!event) throw new Error('the seed has a failed Google event');
+    event.sourceEventId = `${SECRET}:1`;
+    event.payload = { subscriptionNotification: { purchaseToken: SECRET } };
+    const res = await send(
+      'POST /api/admin/subscription-events/:id/reprocess',
+      root(),
+      {},
+      { id: event.id },
+    );
+    expect(JSON.stringify(res.body)).not.toContain('SECRETVALUE');
   });
 });
 

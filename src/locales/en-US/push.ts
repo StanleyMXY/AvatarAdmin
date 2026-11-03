@@ -83,6 +83,12 @@ const messages: Record<string, string> = {
   'push.templates.enabledOf': 'On: {reason}, {locale}',
   'push.templates.defaultLanguageRequired':
     '{reason} needs an enabled template in the default language ({defaultLocale}). Enable that one first. To switch it off, delete it or change it, first switch off the other languages of {reason}. If it is the only enabled template, keep it in {defaultLocale} and enabled, and create the other language as a new template.',
+  'push.templates.defaultCase.DEFAULT_MISSING':
+    '{reason} needs an enabled template in the default language ({defaultLocale}) before another language can be on. Enable the {defaultLocale} template of {reason} first, then enable or create the other languages.',
+  'push.templates.defaultCase.DEFAULT_REQUIRED_BY_OTHERS':
+    'The {defaultLocale} template of {reason} cannot be switched off, deleted, or changed to another language or reason while other languages of {reason} are enabled. To do that, switch off the other languages of {reason} first.',
+  'push.templates.defaultCase.DEFAULT_MOVED_AWAY':
+    'The {defaultLocale} template is the only enabled template of {reason}, so it cannot be changed to another language. Keep it in {defaultLocale} and enabled, and create a new template for the other language.',
   'push.templates.exists':
     'A template for this reason and language exists already. Edit that one instead.',
   'push.templates.reason': 'Trigger reason',
