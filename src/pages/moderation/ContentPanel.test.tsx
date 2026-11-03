@@ -353,6 +353,22 @@ describe('the address of a file is renewed before it expires', { timeout: 30000 
     expect(state.asked).toBe(5);
   });
 
+  it('does not read when the tab was hidden at the time, the panel is left, and the tab is shown again', async () => {
+    const state = scripted([() => file('A', 5 * MINUTE), () => file('B', 5 * MINUTE)]);
+    const view = renderPage(<ContentPanel record={recordOf(RECORD_ID.reportedAvatar)} canReview />);
+    await waitFor(() => expect(state.asked).toBe(1), { timeout: 8000 });
+    await screen.findByRole('img');
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    await advance(10 * MINUTE);
+    view.unmount();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await advance(MINUTE);
+    expect(state.asked).toBe(1);
+  });
+
   describe('a clip that was stopped in the middle keeps its place when the address is replaced', () => {
     /** A media element that remembers what was written to `currentTime` (happy-dom has no player). */
     const fake = (element: HTMLMediaElement, position: number, paused: boolean) => {
