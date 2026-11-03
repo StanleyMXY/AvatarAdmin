@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { resetConfigStore, saved } from './_core/configStore';
 import { issueToken, resetStore } from './_core/store';
 import { resetSubscriptionsStore, subscriptionsState } from './_core/subscriptionsData';
 import { adminOf, bearer, call } from './_core/testing';
@@ -7,6 +8,7 @@ import subscriptions from './subscriptions.mock';
 
 beforeEach(() => {
   resetStore();
+  resetConfigStore();
   resetSubscriptionsStore();
 });
 
@@ -424,6 +426,35 @@ describe('entitlement definitions and their feature values', () => {
       (await put({ featureKey: 'chat.model_tier', mode: 'VALUE', value: 'nope' })).status,
     ).toBe(400);
     expect((await put({ featureKey: 'no.such_key', mode: 'UNSET' })).status).toBe(400);
+  });
+
+  it('refuses a limit above entitlement.limit_max, the value GET /meta gives as entitlementLimitMax, whatever it has been set to', async () => {
+    const put = (value: number) =>
+      send(
+        'PUT /api/admin/entitlement-defs/:key/features',
+        root(),
+        { features: [{ featureKey: 'assets.avatar_max', mode: 'VALUE', value }] },
+        { key: 'basic' },
+      );
+    expect((await put(1_000_000)).status).toBe(200);
+    expect((await put(1_000_001)).body.data.details).toEqual([
+      { ref: 'assets.avatar_max', reason: 'OUT_OF_RANGE' },
+    ]);
+    const setMax = (value: number) =>
+      saved.set('entitlement.limit_max', {
+        value,
+        updatedAt: '',
+        updatedBy: '',
+        updatedByUsername: '',
+      });
+    setMax(500);
+    expect((await put(500)).status).toBe(200);
+    expect((await put(501)).body.data.details).toEqual([
+      { ref: 'assets.avatar_max', reason: 'OUT_OF_RANGE' },
+    ]);
+    setMax(2_000_000);
+    expect((await put(2_000_000)).status).toBe(200);
+    expect((await put(2_000_001)).status).toBe(400);
   });
 
   it('is atomic: one bad value saves none of the others', async () => {
