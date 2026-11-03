@@ -28,6 +28,14 @@ const messages: Record<string, string> = {
   'reason.NOT_FOUND': '指定的对象不存在',
   'reason.DISABLED': '已停用，不能选择',
   'reason.CURRENCY_MISMATCH': '币种与投放成本使用的币种不一致',
+  'reason.LAST_OTP_CHANNEL':
+    '这是最后一个启用的验证码通道。手机号登录开启，或存在手机号账号时，必须至少保留一个启用的验证码通道，所以不能删除、停用或改成其他类型。请先启用或新建另一个验证码通道。',
+  'reason.COUNTRY_LOSES_OTP_CHANNEL':
+    '这次改动之后，现在有启用的验证码通道覆盖的某个国家会没有通道。手机号登录开启，或存在手机号账号时，允许收验证码的每个国家都必须有启用的验证码通道覆盖。请先新建另一个验证码通道，或扩大另一个通道的国家范围。',
+  'reason.LAST_OTP_TEMPLATE':
+    '这是最后一个启用的验证码模板。手机号登录开启，或存在手机号账号时，必须至少保留一个启用的验证码模板，所以不能删除、停用或改成其他类型。请先启用或新建另一个。',
+  'reason.LAST_ENGLISH_FALLBACK_TEMPLATE':
+    '这是最后一个启用的、语言为英文（en）、不限国家的验证码模板。手机号登录开启，或存在手机号账号时，必须保留一个，所以不能删除、停用，也不能改它的语言、国家或类型。请先启用或新建另一个。',
 };
 
 export default messages;

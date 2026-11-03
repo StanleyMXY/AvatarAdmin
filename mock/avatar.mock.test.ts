@@ -254,10 +254,9 @@ describe('uploads and the cosmetic catalog', () => {
     expect((await send(COSMETIC_UPDATE, putBody(), { id: 'zz' })).status).toBe(404);
   });
 
-  it('needs the whole item to update it: kind and enabled among the fields, 400 on the ref of each one that is missing', async () => {
+  it('needs the whole item to update it: enabled among the fields, 400 on the ref of each one that is missing, and not the kind', async () => {
     const full = putBody({ enabled: true });
     for (const field of [
-      'kind',
       'enabled',
       'names',
       'generationSpec',
@@ -281,13 +280,37 @@ describe('uploads and the cosmetic catalog', () => {
     expect(lean200.body.data.surfaces).toEqual([]);
   });
 
-  it('writes the kind and the enabled state it is sent, and refuses a key that is not the key of the item', async () => {
+  it('keeps the kind of the item when the update leaves it out or sends the one it has, and refuses any other kind like a key that is not its own: 400 INVALID_REQUEST, ref kind, OUT_OF_RANGE', async () => {
+    const before = avatarState.cosmetics.find((c) => c.id === '3');
+    expect(before?.kind).toBe('OUTFIT');
+    const { kind: _kind, ...withoutKind } = putBody({ enabled: true }) as Record<string, unknown>;
+    const left = await send(COSMETIC_UPDATE, withoutKind, { id: '3' });
+    expect(left.status).toBe(200);
+    expect(left.body.data.kind).toBe('OUTFIT');
+    const same = await send(COSMETIC_UPDATE, putBody({ kind: 'OUTFIT', enabled: true }), {
+      id: '3',
+    });
+    expect(same.status).toBe(200);
+    expect(same.body.data.kind).toBe('OUTFIT');
+    for (const other of ['BACKGROUND', 'HAT', 'outfit', 7]) {
+      const refused = await send(COSMETIC_UPDATE, putBody({ kind: other, enabled: true }), {
+        id: '3',
+      });
+      expect([refused.status, refused.body.code], String(other)).toEqual([400, 'INVALID_REQUEST']);
+      expect(refused.body.data.details, String(other)).toEqual([
+        { ref: 'kind', reason: 'OUT_OF_RANGE' },
+      ]);
+      expect(avatarState.cosmetics.find((c) => c.id === '3')?.kind).toBe('OUTFIT');
+    }
+  });
+
+  it('writes the enabled state it is sent, and refuses a key that is not the key of the item', async () => {
     const answer = await send(
       COSMETIC_UPDATE,
-      { ...putBody({ kind: 'BACKGROUND', enabled: false }), key: 'outfit_red_dress' },
+      { ...putBody({ enabled: false }), key: 'outfit_red_dress' },
       { id: '3' },
     );
-    expect(answer.body.data).toMatchObject({ kind: 'BACKGROUND', enabled: false });
+    expect(answer.body.data).toMatchObject({ kind: 'OUTFIT', enabled: false });
     const other = await send(
       COSMETIC_UPDATE,
       { ...putBody({ enabled: true }), key: 'other_key' },
@@ -298,10 +321,16 @@ describe('uploads and the cosmetic catalog', () => {
     expect(other.status).toBe(400);
     expect(other.body.data.details).toEqual([{ ref: 'key', reason: 'OUT_OF_RANGE' }]);
     expect(avatarState.cosmetics.find((c) => c.id === '3')?.key).toBe('outfit_red_dress');
-    const wrongKind = await send(COSMETIC_UPDATE, putBody({ kind: 'HAT', enabled: true }), {
-      id: '3',
-    });
-    expect(wrongKind.body.data.details).toEqual([{ ref: 'kind', reason: 'OUT_OF_RANGE' }]);
+    // both mistakes in one request are both named
+    const both = await send(
+      COSMETIC_UPDATE,
+      { ...putBody({ kind: 'BACKGROUND', enabled: true }), key: 'other_key' },
+      { id: '3' },
+    );
+    expect(both.body.data.details).toEqual([
+      { ref: 'key', reason: 'OUT_OF_RANGE' },
+      { ref: 'kind', reason: 'OUT_OF_RANGE' },
+    ]);
   });
 
   it('needs enabled to create an item or an action, on the ref enabled', async () => {
@@ -690,6 +719,34 @@ describe('renderer models', () => {
     expect(invalid.body.data.details.map((d: { ref: string }) => d.ref).sort()).toEqual(
       ['platform', 'rendererFormatVersion'].sort(),
     );
+  });
+
+  it('gives each model with the fields of the table and no storage key (request 11: fileRef is not returned, nor an address in its place)', async () => {
+    const fields = [
+      'abi',
+      'createdAt',
+      'enabled',
+      'id',
+      'minVersionCode',
+      'platform',
+      'rendererFormatVersion',
+      'rendererKind',
+      'sha256',
+      'sizeBytes',
+      'version',
+    ];
+    const listed = (await get(MODELS)).body.data.items as Record<string, unknown>[];
+    expect(listed).toHaveLength(3);
+    for (const row of listed) expect(Object.keys(row).sort()).toEqual(fields);
+    const created = await send(MODEL_CREATE, model(await upload(UPLOAD_MODEL)));
+    expect(Object.keys(created.body.data).sort()).toEqual(fields);
+    const switched = await send(
+      'PUT /api/admin/renderer-models/:id/enabled',
+      { enabled: true },
+      { id: '3' },
+    );
+    expect(Object.keys(switched.body.data).sort()).toEqual(fields);
+    expect(JSON.stringify(listed)).not.toMatch(/fileRef|downloadUrl|\.zip/i);
   });
 
   it('lists and switches', async () => {

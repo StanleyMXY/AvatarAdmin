@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { resetSessionState, setToken } from '../../request/session';
 import {
@@ -28,6 +28,7 @@ import {
   updateAction,
   updateCosmetic,
 } from './index';
+import type { RendererModel } from './types';
 
 beforeEach(() => {
   resetSessionState();
@@ -115,11 +116,13 @@ describe('the catalogs', () => {
     expect(calls[0].init.method).toBe('POST');
     expect(body(calls[0])).toMatchObject({ key: 'red_dress', previewUploadId: 'up-1' });
     expect(JSON.stringify(body(calls[0]))).not.toContain('previewUrl');
-    await updateCosmetic('a/b', { ...base, kind: 'OUTFIT', enabled: true });
+    await updateCosmetic('a/b', { ...base, enabled: true });
     expect(calls[1].url).toBe('/api/admin/cosmetics/a%2Fb');
     expect(calls[1].init.method).toBe('PUT');
     expect(body(calls[1]).creditPrice).toBeNull();
-    expect(body(calls[1])).toMatchObject({ kind: 'OUTFIT', enabled: true });
+    expect(body(calls[1])).toMatchObject({ enabled: true });
+    // the kind is fixed once the item exists: the update leaves it out and the backend keeps it
+    expect('kind' in body(calls[1])).toBe(false);
     expect('key' in body(calls[1])).toBe(false);
     expect('previewUploadId' in body(calls[1])).toBe(false);
   });
@@ -180,6 +183,12 @@ describe('declarations and renderer models', () => {
     await activateDeclaration('2026 v2');
     expect(calls[2].url).toBe('/api/admin/declarations/2026%20v2/activate');
     expect(calls[2].init.method).toBe('PUT');
+  });
+
+  it('types a renderer model without the storage key the backend no longer returns (request 11)', () => {
+    expectTypeOf<RendererModel>().not.toHaveProperty('fileRef');
+    expectTypeOf<RendererModel>().toHaveProperty('sha256');
+    expectTypeOf<RendererModel>().toHaveProperty('sizeBytes');
   });
 
   it('registers a renderer model with the uploadId and the six fields, and no sha256 or size', async () => {
