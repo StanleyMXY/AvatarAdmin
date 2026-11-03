@@ -8,6 +8,7 @@ import { useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import ChannelsPage from './channels';
 import {
+  dialogsClosed,
   holdWrites,
   jsonAnswer,
   overrideFetch,
@@ -581,12 +582,24 @@ describe('the question before the last enabled OTP channel is switched off, dele
     expect((await rowOf('gw_th_otp')).textContent).toContain('gw_th_otp');
   });
 
-  it('deletes the last channel without a question when the meta says that the backend does not guard it (no phone sign-in, no phone accounts)', async () => {
+  it('asks a plain delete question for the last channel when the meta says that the backend does not guard it, and sends the delete only when it is confirmed', async () => {
     smsState.phoneAccounts = 0;
     const { calls, user } = await load();
     await user.click(within(await rowOf('gw_th_otp')).getByRole('button', { name: 'Delete' }));
+    const ask = await screen.findByRole('dialog');
+    expect(within(ask).getAllByText('Delete this channel?').length).toBeGreaterThan(0);
+    // The guard dialog is not shown: nothing of the two conditions is named.
+    expect(within(ask).queryByText(/Phone sign-in is/)).toBeNull();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+    await dialogsClosed();
+    expect((await rowOf('gw_th_otp')).textContent).toContain('gw_th_otp');
+    await user.click(within(await rowOf('gw_th_otp')).getByRole('button', { name: 'Delete' }));
+    const again = (await screen.findAllByRole('dialog')).at(-1) as HTMLElement;
+    await user.click(within(again).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
-    expect(screen.queryByRole('dialog')).toBeNull();
     await waitFor(() => expect(rows().some((tr) => cellsOf(tr)[0] === 'gw_th_otp')).toBe(false));
     expect(screen.queryByText(/Some input is not valid/)).toBeNull();
   });

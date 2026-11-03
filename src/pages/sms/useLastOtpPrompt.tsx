@@ -26,7 +26,7 @@ export async function readPhoneGuard(): Promise<PhoneGuard | null> {
   }
 }
 
-/** True only when the meta says that neither condition holds: then the backend does not guard anything and nothing is asked. */
+/** True only when the meta says that neither condition holds: then the backend does not guard anything and the guard question is not asked. */
 const guardOff = (guard: PhoneGuard | null): boolean =>
   guard !== null && guard.phoneLoginEnabled === false && guard.phoneAccountCount === 0;
 
@@ -63,7 +63,8 @@ export function guardedFailureText(intl: Translator, error: unknown): string {
 /**
  * The question asked before the last enabled OTP channel or template is switched off, deleted or
  * changed so that it stops serving codes. It reads the SMS meta now: when phone sign-in is off and
- * no account has a phone number the backend does not refuse and nothing is asked; otherwise it names
+ * no account has a phone number the backend does not refuse, so a switch-off or change asks nothing and
+ * a delete asks only whether to delete; otherwise it names
  * the condition(s) that hold, with the number of accounts, and resolves true when the administrator
  * goes on. When the meta cannot be read the question names both conditions as unknown. The backend
  * has the last word.
@@ -74,9 +75,24 @@ export function useLastOtpPrompt() {
   return useCallback(
     async (action: GuardAction, subject: GuardSubject): Promise<boolean> => {
       const guard = await readPhoneGuard();
-      if (guardOff(guard)) return true;
       const t = (id: string, values?: Record<string, string | number>) =>
         intl.formatMessage({ id }, values);
+      if (guardOff(guard)) {
+        // The backend does not guard anything now: switching off or changing needs no question, but a
+        // delete cannot be undone (and the credentials of a channel are gone with it), so it is asked
+        // as plainly as the delete of any other row.
+        if (action !== 'delete') return true;
+        return new Promise<boolean>((resolve) => {
+          modal.confirm({
+            title: t(subject === 'channel' ? 'sms.channels.deleteAsk' : 'sms.templates.deleteAsk'),
+            okText: t('sms.common.delete'),
+            cancelText: t('pages.common.cancel'),
+            okButtonProps: { danger: true },
+            onOk: () => resolve(true),
+            onCancel: () => resolve(false),
+          });
+        });
+      }
       const signInLine =
         guard?.phoneLoginEnabled === true
           ? t('sms.guard.signInOn')

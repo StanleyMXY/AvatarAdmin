@@ -657,6 +657,27 @@ describe('deleting a template', () => {
     await waitFor(() => expect(rows().some((tr) => cellsOf(tr)[0] === 'otp_en')).toBe(false));
   });
 
+  it('asks a plain delete question for the last OTP template when the meta says that the backend does not guard it, and sends the delete only when it is confirmed', async () => {
+    only('otp_en');
+    smsState.phoneAccounts = 0;
+    const { calls, user } = await load();
+    await user.click(within(await rowOf('otp_en')).getByRole('button', { name: 'Delete' }));
+    const ask = await screen.findByRole('dialog');
+    expect(within(ask).getAllByText('Delete this template?').length).toBeGreaterThan(0);
+    expect(within(ask).queryByText(/Phone sign-in is/)).toBeNull();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+    await dialogsClosed();
+    expect((await rowOf('otp_en')).textContent).toContain('otp_en');
+    await user.click(within(await rowOf('otp_en')).getByRole('button', { name: 'Delete' }));
+    const again = (await screen.findAllByRole('dialog')).at(-1) as HTMLElement;
+    await user.click(within(again).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    await waitFor(() => expect(rows().some((tr) => cellsOf(tr)[0] === 'otp_en')).toBe(false));
+  });
+
   it('does not ask for a template that is off, even when it is OTP', async () => {
     only('otp_en');
     const { calls, user } = await load();
