@@ -5,6 +5,7 @@ import { resetConfigStore, saved } from './_core/configStore';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
 import ads from './ads.mock';
+import config from './config.mock';
 
 const NOW = new Date('2026-10-26T10:00:00Z');
 
@@ -67,7 +68,7 @@ describe('the permissions', () => {
   it('lets each list be read with its own code and with the codes of the pages that pick from it, and nothing else', async () => {
     const cases: [string, string[], string[]][] = [
       [CAMPAIGNS, ['ADS:CAMPAIGN', 'ADS:UNIT', 'ADS:CREATIVE'], ['ADS:PLACEMENT', 'ADS:REPORT']],
-      [PLACEMENTS, ['ADS:PLACEMENT', 'ADS:UNIT'], ['ADS:CAMPAIGN', 'ADS:CREATIVE', 'ADS:REPORT']],
+      [PLACEMENTS, ['ADS:PLACEMENT', 'ADS:UNIT', 'ADS:CREATIVE'], ['ADS:CAMPAIGN', 'ADS:REPORT']],
       [UNITS, ['ADS:UNIT', 'ADS:CREATIVE'], ['ADS:CAMPAIGN', 'ADS:PLACEMENT', 'ADS:REPORT']],
       [CREATIVES, ['ADS:CREATIVE'], ['ADS:UNIT', 'ADS:CAMPAIGN', 'ADS:PLACEMENT', 'ADS:REPORT']],
     ];
@@ -959,11 +960,64 @@ describe('the creatives', () => {
 });
 
 describe('the meta', () => {
-  it('says whether the geo database is configured', async () => {
+  it('says whether the geo database is configured, the tolerance of the ratio check and how many creatives cannot be skipped on a full-screen placement', async () => {
     adsState.geoConfigured = false;
-    expect((await get(META)).body.data).toEqual({ geoConfigured: false });
+    expect(Object.keys((await get(META)).body.data).sort()).toEqual([
+      'creativeAspectTolerancePercent',
+      'geoConfigured',
+      'notSkippableFullScreenCount',
+    ]);
+    expect((await get(META)).body.data.geoConfigured).toBe(false);
     adsState.geoConfigured = true;
-    expect((await get(META)).body.data).toEqual({ geoConfigured: true });
+    expect((await get(META)).body.data.geoConfigured).toBe(true);
+  });
+
+  it('answers the tolerance in force, 3 until the configuration says otherwise, to every ads code', async () => {
+    expect((await get(META, {}, {}, only('ADS:CREATIVE'))).body.data).toMatchObject({
+      creativeAspectTolerancePercent: 3,
+    });
+    saved.set('ads.creative_aspect_tolerance_percent', {
+      value: 12,
+      updatedAt: '2026-10-25T00:00:00.000Z',
+      updatedBy: '1001',
+      updatedByUsername: 'root',
+    });
+    expect(
+      (await get(META, {}, {}, only('ADS:PLACEMENT'))).body.data.creativeAspectTolerancePercent,
+    ).toBe(12);
+  });
+
+  it('counts the creatives that cannot be skipped, are not rejected and sit on a splash or interstitial placement, the number the force-close warning gives', async () => {
+    const count = async () =>
+      (await get(META, {}, {}, only('ADS:PLACEMENT'))).body.data.notSkippableFullScreenCount;
+    const before = await count();
+    expect(Number.isInteger(before)).toBe(true);
+    const fullScreen = (c: { adUnitId: string }) => {
+      const unit = adsState.units.get(c.adUnitId);
+      const format = unit ? adsState.placements.get(unit.placementId)?.adFormat : undefined;
+      return format === 'SPLASH' || format === 'INTERSTITIAL';
+    };
+    const target = [...adsState.creatives.values()].find((c) => c.skippable && fullScreen(c));
+    expect(target).toBeDefined();
+    if (!target) return;
+    target.skippable = false;
+    target.reviewStatus = 'DRAFT';
+    expect(await count()).toBe(before + 1);
+    target.reviewStatus = 'REJECTED';
+    expect(await count()).toBe(before);
+    // The warning of the save says the same number.
+    target.reviewStatus = 'APPROVED';
+    const saveAnswer = await call(
+      (config as unknown as Record<string, H>)['PUT /api/admin/config/:key'],
+      {
+        headers: { authorization: token('root') },
+        params: { key: 'ads.force_close_seconds' },
+        body: { value: 0 },
+      },
+    );
+    expect(saveAnswer.body.data.warnings).toEqual([
+      expect.objectContaining({ code: 'AD_FORCE_CLOSE_DISABLED', count: before + 1 }),
+    ]);
   });
 });
 

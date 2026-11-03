@@ -209,7 +209,14 @@ export type MediaUpload = {
   mediaType: 'IMAGE' | 'VIDEO' | string;
 };
 
-export type AdsMeta = { geoConfigured: boolean | null };
+/** `GET /ads/meta` (any `ADS:*` code); each value is `null` when the answer does not give it as the right type. */
+export type AdsMeta = {
+  geoConfigured: boolean | null;
+  /** `ads.creative_aspect_tolerance_percent` in force: the ratio of a file may differ from the spec by this many percent. */
+  creativeAspectTolerancePercent: number | null;
+  /** Creatives that cannot be skipped, are not rejected and sit on a splash or interstitial placement. */
+  notSkippableFullScreenCount: number | null;
+};
 
 // ---- reports ----
 

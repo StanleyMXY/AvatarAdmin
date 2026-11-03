@@ -15,6 +15,7 @@ import {
   type AdCreative,
   CREATIVE_TYPES,
   deleteCreative,
+  getAdsMeta,
   listCampaigns,
   listCreatives,
   listPlacements,
@@ -27,7 +28,6 @@ import {
   type ServingStatus,
   setServingStatus,
 } from '../../services/ads';
-import { listConfig } from '../../services/config';
 import { describeFailure } from '../../session/describe';
 import { codeText, countText } from '../../utils/displayText';
 import { plainText } from '../../utils/plainText';
@@ -59,13 +59,13 @@ const REVIEW_COLOR: Record<ReviewStatus, string | undefined> = {
   REJECTED: 'red',
 };
 
-/** `ads.creative_aspect_tolerance_percent` as the configuration says, or `null` when this administrator cannot read it. */
+/**
+ * The tolerance of the ratio check, `creativeAspectTolerancePercent` of `GET /ads/meta` (every `ADS:*`
+ * code may read it, so the system configuration is not needed), or `null` when it cannot be read.
+ */
 async function readTolerance(): Promise<number | null> {
   try {
-    const row = (await listConfig()).items.find(
-      (i) => i.key === 'ads.creative_aspect_tolerance_percent',
-    );
-    return typeof row?.value === 'number' ? row.value : null;
+    return (await getAdsMeta()).creativeAspectTolerancePercent;
   } catch {
     return null;
   }

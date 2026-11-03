@@ -2,9 +2,6 @@
 // server decides; this tells the person why a file would be refused before the form is sent.
 import { formatBytesPair } from '../../utils/format';
 
-/** `ads.creative_aspect_tolerance_percent` when it cannot be read (contract 22.2). */
-export const DEFAULT_TOLERANCE_PERCENT = 3;
-
 export type MediaFacts = {
   width: number | null | undefined;
   height: number | null | undefined;
@@ -36,7 +33,8 @@ function ratioText(width: number, height: number): string {
 
 /**
  * Checks the file against the spec: the ratio within the tolerance (relative to the ratio of the
- * spec), the shorter side at least the minimum, the size at most the maximum. What the spec or the
+ * spec; not compared when the tolerance is not known), the shorter side at least the minimum, the
+ * size at most the maximum. What the spec or the
  * file does not give is not checked. The problems are in the order ratio, shorter side, size.
  */
 export function checkMediaSpec(
@@ -44,15 +42,17 @@ export function checkMediaSpec(
   spec: SpecFacts,
   tolerancePercent: number | null | undefined,
 ): { fits: boolean; problems: SpecProblem[] } {
+  // Without the tolerance in force (`creativeAspectTolerancePercent` of `GET /ads/meta`) the ratio is
+  // not compared: a guessed one could refuse a file the backend takes. The server still decides.
   const percent =
     typeof tolerancePercent === 'number' && Number.isFinite(tolerancePercent)
       ? tolerancePercent
-      : DEFAULT_TOLERANCE_PERCENT;
+      : null;
   const problems: SpecProblem[] = [];
   const { width, height, bytes } = media;
 
   const wanted = /^(\d+):(\d+)$/.exec(spec.creativeAspect ?? '');
-  if (wanted && isCount(width) && isCount(height)) {
+  if (wanted && percent !== null && isCount(width) && isCount(height)) {
     const target = Number(wanted[1]) / Number(wanted[2]);
     const actual = width / height;
     if (

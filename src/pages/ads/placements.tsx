@@ -161,7 +161,7 @@ export default function PlacementsPage() {
       />
       <Card size="small" title={t('ads.placements.globalTitle')}>
         <Flex vertical gap={12}>
-          <AdsWarnings placements={data} version={settingsVersion} />
+          <AdsWarnings version={settingsVersion} />
           <ConfigForm
             editPermission="ADS:PLACEMENT"
             onChanged={() => setSettingsVersion((v) => v + 1)}

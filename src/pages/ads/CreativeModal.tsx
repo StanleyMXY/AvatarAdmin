@@ -70,7 +70,7 @@ type Props = {
   creative: AdCreative | null;
   units: Source<AdUnit>;
   placements: Source<AdPlacement>;
-  /** `ads.creative_aspect_tolerance_percent` when it could be read. */
+  /** `creativeAspectTolerancePercent` of the ads meta when it could be read. */
   tolerance: number | null;
   onClose: () => void;
   onSaved: () => void;

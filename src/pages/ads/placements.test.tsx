@@ -221,16 +221,94 @@ describe('the warnings that stay on the page', { timeout: 30000 }, () => {
     expect(warnings()).toBeNull();
   });
 
-  it('warns without a count when the creatives cannot be read for lack of ADS:CREATIVE', async () => {
-    setConfig('ads.force_close_seconds', 0);
+  it('an administrator with ADS:PLACEMENT only sees the same warning with the count, from the meta, and the page reads no creative or unit for it', async () => {
     signIn('support', { codes: ['ADS:PLACEMENT'] });
     setConfig('ads.force_close_seconds', 0);
-    backend();
+    const calls = backend();
     renderPage(<PlacementsPage />);
     const box = await screen.findByTestId('ads-placements-warnings');
     expect(box.textContent).toMatch(/Forced close \(ads\.force_close_seconds\) is 0/);
-    expect(box.textContent).toMatch(/cannot be checked here/i);
-    expect(box.textContent).not.toMatch(/\d+ creative/);
+    expect(box.textContent).toMatch(/1 creative/);
+    expect(box.textContent).not.toMatch(/could not be checked/i);
+    expect(calls.map((c) => c.url).filter((u) => /\/ads\/(creatives|units)/.test(u))).toEqual([]);
+    expect(calls.some((c) => c.url === '/api/admin/ads/meta')).toBe(true);
+  });
+
+  it('shows the count the meta gives, whatever the creative list would say', async () => {
+    setConfig('ads.force_close_seconds', 0);
+    backend();
+    overrideFetch(async ({ url }) =>
+      url.pathname === '/api/admin/ads/meta'
+        ? jsonAnswer(200, '200', {
+            geoConfigured: true,
+            creativeAspectTolerancePercent: 3,
+            notSkippableFullScreenCount: 7,
+          })
+        : undefined,
+    );
+    renderPage(<PlacementsPage />);
+    const box = await screen.findByTestId('ads-placements-warnings');
+    expect(box.textContent).toMatch(/7 creatives/);
+  });
+
+  it('shows no warning about the force-close when the meta says 0 creatives cannot be skipped', async () => {
+    setConfig('ads.force_close_seconds', 0);
+    backend();
+    overrideFetch(async ({ url }) =>
+      url.pathname === '/api/admin/ads/meta'
+        ? jsonAnswer(200, '200', {
+            geoConfigured: true,
+            creativeAspectTolerancePercent: 3,
+            notSkippableFullScreenCount: 0,
+          })
+        : undefined,
+    );
+    renderPage(<PlacementsPage />);
+    await waitFor(() => expect(configKeys()).toHaveLength(9));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(warnings()).toBeNull();
+  });
+
+  it('does not show the count warning while the force-close is not 0, however many creatives cannot be skipped', async () => {
+    backend();
+    overrideFetch(async ({ url }) =>
+      url.pathname === '/api/admin/ads/meta'
+        ? jsonAnswer(200, '200', {
+            geoConfigured: true,
+            creativeAspectTolerancePercent: 3,
+            notSkippableFullScreenCount: 7,
+          })
+        : undefined,
+    );
+    renderPage(<PlacementsPage />);
+    await waitFor(() => expect(configKeys()).toHaveLength(9));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(warnings()).toBeNull();
+  });
+
+  it('says it cannot check when the force-close is 0 and the meta cannot be read, instead of staying silent', async () => {
+    setConfig('ads.force_close_seconds', 0);
+    backend();
+    overrideFetch(async ({ url }) =>
+      url.pathname === '/api/admin/ads/meta' ? jsonAnswer(500, 'INTERNAL_ERROR', null) : undefined,
+    );
+    renderPage(<PlacementsPage />);
+    const box = await screen.findByTestId('ads-placements-warnings');
+    expect(box.textContent).toMatch(/Forced close \(ads\.force_close_seconds\) is 0/);
+    expect(box.textContent).toMatch(/could not be checked just now/i);
+  });
+
+  it('counts again after a setting is saved', async () => {
+    setConfig('ads.force_close_seconds', 0);
+    const { user } = await load();
+    await screen.findByTestId('ads-placements-warnings');
+    for (const creative of adsState.creatives.values()) creative.skippable = true;
+    const row = await screen.findByTestId('config-row-ads.skip_after_seconds');
+    const input = within(row).getByRole('spinbutton');
+    await user.clear(input);
+    await user.type(input, '4');
+    await user.click(within(row).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(warnings()).toBeNull());
   });
 });
 

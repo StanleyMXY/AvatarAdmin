@@ -89,7 +89,7 @@ const messages: Record<string, string> = {
   'ads.placements.warn.forceClose':
     'Forced close (ads.force_close_seconds) is 0, so a splash or interstitial creative that cannot be skipped has no way to be closed. There {count, plural, one {is # creative} other {are # creatives}} without a skip on those placements now.',
   'ads.placements.warn.forceCloseUnknown':
-    'Forced close (ads.force_close_seconds) is 0. A splash or interstitial creative that cannot be skipped has no way to be closed; this cannot be checked here without the ADS:CREATIVE permission.',
+    'Forced close (ads.force_close_seconds) is 0. A splash or interstitial creative that cannot be skipped has no way to be closed; how many there are could not be checked just now.',
   'ads.placements.col.slotKey': 'Slot key',
   'ads.placements.col.format': 'Format',
   'ads.placements.col.name': 'Name',

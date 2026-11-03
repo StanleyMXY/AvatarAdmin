@@ -83,7 +83,7 @@ const messages: Record<string, string> = {
   'ads.placements.warn.forceClose':
     '强制可关闭兜底（ads.force_close_seconds）为 0，开屏或插屏下“不可跳过”的素材没有任何关闭按钮。这些广告位下现在有 {count} 条不可跳过的素材。',
   'ads.placements.warn.forceCloseUnknown':
-    '强制可关闭兜底（ads.force_close_seconds）为 0。如果开屏或插屏下有“不可跳过”的素材，它们没有任何关闭按钮；没有 ADS:CREATIVE 权限，这里无法核对。',
+    '强制可关闭兜底（ads.force_close_seconds）为 0。如果开屏或插屏下有“不可跳过”的素材，它们没有任何关闭按钮；刚才没能核对有多少条。',
   'ads.placements.col.slotKey': '广告位键',
   'ads.placements.col.format': '形式',
   'ads.placements.col.name': '名称',

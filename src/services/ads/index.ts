@@ -109,11 +109,28 @@ export const setUnitStatus = (id: string, status: UnitStatus): Promise<AdUnit> =
 export const deleteUnit = (id: string): Promise<unknown> =>
   apiRequest({ method: 'DELETE', url: `/ads/units/${enc(id)}` });
 
-/** `GET /ads/meta`: whether the geo database is set up (`null` when the answer does not say). */
+/**
+ * `GET /ads/meta`, open to every `ADS:*` code: whether the geo database is set up, the tolerance of
+ * the ratio check of a creative and the count of creatives that cannot be skipped on a full-screen
+ * placement. A value that is not of its type is `null`, never guessed.
+ */
 export async function getAdsMeta(): Promise<AdsMeta> {
-  const data = await apiRequest<unknown>({ method: 'GET', url: '/ads/meta' });
-  const flag = (data as { geoConfigured?: unknown } | null)?.geoConfigured;
-  return { geoConfigured: typeof flag === 'boolean' ? flag : null };
+  const data = (await apiRequest<unknown>({ method: 'GET', url: '/ads/meta' })) as {
+    geoConfigured?: unknown;
+    creativeAspectTolerancePercent?: unknown;
+    notSkippableFullScreenCount?: unknown;
+  } | null;
+  const count = data?.notSkippableFullScreenCount;
+  const tolerance = data?.creativeAspectTolerancePercent;
+  return {
+    geoConfigured: typeof data?.geoConfigured === 'boolean' ? data.geoConfigured : null,
+    creativeAspectTolerancePercent:
+      typeof tolerance === 'number' && Number.isFinite(tolerance) && tolerance >= 0
+        ? tolerance
+        : null,
+    notSkippableFullScreenCount:
+      typeof count === 'number' && Number.isInteger(count) && count >= 0 ? count : null,
+  };
 }
 
 // ---- creatives (ADS:CREATIVE) ----

@@ -1,7 +1,7 @@
 import type { PermissionCode } from '../src/access/permissionCodes';
 import { CONFIG_SCHEMA, specOf, validateValue } from '../src/pages/config/configSchema';
 import { validateServerLink } from '../src/utils/linkRule';
-import { adsState } from './_core/adsData';
+import { notSkippableFullScreenCount } from './_core/adsData';
 import { guard, hasPermission } from './_core/auth';
 import { campaignState } from './_core/campaignData';
 import { currentValue, defaultOf, deployEnv, saved } from './_core/configStore';
@@ -254,15 +254,8 @@ function warningsFor(
   }
   if (key === 'ads.force_close_seconds' && value === 0) {
     // Contract 17.4: a creative that cannot be skipped on a splash or interstitial placement can
-    // then never be closed. A rejected creative is never served, so it does not count.
-    const fullScreen = (unitId: string): boolean => {
-      const unit = adsState.units.get(unitId);
-      const format = unit ? adsState.placements.get(unit.placementId)?.adFormat : undefined;
-      return format === 'SPLASH' || format === 'INTERSTITIAL';
-    };
-    const count = [...adsState.creatives.values()].filter(
-      (c) => !c.skippable && c.reviewStatus !== 'REJECTED' && fullScreen(c.adUnitId),
-    ).length;
+    // then never be closed (the count is the one `GET /ads/meta` answers).
+    const count = notSkippableFullScreenCount();
     if (count > 0) {
       return [
         {

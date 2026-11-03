@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bytesProblemTexts, checkMediaSpec, DEFAULT_TOLERANCE_PERCENT } from './mediaSpec';
+import { bytesProblemTexts, checkMediaSpec } from './mediaSpec';
 
 const SPEC = { creativeAspect: '9:16', creativeMinShortSide: 720, creativeMaxBytes: 10_485_760 };
 const media = (width: number, height: number, bytes = 1000) => ({ width, height, bytes });
@@ -58,11 +58,15 @@ describe('checkMediaSpec', () => {
     expect(checkMediaSpec(media(0, 0), SPEC, 3).fits).toBe(true);
   });
 
-  it('takes a tolerance that is not a number as the default of the contract', () => {
-    expect(DEFAULT_TOLERANCE_PERCENT).toBe(3);
-    expect(checkMediaSpec(media(1080, 1940), SPEC, null).fits).toBe(true);
-    expect(checkMediaSpec(media(1080, 1940), SPEC, Number.NaN).fits).toBe(true);
-    expect(checkMediaSpec(media(1080, 2200), SPEC, null).fits).toBe(false);
+  it('does not compare the ratio with a tolerance that is not known (null, not a number), and still checks the shorter side and the size', () => {
+    for (const unknown of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(checkMediaSpec(media(1080, 2200), SPEC, unknown).fits).toBe(true);
+      expect(checkMediaSpec(media(1280, 720), SPEC, unknown).problems).toEqual([]);
+    }
+    const small = checkMediaSpec(media(300, 2200, 99_999_999), SPEC, null);
+    expect(small.problems.map((p) => p.code)).toEqual(['shortSide', 'bytes']);
+    // a tolerance of 0 is a tolerance
+    expect(checkMediaSpec(media(1080, 1940), SPEC, 0).fits).toBe(false);
   });
 });
 
