@@ -58,6 +58,18 @@ The verification code is `000000` for every account, also for the first enrollme
 
 Each module's mock file exports `{ 'METHOD /api/admin/path': handler }`; wrap handlers with `guard(permission, handler)` from `mock/_core/auth.ts`, which gives the contract's 401 and 403 answers and `req.admin`. Sample data comes from `mock/_core/fixtures.ts` (Thai, Arabic, Indonesian, Vietnamese, Spanish, English and Chinese, with long strings without spaces and emoji). Tests call a handler directly with `call` from `mock/_core/testing.ts`; no server is started.
 
+## Real backend on this machine
+
+`npm run dev:api` needs the backend running at `ADMIN_API_PROXY_TARGET` (default `http://127.0.0.1:8080`, the backend's admin application). The backend repository has a local stack for it; Docker is required. Run in the backend repository (all paths below are outside it, so no secret lands in a repository):
+
+1. `python -I tools/e2e_smoke.py prepare --out <dir> --image-tag local` writes `<dir>/smoke.env` with fresh random secrets and the first super administrator (`smoke-admin`, password in `ADMIN_BOOTSTRAP_PASSWORD`).
+2. `docker compose --env-file <dir>/smoke.env --profile apps build admin worker`, then `docker compose --env-file <dir>/smoke.env --profile apps up -d --wait postgres mongo redis fake-agent mail-sink admin worker`.
+3. Here: `npm run dev:api`.
+4. First sign-in is the full flow: user name and the password from the file, then the enrolment page (use "Can't scan the QR code?" to read the key, any TOTP tool turns it into the 6-digit code), then the forced password change, then sign in again with the new password and a fresh code (a code already used in the same 30 seconds is refused).
+5. `docker compose --env-file <dir>/smoke.env --profile apps down -v` removes the stack and its data.
+
+The stack answers every page except those backed by services it replaces with a placeholder: the memory tiers and embedding models pages show "not found" (the placeholder knows only the memory export path), because the backend turns the missing upstream answer into `RESOURCE_NOT_FOUND`. A request without `Accept: application/json` (for example a bare `curl`) is answered by the dev server's page fallback, not by the backend.
+
 ## Build variables
 
 Set in the environment or in `.env.local` (git-ignored; copy `.env.example`). They are injected at
