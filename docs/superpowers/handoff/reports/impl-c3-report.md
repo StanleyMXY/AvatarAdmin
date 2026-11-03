@@ -1,6 +1,6 @@
 改了 3 处、没做 0 处、没运行 2 项、阻塞 0（另有 1 处原本就一致，只补了守住它的测试）
 
-立即修未修 0、记录项 2（见第四节）、未运行 2（真实浏览器里点一遍、对着真后端联调）、阻塞 0。
+立即修未修 0、记录项 3（见第四节）、未运行 2（真实浏览器里点一遍、对着真后端联调）、阻塞 0。
 
 组 c3，负责的请求编号：11、12、35、97。依据：后端实现说明（`docs/backend-inputs/2026-11-03-avatar-backend-admin-change-requests-implemented.md`）和更新接口文档（`docs/backend-inputs/2026-11-03-backend-task-java-backend-updated.md`）。
 
@@ -33,7 +33,8 @@
 ## 四、记录项与说明
 
 1. 记录项：提交 `4d7b328`（请求 11）里夹带了请求 97 的两块测试（`mock/avatar.mock.test.ts` 里"keeps the kind of the item…"等、`src/services/avatar/avatar.test.ts` 里去掉 `kind` 的调用），还夹带了别的组暂存的 `src/locales/zh-CN/reason.ts`（8 行）。原因：按项目约定用 `git commit -- <路径>`，它提交整个文件的全部改动，同一文件里两条请求的改动无法分开；`reason.ts` 是别的组同时暂存的文件被一起带进来。内容都没有丢，只是提交归属不干净；不改历史（有别的代理在同时提交）。建议主会话知悉，不需要处理。
-2. 记录项：`mock/push.mock.ts` 里的推送记录列表处理函数有别的组（请求 114 的日期筛选）未提交的改动，我只暂存了自己的 `case` 部分，那部分改动仍留在工作区，由那个组提交。
+2. 记录项：提交 `5ee63b2` 也一样带进了别的组同时暂存的 `src/locales/zh-CN/system.ts` 和 `src/pages/moderation/queue.test.tsx`（原因同上，提交时索引是共用的）。
+3. 记录项：`mock/push.mock.ts` 里的推送记录列表处理函数有别的组（请求 114 的日期筛选）未提交的改动，我只暂存了自己的 `case` 部分，那部分改动仍留在工作区，由那个组提交。
 
 ## 五、没运行的
 
@@ -48,5 +49,5 @@
 
 ## 七、最后一次相关测试
 
-- 第一次（`src/pages/push`、`src/pages/avatar`、两个假后端测试、两个服务层、`src/locales`、`tests`）：1313 个用例，2 个失败：（一）`src/locales/parity.test.ts`，英文的 `DEFAULT_REQUIRED_BY_OTHERS` 句里 `{reason}` 出现 3 次、中文 2 次，占位符次数不一致，已把英文改成 2 次（"while its other languages are enabled"），提交 `见下`；（二）`src/pages/avatar/cosmetics.test.tsx` 的编辑用例一次找不到行（机器负载 10 到 28 时的超时），单独重跑通过。
+- 第一次（`src/pages/push`、`src/pages/avatar`、两个假后端测试、两个服务层、`src/locales`、`tests`）：1313 个用例，2 个失败：（一）`src/locales/parity.test.ts`，英文的 `DEFAULT_REQUIRED_BY_OTHERS` 句里 `{reason}` 出现 3 次、中文 2 次，占位符次数不一致，已把英文改成 2 次（"while its other languages are enabled"），提交 `5ee63b2`；（二）`src/pages/avatar/cosmetics.test.tsx` 的编辑用例一次找不到行（机器负载 10 到 28 时的超时），单独重跑通过。
 - 第二次（`src/locales`、`recallRule.test.ts`、`templates.test.tsx`、`cosmetics.test.tsx` 等 8 个文件）：770 个用例全部通过。
