@@ -30,7 +30,7 @@ const messages: Record<string, string> = {
   'sms.guard.signInUnknown':
     '本页读不到手机号登录是否开启（auth.phone_login_enabled）。如果已开启，后端会拒绝这个改动。',
   'sms.guard.accountsSome':
-    '有 {count} 个账号用手机号登录，它们要靠短信才能删除自己的账号：后端会拒绝这个改动。',
+    '用手机号登录的账号有 {count} 个，它们要靠短信才能删除自己的账号：后端会拒绝这个改动。',
   'sms.guard.accountsNone': '没有用手机号登录的账号。',
   'sms.guard.accountsUnknown':
     '本页读不到有多少账号用手机号登录。如果有，后端会拒绝这个改动，因为这些账号要靠短信才能删除自己的账号。',
@@ -41,7 +41,7 @@ const messages: Record<string, string> = {
   'sms.channels.note.selection':
     '同一个国家里，取启用的验证码通道中优先级数值最小的一个。发送失败时不会改用别的通道重试。',
   'sms.channels.note.credentials':
-    '凭据只写不读：保存后不会再显示。编辑通道时，不添加条目表示不修改已保存的凭据。',
+    '凭据只写不读：保存后不会再显示。编辑通道时，所有凭据框都留空表示不修改已保存的凭据。',
   'sms.channels.new': '新建通道',
   'sms.channels.readOnly': '你只能查看通道。修改通道需要“配置短信渠道”的权限。',
   'sms.channels.empty': '没有通道',
@@ -76,17 +76,22 @@ const messages: Record<string, string> = {
   'sms.channels.hostsHelp': '这个供应商只允许这些主机：{hosts}',
   'sms.channels.credentialsNew': '现在可以不填，以后编辑通道时再补。',
   'sms.channels.credentialsSet':
-    '已设置凭据。不添加条目表示保留；添加条目会替换全部已保存的凭据，所以要把每个名称和值重新填一遍。',
+    '已设置凭据。所有框都留空表示保留；填写会替换全部已保存的凭据，所以每个框都要填。',
   'sms.channels.credentialsNotSet': '还没有设置凭据。',
   'sms.channels.credentialsWriteOnly': '只写不读：已保存的凭据永远不会显示。',
-  'sms.channels.credentialName': '凭据名称',
-  'sms.channels.credentialValue': '凭据值',
-  'sms.channels.credentialAdd': '添加一项凭据',
-  'sms.channels.credentialRemove': '删除这项凭据',
-  'sms.channels.credentialRemoveShort': '删除',
-  'sms.channels.credentialNameRequired': '请输入这个值的名称',
-  'sms.channels.credentialValueRequired': '请输入这个名称的值',
-  'sms.channels.credentialNameDuplicate': '这个名称重复了',
+  'sms.channels.credentialsNone': '这个供应商不需要凭据。',
+  'sms.channels.credentialsChooseProvider': '请先选择供应商：要填哪些凭据由它决定。',
+  'sms.channels.credentialsUnknownProvider':
+    '后端的供应商列表里没有这个供应商，不知道它需要哪些凭据，所以这里不能填写。',
+  'sms.channels.credentialsSwitched':
+    '供应商已更换。已保存的凭据属于原来的供应商，所以每个框都要填。',
+  'sms.channels.credentialsIncomplete':
+    '请填完这个供应商需要的每一项凭据，或者全部留空。还缺：{names}。',
+  'sms.channels.credentialsRequired': '请填完这个供应商需要的每一项凭据。还缺：{names}。',
+  'sms.channels.credentialsRefused.EMPTY_NOT_ALLOWED':
+    '后端说缺少这个供应商需要的凭据。请刷新页面，把每个框都填好再保存。',
+  'sms.channels.credentialsRefused.OUT_OF_RANGE':
+    '后端说有凭据名称不是这个供应商使用的。请刷新页面（名称可能变了），重新填写。',
   'sms.channels.extConfigHelp': '一个 JSON 对象，例如 appId 和按国家的发送方 ID。没有就留空。',
   'sms.channels.countriesHelp': '两位字母的国家码，例如 TH，每填一个按回车。留空表示全部国家。',
   'sms.channels.typePlaceholder': '选择类型',

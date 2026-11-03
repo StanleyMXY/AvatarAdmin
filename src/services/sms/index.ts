@@ -62,35 +62,42 @@ export const sendTestSms = (id: string, mobile: string): Promise<unknown> =>
   apiRequest({ method: 'POST', url: `/sms/channels/${enc(id)}/test`, body: { mobile } });
 
 /**
- * `GET /sms/meta`: the registered providers with the hosts their addresses may use, and the test
- * sends left today for the signed-in administrator. A field that does not have the expected shape is
- * left out: no provider without a code, no number below zero.
+ * `GET /sms/meta` (any `SMS:*` code): the registered providers with the hosts their addresses may
+ * use and the credential names they need, the test sends left today for the signed-in
+ * administrator, and whether phone sign-in is on and how many accounts have a phone number. A field
+ * that does not have the expected shape is left out: no provider without a code, no number below
+ * zero, no credential name that is not text.
  */
 export async function getSmsMeta(): Promise<SmsMeta> {
   const data = (await apiRequest<unknown>({ method: 'GET', url: '/sms/meta' })) as {
     providers?: unknown;
     testRemainingToday?: unknown;
+    phoneLoginEnabled?: unknown;
+    phoneAccountCount?: unknown;
   } | null;
+  const texts = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
   const providers: SmsProvider[] = Array.isArray(data?.providers)
     ? data.providers.flatMap((entry: unknown) => {
         if (typeof entry !== 'object' || entry === null) return [];
-        const { code, allowedHosts } = entry as { code?: unknown; allowedHosts?: unknown };
+        const { code, allowedHosts, credentialNames } = entry as {
+          code?: unknown;
+          allowedHosts?: unknown;
+          credentialNames?: unknown;
+        };
         if (typeof code !== 'string' || code === '') return [];
         return [
-          {
-            code,
-            allowedHosts: Array.isArray(allowedHosts)
-              ? allowedHosts.filter((host): host is string => typeof host === 'string')
-              : [],
-          },
+          { code, allowedHosts: texts(allowedHosts), credentialNames: texts(credentialNames) },
         ];
       })
     : [];
-  const left = data?.testRemainingToday;
+  const count = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
   return {
     providers,
-    testRemainingToday:
-      typeof left === 'number' && Number.isFinite(left) && left >= 0 ? Math.floor(left) : null,
+    testRemainingToday: count(data?.testRemainingToday),
+    phoneLoginEnabled: typeof data?.phoneLoginEnabled === 'boolean' ? data.phoneLoginEnabled : null,
+    phoneAccountCount: count(data?.phoneAccountCount),
   };
 }
 

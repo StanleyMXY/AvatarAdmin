@@ -81,9 +81,14 @@ export type SmsStore = {
 
 /** The registered providers and the hosts their addresses may use (names are made up; none is a real service). */
 export const SMS_PROVIDERS = [
-  { code: 'gateway-a', allowedHosts: ['sms.example.com', 'api.sms-a.example.net'] },
-  { code: 'gateway-b', allowedHosts: ['gw.example.org'] },
-  { code: 'test-stub', allowedHosts: ['stub.example.com'] },
+  {
+    code: 'gateway-a',
+    allowedHosts: ['sms.example.com', 'api.sms-a.example.net'],
+    credentialNames: ['apiKey'],
+  },
+  { code: 'gateway-b', allowedHosts: ['gw.example.org'], credentialNames: ['apiKey', 'apiSecret'] },
+  // like the local stub of the backend: it needs no credentials
+  { code: 'test-stub', allowedHosts: ['stub.example.com'], credentialNames: [] as string[] },
 ];
 
 /** `sms.test_per_day`. */
@@ -112,7 +117,7 @@ function seedChannels(ms: number): MockChannel[] {
       name: multilingualSamples.id[0],
       providerCode: 'gateway-b',
       apiUrl: 'https://gw.example.org/api/otp',
-      credentials: { apiKey: 'seed-secret-2' },
+      credentials: { apiKey: 'seed-secret-2', apiSecret: 'seed-secret-2b' },
       extConfig: { appId: 'app-sea', senderIds: { ID: 'AVATAR', VN: 'AVATAR' } },
       countries: ['ID', 'VN'],
       smsType: 'OTP',
@@ -148,7 +153,7 @@ function seedChannels(ms: number): MockChannel[] {
       name: multilingualSamples.longUnbroken,
       providerCode: 'test-stub',
       apiUrl: 'https://stub.example.com/send',
-      credentials: { apiKey: 'seed-secret-5' },
+      credentials: null,
       extConfig: null,
       countries: [],
       smsType: 'OTP',

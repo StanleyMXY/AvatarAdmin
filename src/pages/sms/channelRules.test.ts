@@ -3,7 +3,7 @@ import {
   apiUrlProblem,
   buildChannelBody,
   countryCodeProblem,
-  credentialProblems,
+  credentialsProblem,
   normalizeCountries,
 } from './channelRules';
 
@@ -50,53 +50,69 @@ describe('the body of a channel', () => {
     name: '  ช่อง  ',
     providerCode: 'gateway-a',
     apiUrl: ' https://sms.example.com/v1 ',
-    credentials: [] as { name?: string; value?: string }[],
+    credentials: {} as Record<string, string | undefined>,
     extConfig: '{"appId":"a","senderIds":{"TH":"AV"}}',
     countries: ['th', 'vn'],
     smsType: 'OTP' as const,
     priority: 5,
     enabled: true,
   };
-  it('leaves the credentials out when there is no row, or every row is blank, on a create and on an update', () => {
+  it('leaves the credentials out when nothing is typed, or every field is blank, on a create and on an update', () => {
     const blank = String.fromCharCode(0x3000);
-    expect('credentials' in buildChannelBody(values, 'create')).toBe(false);
-    expect('credentials' in buildChannelBody({ ...values, credentials: [] }, 'create')).toBe(false);
-    expect(
-      'credentials' in
-        buildChannelBody({ ...values, credentials: [{ name: '   ', value: '' }] }, 'create'),
-    ).toBe(false);
-    expect('credentials' in buildChannelBody(values, 'update')).toBe(false);
-    expect('credentials' in buildChannelBody({ ...values, credentials: undefined }, 'update')).toBe(
+    const names = ['apiKey', 'apiSecret'];
+    expect('credentials' in buildChannelBody(values, 'create', names)).toBe(false);
+    expect('credentials' in buildChannelBody({ ...values, credentials: {} }, 'create', names)).toBe(
       false,
     );
     expect(
       'credentials' in
         buildChannelBody(
-          { ...values, credentials: [{ name: blank, value: undefined }, {}] },
-          'update',
+          { ...values, credentials: { apiKey: '   ', apiSecret: blank } },
+          'create',
+          names,
         ),
     ).toBe(false);
+    expect('credentials' in buildChannelBody(values, 'update', names)).toBe(false);
+    expect(
+      'credentials' in buildChannelBody({ ...values, credentials: undefined }, 'update', names),
+    ).toBe(false);
   });
-  it('sends the typed rows once as a map of names to text values, without the blanks around them', () => {
+  it('sends exactly the names of the provider once, as text without the blanks around them, when every one is filled', () => {
     expect(
       buildChannelBody(
-        {
-          ...values,
-          credentials: [
-            { name: ' apiKey ', value: ' s3cret ' },
-            { name: 'ผู้ใช้', value: 'ñandú' },
-            { name: '', value: '' },
-          ],
-        },
+        { ...values, credentials: { apiKey: ' s3cret ', apiSecret: 'ñandú ผู้ใช้ مفتاح' } },
         'update',
+        ['apiKey', 'apiSecret'],
       ),
-    ).toMatchObject({ credentials: { apiKey: 's3cret', ผู้ใช้: 'ñandú' } });
+    ).toMatchObject({ credentials: { apiKey: 's3cret', apiSecret: 'ñandú ผู้ใช้ مفتاح' } });
+  });
+  it('sends no name the provider does not declare, whatever the form holds (a value typed for another provider is not carried over)', () => {
+    const body = buildChannelBody(
+      { ...values, credentials: { apiKey: 'k', old: 'typed for the provider before' } },
+      'update',
+      ['apiKey'],
+    ) as { credentials: Record<string, unknown> };
+    expect(body.credentials).toEqual({ apiKey: 'k' });
+  });
+  it('sends no credentials when only some of the names are filled (the form refuses that first), or when the provider declares none', () => {
+    expect(
+      'credentials' in
+        buildChannelBody({ ...values, credentials: { apiKey: 'k' } }, 'update', [
+          'apiKey',
+          'apiSecret',
+        ]),
+    ).toBe(false);
+    expect(
+      'credentials' in buildChannelBody({ ...values, credentials: { apiKey: 'k' } }, 'update', []),
+    ).toBe(false);
+    expect(
+      'credentials' in buildChannelBody({ ...values, credentials: { apiKey: 'k' } }, 'update'),
+    ).toBe(false);
   });
   it('never sends a null, a missing or a number as a value or a name', () => {
-    const body = buildChannelBody(
-      { ...values, credentials: [{ name: 'a', value: 'b' }] },
-      'update',
-    ) as { credentials: Record<string, unknown> };
+    const body = buildChannelBody({ ...values, credentials: { a: 'b' } }, 'update', ['a']) as {
+      credentials: Record<string, unknown>;
+    };
     for (const [name, value] of Object.entries(body.credentials)) {
       expect(typeof name).toBe('string');
       expect(name).not.toBe('');
@@ -143,27 +159,34 @@ describe('the body of a channel', () => {
   });
 });
 
-describe('the rows of the credentials', () => {
-  it('has no problem for whole rows with different names, or for rows left blank', () => {
-    expect(
-      credentialProblems([{ name: 'a', value: '1' }, { name: 'b', value: '2' }, {}, { name: ' ' }]),
-    ).toEqual([null, null, null, null]);
+describe('the credential fields of a provider', () => {
+  const names = ['apiKey', 'apiSecret'];
+  it('has no problem when every field is filled, or when all are blank and the saved ones may stay', () => {
+    expect(credentialsProblem({ apiKey: 'a', apiSecret: 'b' }, names, false)).toBeNull();
+    expect(credentialsProblem({}, names, false)).toBeNull();
+    expect(credentialsProblem(undefined, names, false)).toBeNull();
+    expect(credentialsProblem({ apiKey: ' ', apiSecret: '' }, names, false)).toBeNull();
   });
-  it('wants a value for a name and a name for a value', () => {
-    expect(
-      credentialProblems([
-        { name: 'a', value: '' },
-        { name: '', value: 'x' },
-      ]),
-    ).toEqual([{ value: 'REQUIRED' }, { name: 'REQUIRED' }]);
+  it('wants the rest when only some are filled, and names the ones that are missing', () => {
+    expect(credentialsProblem({ apiKey: 'a' }, names, false)).toEqual({
+      kind: 'INCOMPLETE',
+      missing: ['apiSecret'],
+    });
+    expect(credentialsProblem({ apiKey: ' ', apiSecret: 'b' }, names, false)).toEqual({
+      kind: 'INCOMPLETE',
+      missing: ['apiKey'],
+    });
   });
-  it('marks the second of two equal names, after the blanks are cut, and keeps names that differ in case', () => {
-    expect(
-      credentialProblems([
-        { name: 'Key', value: '1' },
-        { name: ' Key ', value: '2' },
-        { name: 'key', value: '3' },
-      ]),
-    ).toEqual([null, { name: 'DUPLICATE' }, null]);
+  it('wants every field when the saved credentials cannot stay (another provider), and names all of them', () => {
+    expect(credentialsProblem({}, names, true)).toEqual({ kind: 'REQUIRED', missing: names });
+    expect(credentialsProblem({ apiKey: 'a' }, names, true)).toEqual({
+      kind: 'INCOMPLETE',
+      missing: ['apiSecret'],
+    });
+    expect(credentialsProblem({ apiKey: 'a', apiSecret: 'b' }, names, true)).toBeNull();
+  });
+  it('has no problem for a provider that needs none, or one that is not known', () => {
+    expect(credentialsProblem({ x: 'typed' }, [], true)).toBeNull();
+    expect(credentialsProblem({}, [], true)).toBeNull();
   });
 });

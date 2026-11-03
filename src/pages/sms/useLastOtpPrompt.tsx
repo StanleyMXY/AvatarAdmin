@@ -2,81 +2,94 @@ import { useIntl } from '@umijs/max';
 import { App, Typography } from 'antd';
 import { useCallback } from 'react';
 import { ApiError } from '../../request/errors';
-import { listConfig } from '../../services/config';
+import { getSmsMeta } from '../../services/sms';
 import { describeFailure } from '../../session/describe';
 import type { Translator } from '../../utils/displayText';
 
 export type GuardAction = 'disable' | 'delete' | 'change';
 export type GuardSubject = 'channel' | 'template' | 'englishTemplate';
 
-const PHONE_SIGN_IN_KEY = 'auth.phone_login_enabled';
+/** What the guard of the last OTP channel and template depends on, as `GET /sms/meta` says; null for what could not be read. */
+export type PhoneGuard = { phoneLoginEnabled: boolean | null; phoneAccountCount: number | null };
 
 /**
- * Whether phone sign-in is on, as far as the administrator can tell: true or false, or null when the
- * setting cannot be read (`GET /config` answers only the keys that the administrator may edit, and
- * a failed read is not a reason to stop the question).
+ * Whether phone sign-in is on and how many accounts have a phone number, read now from the SMS meta
+ * (any `SMS:*` code may read it, so the administrator who can change a channel can also see this).
+ * Null when the meta cannot be read: that is not a reason to stop the question.
  */
-export async function readPhoneSignIn(): Promise<boolean | null> {
+export async function readPhoneGuard(): Promise<PhoneGuard | null> {
   try {
-    const { items } = await listConfig();
-    const item = Array.isArray(items)
-      ? items.find((entry) => (entry as { key?: unknown } | null)?.key === PHONE_SIGN_IN_KEY)
-      : undefined;
-    const value = (item as { value?: unknown } | undefined)?.value;
-    return typeof value === 'boolean' ? value : null;
+    const { phoneLoginEnabled, phoneAccountCount } = await getSmsMeta();
+    return { phoneLoginEnabled, phoneAccountCount };
   } catch {
     return null;
   }
 }
 
+/** True only when the meta says that neither condition holds: then the backend does not guard anything and nothing is asked. */
+const guardOff = (guard: PhoneGuard | null): boolean =>
+  guard !== null && guard.phoneLoginEnabled === false && guard.phoneAccountCount === 0;
+
 /** The detail the backend gives when a channel write would leave no enabled OTP channel, or a country without one: its `ref` is the entity, not a field of a form. */
 const CHANNEL_ENTITY = 'SmsChannel';
-const OUT_OF_RANGE = 'OUT_OF_RANGE';
+const CHANNEL_REASONS = ['LAST_OTP_CHANNEL', 'COUNTRY_LOSES_OTP_CHANNEL'] as const;
 
 /**
- * True when the backend refused a channel write because it would remove the last enabled OTP
- * channel, or leave a country without one, while phone sign-in is on or phone-number accounts exist
- * (contract 23.4). The two cases have the same `ref` and `reason` (answers 41); the page does not
- * judge this beforehand beyond the question it asks: the answer is the only source.
+ * The reason of the refusal of a channel write that would remove the last enabled OTP channel
+ * (`LAST_OTP_CHANNEL`), or leave a country without one (`COUNTRY_LOSES_OTP_CHANNEL`), while phone
+ * sign-in is on or phone-number accounts exist (contract 23.4); undefined for any other failure.
  */
-export function isLastChannelRefusal(error: unknown): boolean {
-  return (
-    error instanceof ApiError &&
-    error.code === 'INVALID_REQUEST' &&
-    error.details.some((d) => d.ref === CHANNEL_ENTITY && d.reason === OUT_OF_RANGE)
+export function lastChannelReason(error: unknown): (typeof CHANNEL_REASONS)[number] | undefined {
+  if (!(error instanceof ApiError) || error.code !== 'INVALID_REQUEST') return undefined;
+  return CHANNEL_REASONS.find((reason) =>
+    error.details.some((d) => d.ref === CHANNEL_ENTITY && d.reason === reason),
   );
 }
 
+export const isLastChannelRefusal = (error: unknown): boolean =>
+  lastChannelReason(error) !== undefined;
+
 /**
- * The words of a failed channel write. The refusal above has one fixed text that covers both of its
- * cases; anything else is the words of the code. The backend's own message is never shown.
+ * The words of a failed channel write. Each of the two refusals above has its own fixed text (the
+ * text of its reason); anything else is the words of the code. The backend's own message is never shown.
  */
 export function guardedFailureText(intl: Translator, error: unknown): string {
-  return isLastChannelRefusal(error)
-    ? intl.formatMessage({ id: 'sms.channels.lastRefused' })
-    : describeFailure(intl, error).text;
+  const reason = lastChannelReason(error);
+  return reason === undefined
+    ? describeFailure(intl, error).text
+    : intl.formatMessage({ id: `reason.${reason}` });
 }
 
 /**
  * The question asked before the last enabled OTP channel or template is switched off, deleted or
- * changed so that it stops serving codes. It names the two conditions under which the backend
- * refuses (phone sign-in is on; phone-number accounts exist), says what is known of the first by
- * reading the setting now, and resolves true when the administrator goes on. The backend has the last word.
+ * changed so that it stops serving codes. It reads the SMS meta now: when phone sign-in is off and
+ * no account has a phone number the backend does not refuse and nothing is asked; otherwise it names
+ * the condition(s) that hold, with the number of accounts, and resolves true when the administrator
+ * goes on. When the meta cannot be read the question names both conditions as unknown. The backend
+ * has the last word.
  */
 export function useLastOtpPrompt() {
   const intl = useIntl();
   const { modal } = App.useApp();
   return useCallback(
     async (action: GuardAction, subject: GuardSubject): Promise<boolean> => {
-      const phoneSignIn = await readPhoneSignIn();
+      const guard = await readPhoneGuard();
+      if (guardOff(guard)) return true;
       const t = (id: string, values?: Record<string, string | number>) =>
         intl.formatMessage({ id }, values);
       const signInLine =
-        phoneSignIn === true
+        guard?.phoneLoginEnabled === true
           ? t('sms.guard.signInOn')
-          : phoneSignIn === false
+          : guard?.phoneLoginEnabled === false
             ? t('sms.guard.signInOff')
             : t('sms.guard.signInUnknown');
+      const count = guard?.phoneAccountCount;
+      const accountsLine =
+        typeof count === 'number'
+          ? count > 0
+            ? t('sms.guard.accountsSome', { count })
+            : t('sms.guard.accountsNone')
+          : t('sms.guard.accountsUnknown');
       return new Promise<boolean>((resolve) => {
         modal.confirm({
           title: t(`sms.guard.title.${subject}`),
@@ -87,7 +100,7 @@ export function useLastOtpPrompt() {
               </Typography.Paragraph>
               <ul style={{ paddingInlineStart: 20 }}>
                 <li>{signInLine}</li>
-                <li>{t('sms.guard.accounts')}</li>
+                <li>{accountsLine}</li>
               </ul>
               <Typography.Paragraph type="secondary">{t('sms.guard.final')}</Typography.Paragraph>
             </>

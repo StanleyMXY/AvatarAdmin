@@ -87,15 +87,22 @@ function losesCoverage(before: MockChannel, after: MockChannel | null): boolean 
 }
 
 /**
- * The backend answers 400 INVALID_REQUEST with the detail SmsChannel / OUT_OF_RANGE whether no OTP
- * channel would be left or only a country would lose its coverage (answers 41: both have the same
- * `ref` and `reason`, only the English message differs).
+ * The backend answers 400 INVALID_REQUEST with the detail SmsChannel and one of two reasons: no
+ * enabled OTP channel would be left at all (LAST_OTP_CHANNEL), or others are left but a country that
+ * had one loses it (COUNTRY_LOSES_OTP_CHANNEL; answers 41 and the updated interface document 23.4).
  */
 function refuseLastChannel(before: MockChannel, after: MockChannel | null) {
   if (phoneSignInMatters() && losesCoverage(before, after)) {
+    const left = [...smsState.channels.values()].filter(
+      (c) => c.id !== before.id && c.enabled && c.smsType === 'OTP',
+    );
+    if (after?.enabled && after.smsType === 'OTP') left.push(after);
+    const none = left.length === 0;
     throw invalidRequest(
-      'The last enabled OTP channel of a country cannot be removed while phone sign-in is on or phone-number accounts exist',
-      [{ ref: 'SmsChannel', reason: 'OUT_OF_RANGE' }],
+      none
+        ? 'The last enabled OTP channel cannot be removed while phone sign-in is on or phone-number accounts exist'
+        : 'A country that has an OTP channel would lose it while phone sign-in is on or phone-number accounts exist',
+      [{ ref: 'SmsChannel', reason: none ? 'LAST_OTP_CHANNEL' : 'COUNTRY_LOSES_OTP_CHANNEL' }],
     );
   }
 }
@@ -113,7 +120,7 @@ function refuseLastTemplate(before: MockTemplate, after: MockTemplate | null) {
   if (wasOtp && !stillOtp && !others.some((t) => t.enabled && t.smsType === 'OTP')) {
     throw invalidRequest(
       'The last enabled OTP template cannot be removed while phone sign-in is on or phone-number accounts exist',
-      [{ ref: 'SmsTemplate', reason: 'OUT_OF_RANGE' }],
+      [{ ref: 'SmsTemplate', reason: 'LAST_OTP_TEMPLATE' }],
     );
   }
   // Then the one that must stay: only the removal of the last qualifying template is judged, so a
@@ -122,7 +129,7 @@ function refuseLastTemplate(before: MockTemplate, after: MockTemplate | null) {
     if (!others.some(isEnglishFallback)) {
       throw invalidRequest(
         'The last enabled OTP template in language en for every country (no country set) cannot be removed or changed while phone login is on or phone accounts exist',
-        [{ ref: 'SmsTemplate', reason: 'OUT_OF_RANGE' }],
+        [{ ref: 'SmsTemplate', reason: 'LAST_ENGLISH_FALLBACK_TEMPLATE' }],
       );
     }
   }
@@ -150,7 +157,8 @@ function channelView(c: MockChannel) {
   };
 }
 
-function channelDetails(body: Record<string, unknown>, creating: boolean): Detail[] {
+function channelDetails(body: Record<string, unknown>, stored: MockChannel | null): Detail[] {
+  const creating = stored === null;
   const details: Detail[] = [];
   if (creating && trimSpec(textOf(body.channelCode)) === '') {
     details.push({ ref: 'channelCode', reason: 'EMPTY_NOT_ALLOWED' });
@@ -183,7 +191,13 @@ function channelDetails(body: Record<string, unknown>, creating: boolean): Detai
   if (ext !== undefined && ext !== null && (typeof ext !== 'object' || Array.isArray(ext))) {
     details.push({ ref: 'extConfig', reason: 'OUT_OF_RANGE' });
   }
-  details.push(...credentialsDetail(body));
+  details.push(
+    ...credentialsDetail(
+      body,
+      provider,
+      stored !== null && stored.providerCode !== body.providerCode,
+    ),
+  );
   return details;
 }
 
@@ -192,21 +206,43 @@ const unreadableBody = () =>
   new MockHttpError(400, 'INVALID_REQUEST', 'Malformed or invalid request body');
 
 /**
- * `credentials` is a map of names to text values (answers 5). Absent, null and {} mean "unchanged".
- * A null value is 400 EMPTY_NOT_ALLOWED on `credentials`; an empty name or an empty value is
- * accepted. Anything that is not a map (a string, a list) cannot be read: 400 without details.
- * A value that is a number or a boolean is not checked against the real backend (it may turn
- * it into text); the page never sends one, so the mock refuses it like an unreadable body.
+ * `credentials` is a map of names to text values (answers 5). Absent, null and {} mean "unchanged",
+ * and are not checked against the provider, except on an update that changes the provider to one
+ * that needs credentials: what is stored belongs to the old provider, so none given is 400
+ * EMPTY_NOT_ALLOWED. A given map must have exactly the names the provider declares (`credentialNames`
+ * of the meta): a name missing is EMPTY_NOT_ALLOWED, a name the provider does not use is
+ * OUT_OF_RANGE (one detail, the missing names first), a null value is EMPTY_NOT_ALLOWED. An empty
+ * value is accepted. Anything that is not a map (a string, a list) cannot be read: 400 without
+ * details. A value that is a number or a boolean is not checked against the real backend (it may
+ * turn it into text); the page never sends one, so the mock refuses it like an unreadable body.
  */
-function credentialsDetail(body: Record<string, unknown>): Detail[] {
+function credentialsDetail(
+  body: Record<string, unknown>,
+  provider: { credentialNames: string[] } | undefined,
+  providerChanged: boolean,
+): Detail[] {
   const value = body.credentials;
-  if (value === undefined || value === null) return [];
+  const needed = provider?.credentialNames ?? [];
+  const none: Detail[] =
+    providerChanged && needed.length > 0
+      ? [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }]
+      : [];
+  if (value === undefined || value === null) return none;
   if (typeof value !== 'object' || Array.isArray(value)) throw unreadableBody();
   const texts = Object.values(value);
   if (texts.some((text) => text !== null && !isText(text))) throw unreadableBody();
-  return texts.some((text) => text === null)
-    ? [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }]
-    : [];
+  if (texts.some((text) => text === null))
+    return [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }];
+  if (texts.length === 0) return none;
+  if (!provider) return [];
+  const names = Object.keys(value);
+  if (needed.some((name) => !names.includes(name))) {
+    return [{ ref: 'credentials', reason: 'EMPTY_NOT_ALLOWED' }];
+  }
+  if (names.some((name) => !needed.includes(name))) {
+    return [{ ref: 'credentials', reason: 'OUT_OF_RANGE' }];
+  }
+  return [];
 }
 
 /** The map the body carries, or null when it carries none (absent, null or empty). */
@@ -342,7 +378,14 @@ export default {
     const today = nowIso().slice(0, 10);
     const used = smsState.testUsed.get(req.admin.id);
     const count = used && used.day === today ? used.count : 0;
-    return ok({ providers: SMS_PROVIDERS, testRemainingToday: Math.max(0, TEST_PER_DAY - count) });
+    // Exactly these four, for an administrator with any SMS code: the page knows beforehand whether
+    // the guard of the last OTP channel and template is on (answers 41).
+    return ok({
+      providers: SMS_PROVIDERS,
+      testRemainingToday: Math.max(0, TEST_PER_DAY - count),
+      phoneLoginEnabled: currentValue('auth.phone_login_enabled') === true,
+      phoneAccountCount: smsState.phoneAccounts,
+    });
   }),
 
   // ---- channels ----
@@ -359,7 +402,7 @@ export default {
 
   'POST /api/admin/sms/channels': guard('SMS:CHANNEL:CONFIG', (req) => {
     const body = bodyOf(req);
-    throwIf(channelDetails(body, true));
+    throwIf(channelDetails(body, null));
     const code = trimSpec(textOf(body.channelCode));
     if ([...smsState.channels.values()].some((c) => c.channelCode === code)) {
       throw new MockHttpError(409, 'DUPLICATE_RESOURCE', 'The channel code is taken', {
@@ -398,7 +441,7 @@ export default {
     for (const key of UPDATE_KEYS) {
       if (sent[key] === undefined || sent[key] === null) body[key] = channel[key];
     }
-    throwIf(channelDetails(body, false));
+    throwIf(channelDetails(body, channel));
     const next: MockChannel = {
       ...channel,
       name: trimSpec(textOf(body.name)),
