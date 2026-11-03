@@ -90,6 +90,32 @@ describe('useServerPage', () => {
     await waitFor(() => expect(calls[calls.length - 1]).toMatchObject({ q: 'b', page: 1 }));
   });
 
+  it('starts from page 1 also when the filters come back to an earlier value (A, B, A)', async () => {
+    const calls: (Query & { only?: boolean })[] = [];
+    const fetcher = async (query: Query & { only?: boolean }) => {
+      calls.push(query);
+      return pageOf(['row'], 45);
+    };
+    const { result, rerender } = renderHook(
+      ({ only }: { only?: boolean }) => useServerPage(fetcher, only === undefined ? {} : { only }),
+      { wrapper, initialProps: {} as { only?: boolean } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.setPaging(3, result.current.pageSize));
+    await waitFor(() => expect(result.current.page).toBe(3));
+    rerender({ only: true });
+    await waitFor(() => expect(calls).toHaveLength(3));
+    rerender({});
+    await waitFor(() => expect(calls).toHaveLength(4));
+    expect(calls.map((c) => ({ only: c.only, page: c.page }))).toEqual([
+      { only: undefined, page: 1 },
+      { only: undefined, page: 3 },
+      { only: true, page: 1 },
+      { only: undefined, page: 1 },
+    ]);
+    expect(result.current.page).toBe(1);
+  });
+
   it('reads again on reload and on search, and search goes to page 1', async () => {
     const calls: FilterQuery[] = [];
     const { result } = renderHook(() => useServerPage(serve(calls), { q: '' }), { wrapper });

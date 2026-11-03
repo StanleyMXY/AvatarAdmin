@@ -252,6 +252,24 @@ describe('the installs and registrations', { timeout: 30000 }, () => {
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
   });
 
+  it('is on page 1 each time other filters are applied, also when they are the ones that were in force on page 2 (no filter, source, no filter)', async () => {
+    const { calls, user } = await load();
+    await user.click(document.querySelector('.ant-pagination-item-2') as HTMLElement);
+    await waitFor(() => expect(recordReads(calls).some((r) => r.get('page') === '2')).toBe(true));
+    await chooseOption(user, 'Source', 'Own attribution (SELF)');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(recordReads(calls).some((r) => r.has('source'))).toBe(true));
+    await chooseOption(user, 'Source', 'All');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(recordReads(calls).at(-1)?.has('source')).toBe(false));
+    expect(recordReads(calls).map((r) => `${r.get('source') ?? 'all'}:${r.get('page')}`)).toEqual([
+      'all:1',
+      'all:2',
+      'SELF:1',
+      'all:1',
+    ]);
+  });
+
   it('never lets a slow answer to an older search replace the answer to the newer one', async () => {
     useMockBackend({ default: campaignMock });
     const releases: (() => void)[] = [];

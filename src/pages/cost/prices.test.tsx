@@ -1583,6 +1583,30 @@ describe('models', () => {
     expect(screen.queryByTitle('2')).toBeNull();
   });
 
+  it('starts from the first page each time the filter changes, also when it comes back to the value it had on page 2 (off, on, off)', async () => {
+    const { user, calls } = await open(ALL, { tab: 'Models', prepare: manyUnpriced(25) });
+    await screen.findAllByText('model-large-1');
+    // 10 models of the preset and 25 more: 35 in all, 20 on a page
+    await user.click(screen.getByTitle('2'));
+    await waitFor(() => expect(lastQuery(calls).page).toBe('2'));
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(lastQuery(calls).hasActivePrice).toBe('false'));
+    expect(lastQuery(calls).page).toBe('1');
+    await waitFor(() => expect(bodyRows()).toHaveLength(20));
+    // off again: the unfiltered list from its first page, not from the page it was left on
+    await user.click(screen.getByRole('checkbox', ONLY_UNPRICED));
+    await waitFor(() => expect(lastQuery(calls)).not.toHaveProperty('hasActivePrice'));
+    expect(lastQuery(calls).page).toBe('1');
+    expect(
+      modelReads(calls).map((r) => {
+        const q = queryOf(r.url);
+        return `${q.hasActivePrice ?? 'all'}:${q.page}`;
+      }),
+    ).toEqual(['all:1', 'all:2', 'false:1', 'all:1']);
+    // and the page is the first one of the list that comes back
+    await waitFor(() => expect(screen.getByTitle('1')).toHaveClass('ant-pagination-item-active'));
+  });
+
   it('asks the server for one resource type (resourceType=MATTING), together with the other filter', async () => {
     const { user, calls } = await open(ALL, { tab: 'Models' });
     await screen.findAllByText('model-large-1');

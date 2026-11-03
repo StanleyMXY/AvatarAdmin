@@ -41,6 +41,10 @@ export function useServerPage<T, F extends Record<string, unknown>>(
   const key = JSON.stringify(filters);
 
   const [paging, setPagingState] = useState({ key, page: 1, pageSize: DEFAULT_PAGE_SIZE });
+  // The page belongs to the filters it was chosen under. When the filters are other ones, it is page
+  // 1, and the state is put right at once (React draws again before anything else): a state that
+  // kept the old key would bring the old page back when the filters come back to that old value.
+  if (paging.key !== key) setPagingState({ key, page: 1, pageSize: paging.pageSize });
   const page = paging.key === key ? paging.page : 1;
   const { pageSize } = paging;
   const [tick, setTick] = useState(0);
