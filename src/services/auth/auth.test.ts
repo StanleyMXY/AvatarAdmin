@@ -187,6 +187,23 @@ describe('getAdminMeta', () => {
     expect(calls[0].url).toBe('/api/admin/meta');
   });
 
+  it('returns the five values other pages use, and a googlePlayPackageName that is null (the backend has no package name in its environment)', async () => {
+    setToken('tok');
+    const five = {
+      monitorMaxRangeDays: 7,
+      taskTypes: ['daily_login', 'call_seconds', 'text_messages'],
+      entitlementLimitMax: 1000000,
+      creativeAspectTolerancePercent: 3,
+      googlePlayPackageName: null,
+    };
+    stubFetch(() => jsonResponse(200, envelope('200', five)));
+    expect(await getAdminMeta()).toEqual(five);
+    stubFetch(() =>
+      jsonResponse(200, envelope('200', { ...five, googlePlayPackageName: 'com.example.avatar' })),
+    );
+    expect((await getAdminMeta()).googlePlayPackageName).toBe('com.example.avatar');
+  });
+
   it('returns nothing, not an error, when the endpoint is missing or the network fails', async () => {
     stubFetch(() => jsonResponse(404, envelope('RESOURCE_NOT_FOUND')));
     expect(await getAdminMeta()).toEqual({});

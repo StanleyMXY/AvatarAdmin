@@ -97,17 +97,18 @@ export const sameValue = (a: FeatureValue | undefined, b: FeatureValue | undefin
 
 /**
  * What the form refuses before it sends, as a reason code of the language files (`reason.<code>`),
- * or null. The size of a limit is not checked here: its upper end is a configuration value the
- * browser is not given, so the server answers for it.
+ * or null. The upper end of a limit is a configuration value (`entitlement.limit_max`): when `GET /meta`
+ * gave it (`entitlementLimitMax`), `max` is it and a limit above it is refused here too; without it
+ * the size of a limit is not checked here and the server answers for it.
  */
-export function valueProblem(kind: FeatureKind, value: unknown): string | null {
+export function valueProblem(kind: FeatureKind, value: unknown, max?: number): string | null {
   if (value === null || value === undefined) return 'EMPTY_NOT_ALLOWED';
   switch (kind) {
     case 'BOOLEAN':
       return typeof value === 'boolean' ? null : 'NOT_BOOLEAN';
     case 'LIMIT':
       if (typeof value !== 'number' || !Number.isInteger(value)) return 'NOT_AN_INTEGER';
-      return value < 0 ? 'OUT_OF_RANGE' : null;
+      return value < 0 || (max !== undefined && value > max) ? 'OUT_OF_RANGE' : null;
     case 'STRING':
       return typeof value === 'string' && trimSpec(value) !== '' ? null : 'EMPTY_NOT_ALLOWED';
   }

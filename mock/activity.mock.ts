@@ -18,13 +18,15 @@ import {
 } from './_core/activityData';
 import { guard } from './_core/auth';
 import { bodyOf, invalidRequest, MockHttpError, ok } from './_core/http';
+import { META_DEFAULTS } from './_core/meta';
 import { paginateQuery } from './_core/paginate';
 import { validDay } from './_core/statRange';
 
 type Detail = { ref: string; reason: string };
 
 const LIFECYCLES = ['DRAFT', 'ACTIVE', 'ENDED', 'DISABLED'];
-const TASK_TYPES = ['daily_login', 'call_seconds', 'text_messages'];
+// The types the backend code declares: the same list `GET /meta` gives as `taskTypes`.
+const TASK_TYPES: string[] = [...META_DEFAULTS.taskTypes];
 const TASK_STATUSES = ['ENABLED', 'DISABLED'];
 const RECORD_STATUSES = ['IN_PROGRESS', 'CLAIMABLE', 'REWARDED', 'EXPIRED'];
 const TASK_NAME_MAX = 100;

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { resetConfigStore, saved } from './_core/configStore';
 import { META_DEFAULTS, META_FIELDS } from './_core/meta';
 import { ALL_CODES } from './_core/permissions';
 import {
@@ -442,11 +443,18 @@ describe('GET /me', () => {
 });
 
 describe('GET /meta', () => {
-  it('is a flat object of exactly 20 fields: 12 configuration values and 8 upload limits', async () => {
+  it('is a flat object of exactly 25 fields: 12 configuration values, 8 upload limits and 5 values other pages use', async () => {
     const { status, body } = await meta(await signIn('support'));
     expect(status).toBe(200);
     expect(Object.keys(body.data).sort()).toEqual([...META_FIELDS].sort());
-    expect(META_FIELDS).toHaveLength(20);
+    expect(META_FIELDS).toHaveLength(25);
+    expect(META_FIELDS.slice(-5)).toEqual([
+      'monitorMaxRangeDays',
+      'taskTypes',
+      'entitlementLimitMax',
+      'creativeAspectTolerancePercent',
+      'googlePlayPackageName',
+    ]);
     expect(body.data.pushImageMaxBytes).toBe(1048576);
   });
 
@@ -474,6 +482,16 @@ describe('GET /meta', () => {
       apkMaxBytes: 104857600,
       renderAssetMaxBytes: 104857600,
     });
+    // The last five: the values of monitor.max_range_days (7), entitlement.limit_max (1000000) and
+    // ads.creative_aspect_tolerance_percent (3), the task types the backend code declares, and the
+    // package name the environment holds for the store link check.
+    expect(body.data).toMatchObject({
+      monitorMaxRangeDays: 7,
+      taskTypes: ['daily_login', 'call_seconds', 'text_messages'],
+      entitlementLimitMax: 1000000,
+      creativeAspectTolerancePercent: 3,
+      googlePlayPackageName: expect.any(String),
+    });
     expect(body.data).toMatchObject({
       allowedCurrencies: ['USD'],
       declarationRequired: true,
@@ -484,13 +502,37 @@ describe('GET /meta', () => {
     });
   });
 
-  it('types: lists of strings, one boolean, the rest whole numbers', async () => {
+  it('types: lists of strings, one boolean, one text that can be null (googlePlayPackageName), the rest whole numbers', async () => {
     const { body } = await meta(await signIn('root'));
     for (const [key, value] of Object.entries(body.data)) {
       if (Array.isArray(value)) expect(value.every((v) => typeof v === 'string')).toBe(true);
       else if (typeof value === 'boolean') expect(key).toBe('declarationRequired');
-      else expect(Number.isInteger(value)).toBe(true);
+      else if (key === 'googlePlayPackageName')
+        expect(['string', 'object']).toContain(typeof value);
+      else expect(Number.isInteger(value), key).toBe(true);
     }
+  });
+
+  it('follows the three settings it repeats once they are saved (monitor.max_range_days, entitlement.limit_max, ads.creative_aspect_tolerance_percent) and gives the default back after a reset', async () => {
+    resetConfigStore();
+    const token = await signIn('root');
+    for (const [key, value] of [
+      ['monitor.max_range_days', 3],
+      ['entitlement.limit_max', 500],
+      ['ads.creative_aspect_tolerance_percent', 10],
+    ] as const)
+      saved.set(key, { value, updatedAt: '', updatedBy: '', updatedByUsername: '' });
+    expect((await meta(token)).body.data).toMatchObject({
+      monitorMaxRangeDays: 3,
+      entitlementLimitMax: 500,
+      creativeAspectTolerancePercent: 10,
+    });
+    resetConfigStore();
+    expect((await meta(token)).body.data).toMatchObject({
+      monitorMaxRangeDays: 7,
+      entitlementLimitMax: 1000000,
+      creativeAspectTolerancePercent: 3,
+    });
   });
 
   it('answers 403 ADMIN_FORBIDDEN while the password must be changed, and 401 without a token', async () => {

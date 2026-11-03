@@ -9,6 +9,7 @@ const messages: Record<string, string> = {
   'subscriptions.value.unset': '未配置',
   'subscriptions.value.value': '具体值',
   'subscriptions.value.unlimited': '不限',
+  'subscriptions.value.largest': '最大值：{max}',
   'subscriptions.value.on': '开',
   'subscriptions.value.off': '关',
   'subscriptions.source.ENTITLEMENT': '权益',

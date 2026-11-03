@@ -204,6 +204,17 @@ describe('what the form refuses before it sends', () => {
     expect(valueProblem('BOOLEAN', false)).toBeNull();
     expect(valueProblem('BOOLEAN', null)).toBe('EMPTY_NOT_ALLOWED');
   });
+
+  it('refuses a limit above the largest value that GET /meta gave (the largest itself is fine), and checks no upper end without it', () => {
+    expect(valueProblem('LIMIT', 1000001, 1000000)).toBe('OUT_OF_RANGE');
+    expect(valueProblem('LIMIT', 1000000, 1000000)).toBeNull();
+    expect(valueProblem('LIMIT', 0, 1000000)).toBeNull();
+    expect(valueProblem('LIMIT', 5000000)).toBeNull();
+    // the other checks come first, and the largest value means nothing to the other kinds
+    expect(valueProblem('LIMIT', 1.5, 1)).toBe('NOT_AN_INTEGER');
+    expect(valueProblem('LIMIT', null, 1)).toBe('EMPTY_NOT_ALLOWED');
+    expect(valueProblem('STRING', 'x'.repeat(50), 1)).toBeNull();
+  });
 });
 
 describe('the event timeline', () => {

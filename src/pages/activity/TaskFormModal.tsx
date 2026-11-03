@@ -12,8 +12,11 @@ import {
   type TaskType,
   updateTaskConfig,
 } from '../../services/activity';
+import { useAdminMeta } from '../../session/useSession';
 import { countCodePoints } from '../../utils/codePoints';
+import { codeText } from '../../utils/displayText';
 import { failureToForm } from '../../utils/failureToForm';
+import { taskTypesOf } from '../../utils/metaValues';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
 
@@ -67,7 +70,11 @@ export function TaskFormModal({ target, open, onClose, onSaved }: Props) {
   const { text: failure, fail, clear } = useFailure();
   const [lockedByBackend, setLockedByBackend] = useState(false);
   const row = target === null || target === 'new' ? null : target;
-  const locked = lockedByBackend || (row as { hasRecords?: unknown } | null)?.hasRecords === true;
+  // The types the backend declares (`GET /meta`); the type the task has stays on offer although the list does not name it.
+  const declared = taskTypesOf(useAdminMeta(), TASK_TYPES);
+  const ownType = typeof row?.taskType === 'string' ? row.taskType : '';
+  const types = ownType !== '' && !declared.includes(ownType) ? [...declared, ownType] : declared;
+  const locked = lockedByBackend || row?.hasRecords === true;
   const taskType = Form.useWatch('taskType', form);
 
   const initial: Values = useMemo(
@@ -75,9 +82,8 @@ export function TaskFormModal({ target, open, onClose, onSaved }: Props) {
       row
         ? {
             taskName: plainText(row.taskName),
-            taskType: (TASK_TYPES as readonly string[]).includes(plainText(row.taskType))
-              ? row.taskType
-              : null,
+            // The type the task has is on offer whatever the list says, so it is the chosen one.
+            taskType: typeof row.taskType === 'string' ? row.taskType : null,
             targetValue: numberOrNull(row.targetValue),
             rewardCredits: numberOrNull(row.rewardCredits),
             description: plainText(row.description),
@@ -186,14 +192,13 @@ export function TaskFormModal({ target, open, onClose, onSaved }: Props) {
         <Form.Item
           name="taskType"
           label={t('activity.task.form.type')}
-          extra={row && !locked ? t('activity.task.form.hasRecordsNote') : undefined}
           rules={[{ required: true, message: t('activity.task.form.typeRequired') }]}
         >
           <Select
             disabled={locked}
-            options={TASK_TYPES.map((type) => ({
+            options={types.map((type) => ({
               value: type,
-              label: t(`activity.task.type.${type}`),
+              label: codeText(intl, 'activity.task.type', type),
             }))}
           />
         </Form.Item>

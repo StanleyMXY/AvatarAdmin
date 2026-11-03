@@ -1,7 +1,10 @@
 import { currentValue, saved } from './configStore';
 
 // `GET /api/admin/meta`: twelve configuration values (the defaults of contract 17.5; a key without
-// a default would be null) and eight upload limits (backend reply 3). The one value that is not the
+// a default would be null), eight upload limits (backend reply 3) and five values other pages use:
+// three settings (monitor.max_range_days, entitlement.limit_max, ads.creative_aspect_tolerance_percent),
+// the task types the backend code declares (28.2) and the Google Play package name of the backend's
+// environment (`GOOGLE_PLAY_PACKAGE_NAME`; null when the environment has none, the only field that can be). The one value that is not the
 // contract's default is `supportedLocales`: the fake backend lists the seven languages of the product
 // (the default is only `en`), so that the language tabs and the template matrix can be looked at with
 // Thai, Arabic, Indonesian, Vietnamese, Spanish, English and Chinese.
@@ -26,6 +29,11 @@ export const META_DEFAULTS = {
   catalogImageMaxPixels: 36000000,
   adImageMaxPixels: 36000000,
   defaultAvatarSourceMaxPixels: 250000000,
+  monitorMaxRangeDays: 7,
+  taskTypes: ['daily_login', 'call_seconds', 'text_messages'],
+  entitlementLimitMax: 1000000,
+  creativeAspectTolerancePercent: 3,
+  googlePlayPackageName: 'com.example.avatar',
 } as const;
 
 export const META_FIELDS = Object.keys(META_DEFAULTS);
@@ -51,6 +59,9 @@ export const META_SETTING_KEY: Partial<Record<keyof typeof META_DEFAULTS, string
   adMediaMaxBytes: 'upload.ad_media_max_bytes',
   apkMaxBytes: 'upload.apk_max_bytes',
   renderAssetMaxBytes: 'upload.render_asset_max_bytes',
+  monitorMaxRangeDays: 'monitor.max_range_days',
+  entitlementLimitMax: 'entitlement.limit_max',
+  creativeAspectTolerancePercent: 'ads.creative_aspect_tolerance_percent',
 };
 
 /**

@@ -35,8 +35,10 @@ import {
   updateEntitlementDef,
 } from '../../services/subscriptions';
 import { describeFailure } from '../../session/describe';
+import { useAdminMeta } from '../../session/useSession';
 import { countCodePoints } from '../../utils/codePoints';
 import { detailReasons, messageReason, setFieldReasons } from '../../utils/fieldReasons';
+import { entitlementLimitMaxOf } from '../../utils/metaValues';
 import { trimSpec } from '../../utils/trimSpec';
 import { FailureAlert } from './FailureAlert';
 import { FeatureValueEditor } from './FeatureValueEditor';
@@ -68,6 +70,8 @@ function FeaturesDrawer({
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const initial = valuesOf(def);
+  // The largest value of a limit, when `GET /meta` gave it.
+  const limitMax = entitlementLimitMaxOf(useAdminMeta());
   const [draft, setDraft] = useState<Record<string, FeatureValue>>(initial);
   // What is wrong with a value, by gate key: the reason checked here (a reason code) or the reason
   // the backend gave (read from `failure` when drawn, not kept as words), until that value is edited.
@@ -95,7 +99,7 @@ function FeaturesDrawer({
     const found: Record<string, string> = {};
     for (const g of changed) {
       const value = draft[g.key];
-      const problem = value?.mode === 'VALUE' ? valueProblem(g.kind, value.value) : null;
+      const problem = value?.mode === 'VALUE' ? valueProblem(g.kind, value.value, limitMax) : null;
       if (problem) found[g.key] = problem;
     }
     setProblems(found);

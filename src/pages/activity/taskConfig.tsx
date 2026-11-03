@@ -19,7 +19,9 @@ import {
   type TaskType,
 } from '../../services/activity';
 import { describeFailure } from '../../session/describe';
+import { useAdminMeta } from '../../session/useSession';
 import { codeText, countText, instantText } from '../../utils/displayText';
+import { taskTypesOf } from '../../utils/metaValues';
 import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { trimSpec } from '../../utils/trimSpec';
@@ -38,6 +40,8 @@ export default function TaskConfigPage() {
   const { message } = App.useApp();
   const access = useAccess() as unknown as { canAccess: (code?: string) => boolean };
   const canManage = access.canAccess('TASK:MANAGE');
+  // The types the backend declares (`GET /meta`); the three this page held before when that could not be read.
+  const taskTypes = taskTypesOf(useAdminMeta(), TASK_TYPES);
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
   const ref = useRef<ActionType | undefined>(undefined);
@@ -112,7 +116,7 @@ export default function TaskConfigPage() {
       dataIndex: 'taskType',
       valueType: 'select',
       valueEnum: Object.fromEntries(
-        TASK_TYPES.map((type) => [type, { text: t(`activity.task.type.${type}`) }]),
+        taskTypes.map((type) => [type, { text: codeText(intl, 'activity.task.type', type) }]),
       ),
       render: (_, row) =>
         codeText(intl, 'activity.task.type', row.taskType, { writeOut: true }) || DASH,

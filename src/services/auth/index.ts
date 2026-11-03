@@ -74,7 +74,7 @@ export async function getMe(): Promise<Me> {
   );
 }
 
-/** `GET /meta`: the configuration values and upload limits a page needs but may not be allowed to edit. */
+/** `GET /meta` (25 fields): the configuration values, upload limits and other values a page needs but may not be allowed to edit. */
 export type AdminMeta = {
   supportedLocales: string[] | null;
   landIntervalMinutes: number | null;
@@ -96,6 +96,19 @@ export type AdminMeta = {
   catalogImageMaxPixels: number;
   adImageMaxPixels: number;
   defaultAvatarSourceMaxPixels: number;
+  /** `monitor.max_range_days` in force: the longest time range the pipeline monitor accepts. */
+  monitorMaxRangeDays: number;
+  /** The daily-task types the backend code declares (a type this app has no label for is shown as it is). */
+  taskTypes: string[];
+  /** `entitlement.limit_max` in force: the largest value of a `LIMIT` feature. */
+  entitlementLimitMax: number;
+  /** `ads.creative_aspect_tolerance_percent` in force. */
+  creativeAspectTolerancePercent: number;
+  /**
+   * The package name the backend checks a Google Play store link against (its environment value, not
+   * the package name registered on the `play` channel). The only field that can be null.
+   */
+  googlePlayPackageName: string | null;
 };
 
 /**
