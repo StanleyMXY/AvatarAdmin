@@ -116,8 +116,7 @@ const messages: Record<string, string> = {
   // ---- roles ----
   'system.roles.note':
     'The permissions of a role are replaced as a whole when you save. Checking a node checks everything below it and the pages it is on. Unchecking a function keeps the page it belongs to, so a role can hold a page with only some of its functions; unchecking the page takes the page and everything below it. Custom nodes cannot be given to a role.',
-  'system.roles.ownRoleReason':
-    'You are given this role, so you cannot change it. Another administrator can.',
+  'system.roles.ownRoleReason': 'You are given this role, so you cannot change it.',
   'system.roles.new': 'New role',
   'system.roles.col.name': 'Name',
   'system.roles.col.remark': 'Remark',

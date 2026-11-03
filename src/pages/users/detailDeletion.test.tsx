@@ -47,7 +47,7 @@ describe('the deletion that is open, on the overview of an account', { timeout: 
   it('says the user asked for it when there is no administrator behind the request', async () => {
     backend();
     await open(USER.pendingDeletion);
-    expect(field('deletion-requestedBy')).toHaveTextContent('The user, in the app or on the web');
+    expect(field('deletion-requestedBy')).toHaveTextContent(/^The user$/);
   });
 
   it('names the administrator who started it, in any script', async () => {

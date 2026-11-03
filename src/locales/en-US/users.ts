@@ -120,7 +120,7 @@ const messages: Record<string, string> = {
   'users.overview.deletionExecuteAfter': 'Planned run',
   'users.overview.deletionRequestedBy': 'Asked for by',
   'users.overview.deletionCreatedAt': 'Asked for at',
-  'users.overview.deletionByUser': 'The user, in the app or on the web',
+  'users.overview.deletionByUser': 'The user',
   'users.overview.deletionByGoneAdmin': 'An administrator who has been deleted ({id})',
   'users.overview.state': 'State',
   'users.overview.banReason': 'Ban reason (shown to the user)',
