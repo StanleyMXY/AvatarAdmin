@@ -99,7 +99,9 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
         await createAction({ ...fields, key: trimSpec(values.key), enabled: values.enabled });
       }
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS, tagAliases(error, 'names'));
+      const result = failureToForm(intl, form, error, FIELDS, tagAliases(error, 'names'), {
+        uploadFields: ['iconUploadId'],
+      });
       if (result.uploadRejected) {
         icon.reset();
         setIconProblem('avatar.icon.rejected');

@@ -666,3 +666,37 @@ describe('the manual task page: languages and permissions', { timeout: 30000 }, 
     expect(within(row).getByRole('button', { name: '取消任务' })).toBeInTheDocument();
   });
 });
+
+describe('the push task page: the answer about the upload field', { timeout: 40000 }, () => {
+  it('keeps the picture when the 400 names another field, and asks for it again when the 400 names uploadId', async () => {
+    backend();
+    let answered = 0;
+    const refused = overrideFetch(({ method, url }) => {
+      if (method !== 'POST' || url.pathname !== '/api/admin/push/tasks') return undefined;
+      answered += 1;
+      const ref = answered === 1 ? 'title' : 'uploadId';
+      return jsonAnswer(400, 'INVALID_REQUEST', { details: [{ ref, reason: 'OUT_OF_RANGE' }] });
+    });
+    const user = userEvent.setup();
+    renderPage(<TasksPage />);
+    const dialog = await openNew(user);
+    basics(dialog);
+    fireEvent.change(screen.getByTestId('upload-input'), {
+      target: { files: [fileOf(pngBytes(40, 40), 'edge.png')] },
+    });
+    await within(dialog).findByText(/Uploaded: edge\.png/);
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(refused).toHaveLength(1));
+    // another field was refused: the file is still good
+    expect(within(dialog).getByText(/Uploaded: edge\.png/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(refused).toHaveLength(2));
+    // the upload field itself was refused: the file goes and the picture is asked for again
+    expect(
+      await within(dialog).findByText(
+        'The backend did not accept the uploaded picture. Upload it again.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Uploaded: edge\.png/)).not.toBeInTheDocument();
+  });
+});

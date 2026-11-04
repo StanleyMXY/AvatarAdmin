@@ -243,14 +243,17 @@ export default function TemplatesPage() {
             : undefined
         }
       />
-      <TemplateModal
-        open={editing !== null}
-        template={editing === 'new' || editing === null ? null : editing}
-        templates={all ?? []}
-        locales={locales}
-        onClose={() => setEditing(null)}
-        onSaved={reload}
-      />
+      {/* Mounted only while it is open: a dialog that stayed mounted would keep what was typed in it for the next one. */}
+      {editing !== null ? (
+        <TemplateModal
+          open
+          template={editing === 'new' ? null : editing}
+          templates={all ?? []}
+          locales={locales}
+          onClose={() => setEditing(null)}
+          onSaved={reload}
+        />
+      ) : null}
     </Flex>
   );
 }

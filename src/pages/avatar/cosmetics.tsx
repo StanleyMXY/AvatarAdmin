@@ -224,12 +224,15 @@ export default function CosmeticsPage() {
             : undefined
         }
       />
-      <CosmeticModal
-        open={editing !== null}
-        item={editing === 'new' || editing === null ? null : editing}
-        onClose={() => setEditing(null)}
-        onSaved={reload}
-      />
+      {/* Mounted only while it is open: a dialog that stayed mounted would keep what was typed in it for the next one. */}
+      {editing !== null ? (
+        <CosmeticModal
+          open
+          item={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={reload}
+        />
+      ) : null}
     </>
   );
 }

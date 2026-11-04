@@ -840,9 +840,9 @@ const messages: Record<string, string> = {
   'config.push.schedule_catchup_minutes.reject.OUT_OF_RANGE':
     'Not saved. The value must be 1 to 10080, and catch-up minutes × 60 must be at least 600 + the push task poll seconds (at least 11 with the default poll).',
   'config.invite.reward_start_at.reject.OUT_OF_RANGE':
-    'The start of the reward has to be earlier than its end.',
+    'The start and the end of the reward must be UTC times that end with Z, like 2026-12-01T00:00:00Z, and the start has to be earlier than the end.',
   'config.invite.reward_end_at.reject.OUT_OF_RANGE':
-    'The start of the reward has to be earlier than its end.',
+    'The start and the end of the reward must be UTC times that end with Z, like 2026-12-01T00:00:00Z, and the start has to be earlier than the end.',
   'config.push.task_poll_seconds.reject.OUT_OF_RANGE':
     'Not saved. The value must be at least 1, and catch-up minutes × 60 must stay at least 600 + these poll seconds.',
   'config.chat.message_retention_days.reject.OUT_OF_RANGE':

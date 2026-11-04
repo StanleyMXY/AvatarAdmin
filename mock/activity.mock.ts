@@ -166,7 +166,15 @@ const findConfig = (id: string): MockTaskConfig => {
   return found;
 };
 
-/** The checks of a new or edited task configuration (contract 28.2). */
+/** The upper bounds of a task configuration (CheckinInputs.MAX_TARGET_VALUE, MAX_CREDITS, MAX_SORT_ORDER). */
+const TARGET_MAX = 1_000_000_000;
+const REWARD_MAX = 100_000;
+const SORT_ORDER_MAX = 9_999;
+
+/**
+ * The checks of a new or edited task configuration (contract 28.2). The backend checks them in this
+ * order and stops at the first one that fails, so the answer has one detail.
+ */
 function taskFields(body: Record<string, unknown>) {
   const details: Detail[] = [];
   const taskName = isText(body.taskName) ? trimSpec(body.taskName) : '';
@@ -179,12 +187,14 @@ function taskFields(body: Record<string, unknown>) {
   }
   const target = body.targetValue;
   if (!isInt(target)) details.push({ ref: 'targetValue', reason: 'NOT_AN_INTEGER' });
-  else if (target < 1 || (taskType === 'daily_login' && target !== 1)) {
+  else if (target < 1 || target > TARGET_MAX || (taskType === 'daily_login' && target !== 1)) {
     details.push({ ref: 'targetValue', reason: 'OUT_OF_RANGE' });
   }
   const reward = body.rewardCredits;
   if (!isInt(reward)) details.push({ ref: 'rewardCredits', reason: 'NOT_AN_INTEGER' });
-  else if (reward < 0) details.push({ ref: 'rewardCredits', reason: 'OUT_OF_RANGE' });
+  else if (reward < 0 || reward > REWARD_MAX) {
+    details.push({ ref: 'rewardCredits', reason: 'OUT_OF_RANGE' });
+  }
   const description =
     body.description === undefined || body.description === null
       ? ''
@@ -204,7 +214,10 @@ function taskFields(body: Record<string, unknown>) {
   }
   const sortOrder = body.sortOrder === undefined ? 0 : body.sortOrder;
   if (!isInt(sortOrder)) details.push({ ref: 'sortOrder', reason: 'NOT_AN_INTEGER' });
-  if (details.length > 0) throw fail(details);
+  else if (sortOrder < 0 || sortOrder > SORT_ORDER_MAX) {
+    details.push({ ref: 'sortOrder', reason: 'OUT_OF_RANGE' });
+  }
+  if (details.length > 0) throw fail(details.slice(0, 1));
   return {
     taskName,
     taskType: taskType as MockTaskConfig['taskType'],

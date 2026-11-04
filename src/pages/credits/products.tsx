@@ -114,12 +114,15 @@ export default function CreditProductsPage() {
           </Button>,
         ]}
       />
-      <ProductModal
-        open={editing !== null}
-        pack={editing === 'new' || editing === null ? null : editing}
-        onClose={() => setEditing(null)}
-        onSaved={reload}
-      />
+      {/* Mounted only while it is open: a dialog that stayed mounted would keep the pack it showed before. */}
+      {editing !== null ? (
+        <ProductModal
+          open
+          pack={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={reload}
+        />
+      ) : null}
     </>
   );
 }

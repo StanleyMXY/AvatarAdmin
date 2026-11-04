@@ -160,7 +160,9 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
       if (schedule) await updateSchedule(schedule.id, body);
       else await createSchedule(body);
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS, ALIASES);
+      const result = failureToForm(intl, form, error, FIELDS, ALIASES, {
+        uploadFields: ['uploadId'],
+      });
       if (result.uploadRejected) {
         picture.reset();
         setRejected(true);

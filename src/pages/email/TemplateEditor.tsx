@@ -10,7 +10,7 @@ import { countCodePoints } from '../../utils/codePoints';
 import { failureToForm, failureWords } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
-import { listOfText, missingPlaceholders } from './placeholders';
+import { listOfText, missingPlaceholders, unknownPlaceholders } from './placeholders';
 
 export const SUBJECT_MAX = 200;
 
@@ -124,6 +124,10 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
                 if (length < 1 || length > SUBJECT_MAX) {
                   throw new Error(t('email.templates.subjectInvalid'));
                 }
+                const unknown = unknownPlaceholders(value ?? '', placeholders);
+                if (unknown.length > 0) {
+                  throw new Error(t('email.templates.unknown', { list: unknown.join(', ') }));
+                }
               },
             },
           ]}
@@ -170,10 +174,17 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
               validator: async (_, value: string | undefined) => {
                 const body = value ?? '';
                 if (trimSpec(body) === '') throw new Error(t('email.templates.bodyRequired'));
+                // Both can be true at once ({CODE} for {code}): say both, the unknown one first, as the backend checks.
+                const problems: string[] = [];
+                const unknown = unknownPlaceholders(body, placeholders);
+                if (unknown.length > 0) {
+                  problems.push(t('email.templates.unknown', { list: unknown.join(', ') }));
+                }
                 const missing = missingPlaceholders(body, required);
                 if (missing.length > 0) {
-                  throw new Error(t('email.templates.missing', { list: missing.join(', ') }));
+                  problems.push(t('email.templates.missing', { list: missing.join(', ') }));
                 }
+                if (problems.length > 0) throw new Error(problems.join(' '));
               },
             },
           ]}

@@ -71,7 +71,7 @@ export function RendererModelModal({ open, onClose, onSaved }: Props) {
         minVersionCode: values.minVersionCode as number,
       });
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS);
+      const result = failureToForm(intl, form, error, FIELDS, {}, { uploadFields: ['uploadId'] });
       if (result.uploadRejected) {
         file.reset();
         setFileProblem('avatar.models.fileRejected');

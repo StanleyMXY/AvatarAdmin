@@ -129,7 +129,7 @@ const messages: Record<string, string> = {
   'subscriptions.events.failed': '处理失败',
   'subscriptions.events.reprocess': '重新处理',
   'subscriptions.events.reprocessConfirm': '重新处理这个事件？',
-  'subscriptions.events.reprocessed': '事件已重新处理',
+  'subscriptions.events.reprocessed': '事件已排队，等待重新处理',
   'subscriptions.events.ack': '已处理',
   'subscriptions.events.acked': '已标记为已处理',
 

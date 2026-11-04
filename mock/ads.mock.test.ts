@@ -195,8 +195,9 @@ describe('the campaigns', () => {
     expect(refs(await send(CAMPAIGN_CREATE, { name: `${String.fromCharCode(0x3000)} ` }))).toEqual([
       'name:EMPTY_NOT_ALLOWED',
     ]);
+    // the backend reads a priority as an int: a fraction is out of range, not a different reason
     expect(refs(await send(CAMPAIGN_CREATE, { name: 'a', priority: 1.5 }))).toEqual([
-      'priority:NOT_AN_INTEGER',
+      'priority:OUT_OF_RANGE',
     ]);
     expect(refs(await send(CAMPAIGN_CREATE, { name: 'a', startAt: 'tomorrow' }))).toEqual([
       'startAt:OUT_OF_RANGE',
@@ -208,12 +209,41 @@ describe('the campaigns', () => {
     });
     expect(reversed.status).toBe(400);
     expect(refs(reversed)).toEqual(['endAt:OUT_OF_RANGE']);
+    // the start has to be before the end: equal times are refused too
     const same = await send(CAMPAIGN_CREATE, {
       name: 'a',
       startAt: '2026-11-01T00:00:00Z',
       endAt: '2026-11-01T00:00:00Z',
     });
-    expect(same.status).toBe(200);
+    expect(same.status).toBe(400);
+    expect(refs(same)).toEqual(['endAt:OUT_OF_RANGE']);
+  });
+
+  it('holds the limits of the backend: name 100 and description 500 code points, priority 0 to 2147483647', async () => {
+    expect(refs(await send(CAMPAIGN_CREATE, { name: 'a'.repeat(101) }))).toEqual(['name:TOO_LONG']);
+    expect(refs(await send(CAMPAIGN_CREATE, { name: 'a', description: 'd'.repeat(501) }))).toEqual([
+      'description:TOO_LONG',
+    ]);
+    expect(refs(await send(CAMPAIGN_CREATE, { name: 'a', priority: -1 }))).toEqual([
+      'priority:OUT_OF_RANGE',
+    ]);
+    expect(refs(await send(CAMPAIGN_CREATE, { name: 'a', priority: 2147483648 }))).toEqual([
+      'priority:OUT_OF_RANGE',
+    ]);
+    // code points are counted, not UTF-16 units: 100 emoji are 100 characters
+    const full = await send(CAMPAIGN_CREATE, {
+      name: '\u{1F600}'.repeat(100),
+      description: '\u{1F600}'.repeat(500),
+      priority: 2147483647,
+    });
+    expect(full.status).toBe(200);
+    expect(full.body.data.priority).toBe(2147483647);
+    const id = full.body.data.id;
+    // a new campaign without a priority gets 100; the priority of an existing one cannot be cleared
+    expect((await send(CAMPAIGN_CREATE, { name: 'b' })).body.data.priority).toBe(100);
+    expect(refs(await send(CAMPAIGN_UPDATE, { priority: null }, { id }))).toEqual([
+      'priority:EMPTY_NOT_ALLOWED',
+    ]);
   });
 
   it('updates like a merge patch: what is not sent stays, an explicit null clears', async () => {
@@ -351,11 +381,33 @@ describe('the placements', () => {
       'frequencyCap:OUT_OF_RANGE',
     ]);
     expect(refs(await send(PLACEMENT_UPDATE, { frequencyCap: 1.5 }, { id: rows[0].id }))).toEqual([
-      'frequencyCap:NOT_AN_INTEGER',
+      'frequencyCap:OUT_OF_RANGE',
     ]);
+    expect(
+      refs(await send(PLACEMENT_UPDATE, { frequencyCap: 2147483648 }, { id: rows[0].id })),
+    ).toEqual(['frequencyCap:OUT_OF_RANGE']);
     expect(refs(await send(PLACEMENT_UPDATE, { enabled: 'yes' }, { id: rows[0].id }))).toEqual([
-      'enabled:NOT_BOOLEAN',
+      'enabled:OUT_OF_RANGE',
     ]);
+    // a cap or a switch cannot be cleared; a cooldown can, and so can a reward on a placement without one
+    expect(refs(await send(PLACEMENT_UPDATE, { frequencyCap: null }, { id: rows[0].id }))).toEqual([
+      'frequencyCap:EMPTY_NOT_ALLOWED',
+    ]);
+    expect(refs(await send(PLACEMENT_UPDATE, { enabled: null }, { id: rows[0].id }))).toEqual([
+      'enabled:EMPTY_NOT_ALLOWED',
+    ]);
+    expect(
+      (await send(PLACEMENT_UPDATE, { cooldownMinutes: null }, { id: rows[0].id })).status,
+    ).toBe(200);
+    expect(
+      (await send(PLACEMENT_UPDATE, { cooldownMinutes: null }, { id: rewarded.id })).status,
+    ).toBe(200);
+    expect((await send(PLACEMENT_UPDATE, { rewardCredits: null }, { id: rows[0].id })).status).toBe(
+      200,
+    );
+    expect(
+      refs(await send(PLACEMENT_UPDATE, { rewardCredits: null }, { id: rewarded.id })),
+    ).toEqual(['rewardCredits:OUT_OF_RANGE']);
     const same = (await get(PLACEMENTS)).body.data.items[3];
     expect(same.frequencyCap).toBe(rewarded.frequencyCap);
   });
@@ -449,9 +501,7 @@ describe('the units', () => {
     expect(await bad({ app_version_min: '1..2' })).toEqual([
       'targeting.app_version_min:OUT_OF_RANGE',
     ]);
-    expect(await bad({ languages: ['not a tag'] })).toEqual([
-      'targeting.languages:INVALID_LANGUAGE_TAG',
-    ]);
+    expect(await bad({ languages: ['not a tag'] })).toEqual(['targeting.languages:OUT_OF_RANGE']);
     expect(await bad({ day_parts: [{ start: '25:00', end: '1:00' }] })).toEqual([
       'targeting.day_parts:OUT_OF_RANGE',
     ]);
@@ -842,6 +892,28 @@ describe('the creatives', () => {
     expect((await make({ adUnitId: nativeUnit, title: 'สวัสดี', ctaText: 'ติดตั้ง' })).status).toBe(200);
   });
 
+  it('holds the limits of the backend on the texts and the weight, and answers OUT_OF_RANGE for a language that is not a tag', async () => {
+    expect(refs(await make({ title: 't'.repeat(201) }))).toEqual(['title:TOO_LONG']);
+    expect(refs(await make({ body: 'b'.repeat(1001) }))).toEqual(['body:TOO_LONG']);
+    expect(refs(await make({ ctaText: 'c'.repeat(101) }))).toEqual(['ctaText:TOO_LONG']);
+    expect(refs(await make({ advertiserName: 'a'.repeat(101) }))).toEqual([
+      'advertiserName:TOO_LONG',
+    ]);
+    expect(refs(await make({ weight: 2147483648 }))).toEqual(['weight:OUT_OF_RANGE']);
+    expect(refs(await make({ weight: 1.5 }))).toEqual(['weight:OUT_OF_RANGE']);
+    expect(refs(await make({ language: 'not a tag' }))).toEqual(['language:OUT_OF_RANGE']);
+    expect(refs(await make({ skippable: 'yes' }))).toEqual(['skippable:OUT_OF_RANGE']);
+    expect(refs(await make({ skippable: null }))).toEqual(['skippable:EMPTY_NOT_ALLOWED']);
+    const edge = await make({
+      title: '\u{1F600}'.repeat(200),
+      body: 'b'.repeat(1000),
+      ctaText: 'c'.repeat(100),
+      advertiserName: 'a'.repeat(100),
+      weight: 2147483647,
+    });
+    expect(edge.status).toBe(200);
+  });
+
   it('answers with warnings, and saves anyway: an unskippable full-screen ad, and a skip delay above 5 seconds', async () => {
     const unskippable = await make({ skippable: false });
     expect(unskippable.status).toBe(200);
@@ -1168,5 +1240,19 @@ describe('the reports', () => {
         ['history_feed', 'reward_credits'].includes(r.slotKey),
       ),
     ).toBe(true);
+  });
+});
+
+describe('the units: the name and the creative switch', () => {
+  it('refuses a unit name over 100 code points when a unit is created and when it is renamed', async () => {
+    const fields = { campaignId: '1', placementId: '1' };
+    expect(refs(await send(UNIT_CREATE, { ...fields, name: 'n'.repeat(101) }))).toEqual([
+      'name:TOO_LONG',
+    ]);
+    const made = await send(UNIT_CREATE, { ...fields, name: '\u{1F600}'.repeat(100) });
+    expect(made.status).toBe(200);
+    expect(
+      refs(await send(UNIT_UPDATE, { name: 'n'.repeat(101) }, { id: made.body.data.id })),
+    ).toEqual(['name:TOO_LONG']);
   });
 });

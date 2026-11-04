@@ -563,3 +563,24 @@ describe('the default avatar page: rename', { timeout: 30000 }, () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('the default avatars page: a dialog that is opened again', { timeout: 40000 }, () => {
+  it('shows the name of the avatar that is renamed, not the name the dialog showed before', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<DefaultAvatarsPage />);
+    const rename = async (name: string) => {
+      await user.click(within(await rowOf(name)).getByRole('button', { name: 'Rename' }));
+      return within(await screen.findByRole('dialog'));
+    };
+
+    const first = await rename(LUNA);
+    expect(first.getByLabelText('Name')).toHaveValue(LUNA);
+    await user.click(first.getByRole('button', { name: 'Cancel' }));
+    const second = await rename(MIRA);
+    expect(second.getByLabelText('Name')).toHaveValue(MIRA);
+    await user.click(second.getByRole('button', { name: 'Cancel' }));
+    const third = await rename(LUNA);
+    expect(third.getByLabelText('Name')).toHaveValue(LUNA);
+  });
+});

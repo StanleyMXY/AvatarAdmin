@@ -3,6 +3,7 @@ import { Alert, App, Flex, Form, Input, InputNumber, Modal } from 'antd';
 import { useFailure } from '../../hooks/useFailure';
 import { RevalidateOnLocaleChange } from '../../hooks/useRevalidateOnLocaleChange';
 import { useSingleFlight } from '../../hooks/useSingleFlight';
+import { ApiError } from '../../request/errors';
 import {
   MEMORY_NAME_PATTERN,
   registerEmbeddingModel,
@@ -52,7 +53,26 @@ export function ModelForm({ open, onClose, onSaved }: Props) {
         ['name', 'teiBaseUrl', 'dimensions'].includes(ref) ? (byRef[ref] ?? ref) : undefined,
       );
       if (placed.length > 0) {
-        setFieldReasons(form, intl, placed);
+        // The backend answers INVALID_HOST for four causes; on this field the usual one is a host that
+        // is not on memory.tei_allowed_hosts, which the general text of the reason does not mention.
+        const hostRefused =
+          error instanceof ApiError &&
+          error.details.some((d) => d.ref === 'teiBaseUrl' && d.reason === 'INVALID_HOST');
+        setFieldReasons(
+          form,
+          intl,
+          hostRefused
+            ? placed.map((reason) =>
+                reason.name === 'teiBaseUrl'
+                  ? {
+                      name: reason.name,
+                      write: (words) =>
+                        words.formatMessage({ id: 'memory.model.teiBaseUrlRefused' }),
+                    }
+                  : reason,
+              )
+            : placed,
+        );
       } else {
         // A name that is registered with other dimensions: say which ones (the backend reads them
         // before the call), so that the person can decide on a new name. The memory service's

@@ -6,6 +6,7 @@ import avatarMock from '../../../mock/avatar.mock';
 import channelsMock from '../../../mock/channels.mock';
 import { fileOf, pngBytes, zipBytes } from '../../../tests/imageBytes';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { jsonAnswer, overrideFetch } from '../../../tests/pageHelpers';
 import { renderPage } from '../../../tests/renderPage';
 import { ApiError } from '../../request/errors';
 import CosmeticsPage from './cosmetics';
@@ -502,6 +503,39 @@ describe('the cosmetic catalog page: new item', { timeout: 60000 }, () => {
     expect(writesOf(calls)).toHaveLength(1);
   });
 
+  it('keeps the uploaded picture when the backend refuses another field of the form, and the same upload id goes with the next try', async () => {
+    backend();
+    const refused = overrideFetch(({ url, method }) =>
+      method === 'POST' && url.pathname === '/api/admin/cosmetics'
+        ? jsonAnswer(400, 'INVALID_REQUEST', {
+            details: [{ ref: 'sortOrder', reason: 'OUT_OF_RANGE' }],
+          })
+        : undefined,
+    );
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New item' }));
+    const dialog = await screen.findByRole('dialog');
+    fillBasics(dialog);
+    choose(png());
+    await waitFor(() => expect(uploads).toHaveLength(1));
+    await within(dialog).findByText(/preview\.png/);
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(refused).toHaveLength(1));
+    // The file is still good: it stays in the dialog and nothing asks for it again.
+    expect(within(dialog).getByText(/preview\.png/)).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText(
+        'The server did not accept the uploaded picture. Upload it again.',
+      ),
+    ).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(refused).toHaveLength(2));
+    const bodies = refused.map((call) => call.body as { previewUploadId?: string });
+    expect(bodies[0].previewUploadId).toBeTruthy();
+    expect(bodies[1].previewUploadId).toBe(bodies[0].previewUploadId);
+  });
+
   it('cannot be sent while the picture is still going up', async () => {
     backend();
     const user = userEvent.setup();
@@ -678,5 +712,38 @@ describe('the cosmetic catalog page: edit', { timeout: 60000 }, () => {
       await within(dialog).findByText('The current state of the item does not allow this action.'),
     ).toBeInTheDocument();
     expect(within(dialog).queryByText(DEFAULT_KEPT_EN)).toBeNull();
+  });
+});
+
+describe('the cosmetic catalog page: a dialog that is opened again', { timeout: 40000 }, () => {
+  it('shows the item that is edited and a blank form for a new one, not what the dialog showed before', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<CosmeticsPage />);
+    const item = (key: string) => {
+      const found = avatarState.cosmetics.find((c) => c.key === key);
+      if (!found) throw new Error(`the mock has no cosmetic ${key}`);
+      return found;
+    };
+    const open = async (key: string) => {
+      await user.click(within(await rowOf(key)).getByRole('button', { name: 'Edit' }));
+      return within(await screen.findByRole('dialog'));
+    };
+
+    const first = await open('outfit_default');
+    expect(first.getByLabelText('Key')).toHaveValue('outfit_default');
+    expect(first.getByLabelText('Generation text')).toHaveValue(
+      item('outfit_default').generationSpec,
+    );
+    await user.click(first.getByRole('button', { name: 'Cancel' }));
+    const second = await open('bg_default');
+    expect(second.getByLabelText('Key')).toHaveValue('bg_default');
+    expect(second.getByLabelText('Generation text')).toHaveValue(item('bg_default').generationSpec);
+    await user.click(second.getByRole('button', { name: 'Cancel' }));
+    await user.click(await screen.findByRole('button', { name: 'New item' }));
+    const fresh = within(await screen.findByRole('dialog'));
+    expect(fresh.getByLabelText('Key')).toHaveValue('');
+    expect(fresh.getByLabelText('Key')).toBeEnabled();
+    expect(fresh.getByLabelText('Generation text')).toHaveValue('');
   });
 });

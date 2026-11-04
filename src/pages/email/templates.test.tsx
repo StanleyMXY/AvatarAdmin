@@ -404,6 +404,34 @@ describe('the check of the required placeholders', () => {
     expect(form.queryByText(/missing \{confirmLink\}/)).toBeNull();
   });
 
+  it('names a placeholder the template does not have, in the body or in the subject, and sends nothing', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'REGISTER_CODE');
+    setText(
+      form.getByRole('textbox', { name: 'Body' }),
+      'Use {code} and {foo} and {foo} and {Bar}',
+    );
+    expect(
+      await form.findByText(/\{foo\}, \{Bar\} is not a placeholder of this template/),
+    ).toBeInTheDocument();
+    setText(form.getByRole('textbox', { name: 'Body' }), 'Use {code}');
+    setText(form.getByRole('textbox', { name: 'Subject' }), 'Your {nope} code');
+    expect(
+      await form.findByText(/\{nope\} is not a placeholder of this template/),
+    ).toBeInTheDocument();
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+  });
+
+  it('does not take braces that are not a placeholder for one', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'REGISTER_CODE');
+    setText(form.getByRole('textbox', { name: 'Body' }), 'Use {code} { code } {1} {} {a-b} {{x');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+  });
+
   it('asks for nothing but a body for a template with no required placeholder', async () => {
     const { calls, user } = await load();
     const form = await openEdit(user, 'LIKENESS_COMPLAINT_RECEIVED');

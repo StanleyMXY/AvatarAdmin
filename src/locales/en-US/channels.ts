@@ -34,7 +34,7 @@ const messages: Record<string, string> = {
     '2 to 32 characters: lower-case letters, digits, hyphen and underscore. It cannot be changed after the channel is created.',
   'channels.fixedHelp': 'Cannot be changed after the channel is created.',
   'channels.packageHelp':
-    'The application id of Android or the bundle id of iOS. The store link of a version is compared with it.',
+    'The application id of Android or the bundle id of iOS, kept here as a record. The Google Play link of a version is checked against the package name set on the server, not against the one written here.',
   'channels.directHelp': 'A direct download is an Android file, so it cannot be used with iOS.',
   'channels.rule.code': 'Use 2 to 32 characters: lower-case letters, digits, hyphen or underscore',
   'channels.rule.codeReserved': 'unknown is reserved for "no channel" in the statistics',

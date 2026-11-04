@@ -49,6 +49,8 @@ const messages: Record<string, string> = {
   'memory.model.teiBaseUrl': 'TEI 地址',
   'memory.model.teiBaseUrlHelp':
     '以 http:// 或 https:// 开头的完整地址，不含用户名和密码；主机必须在白名单内。',
+  'memory.model.teiBaseUrlRefused':
+    '这个地址没有被接受：必须是以 http:// 或 https:// 开头、不含用户名和密码的完整地址，主机要在允许的白名单内（国际化域名写成 xn-- 形式）。',
   'memory.model.teiBaseUrlInvalid': '请填写以 http:// 或 https:// 开头的地址，不含用户名和密码',
   'memory.model.dimensions': '维度',
   'memory.model.dimensionsHelp':

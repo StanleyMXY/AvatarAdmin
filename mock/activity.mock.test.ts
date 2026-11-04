@@ -491,11 +491,38 @@ describe('the task configurations', () => {
     ['a negative reward', { rewardCredits: -1 }, 'rewardCredits'],
     ['a description of 501 code points', { description: '😀'.repeat(501) }, 'description'],
     ['a claim time of 0 seconds', { claimTimeoutSeconds: 0 }, 'claimTimeoutSeconds'],
+    ['a target above one billion', { targetValue: 1_000_000_001 }, 'targetValue'],
+    ['a reward above 100000', { rewardCredits: 100_001 }, 'rewardCredits'],
+    ['an order above 9999', { sortOrder: 10_000 }, 'sortOrder'],
+    ['a negative order', { sortOrder: -1 }, 'sortOrder'],
   ])('refuses %s with 400 INVALID_REQUEST', async (_label, over, ref) => {
     const reply = await send(CONFIG_CREATE, task(over));
     expect(reply.status).toBe(400);
     expect(refs(reply)).toContain(ref);
     expect(activityState.taskConfigs).toHaveLength(6);
+  });
+
+  it('names only the first thing wrong, in the order the backend checks: the name before the target before the reward before the order', async () => {
+    const reply = await send(
+      CONFIG_CREATE,
+      task({ taskName: '', targetValue: 0, rewardCredits: -1, sortOrder: 20_000 }),
+    );
+    expect(refs(reply)).toEqual(['taskName']);
+    const later = await send(
+      CONFIG_CREATE,
+      task({ targetValue: 0, rewardCredits: -1, sortOrder: 20_000 }),
+    );
+    expect(refs(later)).toEqual(['targetValue']);
+    const last = await send(CONFIG_CREATE, task({ rewardCredits: 100_000, sortOrder: 20_000 }));
+    expect(refs(last)).toEqual(['sortOrder']);
+  });
+
+  it('accepts the largest values: a target of one billion, a reward of 100000 and an order of 9999', async () => {
+    const reply = await send(
+      CONFIG_CREATE,
+      task({ targetValue: 1_000_000_000, rewardCredits: 100_000, sortOrder: 9_999 }),
+    );
+    expect(reply.status).toBe(200);
   });
 
   it('accepts a description of exactly 500 code points (emoji count once each) and a reward of 0', async () => {

@@ -17,6 +17,13 @@ import type {
 import { multilingualSamples, sampleText } from './fixtures';
 import { store } from './store';
 
+/**
+ * Seed values as long as the backend takes for the field and no longer: it keeps a name to 100 and a
+ * creative title to 200 characters, so a longer one could never be on a real row.
+ */
+const LONG_NAME = 'A'.repeat(100);
+const LONG_TITLE = 'A'.repeat(200);
+
 export type MockCampaign = {
   id: string;
   name: string;
@@ -235,15 +242,7 @@ function seedCampaigns(ms: number): MockCampaign[] {
     row('5', sampleText('es', 0), 'ENDED', 100, -60, -30),
     row('6', sampleText('en', 0), 'ACTIVE', 200, -2, 60, sampleText('en', 1)),
     row('7', sampleText('zh', 0), 'DRAFT', 100, null, null),
-    row(
-      '8',
-      multilingualSamples.longUnbroken,
-      'ACTIVE',
-      100,
-      -1,
-      90,
-      `${sampleText('th', 2)} ${'B'.repeat(300)}`,
-    ),
+    row('8', LONG_NAME, 'ACTIVE', 100, -1, 90, `${sampleText('th', 2)} ${'B'.repeat(300)}`),
   ];
 }
 
@@ -319,16 +318,7 @@ function seedUnits(ms: number): MockUnit[] {
       { platform: 'ANDROID', channel: 'play' },
       { platform: 'ANDROID', channel: 'playdirect' },
     ]),
-    row(
-      '7',
-      '4',
-      '1',
-      multilingualSamples.longUnbroken,
-      'PAUSED',
-      { geo: ['ES', 'US', 'SA'] },
-      100,
-      0,
-    ),
+    row('7', '4', '1', LONG_NAME, 'PAUSED', { geo: ['ES', 'US', 'SA'] }, 100, 0),
     row('8', '2', '3', sampleText('en', 2), 'DRAFT', { languages: ['en'] }, 100, 0),
   ];
 }
@@ -418,7 +408,7 @@ function seedCreatives(ms: number): { creatives: MockCreative[]; uploads: MockUp
       unit: '8',
       media: IMAGE,
       review: 'DRAFT',
-      title: multilingualSamples.longUnbroken,
+      title: LONG_TITLE,
       ctaText: 'OK',
       advertiser: multilingualSamples.edgeCases[1],
     },

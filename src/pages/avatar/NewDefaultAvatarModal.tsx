@@ -46,7 +46,16 @@ export function NewDefaultAvatarModal({ open, onClose, onSaved }: Props) {
         sourceUploadId: source.uploadId,
       });
     } catch (error) {
-      const result = failureToForm(intl, form, error, ['name', 'style']);
+      const result = failureToForm(
+        intl,
+        form,
+        error,
+        ['name', 'style'],
+        {},
+        {
+          uploadFields: ['sourceUploadId'],
+        },
+      );
       if (result.uploadRejected) {
         source.reset();
         setSourceProblem('avatar.defaults.sourceRejected');

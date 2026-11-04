@@ -76,34 +76,54 @@ const newest = <T extends { id: string }>(rows: T[]): T[] =>
   [...rows].sort((a, b) => Number(b.id) - Number(a.id));
 const nowIso = () => new Date().toISOString();
 
-/** A whole number in `[min, max]`; a value that is not a whole number or is outside is put into the details. */
+/** The largest number the backend takes where it reads a Java int (`Integer.MAX_VALUE`). */
+const INT_MAX = 2147483647;
+
+/**
+ * A whole number in `[min, max]`. The backend answers OUT_OF_RANGE for everything else, a fraction
+ * and a text included (it reads the field as an int), and its largest value is `Integer.MAX_VALUE`.
+ */
 function whole(
   value: unknown,
   ref: string,
   details: Detail[],
   min: number,
-  max = Number.MAX_SAFE_INTEGER,
+  max = INT_MAX,
 ): number | undefined {
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
-    details.push({ ref, reason: 'NOT_AN_INTEGER' });
-    return undefined;
-  }
-  if (value < min || value > max) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
     details.push({ ref, reason: 'OUT_OF_RANGE' });
     return undefined;
   }
   return value;
 }
 
-/** Text trimmed with the contract's set; the empty text is `null`. */
-const optionalText = (value: unknown, ref: string, details: Detail[]): string | null => {
+/** The limits of the texts, in code points (AdAdminService NAME_MAX and the others). */
+const NAME_MAX = 100;
+const DESCRIPTION_MAX = 500;
+const TITLE_MAX = 200;
+const BODY_MAX = 1000;
+const CTA_MAX = 100;
+const ADVERTISER_MAX = 100;
+
+/** Text trimmed with the contract's set; the empty text is `null`; a text over `max` code points is TOO_LONG. */
+const optionalText = (
+  value: unknown,
+  ref: string,
+  details: Detail[],
+  max: number,
+): string | null => {
   if (value === undefined || value === null) return null;
   if (!isText(value)) {
     details.push({ ref, reason: 'OUT_OF_RANGE' });
     return null;
   }
   const trimmed = trimSpec(value);
-  return trimmed === '' ? null : trimmed;
+  if (trimmed === '') return null;
+  if (countCodePoints(trimmed) > max) {
+    details.push({ ref, reason: 'TOO_LONG' });
+    return null;
+  }
+  return trimmed;
 };
 
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
@@ -188,12 +208,22 @@ function campaignFields(body: Record<string, unknown>, current: MockCampaign | n
   if (has('name')) {
     const name = isText(body.name) ? trimSpec(body.name) : '';
     if (name === '') details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
+    else if (countCodePoints(name) > NAME_MAX) details.push({ ref: 'name', reason: 'TOO_LONG' });
     else out.name = name;
   }
-  if (has('description')) out.description = optionalText(body.description, 'description', details);
+  if (has('description')) {
+    out.description = optionalText(body.description, 'description', details, DESCRIPTION_MAX);
+  }
   if (has('priority')) {
-    out.priority =
-      body.priority === undefined ? 100 : whole(body.priority, 'priority', details, 0, 100000);
+    if (body.priority === undefined || body.priority === null) {
+      // absent or null: a new campaign gets 100; the priority of an existing one cannot be cleared
+      if (current === null) out.priority = 100;
+      else if (body.priority === null) {
+        details.push({ ref: 'priority', reason: 'EMPTY_NOT_ALLOWED' });
+      }
+    } else {
+      out.priority = whole(body.priority, 'priority', details, 0);
+    }
   }
   if (has('startAt')) out.startAt = instantOrNull(body.startAt, 'startAt', details);
   if (has('endAt')) out.endAt = instantOrNull(body.endAt, 'endAt', details);
@@ -203,7 +233,7 @@ function campaignFields(body: Record<string, unknown>, current: MockCampaign | n
     details.every((d) => d.ref !== 'startAt' && d.ref !== 'endAt') &&
     startAt &&
     endAt &&
-    Date.parse(endAt) < Date.parse(startAt)
+    Date.parse(endAt) <= Date.parse(startAt)
   ) {
     details.push({ ref: 'endAt', reason: 'OUT_OF_RANGE' });
   }
@@ -279,7 +309,7 @@ function checkTargeting(value: unknown, details: Detail[]): void {
   if ('languages' in targeting) {
     const languages = list('languages');
     if (!languages?.every((l) => isText(l) && LANGUAGE_TAG.test(l) && l.length <= 35)) {
-      details.push({ ref: ref('languages'), reason: 'INVALID_LANGUAGE_TAG' });
+      details.push({ ref: ref('languages'), reason: 'OUT_OF_RANGE' });
     }
   }
   if ('day_parts' in targeting) {
@@ -452,7 +482,7 @@ function creativeFields(
     if (language === '*' || (LANGUAGE_TAG.test(language) && language.length <= 35)) {
       out.language = language;
     } else {
-      details.push({ ref: 'language', reason: 'INVALID_LANGUAGE_TAG' });
+      details.push({ ref: 'language', reason: 'OUT_OF_RANGE' });
     }
   }
   if (has('weight')) {
@@ -461,10 +491,18 @@ function creativeFields(
   if (has('skippable')) {
     if (body.skippable === undefined) out.skippable = true;
     else if (typeof body.skippable === 'boolean') out.skippable = body.skippable;
-    else details.push({ ref: 'skippable', reason: 'NOT_BOOLEAN' });
+    else if (body.skippable === null)
+      details.push({ ref: 'skippable', reason: 'EMPTY_NOT_ALLOWED' });
+    else details.push({ ref: 'skippable', reason: 'OUT_OF_RANGE' });
   }
+  const TEXT_MAX = {
+    title: TITLE_MAX,
+    body: BODY_MAX,
+    ctaText: CTA_MAX,
+    advertiserName: ADVERTISER_MAX,
+  } as const;
   for (const key of ['title', 'body', 'ctaText', 'advertiserName'] as const) {
-    if (has(key)) out[key] = optionalText(body[key], key, details);
+    if (has(key)) out[key] = optionalText(body[key], key, details, TEXT_MAX[key]);
   }
   if (placement.adFormat === 'NATIVE') {
     for (const key of ['title', 'ctaText'] as const) {
@@ -631,16 +669,22 @@ export default {
     const out: Partial<MockPlacement> = {};
     for (const key of Object.keys(body)) {
       if (key === 'enabled') {
-        if (typeof body.enabled === 'boolean') out.enabled = body.enabled;
-        else details.push({ ref: 'enabled', reason: 'NOT_BOOLEAN' });
+        if (body.enabled === null) details.push({ ref: key, reason: 'EMPTY_NOT_ALLOWED' });
+        else if (typeof body.enabled === 'boolean') out.enabled = body.enabled;
+        else details.push({ ref: key, reason: 'OUT_OF_RANGE' });
       } else if (key === 'frequencyCap') {
-        // The rewarded placement counts the rewards with it, so it cannot be 0 (unlimited).
-        out.frequencyCap = whole(body.frequencyCap, key, details, rewarded ? 1 : 0);
+        // The rewarded placement counts the rewards with it, so it cannot be 0 (unlimited); none of them can be cleared.
+        if (body.frequencyCap === null) details.push({ ref: key, reason: 'EMPTY_NOT_ALLOWED' });
+        else out.frequencyCap = whole(body.frequencyCap, key, details, rewarded ? 1 : 0);
       } else if (key === 'cooldownMinutes') {
-        if (rewarded) details.push({ ref: key, reason: 'OUT_OF_RANGE' });
+        // null clears it on any placement; a number is refused on a rewarded one
+        if (body.cooldownMinutes === null) out.cooldownMinutes = null;
+        else if (rewarded) details.push({ ref: key, reason: 'OUT_OF_RANGE' });
         else out.cooldownMinutes = whole(body.cooldownMinutes, key, details, 0);
       } else if (key === 'rewardCredits') {
-        if (!rewarded) details.push({ ref: key, reason: 'OUT_OF_RANGE' });
+        // null clears it on a placement that is not rewarded; a rewarded one needs more than 0
+        if (body.rewardCredits === null && !rewarded) out.rewardCredits = null;
+        else if (!rewarded) details.push({ ref: key, reason: 'OUT_OF_RANGE' });
         else out.rewardCredits = whole(body.rewardCredits, key, details, 1);
       }
     }
@@ -676,6 +720,7 @@ export default {
     const details: Detail[] = [];
     const name = isText(body.name) ? trimSpec(body.name) : '';
     if (name === '') details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
+    else if (countCodePoints(name) > NAME_MAX) details.push({ ref: 'name', reason: 'TOO_LONG' });
     const weight = body.weight === undefined ? 100 : whole(body.weight, 'weight', details, 0);
     const cap =
       body.dailyImpressionCap === undefined
@@ -718,6 +763,7 @@ export default {
     if ('name' in body) {
       const name = isText(body.name) ? trimSpec(body.name) : '';
       if (name === '') details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
+      else if (countCodePoints(name) > NAME_MAX) details.push({ ref: 'name', reason: 'TOO_LONG' });
       else out.name = name;
     }
     if ('weight' in body) out.weight = whole(body.weight, 'weight', details, 0);

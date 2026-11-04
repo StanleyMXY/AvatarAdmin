@@ -867,11 +867,67 @@ describe('the templates', () => {
     ]) {
       const answer = await send(TEMPLATE_CREATE, goodTemplate({ content }));
       expect([answer.status, answer.body.code], content).toEqual([400, 'INVALID_REQUEST']);
-      expect(refsOf(answer)).toEqual(['content:MISSING_PLACEHOLDER']);
+      expect(refsOf(answer)).toEqual(['content:OUT_OF_RANGE']);
     }
     expect(
       (await send(TEMPLATE_CREATE, goodTemplate({ smsType: 'MARKETING', content: 'Sale' }))).status,
     ).toBe(200);
+  });
+
+  it('holds the rules of the backend: the code, the name, the content and its placeholders, and says only the first thing it finds', async () => {
+    const refused = async (over: Record<string, unknown>) =>
+      refsOf(await send(TEMPLATE_CREATE, goodTemplate(over)));
+    expect(await refused({ templateCode: '' })).toEqual(['templateCode:OUT_OF_RANGE']);
+    expect(await refused({ templateCode: 'a'.repeat(65) })).toEqual(['templateCode:OUT_OF_RANGE']);
+    expect(await refused({ templateCode: 'has space' })).toEqual(['templateCode:OUT_OF_RANGE']);
+    expect(await refused({ name: 'n'.repeat(101) })).toEqual(['name:TOO_LONG']);
+    expect(await refused({ content: `${'c'.repeat(1001)}{code}` })).toEqual(['content:TOO_LONG']);
+    expect(await refused({ content: 'Your code is {code} {foo}' })).toEqual([
+      'content:OUT_OF_RANGE',
+    ]);
+    expect(await refused({ smsType: undefined })).toEqual(['smsType:EMPTY_NOT_ALLOWED']);
+    expect(await refused({ providerTemplateId: 'p'.repeat(129) })).toEqual([
+      'providerTemplateId:TOO_LONG',
+    ]);
+    // two things wrong: the backend names the first one it reaches, the code
+    expect(await refused({ templateCode: '', name: '', content: '' })).toEqual([
+      'templateCode:OUT_OF_RANGE',
+    ]);
+    // the three known tokens, a line break, 100 emoji for a name and a lower-case country go through
+    const fine = await send(
+      TEMPLATE_CREATE,
+      goodTemplate({
+        templateCode: 'Fine-1_x',
+        name: '\u{1F600}'.repeat(100),
+        content: 'Your code is {code}\nfor {minutes} minutes in {appName}',
+        country: 'th',
+      }),
+    );
+    expect(fine.status).toBe(200);
+    expect(fine.body.data).toMatchObject({ country: 'TH' });
+  });
+
+  it('keeps a country and an id at the provider the way the backend keeps them: stripped, upper case, none when blank', async () => {
+    const padded = await send(
+      TEMPLATE_CREATE,
+      goodTemplate({ templateCode: 'pad_1', country: ' th ', providerTemplateId: ' tpl-1 ' }),
+    );
+    expect(padded.body.data).toMatchObject({ country: 'TH', providerTemplateId: 'tpl-1' });
+    const blank = await send(
+      TEMPLATE_CREATE,
+      goodTemplate({ templateCode: 'pad_2', country: '  ', providerTemplateId: '  ' }),
+    );
+    expect(blank.body.data).toMatchObject({ country: null, providerTemplateId: null });
+    const {
+      templateCode: _c,
+      enabled: _e,
+      ...patch
+    } = goodTemplate({
+      country: ' vn ',
+      providerTemplateId: '',
+    });
+    const updated = await send(TEMPLATE_UPDATE, patch, { id: padded.body.data.id });
+    expect(updated.body.data).toMatchObject({ country: 'VN', providerTemplateId: null });
   });
 
   it('updates one without changing its code or switch, and refuses a missing {code} there too', async () => {

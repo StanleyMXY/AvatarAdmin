@@ -54,6 +54,8 @@ const messages: Record<string, string> = {
   'memory.model.teiBaseUrl': 'TEI address',
   'memory.model.teiBaseUrlHelp':
     'A full address that starts with http:// or https://, without a user name or password; the host must be on the allowed list.',
+  'memory.model.teiBaseUrlRefused':
+    'This address was not accepted: it has to be a full address that starts with http:// or https://, without a user name or password, and its host has to be on the allowed list (write internationalized domains as xn--…).',
   'memory.model.teiBaseUrlInvalid':
     'Enter an address that starts with http:// or https://, without a user name or password',
   'memory.model.dimensions': 'Dimensions',

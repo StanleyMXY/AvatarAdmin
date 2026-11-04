@@ -135,7 +135,7 @@ const messages: Record<string, string> = {
   'subscriptions.events.failed': 'Failed',
   'subscriptions.events.reprocess': 'Reprocess',
   'subscriptions.events.reprocessConfirm': 'Process this event again?',
-  'subscriptions.events.reprocessed': 'The event was processed again',
+  'subscriptions.events.reprocessed': 'The event was queued to be processed again',
   'subscriptions.events.ack': 'Mark handled',
   'subscriptions.events.acked': 'Marked as handled',
 

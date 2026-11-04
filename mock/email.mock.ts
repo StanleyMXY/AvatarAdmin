@@ -51,11 +51,27 @@ export default {
         { ref: 'subject', reason: length < 1 ? 'EMPTY_NOT_ALLOWED' : 'TOO_LONG' },
       ]);
     }
+    // The real backend checks, in this order: the subject's length, its tokens, the body being empty,
+    // its tokens, then the required placeholders; a refused token carries no details.
+    const refuseUnknownToken = (field: string, text: string) => {
+      const unknown = (text.match(/\{[A-Za-z][A-Za-z0-9]*\}/g) ?? []).find(
+        (token) => !def.placeholders.includes(token),
+      );
+      if (unknown !== undefined) {
+        throw new MockHttpError(
+          400,
+          'INVALID_REQUEST',
+          `${field} contains an unknown placeholder ${unknown}`,
+        );
+      }
+    };
+    refuseUnknownToken('subject', subject);
     if (body === '') {
       throw invalidRequest('The body must not be empty', [
         { ref: 'body', reason: 'EMPTY_NOT_ALLOWED' },
       ]);
     }
+    refuseUnknownToken('body', body);
     const missing = def.requiredPlaceholders.filter((placeholder) => !body.includes(placeholder));
     if (missing.length > 0) {
       throw new MockHttpError(

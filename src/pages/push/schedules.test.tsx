@@ -595,3 +595,68 @@ describe('the periodic push page: permissions and language', { timeout: 30000 },
     expect(screen.getByRole('button', { name: /新建周期推送/ })).toBeInTheDocument();
   });
 });
+
+describe('the periodic push page: a dialog that is opened again', { timeout: 40000 }, () => {
+  it('shows the periodic push that is edited and a blank form for a new one, not what the dialog showed before', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<SchedulesPage />);
+    const schedule = (title: string) => {
+      const found = pushState.schedules.find((s) => s.title === title);
+      if (!found) throw new Error(`the mock has no periodic push titled ${title}`);
+      return found;
+    };
+    const open = async (title: string) => {
+      await user.click(within(await rowOf(title)).getByRole('button', { name: 'Edit' }));
+      return within(await screen.findByRole('dialog'));
+    };
+
+    const daily = await open(DAILY);
+    expect(daily.getByLabelText('Title')).toHaveValue(DAILY);
+    expect(daily.getByLabelText('Time of day')).toHaveValue(schedule(DAILY).timeOfDay);
+    await user.click(daily.getByRole('button', { name: 'Cancel' }));
+    const weekly = await open(WEEKLY);
+    expect(weekly.getByLabelText('Title')).toHaveValue(WEEKLY);
+    expect(weekly.getByLabelText('Body')).toHaveValue(schedule(WEEKLY).body);
+    expect(weekly.getByLabelText('Time of day')).toHaveValue(schedule(WEEKLY).timeOfDay);
+    await user.click(weekly.getByRole('button', { name: 'Cancel' }));
+    const fresh = within(await openNew(user));
+    expect(fresh.getByLabelText('Title')).toHaveValue('');
+    expect(fresh.getByLabelText('Body')).toHaveValue('');
+    expect(fresh.getByLabelText('Start date')).toHaveValue('');
+  });
+});
+
+describe('the periodic push page: the answer about the upload field', { timeout: 40000 }, () => {
+  it('keeps the picture when the 400 names another field, and asks for it again when the 400 names uploadId', async () => {
+    backend();
+    let answered = 0;
+    const refused = overrideFetch(({ method, url }) => {
+      if (method !== 'POST' || url.pathname !== '/api/admin/push/schedules') return undefined;
+      answered += 1;
+      const ref = answered === 1 ? 'title' : 'uploadId';
+      return jsonAnswer(400, 'INVALID_REQUEST', { details: [{ ref, reason: 'OUT_OF_RANGE' }] });
+    });
+    const user = userEvent.setup();
+    renderPage(<SchedulesPage />);
+    const dialog = await openNew(user);
+    fill(dialog);
+    fireEvent.change(screen.getByTestId('upload-input'), {
+      target: { files: [fileOf(pngBytes(40, 40), 'edge.png')] },
+    });
+    await within(dialog).findByText(/Uploaded: edge\.png/);
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(refused).toHaveLength(1));
+    // another field was refused: the file is still good
+    expect(within(dialog).getByText(/Uploaded: edge\.png/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(refused).toHaveLength(2));
+    // the upload field itself was refused: the file goes and the picture is asked for again
+    expect(
+      await within(dialog).findByText(
+        'The backend did not accept the uploaded picture. Upload it again.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Uploaded: edge\.png/)).not.toBeInTheDocument();
+  });
+});

@@ -369,6 +369,59 @@ describe('creating a batch by hand', () => {
     expect(saved.confirmedByUsername).toBe('root');
   });
 
+  it('keeps every price at ten decimals as the backend does ("0.4" comes back as "0.4000000000") and keeps the bands by lower bound, whatever order they came in', async () => {
+    const answer = await write(
+      CREATE,
+      {},
+      llmBody({
+        bands: [
+          {
+            inputMinTokens: 1001,
+            inputMaxTokens: null,
+            inputPrice: '0.8',
+            cachedInputPrice: '0.2',
+            outputPrice: '3',
+          },
+          {
+            inputMinTokens: 0,
+            inputMaxTokens: 1000,
+            inputPrice: '0.4',
+            cachedInputPrice: null,
+            outputPrice: '1.5',
+          },
+        ],
+      }),
+    );
+    expect(answer.status).toBe(200);
+    const saved = (await allPrices({ model: 'model-z' }))[0];
+    expect(saved.bands?.map((band) => band.inputMinTokens)).toEqual([0, 1001]);
+    expect(saved.bands?.[0]).toMatchObject({
+      inputPrice: '0.4000000000',
+      cachedInputPrice: null,
+      outputPrice: '1.5000000000',
+    });
+    expect(saved.bands?.[1]).toMatchObject({
+      inputPrice: '0.8000000000',
+      cachedInputPrice: '0.2000000000',
+      outputPrice: '3.0000000000',
+    });
+    const unit = await write(
+      CREATE,
+      {},
+      {
+        resourceType: 'IMAGE_TO_VIDEO',
+        provider: 'p',
+        model: 'v',
+        unit: 'SECOND',
+        effectiveFrom: '2026-10-01',
+        currency: 'USD',
+        unitPrice: '12',
+      },
+    );
+    expect(unit.status).toBe(200);
+    expect((await allPrices({ model: 'v' }))[0].unitPrice).toBe('12.0000000000');
+  });
+
   it('saves a unit price for another type and takes the unit from the type', async () => {
     const body = {
       resourceType: 'IMAGE_TO_VIDEO',

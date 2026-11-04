@@ -147,6 +147,27 @@ function bandsProblem(bands: unknown): Detail | null {
   return bandsOutOfOrder(bands as MockBand[]) ? problem('bands', 'OUT_OF_RANGE') : null;
 }
 
+/** A price as the backend keeps and returns it: at scale 10, so "0.4" comes back as "0.4000000000". */
+function atScale10(value: string): string {
+  const [whole, fraction = ''] = value.split('.');
+  return `${whole}.${fraction.padEnd(10, '0')}`;
+}
+
+/** The bands of an LLM price as the backend keeps them: by lower bound, each price at scale 10. */
+function bandsAsKept(bands: MockBand[]): MockBand[] {
+  return [...structuredClone(bands)]
+    .sort((a, b) => a.inputMinTokens - b.inputMinTokens)
+    .map((band) => ({
+      ...band,
+      inputPrice: atScale10(band.inputPrice),
+      cachedInputPrice:
+        band.cachedInputPrice === null || band.cachedInputPrice === undefined
+          ? null
+          : atScale10(band.cachedInputPrice),
+      outputPrice: atScale10(band.outputPrice),
+    }));
+}
+
 /**
  * The first thing wrong with `POST /usage/prices`, or null. The backend stops at the first wrong field,
  * so the answer has exactly one detail. Order: the resource type, `provider`, `model`, `unit`,
@@ -335,8 +356,8 @@ export default {
       reviewedAt: null,
       reviewNote: null,
       createdAt: new Date().toISOString(),
-      bands: resourceType === 'LLM' ? (structuredClone(body.bands) as MockBand[]) : null,
-      unitPrice: resourceType === 'LLM' ? null : text(body.unitPrice),
+      bands: resourceType === 'LLM' ? bandsAsKept(body.bands as MockBand[]) : null,
+      unitPrice: resourceType === 'LLM' ? null : atScale10(text(body.unitPrice)),
     };
     supersedeSameDay(created);
     costState.batches.push(created);

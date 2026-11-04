@@ -64,14 +64,27 @@ describe('failureToForm', () => {
 
   it('says when the backend refused the upload id that the request carried', () => {
     const form = formWith();
-    expect(failureToForm(intl, form, refusal([], 409, 'INVALID_STATE'), []).uploadRejected).toBe(
-      true,
-    );
-    expect(failureToForm(intl, form, refusal([]), []).uploadRejected).toBe(true);
-    expect(failureToForm(intl, form, refusal([], 500, 'INTERNAL_ERROR'), []).uploadRejected).toBe(
-      false,
-    );
-    expect(failureToForm(intl, form, new Error('x'), []).uploadRejected).toBe(false);
+    const upload = { uploadFields: ['iconUploadId'] };
+    const rejected = (error: unknown) =>
+      failureToForm(intl, form, error, [], {}, upload).uploadRejected;
+    expect(rejected(refusal([], 409, 'INVALID_STATE'))).toBe(true);
+    expect(rejected(refusal([], 404, 'RESOURCE_NOT_FOUND'))).toBe(true);
+    // an upload of another kind: the backend answers 400 and names no field
+    expect(rejected(refusal([]))).toBe(true);
+    expect(rejected(refusal([{ ref: 'iconUploadId', reason: 'EMPTY_NOT_ALLOWED' }]))).toBe(true);
+    expect(rejected(refusal([], 500, 'INTERNAL_ERROR'))).toBe(false);
+    expect(rejected(new Error('x'))).toBe(false);
+  });
+
+  it('does not call the upload refused when the 400 names another field: the file is still good', () => {
+    const form = formWith();
+    const other = refusal([{ ref: 'compatibleStyles', reason: 'EMPTY_NOT_ALLOWED' }]);
+    expect(
+      failureToForm(intl, form, other, ['compatibleStyles'], {}, { uploadFields: ['iconUploadId'] })
+        .uploadRejected,
+    ).toBe(false);
+    // a form that does not say which fields carry an upload never discards a file on a 400 with details
+    expect(failureToForm(intl, form, other, ['compatibleStyles']).uploadRejected).toBe(false);
   });
 
   it('lists the text of each detail that no field of the form took, with the alias applied', () => {

@@ -246,6 +246,18 @@ describe('a new tier', { timeout: 30000 }, () => {
     expect(dialog.querySelector('.ant-spin-spinning')).toBeNull();
   });
 
+  it('starts with an empty name, not with the name of the default tier whose settings it starts from', async () => {
+    const calls = useMockBackend(memoryMock);
+    const user = userEvent.setup();
+    renderPage(<TiersPage />);
+    const dialog = await openNew(user);
+    expect(within(dialog).getByLabelText('Tier name')).toHaveValue('');
+    // a name typed after it is the whole name, and nothing was sent by opening the dialog
+    fireEvent.change(within(dialog).getByLabelText('Tier name'), { target: { value: 'gold' } });
+    expect(within(dialog).getByLabelText('Tier name')).toHaveValue('gold');
+    expect(writes(calls)).toHaveLength(0);
+  });
+
   it('asks to confirm "a new tier X will be created" before it sends a name that is not in the list', async () => {
     const calls = useMockBackend(memoryMock);
     const user = userEvent.setup();

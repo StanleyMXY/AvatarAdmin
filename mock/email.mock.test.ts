@@ -130,18 +130,36 @@ describe('PUT /email/templates/{templateCode}', () => {
   });
 
   it('refuses a body without a required placeholder written exactly, case and spaces included', async () => {
-    for (const body of [
-      'no placeholder',
-      'Code code',
-      'Code {CODE}',
-      'Code { code }',
-      'Code {Code}',
-    ]) {
+    for (const body of ['no placeholder', 'Code code', 'Code { code }']) {
       const answer = await save('REGISTER_CODE', { subject: 'x', body });
       expect([answer.status, answer.body.code], body).toEqual([400, 'INVALID_REQUEST']);
       expect(answer.body.message).toContain('{code}');
     }
     expect((await itemOf('REGISTER_CODE')).modified).toBe(false);
+  });
+
+  it('refuses an unknown placeholder in the subject or the body, before it looks for the required ones, with no details as the backend does', async () => {
+    for (const body of ['Code {CODE}', 'Code {Code}', 'Use {code} and {foo}']) {
+      const answer = await save('REGISTER_CODE', { subject: 'x', body });
+      expect([answer.status, answer.body.code], body).toEqual([400, 'INVALID_REQUEST']);
+      expect(answer.body.message).toContain('body contains an unknown placeholder');
+      expect(answer.body.data).toBeNull();
+    }
+    const subject = await save('REGISTER_CODE', { subject: 'Your {nope}', body: '{code}' });
+    expect(subject.status).toBe(400);
+    expect(subject.body.message).toBe('subject contains an unknown placeholder {nope}');
+    // the subject is checked before the body is looked at: an unknown token there wins over an empty body
+    const early = await save('REGISTER_CODE', { subject: '{x}', body: '' });
+    expect(early.body.message).toBe('subject contains an unknown placeholder {x}');
+    // and the body being empty comes before the tokens of the body and the required placeholders
+    expect((await save('REGISTER_CODE', { subject: 'x', body: '' })).body.message).toBe(
+      'The body must not be empty',
+    );
+    // braces that are not a token are not placeholders
+    expect(
+      (await save('REGISTER_CODE', { subject: 'x {1} {}', body: '{code} { x } {a-b}' })).status,
+    ).toBe(200);
+    expect((await itemOf('REGISTER_CODE')).modified).toBe(true);
   });
 
   it('names the missing one of two required placeholders', async () => {

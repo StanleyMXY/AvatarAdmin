@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { listOfText, missingPlaceholders } from './placeholders';
+import { listOfText, missingPlaceholders, unknownPlaceholders } from './placeholders';
 
 describe('the required placeholders of a template body', () => {
   it('finds {code} when the body has it exactly', () => {
@@ -48,5 +48,33 @@ describe('listOfText', () => {
     expect(listOfText('{a}')).toEqual([]);
     expect(listOfText(undefined)).toEqual([]);
     expect(listOfText({ 0: '{a}' })).toEqual([]);
+  });
+});
+
+describe('the placeholders written in a text that the template does not list', () => {
+  const allowed = ['{code}', '{minutes}', '{appName}'];
+
+  it('finds none when every token is listed', () => {
+    expect(unknownPlaceholders('Use {code} within {minutes} minutes', allowed)).toEqual([]);
+    expect(unknownPlaceholders('', allowed)).toEqual([]);
+  });
+
+  it('names each unknown one once, in the order it first appears, in the case it was written', () => {
+    expect(unknownPlaceholders('{foo} {code} {Bar} {foo} {CODE}', allowed)).toEqual([
+      '{foo}',
+      '{Bar}',
+      '{CODE}',
+    ]);
+  });
+
+  it('takes only what the backend takes for a placeholder: a letter and then letters or digits', () => {
+    expect(unknownPlaceholders('{ code } {1} {} {a-b} {a b} {{x} {x1}', allowed)).toEqual([
+      '{x}',
+      '{x1}',
+    ]);
+  });
+
+  it('treats a list that is not a list as empty, so everything written is unknown', () => {
+    expect(unknownPlaceholders('{code}', undefined)).toEqual(['{code}']);
   });
 });

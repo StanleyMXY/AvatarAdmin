@@ -117,7 +117,9 @@ export function CosmeticModal({ open, item, onClose, onSaved }: Props) {
         });
       }
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS, tagAliases(error, 'names'));
+      const result = failureToForm(intl, form, error, FIELDS, tagAliases(error, 'names'), {
+        uploadFields: ['previewUploadId'],
+      });
       if (result.uploadRejected) {
         picture.reset();
         setPictureProblem('avatar.preview.rejected');

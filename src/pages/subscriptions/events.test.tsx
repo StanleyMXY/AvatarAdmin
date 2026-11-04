@@ -230,6 +230,10 @@ describe('the Reprocess and Mark handled buttons', { timeout: 30000 }, () => {
       method: 'POST',
       url: `/api/admin/subscription-events/${failed.id}/reprocess`,
     });
+    // The backend only queued it (its answer is QUEUED), so the page does not say it was processed.
+    expect(
+      await screen.findByText('The event was queued to be processed again'),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(subscriptionsState().events.find((e) => e.id === failed.id)?.error).toBeNull(),
     );

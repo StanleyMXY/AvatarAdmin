@@ -86,7 +86,9 @@ export function TemplateModal({ open, template, templates, locales, onClose, onS
         });
       }
     } catch (error) {
-      const result = failureToForm(intl, form, error, FIELDS, ALIASES);
+      const result = failureToForm(intl, form, error, FIELDS, ALIASES, {
+        uploadFields: ['uploadId'],
+      });
       if (result.uploadRejected) {
         picture.reset();
         setRejected(true);

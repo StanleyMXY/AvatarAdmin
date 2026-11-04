@@ -35,7 +35,8 @@ describe('ConfigForm: the start of the invite reward must be earlier than its en
     );
     const start = await save('invite.reward_start_at', '2026-12-01T00:00:00Z');
     await waitFor(() => expect(within(start).getByRole('alert')).toBeInTheDocument());
-    const words = 'The start of the reward has to be earlier than its end.';
+    const words =
+      'The start and the end of the reward must be UTC times that end with Z, like 2026-12-01T00:00:00Z, and the start has to be earlier than the end.';
     expect(within(start).getByRole('alert')).toHaveTextContent(words);
     expect(
       within(screen.getByTestId('config-row-invite.reward_end_at')).getByRole('alert'),
@@ -52,6 +53,8 @@ describe('ConfigForm: the start of the invite reward must be earlier than its en
     );
     const start = await save('invite.reward_start_at', '2026-12-01T00:00:00Z');
     await waitFor(() => expect(within(start).getByRole('alert')).toBeInTheDocument());
-    expect(within(start).getByRole('alert')).toHaveTextContent('奖励的开始时间必须早于结束时间。');
+    expect(within(start).getByRole('alert')).toHaveTextContent(
+      '奖励的开始和结束时间必须写成 UTC 时间，以 Z 结尾，例如 2026-12-01T00:00:00Z，并且开始时间要早于结束时间。',
+    );
   });
 });

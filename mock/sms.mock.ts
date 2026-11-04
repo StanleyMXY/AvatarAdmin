@@ -14,6 +14,7 @@ import {
   SEND_STATUSES,
   SMS_TYPES,
 } from '../src/services/sms/types';
+import { countCodePoints } from '../src/utils/codePoints';
 import { trimSpec } from '../src/utils/trimSpec';
 import { authenticate, guard, hasPermission } from './_core/auth';
 import { currentValue } from './_core/configStore';
@@ -269,36 +270,78 @@ const UPDATE_KEYS = [
 
 // ---- templates ----
 
+/** The limits and shapes of SmsInputs / SmsTemplateAdminService, in code points where it counts them. */
+const TEMPLATE_NAME_MAX = 100;
+const TEMPLATE_CONTENT_MAX = 1000;
+const PROVIDER_TEMPLATE_ID_MAX = 128;
+const TEMPLATE_CODE = /^[A-Za-z0-9_-]{1,64}$/;
+const TEMPLATE_LOCALE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,3}$/;
+const TEMPLATE_PLACEHOLDERS = ['{code}', '{minutes}', '{appName}'];
+
+/** The country as the backend keeps it: stripped and upper case, none when blank (SmsInputs.optionalCountry). */
+const countryKept = (value: unknown): string | null => {
+  const text = isText(value) ? trimSpec(value) : '';
+  return text === '' ? null : text.toUpperCase();
+};
+
+/** The id at the provider as the backend keeps it: stripped, none when blank (SmsInputs.optionalText). */
+const providerIdKept = (value: unknown): string | null => {
+  const text = isText(value) ? trimSpec(value) : '';
+  return text === '' ? null : text;
+};
+
+/** A control character other than a line break, a carriage return or a tab (SmsInputs.content). */
+const hasControlCharacter = (text: string): boolean =>
+  [...text].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    const control = code < 0x20 || (code >= 0x7f && code <= 0x9f);
+    return control && code !== 0x0a && code !== 0x0d && code !== 0x09;
+  });
+
+/**
+ * What the backend refuses in a template, in its order, and only the first thing it finds (it stops
+ * at the first refusal, so the answer has one detail): the code, the name, the language, the
+ * country, the type, the content, the id at the provider.
+ */
 function templateDetails(body: Record<string, unknown>, creating: boolean): Detail[] {
-  const details: Detail[] = [];
-  if (creating && trimSpec(textOf(body.templateCode)) === '') {
-    details.push({ ref: 'templateCode', reason: 'EMPTY_NOT_ALLOWED' });
+  const refuse = (ref: string, reason: string): Detail[] => [{ ref, reason }];
+  if (creating && !(isText(body.templateCode) && TEMPLATE_CODE.test(body.templateCode))) {
+    return refuse('templateCode', 'OUT_OF_RANGE');
   }
-  if (trimSpec(textOf(body.name)) === '')
-    details.push({ ref: 'name', reason: 'EMPTY_NOT_ALLOWED' });
-  if (!SMS_TYPES.includes(body.smsType as never))
-    details.push({ ref: 'smsType', reason: 'OUT_OF_RANGE' });
-  if (!/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(textOf(body.locale))) {
-    details.push({ ref: 'locale', reason: 'INVALID_LANGUAGE_TAG' });
+  const name = trimSpec(textOf(body.name));
+  if (name === '') return refuse('name', 'EMPTY_NOT_ALLOWED');
+  if (countCodePoints(name) > TEMPLATE_NAME_MAX) return refuse('name', 'TOO_LONG');
+  if (!(isText(body.locale) && TEMPLATE_LOCALE.test(body.locale))) {
+    return refuse('locale', 'INVALID_LANGUAGE_TAG');
   }
-  const country = body.country;
-  if (country !== undefined && country !== null && !(isText(country) && COUNTRY.test(country))) {
-    details.push({ ref: 'country', reason: 'OUT_OF_RANGE' });
+  // blank is none; otherwise any case, which the backend turns into upper case
+  const country = isText(body.country) ? trimSpec(body.country) : body.country;
+  if (country !== undefined && country !== null && country !== '') {
+    if (!(isText(country) && COUNTRY.test(country))) return refuse('country', 'OUT_OF_RANGE');
   }
-  const content = textOf(body.content);
-  if (trimSpec(content) === '') details.push({ ref: 'content', reason: 'EMPTY_NOT_ALLOWED' });
-  else if (body.smsType === 'OTP' && !content.includes('{code}')) {
-    details.push({ ref: 'content', reason: 'MISSING_PLACEHOLDER' });
+  if (body.smsType === undefined || body.smsType === null) {
+    return refuse('smsType', 'EMPTY_NOT_ALLOWED');
+  }
+  if (!SMS_TYPES.includes(body.smsType as never)) return refuse('smsType', 'OUT_OF_RANGE');
+  const content = trimSpec(textOf(body.content));
+  if (content === '') return refuse('content', 'EMPTY_NOT_ALLOWED');
+  if (countCodePoints(content) > TEMPLATE_CONTENT_MAX) return refuse('content', 'TOO_LONG');
+  // a control character other than a line break or a tab, and a token the backend does not know
+  if (hasControlCharacter(content)) return refuse('content', 'OUT_OF_RANGE');
+  for (const token of content.match(/\{[^{}]*\}/g) ?? []) {
+    if (!TEMPLATE_PLACEHOLDERS.includes(token)) return refuse('content', 'OUT_OF_RANGE');
+  }
+  if (body.smsType === 'OTP' && !content.includes('{code}')) {
+    return refuse('content', 'OUT_OF_RANGE');
   }
   const providerTemplateId = body.providerTemplateId;
-  if (
-    providerTemplateId !== undefined &&
-    providerTemplateId !== null &&
-    !isText(providerTemplateId)
-  ) {
-    details.push({ ref: 'providerTemplateId', reason: 'OUT_OF_RANGE' });
+  if (providerTemplateId !== undefined && providerTemplateId !== null) {
+    if (!isText(providerTemplateId)) return refuse('providerTemplateId', 'OUT_OF_RANGE');
+    if (countCodePoints(trimSpec(providerTemplateId)) > PROVIDER_TEMPLATE_ID_MAX) {
+      return refuse('providerTemplateId', 'TOO_LONG');
+    }
   }
-  return details;
+  return [];
 }
 
 // ---- records ----
@@ -542,9 +585,9 @@ export default {
       templateCode: code,
       name: trimSpec(textOf(body.name)),
       locale: trimSpec(textOf(body.locale)),
-      country: isText(body.country) ? body.country.toUpperCase() : null,
+      country: countryKept(body.country),
       content: trimSpec(textOf(body.content)),
-      providerTemplateId: isText(body.providerTemplateId) ? body.providerTemplateId : null,
+      providerTemplateId: providerIdKept(body.providerTemplateId),
       smsType: body.smsType as MockTemplate['smsType'],
       enabled: body.enabled !== false,
     };
@@ -561,9 +604,9 @@ export default {
       ...template,
       name: trimSpec(textOf(body.name)),
       locale: trimSpec(textOf(body.locale)),
-      country: isText(body.country) ? body.country.toUpperCase() : null,
+      country: countryKept(body.country),
       content: trimSpec(textOf(body.content)),
-      providerTemplateId: isText(body.providerTemplateId) ? body.providerTemplateId : null,
+      providerTemplateId: providerIdKept(body.providerTemplateId),
       smsType: body.smsType as MockTemplate['smsType'],
     };
     refuseLastTemplate(template, next);

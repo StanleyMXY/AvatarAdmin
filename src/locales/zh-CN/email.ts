@@ -44,6 +44,8 @@ const messages: Record<string, string> = {
   'email.templates.placeholders': '可用的占位符：',
   'email.templates.required': '正文里必须有：',
   'email.templates.requiredNone': '无',
+  'email.templates.unknown':
+    '{list} 不是这个模板可用的占位符，请删掉，或改用这个模板可用的占位符。',
   'email.templates.missing': '正文里缺少 {list}。要和列出的写得完全一样：带花括号，大小写相同。',
   'email.templates.defaultTitle': '默认文案',
   'email.templates.restore': '恢复默认',

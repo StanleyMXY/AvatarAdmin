@@ -14,3 +14,18 @@ export function isUploadIdRejection(error: unknown): boolean {
     (error.httpStatus === 404 && error.code === 'RESOURCE_NOT_FOUND')
   );
 }
+
+/**
+ * True when the backend refused the request because of the upload id it carried, and not because
+ * of another field of the same request. A 400 counts only when it names no field (the answer for an
+ * upload of another kind carries no details) or names one of `uploadRefs`; a 400 that names other
+ * fields leaves the uploaded file as it is, because the file is still good. A 409 or a 404 is about
+ * the upload id whatever it says. Call it only for a request that carries an upload id.
+ */
+export function isUploadFieldRejection(error: unknown, uploadRefs: readonly string[]): boolean {
+  if (!isUploadIdRejection(error)) return false;
+  if (error instanceof ApiError && error.httpStatus === 400) {
+    return error.details.length === 0 || error.details.some((d) => uploadRefs.includes(d.ref));
+  }
+  return true;
+}

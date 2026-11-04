@@ -42,7 +42,7 @@ import { plainText } from '../../utils/plainText';
 import { DASH } from '../../utils/ratio';
 import { SCREEN_TARGETS } from '../../utils/screenTargets';
 import { trimSpec } from '../../utils/trimSpec';
-import { isUploadIdRejection } from '../../utils/uploadErrors';
+import { isUploadFieldRejection } from '../../utils/uploadErrors';
 import { bytesProblemTexts, checkMediaSpec } from './mediaSpec';
 import { Picker } from './Picker';
 import { Thumb } from './Thumb';
@@ -109,14 +109,6 @@ function splitRefusal(intl: Parameters<typeof describeFailure>[0], error: unknow
     } else more.push(detail.text);
   }
   return { text, more, forForm };
-}
-
-function uploadRefused(error: unknown): boolean {
-  if (!isUploadIdRejection(error)) return false;
-  if (error instanceof ApiError && error.httpStatus === 400) {
-    return error.details.length === 0 || error.details.some((d) => d.ref === 'uploadId');
-  }
-  return true;
 }
 
 const orNull = (value: string | undefined): string | null => {
@@ -249,7 +241,7 @@ export function CreativeModal({
     } catch (error) {
       const { forForm } = splitRefusal(intl, error);
       setFieldReasons(form as FormInstance, intl, forForm);
-      if (uploadRefused(error)) {
+      if (isUploadFieldRejection(error, ['uploadId'])) {
         slot.reset();
         setRejected(true);
       }

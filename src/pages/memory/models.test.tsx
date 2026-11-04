@@ -242,7 +242,10 @@ describe('registering a model', { timeout: 30000 }, () => {
     const dialog = await openRegister(user);
     fill(dialog, { url: 'https://elsewhere.example' });
     await user.click(within(dialog).getByRole('button', { name: 'Register' }));
-    expect(await within(dialog).findByText(/The host is not valid/)).toBeInTheDocument();
+    // The usual cause is the allowed list, so the text says so, not only the malformed-host causes.
+    expect(
+      await within(dialog).findByText(/host has to be on the allowed list/),
+    ).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 

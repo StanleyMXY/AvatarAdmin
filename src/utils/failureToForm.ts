@@ -1,7 +1,7 @@
 import type { FormInstance } from 'antd';
 import { describeFailure } from '../session/describe';
 import { setFieldReasons } from './fieldReasons';
-import { isUploadIdRejection } from './uploadErrors';
+import { isUploadFieldRejection } from './uploadErrors';
 
 /** The part of `useIntl()` this needs (Umi's copy of react-intl and ours have different types). */
 type Translator = {
@@ -16,6 +16,13 @@ type Options = {
    * has just that one detail, the backend's own message.
    */
   generalReason?: boolean;
+  /**
+   * The names the backend uses for the upload fields of the request (`iconUploadId`). Only a
+   * refusal that names none of the fields of the form, or one of these, counts as `uploadRejected`:
+   * a refusal of another field leaves the uploaded file alone. Without it a refusal with details is
+   * never about the upload.
+   */
+  uploadFields?: readonly string[];
 };
 
 /**
@@ -55,8 +62,8 @@ export function failureWords(
  * form has it, and the whole text is returned for the bar at the bottom of the dialog. The words
  * are those of the error code and of the reasons, never the backend's own message (see `options`
  * for a reason the language file does not know). `uploadRejected` is true when the backend refused
- * the `uploadId` the request carried (the form must ask for the file again; call it for a request
- * that carries one). `aliases` maps a name the backend uses to the form field that holds it
+ * the upload id the request carried and not another field (the form must ask for the file again;
+ * call it for a request that carries one, with `options.uploadFields`). `aliases` maps a name the backend uses to the form field that holds it
  * (`linkTarget` to `link`). `unplaced` is the text of each detail that no field of the form took,
  * for the bar. `code` is the error code of the failure. `text` and `unplaced` are in the language
  * of this moment: a page that keeps them in its state shows them in that language for good, so it
@@ -81,5 +88,10 @@ export function failureToForm(
         failureWords(other, error, fields, aliases, options).mine[index]?.text ?? d.text,
     })),
   );
-  return { text, uploadRejected: isUploadIdRejection(error), unplaced, code };
+  return {
+    text,
+    uploadRejected: isUploadFieldRejection(error, options.uploadFields ?? []),
+    unplaced,
+    code,
+  };
 }

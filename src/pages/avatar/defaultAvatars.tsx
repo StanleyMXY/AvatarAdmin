@@ -199,11 +199,14 @@ export default function DefaultAvatarsPage() {
         ]}
       />
       <NewDefaultAvatarModal open={creating} onClose={() => setCreating(false)} onSaved={reload} />
-      <RenameDefaultAvatarModal
-        avatar={renaming}
-        onClose={() => setRenaming(null)}
-        onSaved={reload}
-      />
+      {/* Mounted only while it is open: a dialog that stayed mounted would keep the name of the avatar it showed before. */}
+      {renaming !== null ? (
+        <RenameDefaultAvatarModal
+          avatar={renaming}
+          onClose={() => setRenaming(null)}
+          onSaved={reload}
+        />
+      ) : null}
     </>
   );
 }

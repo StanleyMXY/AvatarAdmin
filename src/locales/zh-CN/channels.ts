@@ -31,7 +31,8 @@ const messages: Record<string, string> = {
   'channels.field.packageName': '包名',
   'channels.codeHelp': '2 到 32 个字符：小写字母、数字、连字符、下划线。创建后不能修改。',
   'channels.fixedHelp': '创建后不能修改。',
-  'channels.packageHelp': 'Android 的应用包名或 iOS 的 bundle ID。版本的商店链接会与它对照。',
+  'channels.packageHelp':
+    'Android 的应用包名或 iOS 的 bundle ID，这里只作记录。版本的 Google Play 链接按服务器上配置的包名检查，不按这里填的包名。',
   'channels.directHelp': '直接下载的是 Android 文件，不能用于 iOS。',
   'channels.rule.code': '用 2 到 32 个字符：小写字母、数字、连字符或下划线',
   'channels.rule.codeReserved': 'unknown 在统计里表示“没有渠道”，不能用作渠道码',

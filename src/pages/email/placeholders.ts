@@ -14,3 +14,16 @@ export function listOfText(value: unknown): string[] {
 export function missingPlaceholders(body: string, required: unknown): string[] {
   return listOfText(required).filter((placeholder) => !body.includes(placeholder));
 }
+
+/** What the backend takes for a placeholder in a subject or a body: braces around a letter and then letters or digits (EmailTemplateService.TOKEN). */
+const TOKEN = /\{[A-Za-z][A-Za-z0-9]*\}/g;
+
+/**
+ * The placeholders written in the text that the template does not list, each once, in the order
+ * they first appear. The backend refuses a subject or a body with any of them, and answers without
+ * saying which one, so the dialog says it first.
+ */
+export function unknownPlaceholders(text: string, allowed: unknown): string[] {
+  const known = new Set(listOfText(allowed));
+  return [...new Set(text.match(TOKEN) ?? [])].filter((token) => !known.has(token));
+}

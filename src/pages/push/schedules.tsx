@@ -162,13 +162,16 @@ export default function SchedulesPage() {
             : undefined
         }
       />
-      <ScheduleModal
-        open={editing !== null}
-        schedule={editing === 'new' || editing === null ? null : editing}
-        locales={locales}
-        onClose={() => setEditing(null)}
-        onSaved={reload}
-      />
+      {/* Mounted only while it is open: a dialog that stayed mounted would keep what was typed in it for the next one. */}
+      {editing !== null ? (
+        <ScheduleModal
+          open
+          schedule={editing === 'new' ? null : editing}
+          locales={locales}
+          onClose={() => setEditing(null)}
+          onSaved={reload}
+        />
+      ) : null}
     </Flex>
   );
 }

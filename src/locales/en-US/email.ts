@@ -46,6 +46,8 @@ const messages: Record<string, string> = {
   'email.templates.placeholders': 'Placeholders you can use:',
   'email.templates.required': 'Must be in the body:',
   'email.templates.requiredNone': 'none',
+  'email.templates.unknown':
+    '{list} is not a placeholder of this template. Remove it, or use one of the placeholders available for this template.',
   'email.templates.missing':
     'The body is missing {list}. Write it exactly as listed, with the braces and in the same case.',
   'email.templates.defaultTitle': 'Default text',

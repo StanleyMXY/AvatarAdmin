@@ -273,22 +273,42 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     );
   });
 
-  it('keeps the title and the fixed fields of the edit dialog while it fades out, instead of turning into the new-pack dialog (the dialog library keeps the content of a closing dialog as it was)', async () => {
+  it('shows the pack that is edited and a blank form for a new one, not what the dialog showed before', async () => {
     useMockBackend(creditsMock);
     const user = userEvent.setup();
     renderPage(<ProductsPage />);
-    const pack = creditsState.products[0];
-    await user.click(
-      within(await rowOf(pack.productId, pack.store)).getByRole('button', { name: 'Edit' }),
-    );
-    const dialog = await screen.findByRole('dialog');
-    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-    // the dialog is closing (happy-dom never ends the animation, so it stays in the page)
-    expect(screen.queryByText('New credit pack', { selector: '.ant-modal-title' })).toBeNull();
+    const open = async (productId: string) => {
+      await user.click(within(await rowOf(productId)).getByRole('button', { name: 'Edit' }));
+      return within(await screen.findByRole('dialog'));
+    };
+    const pack = (productId: string) => {
+      const found = creditsState.products.find(
+        (p) => p.store === 'APPLE' && p.productId === productId,
+      );
+      if (!found) throw new Error(`the mock has no APPLE pack ${productId}`);
+      return found;
+    };
+
+    const first = await open('credits_100');
+    expect(first.getByLabelText('Product ID')).toHaveValue('credits_100');
+    expect(first.getByLabelText('Credits')).toHaveValue(String(pack('credits_100').credits));
+    await user.click(first.getByRole('button', { name: 'Cancel' }));
+    const second = await open('credits_500');
     expect(
-      screen.getByText('Edit credit pack', { selector: '.ant-modal-title' }),
+      second.getByText('Edit credit pack', { selector: '.ant-modal-title' }),
     ).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('Product ID')).toBeDisabled();
+    expect(second.getByLabelText('Product ID')).toHaveValue('credits_500');
+    expect(second.getByLabelText('Product ID')).toBeDisabled();
+    expect(second.getByLabelText('Credits')).toHaveValue(String(pack('credits_500').credits));
+    await user.click(second.getByRole('button', { name: 'Cancel' }));
+    await user.click(await screen.findByRole('button', { name: 'New credit pack' }));
+    const fresh = within(await screen.findByRole('dialog'));
+    expect(
+      fresh.getByText('New credit pack', { selector: '.ant-modal-title' }),
+    ).toBeInTheDocument();
+    expect(fresh.getByLabelText('Product ID')).toHaveValue('');
+    expect(fresh.getByLabelText('Product ID')).toBeEnabled();
+    expect(fresh.getByLabelText('Credits')).toHaveValue('');
   });
 
   it('reads the list once: it has no total and no paging, so a second request would only bring the same rows again', async () => {

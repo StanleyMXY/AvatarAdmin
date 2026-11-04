@@ -7,6 +7,7 @@ import pushMock from '../../../mock/push.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { fileOf, pngBytes } from '../../../tests/imageBytes';
 import { useMockBackend } from '../../../tests/mockBackend';
+import { jsonAnswer, overrideFetch } from '../../../tests/pageHelpers';
 import { renderPage } from '../../../tests/renderPage';
 import { setTestAccess } from '../../../tests/stubs/umi-max';
 import access from '../../access';
@@ -1202,5 +1203,70 @@ describe('the template page: Chinese texts', { timeout: 30000 }, () => {
     const howTo = await screen.findByTestId('push-howto');
     expect(howTo.textContent).toContain('先停其他语言，最后停默认语言');
     expect(howTo.textContent).toContain('push.default_locale');
+  });
+});
+
+describe('the template page: a dialog that is opened again', { timeout: 40000 }, () => {
+  it('shows the template that is edited and a blank form for a new one, not what the dialog showed before', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<TemplatesPage />);
+    const pick = (locale: string) =>
+      pushState.templates.find((t) => t.triggerReason === 'daily_recall' && t.locale === locale);
+    const a = pick('th');
+    const b = pick('ar');
+    if (!a || !b) throw new Error('the mock has no Thai or Arabic daily recall template');
+    const open = async (title: string) => {
+      await user.click(within(await rowOf(title)).getByRole('button', { name: 'Edit' }));
+      return within(await screen.findByRole('dialog'));
+    };
+
+    const first = await open(a.title);
+    expect(first.getByLabelText('Title')).toHaveValue(a.title);
+    await user.click(first.getByRole('button', { name: 'Cancel' }));
+    const second = await open(b.title);
+    expect(second.getByLabelText('Title')).toHaveValue(b.title);
+    expect(second.getByLabelText('Body')).toHaveValue(b.body);
+    await user.click(second.getByRole('button', { name: 'Cancel' }));
+    const third = await open(a.title);
+    expect(third.getByLabelText('Title')).toHaveValue(a.title);
+    await user.click(third.getByRole('button', { name: 'Cancel' }));
+    const fresh = within(await openNew(user));
+    expect(fresh.getByLabelText('Title')).toHaveValue('');
+    expect(fresh.getByLabelText('Body')).toHaveValue('');
+  });
+});
+
+describe('the template page: the answer about the upload field', { timeout: 40000 }, () => {
+  it('keeps the picture when the 400 names another field, and asks for it again when the 400 names uploadId', async () => {
+    backend();
+    let answered = 0;
+    const refused = overrideFetch(({ method, url }) => {
+      if (method !== 'POST' || url.pathname !== '/api/admin/push/templates') return undefined;
+      answered += 1;
+      const ref = answered === 1 ? 'title' : 'uploadId';
+      return jsonAnswer(400, 'INVALID_REQUEST', { details: [{ ref, reason: 'OUT_OF_RANGE' }] });
+    });
+    const user = userEvent.setup();
+    renderPage(<TemplatesPage />);
+    const dialog = await openNew(user);
+    await fillNew(user, dialog);
+    fireEvent.change(screen.getByTestId('upload-input'), {
+      target: { files: [fileOf(pngBytes(40, 40), 'edge.png')] },
+    });
+    await within(dialog).findByText(/Uploaded: edge\.png/);
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(refused).toHaveLength(1));
+    // another field was refused: the file is still good
+    expect(within(dialog).getByText(/Uploaded: edge\.png/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(refused).toHaveLength(2));
+    // the upload field itself was refused: the file goes and the picture is asked for again
+    expect(
+      await within(dialog).findByText(
+        'The backend did not accept the uploaded picture. Upload it again.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Uploaded: edge\.png/)).not.toBeInTheDocument();
   });
 });

@@ -24,7 +24,7 @@ afterEach(() => vi.unstubAllGlobals());
 const AUTUMN = 'Autumn check-in 🍂';
 const THAI = 'ภาษาไทยไม่มีช่องว่างระหว่างคำดังนั้นข้อความยาวๆอาจทำให้ตารางล้นได้ถ้าไม่จัดการให้ดี';
 const ARABIC =
-  'هذا نص طويل جدا باللغة العربية يكتب من اليمين إلى اليسار ويحتوي على أرقام ١٢٣ وكلمات إنجليزية mixed in';
+  'هذا نص طويل باللغة العربية يكتب من اليمين إلى اليسار ويحتوي على أرقام ١٢٣ وكلمات إنجليزية mixed in';
 const INDONESIAN =
   'Aplikasi ini sangat membantu saya setiap hari dalam berkomunikasi dengan teman-teman baru';
 const VIETNAMESE =

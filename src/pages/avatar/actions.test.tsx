@@ -352,3 +352,36 @@ describe('the action catalog page: new and edit', { timeout: 60000 }, () => {
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
   });
 });
+
+describe('the action catalog page: a dialog that is opened again', { timeout: 40000 }, () => {
+  it('shows the action that is edited and a blank form for a new one, not what the dialog showed before', async () => {
+    backend();
+    const user = userEvent.setup();
+    renderPage(<ActionsPage />);
+    const row = (key: string) => {
+      const found = avatarState.actions.find((a) => a.key === key);
+      if (!found) throw new Error(`the mock has no action ${key}`);
+      return found;
+    };
+    const open = async (key: string) => {
+      await user.click(within(await rowOf(key)).getByRole('button', { name: 'Edit' }));
+      return within(await screen.findByRole('dialog'));
+    };
+
+    const wave = await open('wave');
+    expect(wave.getByLabelText('Key')).toHaveValue('wave');
+    expect(wave.getByLabelText('Description for the agent')).toHaveValue(row('wave').description);
+    await user.click(wave.getByRole('button', { name: 'Cancel' }));
+    const smile = await open('smile');
+    expect(smile.getByLabelText('Key')).toHaveValue('smile');
+    expect(smile.getByLabelText('Description for the agent')).toHaveValue(row('smile').description);
+    expect(smile.getByLabelText('Generation text')).toHaveValue(row('smile').generationSpec);
+    await user.click(smile.getByRole('button', { name: 'Cancel' }));
+    await user.click(await screen.findByRole('button', { name: 'New action' }));
+    const fresh = within(await screen.findByRole('dialog'));
+    expect(fresh.getByLabelText('Key')).toHaveValue('');
+    expect(fresh.getByLabelText('Key')).toBeEnabled();
+    expect(fresh.getByLabelText('Description for the agent')).toHaveValue('');
+    expect(fresh.getByLabelText('Generation text')).toHaveValue('');
+  });
+});
