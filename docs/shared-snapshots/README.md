@@ -1,11 +1,11 @@
 # 规格和契约的快照
 
-这两份文件是 AvatarApp 仓库 `main`（提交 e9db4213，2026-11-04 取）里的原文，逐字节相同（用 `git show HEAD:<路径>` 取出，修改时间用 `touch -r` 对齐源文件，`git hash-object --no-filters` 的结果等于该提交里的文件哈希）：
+这两份文件是 AvatarApp 仓库 `main`（提交 50ced220，2026-11-04 取）里的原文，逐字节相同（用 `git show HEAD:<路径>` 取出，修改时间用 `touch -r` 对齐源文件，`git hash-object --no-filters` 的结果等于该提交里的文件哈希）：
 
 | 文件 | AvatarApp 里的路径 | 该文件在 AvatarApp 的最后一次改动 | 文件哈希（git blob） |
 |---|---|---|---|
 | `admin-frontend-design.md` | `docs/admin-frontend-design.md` | 20f314b0 | 9f43a7d5 |
-| `backend-task-java-backend.md` | `docs/backend-task-java-backend.md` | e9db4213 | 43d9ee3b |
+| `backend-task-java-backend.md` | `docs/backend-task-java-backend.md` | 50ced220 | ff15bb1a |
 
 **为什么有这份副本：** 负责人不让云端会话访问 AvatarApp 仓库，所以 2026-10-26 决定把这两份拷进本仓库，让云端会话只读本仓库就能对照。
 
