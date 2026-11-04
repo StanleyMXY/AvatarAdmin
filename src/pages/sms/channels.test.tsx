@@ -277,6 +277,13 @@ describe('the switch of a channel', () => {
     gate.release();
     await settled();
     expect(writesOf(calls)).toHaveLength(1);
+    // the page reads the list again after the write: wait for it, so it is not sent after the test
+    await waitFor(() =>
+      expect(
+        calls.filter((c) => c.method === 'GET' && c.url.startsWith('/api/admin/sms/channels?'))
+          .length,
+      ).toBeGreaterThan(1),
+    );
     void user;
   });
 

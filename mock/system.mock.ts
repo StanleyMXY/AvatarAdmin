@@ -539,7 +539,7 @@ export default {
     ] as const) {
       const value = text(name);
       if (value !== undefined && countCodePoints(value) > limit)
-        refuse([{ ref: name, reason: 'TOO_LONG' }]);
+        refuse([{ ref: name, reason: 'OUT_OF_RANGE' }]);
     }
     const from = instant('from');
     const to = instant('to');

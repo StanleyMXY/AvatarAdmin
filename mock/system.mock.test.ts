@@ -982,7 +982,7 @@ describe('GET /audit-logs', () => {
     expect((await list({ from: 'yesterday' })).status).toBe(400);
   });
 
-  it('refuses an action or an object type of more than 64 characters and an object id of more than 255: 400 TOO_LONG on that parameter', async () => {
+  it('refuses an action or an object type of more than 64 characters and an object id of more than 255: 400 OUT_OF_RANGE on that parameter, as the backend answers', async () => {
     for (const [name, limit] of [
       ['action', 64],
       ['targetType', 64],
@@ -992,7 +992,7 @@ describe('GET /audit-logs', () => {
       expect([name, over.status, over.body.data.details]).toEqual([
         name,
         400,
-        [{ ref: name, reason: 'TOO_LONG' }],
+        [{ ref: name, reason: 'OUT_OF_RANGE' }],
       ]);
       expect((await list({ [name]: 'ก'.repeat(limit) })).status).toBe(200);
     }

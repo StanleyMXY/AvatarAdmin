@@ -31,6 +31,7 @@ const UNITS: Record<string, string> = {
 };
 const STATUSES = ['PENDING_REVIEW', 'ACTIVE', 'REJECTED', 'SUPERSEDED', 'RETIRED'];
 const MAX_BANDS = 20;
+const NAME_MAX = 128;
 const PRICE = /^\d+(\.\d{1,10})?$/;
 const PRICE_MAX_UNITS = 10_000_000_000_000_000n; // 1000000 with ten decimals
 
@@ -38,11 +39,16 @@ type Detail = { ref: string; reason: string };
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '');
 
+/** A query parameter that was given (an empty one too), else undefined. */
+const given = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
 const day = (value: unknown): string | null => {
   const s = typeof value === 'string' ? value : '';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   const d = new Date(`${s}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s ? null : s;
+  // The backend takes the years 1 to 9999 only.
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s || s < '0001' ? null : s;
 };
 
 /** A price as the contract wants it: a string, digits only, up to ten decimals, at most 1000000. */
@@ -55,6 +61,11 @@ function priceOk(value: unknown): boolean {
 const isBound = (n: unknown): n is number =>
   typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
 
+/** A string value, or null when the field is missing or not a string (the backend reads every text field so). */
+const str = (value: unknown): string | null => (typeof value === 'string' ? value : null);
+
+const problem = (ref: string, reason: string): Detail => ({ ref, reason });
+
 /**
  * One bound of a band as typed: a whole number from 0 up. Nothing is `EMPTY_NOT_ALLOWED`, a number
  * with a fraction (or a text) `NOT_AN_INTEGER`, a negative or too large whole number `OUT_OF_RANGE`.
@@ -66,73 +77,107 @@ function boundReason(value: unknown): string | null {
 }
 
 /**
- * The band rules of 14.2 (whole numbers, the first from 0, the next = the previous + 1, only the
- * last has no upper bound), as `data.details`: `ref` is the path of the field (`bands[1].inputMinTokens`),
- * `reason` one of the three the contract allows. A gap and an overlap have no reason of their own:
- * both are `OUT_OF_RANGE` of the lower bound that does not follow the one before.
+ * A price as typed: not given is `EMPTY_NOT_ALLOWED`, anything that is not a price in the contract's
+ * form (an empty text included) `OUT_OF_RANGE`. The cached input price is the one that may be left out.
  */
-function bandsDetails(bands: unknown): Detail[] {
-  if (!Array.isArray(bands) || bands.length === 0)
-    return [{ ref: 'bands', reason: 'EMPTY_NOT_ALLOWED' }];
-  if (bands.length > MAX_BANDS) return [{ ref: 'bands', reason: 'OUT_OF_RANGE' }];
-  const out: Detail[] = [];
-  for (let i = 0; i < bands.length; i += 1) {
-    const b = bands[i] as Partial<MockBand> | null;
-    if (typeof b !== 'object' || b === null || Array.isArray(b)) {
-      out.push({ ref: `bands[${i}]`, reason: 'OUT_OF_RANGE' });
-      continue;
-    }
-    const last = i === bands.length - 1;
-    const minRef = `bands[${i}].inputMinTokens`;
-    const maxRef = `bands[${i}].inputMaxTokens`;
-    const minReason = boundReason(b.inputMinTokens);
-    if (minReason !== null) out.push({ ref: minRef, reason: minReason });
-    else if (i === 0 && b.inputMinTokens !== 0) out.push({ ref: minRef, reason: 'OUT_OF_RANGE' });
-    else if (i > 0) {
-      const before = (bands[i - 1] as Partial<MockBand> | null)?.inputMaxTokens;
-      // The band before has no usable upper bound: it was named on its own line.
-      if (isBound(before) && b.inputMinTokens !== before + 1)
-        out.push({ ref: minRef, reason: 'OUT_OF_RANGE' });
-    }
-    if (last) {
-      if (b.inputMaxTokens !== null && b.inputMaxTokens !== undefined)
-        out.push({ ref: maxRef, reason: 'OUT_OF_RANGE' });
-    } else {
-      const maxReason = boundReason(b.inputMaxTokens);
-      if (maxReason !== null) out.push({ ref: maxRef, reason: maxReason });
-      else if (isBound(b.inputMinTokens) && (b.inputMaxTokens as number) < b.inputMinTokens)
-        out.push({ ref: maxRef, reason: 'OUT_OF_RANGE' });
-    }
-  }
-  return out;
+function priceReason(value: unknown, optional: boolean): string | null {
+  if (value === null || value === undefined) return optional ? null : 'EMPTY_NOT_ALLOWED';
+  return priceOk(value) ? null : 'OUT_OF_RANGE';
 }
 
-/** A price that is not given is `EMPTY_NOT_ALLOWED`; one that is not a price in the contract's form `OUT_OF_RANGE`. */
-const priceReason = (value: unknown): string | null =>
-  value === null || value === undefined || value === ''
-    ? 'EMPTY_NOT_ALLOWED'
-    : priceOk(value)
-      ? null
-      : 'OUT_OF_RANGE';
+/**
+ * The fields of one band, in the order the backend reads them: the lower bound, the upper bound (when
+ * given), the input price, the cached input price, the output price. The first wrong one is the answer.
+ */
+function bandProblem(raw: unknown, i: number): Detail | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
+    return problem(`bands[${i}]`, 'OUT_OF_RANGE');
+  const b = raw as Partial<MockBand>;
+  const minReason = boundReason(b.inputMinTokens);
+  if (minReason) return problem(`bands[${i}].inputMinTokens`, minReason);
+  if (b.inputMaxTokens !== null && b.inputMaxTokens !== undefined) {
+    const maxReason = boundReason(b.inputMaxTokens);
+    if (maxReason) return problem(`bands[${i}].inputMaxTokens`, maxReason);
+  }
+  for (const [field, optional] of [
+    ['inputPrice', false],
+    ['cachedInputPrice', true],
+    ['outputPrice', false],
+  ] as const) {
+    const reason = priceReason(b[field], optional);
+    if (reason) return problem(`bands[${i}].${field}`, reason);
+  }
+  return null;
+}
 
-const bandPricesDetails = (bands: unknown[]): Detail[] =>
-  bands.flatMap((raw, i) => {
-    if (typeof raw !== 'object' || raw === null) return [];
-    const b = raw as Partial<MockBand>;
-    const out: Detail[] = [];
-    const input = priceReason(b.inputPrice);
-    if (input) out.push({ ref: `bands[${i}].inputPrice`, reason: input });
-    // The cached input price may be left out (null): it is then charged at the input price.
-    if (
-      b.cachedInputPrice !== null &&
-      b.cachedInputPrice !== undefined &&
-      !priceOk(b.cachedInputPrice)
-    )
-      out.push({ ref: `bands[${i}].cachedInputPrice`, reason: 'OUT_OF_RANGE' });
-    const output = priceReason(b.outputPrice);
-    if (output) out.push({ ref: `bands[${i}].outputPrice`, reason: output });
-    return out;
+/**
+ * The boundary rule of 14.2, checked on the bands by lower bound once every field is fine: the first
+ * starts at 0, each next starts at the previous upper bound plus 1, only the last has no upper bound.
+ * A gap and an overlap have no reason of their own: the answer is `OUT_OF_RANGE` of `bands`, with no index.
+ */
+function bandsOutOfOrder(bands: MockBand[]): boolean {
+  const sorted = [...bands].sort((a, b) => a.inputMinTokens - b.inputMinTokens);
+  if (sorted[0].inputMinTokens !== 0) return true;
+  return sorted.some((band, i) => {
+    if (i === sorted.length - 1) return band.inputMaxTokens !== null;
+    const max = band.inputMaxTokens;
+    return max === null || max < band.inputMinTokens || sorted[i + 1].inputMinTokens !== max + 1;
   });
+}
+
+/** `provider` and `model`: stripped, then 1 to 128 code points, no NUL. */
+function nameReason(stripped: string): string | null {
+  const length = countCodePoints(stripped);
+  if (length < 1) return 'EMPTY_NOT_ALLOWED';
+  return length > NAME_MAX || stripped.includes('\u0000') ? 'OUT_OF_RANGE' : null;
+}
+
+/** The bands of an LLM price as the backend reads them: the count, then each band in request order, then the boundary rule. */
+function bandsProblem(bands: unknown): Detail | null {
+  if (bands === null || bands === undefined || (Array.isArray(bands) && bands.length === 0))
+    return problem('bands', 'EMPTY_NOT_ALLOWED');
+  if (!Array.isArray(bands)) return problem('bands', 'OUT_OF_RANGE');
+  const saved = currentValue('usage_price.max_bands');
+  if (bands.length > (typeof saved === 'number' ? saved : MAX_BANDS))
+    return problem('bands', 'OUT_OF_RANGE');
+  for (let i = 0; i < bands.length; i += 1) {
+    const found = bandProblem(bands[i], i);
+    if (found) return found;
+  }
+  return bandsOutOfOrder(bands as MockBand[]) ? problem('bands', 'OUT_OF_RANGE') : null;
+}
+
+/**
+ * The first thing wrong with `POST /usage/prices`, or null. The backend stops at the first wrong field,
+ * so the answer has exactly one detail. Order: the resource type, `provider`, `model`, `unit`,
+ * `effectiveFrom`, `currency`, then for an LLM batch `unitPrice` (must be absent) and the bands, for any
+ * other batch `bands` (must be absent) and `unitPrice`.
+ */
+function manualProblem(body: Record<string, unknown>): Detail | null {
+  const typeText = str(body.resourceType);
+  if (typeText === null) return problem('resourceType', 'EMPTY_NOT_ALLOWED');
+  if (!Object.hasOwn(UNITS, typeText)) return problem('resourceType', 'OUT_OF_RANGE');
+  for (const field of ['provider', 'model'] as const) {
+    const reason = nameReason(trimSpec(str(body[field]) ?? ''));
+    if (reason) return problem(field, reason);
+  }
+  const unit = str(body.unit);
+  if (unit !== UNITS[typeText])
+    return problem('unit', unit === null ? 'EMPTY_NOT_ALLOWED' : 'OUT_OF_RANGE');
+  const effectiveFrom = str(body.effectiveFrom);
+  if (effectiveFrom === null) return problem('effectiveFrom', 'EMPTY_NOT_ALLOWED');
+  if (day(effectiveFrom) === null) return problem('effectiveFrom', 'OUT_OF_RANGE');
+  if (str(body.currency) === null) return problem('currency', 'EMPTY_NOT_ALLOWED');
+  if (!allowedCurrency(body.currency)) return problem('currency', 'OUT_OF_RANGE');
+  if (typeText === 'LLM') {
+    if (body.unitPrice !== undefined && body.unitPrice !== null)
+      return problem('unitPrice', 'OUT_OF_RANGE');
+    return bandsProblem(body.bands);
+  }
+  if (body.bands !== undefined && body.bands !== null) return problem('bands', 'OUT_OF_RANGE');
+  const reason = priceReason(body.unitPrice, false);
+  return reason ? problem('unitPrice', reason) : null;
+}
 
 /** `usage_price.allowed_currencies` as saved (else its default, else what `GET /meta` lists); compared as written. */
 const allowedCurrency = (value: unknown): boolean => {
@@ -190,20 +235,34 @@ const viewOf = ({ ...rest }: MockBatch): MockBatch => structuredClone(rest);
 
 export default {
   'GET /api/admin/usage/prices': guard('COST:VIEW', (req) => {
-    const status = text(req.query.status);
-    const resourceType = text(req.query.resourceType);
-    const problems: Detail[] = [];
-    if (status !== '' && !STATUSES.includes(status))
-      problems.push({ ref: 'status', reason: 'OUT_OF_RANGE' });
-    if (resourceType !== '' && !(resourceType in UNITS))
-      problems.push({ ref: 'resourceType', reason: 'OUT_OF_RANGE' });
-    if (problems.length > 0) throw invalidRequest('invalid filter', problems);
+    // The filters are checked as the backend does: a filter that is given (an empty one too) must be a
+    // known value, answered with a 400 that has no `details` (resourceType, unit, status in this order);
+    // `provider` and `model` are stripped and must be 1 to 128 code points, with `details` naming them.
+    const resourceType = given(req.query.resourceType);
+    const unit = given(req.query.unit);
+    const status = given(req.query.status);
+    if (resourceType !== undefined && !Object.hasOwn(UNITS, resourceType))
+      throw new MockHttpError(400, 'INVALID_REQUEST', 'resourceType is not a known resource type');
+    if (unit !== undefined && !Object.values(UNITS).includes(unit))
+      throw new MockHttpError(400, 'INVALID_REQUEST', 'unit is not a known unit');
+    if (status !== undefined && !STATUSES.includes(status))
+      throw new MockHttpError(400, 'INVALID_REQUEST', 'status is not a known status');
+    const named = (ref: 'provider' | 'model'): string | undefined => {
+      const value = given(req.query[ref]);
+      if (value === undefined) return undefined;
+      const stripped = trimSpec(value);
+      const reason = nameReason(stripped);
+      if (reason) throw invalidRequest(`${ref} is not valid`, [problem(ref, reason)]);
+      return stripped;
+    };
+    const provider = named('provider');
+    const model = named('model');
     const rows = costState.batches
-      .filter((b) => status === '' || b.status === status)
-      .filter((b) => resourceType === '' || b.resourceType === resourceType)
-      .filter((b) => text(req.query.provider) === '' || b.provider === text(req.query.provider))
-      .filter((b) => text(req.query.model) === '' || b.model === text(req.query.model))
-      .filter((b) => text(req.query.unit) === '' || b.unit === text(req.query.unit))
+      .filter((b) => status === undefined || b.status === status)
+      .filter((b) => resourceType === undefined || b.resourceType === resourceType)
+      .filter((b) => provider === undefined || b.provider === provider)
+      .filter((b) => model === undefined || b.model === model)
+      .filter((b) => unit === undefined || b.unit === unit)
       .sort(byModelThenDate);
     const { page, pageSize } = pagingOf(req);
     const answer = paginate(rows, page, pageSize);
@@ -222,22 +281,18 @@ export default {
   }),
 
   // `resourceType` (one of the seven) and `hasActivePrice` (`true` or `false`) filter on the server, the
-  // total is the number kept. Any other value is a 400 with no details, as for `GET /usage/prices`.
+  // total is the number kept. A filter that is given (an empty one too) with any other value is a 400
+  // with no details, as for `GET /usage/prices`.
   'GET /api/admin/usage/models': guard('COST:VIEW', (req) => {
-    const resourceType = text(req.query.resourceType);
-    const asked = text(req.query.hasActivePrice);
-    if (
-      (resourceType !== '' && !(resourceType in UNITS)) ||
-      (asked !== '' && asked !== 'true' && asked !== 'false')
-    )
-      throw new MockHttpError(
-        400,
-        'INVALID_REQUEST',
-        'resourceType or hasActivePrice is not valid',
-      );
+    const resourceType = given(req.query.resourceType);
+    const asked = given(req.query.hasActivePrice);
+    if (resourceType !== undefined && !Object.hasOwn(UNITS, resourceType))
+      throw new MockHttpError(400, 'INVALID_REQUEST', 'resourceType is not a known resource type');
+    if (asked !== undefined && asked !== 'true' && asked !== 'false')
+      throw new MockHttpError(400, 'INVALID_REQUEST', 'hasActivePrice must be true or false');
     const rows = costState.models
-      .filter((m) => resourceType === '' || m.resourceType === resourceType)
-      .filter((m) => asked === '' || hasActivePrice(m) === (asked === 'true'))
+      .filter((m) => resourceType === undefined || m.resourceType === resourceType)
+      .filter((m) => asked === undefined || hasActivePrice(m) === (asked === 'true'))
       .sort((a, b) =>
         `${a.resourceType}\u0000${a.provider}\u0000${a.model}` <
         `${b.resourceType}\u0000${b.provider}\u0000${b.model}`
@@ -254,37 +309,13 @@ export default {
 
   'POST /api/admin/usage/prices': guard('COST:PRICE', (req) => {
     const body = bodyOf(req);
-    const problems: Detail[] = [];
+    // `data.details` = [{ ref: the path of the field, reason }], reasons EMPTY_NOT_ALLOWED, OUT_OF_RANGE, NOT_AN_INTEGER.
+    const wrong = manualProblem(body);
+    if (wrong) throw invalidRequest('invalid price', [wrong]);
     const resourceType = text(body.resourceType);
-    if (!(resourceType in UNITS)) problems.push({ ref: 'resourceType', reason: 'OUT_OF_RANGE' });
-    else if (body.unit !== UNITS[resourceType])
-      problems.push({ ref: 'unit', reason: 'OUT_OF_RANGE' });
     const provider = trimSpec(text(body.provider));
     const model = trimSpec(text(body.model));
-    for (const [ref, value] of [
-      ['provider', provider],
-      ['model', model],
-    ] as const) {
-      const length = countCodePoints(value);
-      if (length < 1 || length > 128)
-        problems.push({ ref, reason: length === 0 ? 'EMPTY_NOT_ALLOWED' : 'TOO_LONG' });
-    }
-    if (!allowedCurrency(body.currency)) problems.push({ ref: 'currency', reason: 'OUT_OF_RANGE' });
     const effectiveFrom = day(body.effectiveFrom);
-    if (effectiveFrom === null) problems.push({ ref: 'effectiveFrom', reason: 'OUT_OF_RANGE' });
-    if (resourceType === 'LLM') {
-      problems.push(...bandsDetails(body.bands));
-      if (Array.isArray(body.bands)) problems.push(...bandPricesDetails(body.bands));
-      if (body.unitPrice !== undefined && body.unitPrice !== null)
-        problems.push({ ref: 'unitPrice', reason: 'OUT_OF_RANGE' });
-    } else if (resourceType in UNITS) {
-      const unitPrice = priceReason(body.unitPrice);
-      if (unitPrice) problems.push({ ref: 'unitPrice', reason: unitPrice });
-      if (body.bands !== undefined && body.bands !== null)
-        problems.push({ ref: 'bands', reason: 'OUT_OF_RANGE' });
-    }
-    // `data.details` = [{ ref: the path of the field, reason }], reasons EMPTY_NOT_ALLOWED, OUT_OF_RANGE, NOT_AN_INTEGER.
-    if (problems.length > 0) throw invalidRequest('invalid price', problems);
 
     const created: MockBatch = {
       batchId: newBatchId(),
@@ -334,10 +365,8 @@ export default {
         { ref: 'currency', reason: 'OUT_OF_RANGE' },
       ]);
     // The bands are checked again on confirm (contract 14.2), with the details of a hand-entered price.
-    if (target.bands) {
-      const wrong = bandsDetails(target.bands);
-      if (wrong.length > 0) throw invalidRequest('cannot confirm: bands', wrong);
-    }
+    if (target.bands && bandsOutOfOrder(target.bands))
+      throw invalidRequest('cannot confirm: bands', [problem('bands', 'OUT_OF_RANGE')]);
     requireStatus(target, 'PENDING_REVIEW');
     target.effectiveFrom = effectiveFrom;
     target.currency = currency as string;

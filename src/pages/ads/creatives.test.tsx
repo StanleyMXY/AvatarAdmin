@@ -504,6 +504,13 @@ describe('approve, reject, serve and delete', { timeout: 40000 }, () => {
     gate.release();
     await settled();
     expect(writesOf(calls)).toHaveLength(1);
+    // the page reads the list again after the write: wait for it, so it is not sent after the test
+    await waitFor(() =>
+      expect(
+        calls.filter((c) => c.method === 'GET' && c.url.startsWith('/api/admin/ads/creatives?'))
+          .length,
+      ).toBeGreaterThan(1),
+    );
   });
 
   it('shows the words of the error code when the switch is refused', async () => {

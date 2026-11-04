@@ -60,6 +60,7 @@ describe('the event summary page', { timeout: 30000 }, () => {
   });
 
   it('says nothing about signed-in accounts in the hint: the backend counts distinct accounts, and the page does not say who they are', async () => {
+    useMockBackend(analyticsMock);
     renderPage(<SummaryPage />);
     expect(await screen.findByText(/Read live from the event log/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/signed-in/);

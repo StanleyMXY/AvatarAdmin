@@ -128,8 +128,8 @@ const versionsOf = (channelCode: string): MockVersion[] =>
  * The number checks of a save, in the backend's order (answers 47): the number the channel has
  * already is 409 `DUPLICATE_RESOURCE` naming the field; then, when the number is new or changed
  * (a draft whose number is left alone is not compared), a number that does not beat every other
- * version of the channel, drafts and taken-down ones included, is 400 `INVALID_REQUEST` with a
- * message and no field list. `own` is the draft being edited.
+ * version of the channel, drafts and taken-down ones included, is 400 `INVALID_REQUEST` whose
+ * `details` is `[{ ref: 'versionCode', reason: 'OUT_OF_RANGE' }]`. `own` is the draft being edited.
  */
 function checkNumber(channel: MockChannel, code: number, own: MockVersion | null): void {
   const others = versionsOf(channel.code).filter((v) => v.id !== own?.id);

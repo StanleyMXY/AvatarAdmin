@@ -296,11 +296,50 @@ describe('the model list filters on the server (resourceType, hasActivePrice)', 
       { hasActivePrice: 'yes' },
       { hasActivePrice: 'TRUE' },
       { hasActivePrice: '1' },
+      // a filter that is given empty is refused too, it is not "no filter"
+      { resourceType: '' },
+      { hasActivePrice: '' },
+      { resourceType: 'constructor' },
     ]) {
       const answer = await get(MODELS, query);
       expect(answer.status, JSON.stringify(query)).toBe(400);
       expect(answer.body.code).toBe('INVALID_REQUEST');
       expect(answer.body.data, JSON.stringify(query)).toBeNull();
+    }
+  });
+});
+
+describe('the filters of the price list', () => {
+  it('refuses a resource type, unit or status that is not known, empty or in another case, with 400 INVALID_REQUEST and no details', async () => {
+    for (const query of [
+      { resourceType: 'llm' },
+      { resourceType: '' },
+      { resourceType: 'constructor' },
+      { unit: 'call' },
+      { unit: '' },
+      { status: 'active' },
+      { status: '' },
+    ]) {
+      const answer = await get(PRICES, query);
+      expect(answer.status, JSON.stringify(query)).toBe(400);
+      expect(answer.body.code).toBe('INVALID_REQUEST');
+      expect(answer.body.data, JSON.stringify(query)).toBeNull();
+    }
+  });
+
+  it('strips provider and model, and refuses an empty one or one over 128 code points with the reason in details', async () => {
+    const stripped = await allPrices({ model: '  model-large-1  ' });
+    expect(stripped.length).toBeGreaterThan(0);
+    expect(stripped.every((b) => b.model === 'model-large-1')).toBe(true);
+    const cases: [Record<string, string>, { ref: string; reason: string }][] = [
+      [{ provider: '' }, { ref: 'provider', reason: 'EMPTY_NOT_ALLOWED' }],
+      [{ model: '   ' }, { ref: 'model', reason: 'EMPTY_NOT_ALLOWED' }],
+      [{ model: 'x'.repeat(129) }, { ref: 'model', reason: 'OUT_OF_RANGE' }],
+    ];
+    for (const [query, detail] of cases) {
+      const answer = await get(PRICES, query);
+      expect(answer.status, JSON.stringify(query)).toBe(400);
+      expect(answer.body.data.details).toEqual([detail]);
     }
   });
 });
@@ -379,7 +418,7 @@ describe('creating a batch by hand', () => {
     expect(batch).toEqual(listed);
   });
 
-  it('refuses bands with a gap, an overlap, a first band that does not start at 0 and a last band with a limit, and names the field of the band (the three reasons only: no reason of its own for a gap or an overlap)', async () => {
+  it('refuses bands with a gap, an overlap, a first band that does not start at 0, a last band with a limit and a band before the last without one: `bands` with no index, `OUT_OF_RANGE` (no reason of its own for a gap or an overlap)', async () => {
     const band = (min: number, max: number | null) => ({
       inputMinTokens: min,
       inputMaxTokens: max,
@@ -387,23 +426,84 @@ describe('creating a batch by hand', () => {
       cachedInputPrice: null,
       outputPrice: '1',
     });
-    const cases: [ReturnType<typeof band>[], { ref: string; reason: string }[]][] = [
-      [[band(0, 10), band(12, null)], [{ ref: 'bands[1].inputMinTokens', reason: 'OUT_OF_RANGE' }]],
-      [[band(0, 10), band(10, null)], [{ ref: 'bands[1].inputMinTokens', reason: 'OUT_OF_RANGE' }]],
-      [[band(1, null)], [{ ref: 'bands[0].inputMinTokens', reason: 'OUT_OF_RANGE' }]],
-      [[band(0, 10)], [{ ref: 'bands[0].inputMaxTokens', reason: 'OUT_OF_RANGE' }]],
-      [
-        [band(0, null), band(1, null)],
-        [{ ref: 'bands[0].inputMaxTokens', reason: 'EMPTY_NOT_ALLOWED' }],
-      ],
-      [[band(0, 10), band(11, 5)], [{ ref: 'bands[1].inputMaxTokens', reason: 'OUT_OF_RANGE' }]],
+    const cases: ReturnType<typeof band>[][] = [
+      [band(0, 10), band(12, null)],
+      [band(0, 10), band(10, null)],
+      [band(1, null)],
+      [band(0, 10)],
+      [band(0, null), band(1, null)],
+      [band(0, 10), band(11, 5)],
     ];
-    for (const [bands, details] of cases) {
+    for (const bands of cases) {
       const answer = await write(CREATE, {}, llmBody({ bands }));
       expect(answer.status).toBe(400);
       expect(answer.body.code).toBe('INVALID_REQUEST');
-      expect(answer.body.data.details).toEqual(details);
+      expect(answer.body.data.details).toEqual([{ ref: 'bands', reason: 'OUT_OF_RANGE' }]);
     }
+  });
+
+  it('checks the boundary rule on the bands by lower bound, so bands sent out of order are fine, and counts the index of a wrong field in the order sent', async () => {
+    const band = (min: number, max: number | null, extra: object = {}) => ({
+      inputMinTokens: min,
+      inputMaxTokens: max,
+      inputPrice: '1',
+      cachedInputPrice: null,
+      outputPrice: '1',
+      ...extra,
+    });
+    const shuffled = await write(CREATE, {}, llmBody({ bands: [band(11, null), band(0, 10)] }));
+    expect(shuffled.status).toBe(200);
+    const wrong = await write(
+      CREATE,
+      {},
+      llmBody({ bands: [band(11, null, { inputMinTokens: 11.5 }), band(0, 10)] }),
+    );
+    expect(wrong.body.data.details).toEqual([
+      { ref: 'bands[0].inputMinTokens', reason: 'NOT_AN_INTEGER' },
+    ]);
+  });
+
+  it('stops at the first wrong field, as the backend does: one detail, the fields of a band in the order lower bound, upper bound, input price, cached input price, output price', async () => {
+    const body = (patch: object) =>
+      llmBody({
+        bands: [
+          {
+            inputMinTokens: 0,
+            inputMaxTokens: null,
+            inputPrice: '1',
+            cachedInputPrice: null,
+            outputPrice: '1',
+            ...patch,
+          },
+        ],
+      });
+    const answer = await write(
+      CREATE,
+      {},
+      body({ inputMinTokens: 1.5, inputPrice: '-1', outputPrice: '-1' }),
+    );
+    expect(answer.body.data.details).toEqual([
+      { ref: 'bands[0].inputMinTokens', reason: 'NOT_AN_INTEGER' },
+    ]);
+    const prices = await write(CREATE, {}, body({ cachedInputPrice: '-1', outputPrice: '-1' }));
+    expect(prices.body.data.details).toEqual([
+      { ref: 'bands[0].cachedInputPrice', reason: 'OUT_OF_RANGE' },
+    ]);
+    const second = await write(
+      CREATE,
+      {},
+      llmBody({
+        bands: [
+          { inputMinTokens: 0, inputMaxTokens: 5, inputPrice: '1', outputPrice: '1' },
+          { inputMinTokens: 6, inputMaxTokens: null, inputPrice: '-1', outputPrice: '1' },
+        ],
+      }),
+    );
+    expect(second.body.data.details).toEqual([
+      { ref: 'bands[1].inputPrice', reason: 'OUT_OF_RANGE' },
+    ]);
+    const top = await write(CREATE, {}, llmBody({ provider: ' ', model: '', currency: 'EUR' }));
+    expect(top.body.data.details).toEqual([{ ref: 'provider', reason: 'EMPTY_NOT_ALLOWED' }]);
   });
 
   it('names a bound that is not a whole number or is negative, and a list of bands that is empty or too long', async () => {
@@ -452,9 +552,9 @@ describe('creating a batch by hand', () => {
         }),
       );
       expect(answer.status, price).toBe(400);
+      // the first wrong field answers alone
       expect(answer.body.data.details, price).toEqual([
         { ref: 'bands[0].inputPrice', reason: 'OUT_OF_RANGE' },
-        { ref: 'bands[0].cachedInputPrice', reason: 'OUT_OF_RANGE' },
       ]);
     }
     const empty = await write(
@@ -472,7 +572,16 @@ describe('creating a batch by hand', () => {
         ],
       }),
     );
+    // an empty text is not a decimal number (OUT_OF_RANGE); a price that is not sent at all is EMPTY_NOT_ALLOWED
     expect(empty.body.data.details).toEqual([
+      { ref: 'bands[0].inputPrice', reason: 'OUT_OF_RANGE' },
+    ]);
+    const missing = await write(
+      CREATE,
+      {},
+      llmBody({ bands: [{ inputMinTokens: 0, inputMaxTokens: null, outputPrice: '1' }] }),
+    );
+    expect(missing.body.data.details).toEqual([
       { ref: 'bands[0].inputPrice', reason: 'EMPTY_NOT_ALLOWED' },
     ]);
     const num = await write(
@@ -504,7 +613,9 @@ describe('creating a batch by hand', () => {
       currency: 'USD',
     };
     const empty = await write(CREATE, {}, { ...body, unitPrice: '' });
-    expect(empty.body.data.details).toEqual([{ ref: 'unitPrice', reason: 'EMPTY_NOT_ALLOWED' }]);
+    expect(empty.body.data.details).toEqual([{ ref: 'unitPrice', reason: 'OUT_OF_RANGE' }]);
+    const missing = await write(CREATE, {}, body);
+    expect(missing.body.data.details).toEqual([{ ref: 'unitPrice', reason: 'EMPTY_NOT_ALLOWED' }]);
     const bad = await write(CREATE, {}, { ...body, unitPrice: '-1' });
     expect(bad.body.data.details).toEqual([{ ref: 'unitPrice', reason: 'OUT_OF_RANGE' }]);
   });
@@ -513,10 +624,35 @@ describe('creating a batch by hand', () => {
     const provider = await write(CREATE, {}, llmBody({ provider: '  ' }));
     expect(provider.body.data.details).toEqual([{ ref: 'provider', reason: 'EMPTY_NOT_ALLOWED' }]);
     const model = await write(CREATE, {}, llmBody({ model: 'x'.repeat(129) }));
-    expect(model.body.data.details).toEqual([{ ref: 'model', reason: 'TOO_LONG' }]);
+    expect(model.body.data.details).toEqual([{ ref: 'model', reason: 'OUT_OF_RANGE' }]);
     const type = await write(CREATE, {}, llmBody({ resourceType: 'TTS' }));
     expect(type.body.data.details).toEqual([{ ref: 'resourceType', reason: 'OUT_OF_RANGE' }]);
+    const noType = await write(CREATE, {}, llmBody({ resourceType: undefined }));
+    expect(noType.body.data.details).toEqual([
+      { ref: 'resourceType', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    const tooManyEmoji = await write(CREATE, {}, llmBody({ model: '\u{1F600}'.repeat(129) }));
+    expect(tooManyEmoji.body.data.details).toEqual([{ ref: 'model', reason: 'OUT_OF_RANGE' }]);
+    const noDate = await write(CREATE, {}, llmBody({ effectiveFrom: undefined }));
+    expect(noDate.body.data.details).toEqual([
+      { ref: 'effectiveFrom', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
+    for (const wrong of ['2026-02-30', '0000-01-01', 'tomorrow']) {
+      const answer = await write(CREATE, {}, llmBody({ effectiveFrom: wrong }));
+      expect(answer.body.data.details, wrong).toEqual([
+        { ref: 'effectiveFrom', reason: 'OUT_OF_RANGE' },
+      ]);
+    }
+    const noCurrency = await write(CREATE, {}, llmBody({ currency: undefined }));
+    expect(noCurrency.body.data.details).toEqual([
+      { ref: 'currency', reason: 'EMPTY_NOT_ALLOWED' },
+    ]);
     expect(costState.batches.some((b) => b.model === 'model-z')).toBe(false);
+    // 128 code points are allowed whatever their length in UTF-16 units (nothing was saved above)
+    const long = await write(CREATE, {}, llmBody({ provider: 'x'.repeat(128) }));
+    expect(long.status).toBe(200);
+    const emoji = await write(CREATE, {}, llmBody({ model: '\u{1F600}'.repeat(128) }));
+    expect(emoji.status).toBe(200);
   });
 });
 
@@ -537,13 +673,11 @@ describe('confirm, reject and retire', () => {
     expect(rows.find((b) => b.batchId === BATCH.activeLlm)?.status).toBe('SUPERSEDED');
   });
 
-  it('refuses to confirm a batch with a gap in its bands, and names the band field as a price does', async () => {
+  it('refuses to confirm a batch with a gap in its bands, and names `bands` as a hand-entered price does', async () => {
     const answer = await write(CONFIRM, { batchId: BATCH.pendingGap }, {});
     expect(answer.status).toBe(400);
     expect(answer.body.code).toBe('INVALID_REQUEST');
-    expect(answer.body.data.details).toEqual([
-      { ref: 'bands[1].inputMinTokens', reason: 'OUT_OF_RANGE' },
-    ]);
+    expect(answer.body.data.details).toEqual([{ ref: 'bands', reason: 'OUT_OF_RANGE' }]);
     expect(costState.batches.find((b) => b.batchId === BATCH.pendingGap)?.status).toBe(
       'PENDING_REVIEW',
     );
@@ -732,9 +866,7 @@ describe('the final currency of a confirmed batch must be in usage_price.allowed
     expect(currency.body.data.details).toEqual([{ ref: 'currency', reason: 'OUT_OF_RANGE' }]);
     const bands = await write(CONFIRM, { batchId: BATCH.pendingGap }, {});
     expect(bands.status).toBe(400);
-    expect(bands.body.data.details).toEqual([
-      { ref: 'bands[1].inputMinTokens', reason: 'OUT_OF_RANGE' },
-    ]);
+    expect(bands.body.data.details).toEqual([{ ref: 'bands', reason: 'OUT_OF_RANGE' }]);
     // a batch that is not pending answers the currency first, and 409 only for a good body
     const activeBad = await write(CONFIRM, { batchId: BATCH.activeLlm }, { currency: 'EUR' });
     expect(activeBad.status).toBe(400);

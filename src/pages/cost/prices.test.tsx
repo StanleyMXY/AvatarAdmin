@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetConfigStore } from '../../../mock/_core/configStore';
 import { BATCH, costState, HOSTILE_MODEL, MODEL } from '../../../mock/_core/costData';
+import type { MockRes } from '../../../mock/_core/http';
 import { monitorStore, raiseAlert, resetMonitorStore } from '../../../mock/_core/monitorData';
 import * as configMock from '../../../mock/config.mock';
 import * as costMock from '../../../mock/cost.mock';
@@ -441,7 +442,7 @@ describe('pending prices', () => {
       expect(callsTo(calls, 'POST', '/api/admin/usage/price-batches')).toHaveLength(1);
     });
 
-    it('keeps the dialog open and names the band field when the backend refused (the bands have a gap): the words of the code and of the reason, not the backend words', async () => {
+    it('keeps the dialog open and says the reason when the backend refused (the bands have a gap, `ref` is `bands`): the words of the code and of the reason, not the backend words', async () => {
       const { user } = await open();
       const card = await cardOf(BATCH.pendingGap);
       await user.click(card.getByRole('button', { name: 'Confirm' }));
@@ -456,10 +457,9 @@ describe('pending prices', () => {
           'Some input is not valid. Please check the fields and try again.',
         ),
       );
-      // the backend names the lower bound of the second band; the line says which band and which field
-      expect(dialog.textContent).toContain(
-        'Band 2: lower bound (tokens): The value is outside the allowed range.',
-      );
+      // the backend names `bands` as a whole (no index): the line is the words of the reason alone
+      expect(dialog.textContent).toContain('The value is outside the allowed range.');
+      expect(dialog.textContent).not.toContain('Band 2');
       expect(dialog.textContent).not.toContain('cannot confirm');
       expect(costState.batches.find((b) => b.batchId === BATCH.pendingGap)?.status).toBe(
         'PENDING_REVIEW',
@@ -1125,18 +1125,22 @@ describe('enter a price by hand', () => {
     });
 
     it('stops at the number of bands the configuration allows', async () => {
-      const { user } = await open(ALL, { tab: 'Enter by hand' });
+      await open(ALL, { tab: 'Enter by hand' });
       await screen.findByText(/At most 20 bands/);
+      // Role queries walk the whole page and the page grows with every band: plain selectors keep the loop short.
+      const uppers = () =>
+        document.querySelectorAll<HTMLInputElement>('input[aria-label$="upper bound (tokens)"]');
+      const add = () =>
+        [...document.querySelectorAll('button')].find(
+          (b) => b.textContent === 'Add a band',
+        ) as HTMLButtonElement;
       for (let i = 0; i < 19; i += 1) {
-        const last = screen
-          .getAllByRole('textbox', { name: /upper bound/ })
-          .at(-1) as HTMLInputElement;
-        fireEvent.change(last, { target: { value: String(1000 * (i + 1)) } });
-        await user.click(screen.getByRole('button', { name: 'Add a band' }));
+        fireEvent.change(uppers()[i], { target: { value: String(1000 * (i + 1)) } });
+        fireEvent.click(add());
       }
       expect(screen.getAllByRole('textbox', { name: /lower bound/ })).toHaveLength(20);
       expect(screen.getByRole('button', { name: 'Add a band' })).toBeDisabled();
-    }, 30000);
+    });
   });
 
   describe('save', () => {
@@ -1380,8 +1384,26 @@ describe('enter a price by hand', () => {
         expect(costState.batches.some((b) => b.model === 'model-z')).toBe(false);
       });
 
-      it('takes a hint away when its field is edited, and leaves the hints of the other fields', async () => {
-        const { user } = await open(ALL, { tab: 'Enter by hand' });
+      it('takes a hint away when its field is edited, and leaves the hints of the other fields (the page shows every detail it is given; the backend itself names one field at a time)', async () => {
+        const { user } = await open(ALL, {
+          tab: 'Enter by hand',
+          prepare: () => {
+            vi.spyOn(
+              costMock.default as unknown as Record<string, (...args: never[]) => unknown>,
+              'POST /api/admin/usage/prices',
+            ).mockImplementation(((_req: unknown, res: MockRes) =>
+              res.status(400).json({
+                code: 'INVALID_REQUEST',
+                message: 'invalid price',
+                data: {
+                  details: [
+                    { ref: 'bands[1].inputPrice', reason: 'OUT_OF_RANGE' },
+                    { ref: 'bands[0].outputPrice', reason: 'OUT_OF_RANGE' },
+                  ],
+                },
+              })) as never);
+          },
+        });
         await twoBands(user);
         await user.clear(field('Band 2: input price'));
         await user.type(field('Band 2: input price'), TOO_BIG);
@@ -1401,7 +1423,7 @@ describe('enter a price by hand', () => {
         expect(screen.queryByTestId('manual-refused')).toBeNull();
       });
 
-      it('names the unit price of a type that has one, and the currency the backend does not allow', async () => {
+      it('names the currency the backend does not allow, and not the unit price that is also wrong (the backend stops at the first wrong field)', async () => {
         const { user } = await open(ALL, {
           tab: 'Enter by hand',
           meta: { allowedCurrencies: ['USD', 'EUR'] },
@@ -1414,6 +1436,17 @@ describe('enter a price by hand', () => {
         await send(user);
         await waitFor(() => expect(refusal('currency')).not.toBeNull());
         expect(refusal('currency')?.textContent).toBe(OUT_OF_RANGE);
+        expect(refusal('unitPrice')).toBeNull();
+      });
+
+      it('names the unit price of a type that has one', async () => {
+        const { user } = await open(ALL, { tab: 'Enter by hand' });
+        await chooseOption(user, 'Resource type', 'Cloud rendering');
+        await user.type(field('Provider'), 'p');
+        await user.type(field('Model'), 'm');
+        await user.type(field('Price per unit'), '1000000.01');
+        await send(user);
+        await waitFor(() => expect(refusal('unitPrice')).not.toBeNull());
         expect(refusal('unitPrice')?.textContent).toBe(OUT_OF_RANGE);
         expect(field('Price per unit')).toHaveAccessibleDescription(OUT_OF_RANGE);
       });
