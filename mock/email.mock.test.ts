@@ -254,3 +254,17 @@ describe('the state', () => {
     }
   });
 });
+
+describe('the refusals of an e-mail template that carry no details', () => {
+  it('answers an empty subject, a too long subject and an empty body with the message only, as the backend does', async () => {
+    for (const input of [
+      { subject: '', body: '{code}' },
+      { subject: 's'.repeat(201), body: '{code}' },
+      { subject: 'x', body: '' },
+    ]) {
+      const answer = await save('REGISTER_CODE', input);
+      expect([answer.status, answer.body.code]).toEqual([400, 'INVALID_REQUEST']);
+      expect(answer.body.data).toBeNull();
+    }
+  });
+});

@@ -1270,3 +1270,33 @@ describe('the template page: the answer about the upload field', { timeout: 4000
     expect(within(dialog).queryByText(/Uploaded: edge\.png/)).not.toBeInTheDocument();
   });
 });
+
+describe('the template page: an edit that kept its picture', { timeout: 40000 }, () => {
+  it('does not say the picture was rejected when the template is gone (404), and does not block the next try', async () => {
+    const calls = backend();
+    let answered = 0;
+    const refused = overrideFetch(({ method, url }) => {
+      if (method !== 'PUT' || !/\/api\/admin\/push\/templates\/[^/]+$/.test(url.pathname))
+        return undefined;
+      answered += 1;
+      return answered === 1 ? jsonAnswer(404, 'RESOURCE_NOT_FOUND') : undefined;
+    });
+    const user = userEvent.setup();
+    renderPage(<TemplatesPage />);
+    const target = pushState.templates.find(
+      (t) => t.triggerReason === 'daily_recall' && t.locale === 'th',
+    );
+    if (!target) throw new Error('the mock has no Thai daily recall template');
+    await user.click(within(await rowOf(target.title)).getByRole('button', { name: 'Edit' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    fireEvent.change(dialog.getByLabelText('Body'), { target: { value: 'Another body' } });
+    await user.click(dialog.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(refused).toHaveLength(1));
+    expect(
+      dialog.queryByText('The backend did not accept the uploaded picture. Upload it again.'),
+    ).not.toBeInTheDocument();
+    // the next try is sent: nothing is waiting for a picture
+    await user.click(dialog.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+  });
+});

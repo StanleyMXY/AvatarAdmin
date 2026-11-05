@@ -23,6 +23,11 @@ type Options = {
    * never about the upload.
    */
   uploadFields?: readonly string[];
+  /**
+   * False when the request carried no upload id (an edit that kept the old picture): then a 404 or a
+   * 409 is about the row, not about a file, and `uploadRejected` is false. Default true.
+   */
+  carriedUpload?: boolean;
 };
 
 /**
@@ -90,7 +95,8 @@ export function failureToForm(
   );
   return {
     text,
-    uploadRejected: isUploadFieldRejection(error, options.uploadFields ?? []),
+    uploadRejected:
+      (options.carriedUpload ?? true) && isUploadFieldRejection(error, options.uploadFields ?? []),
     unplaced,
     code,
   };

@@ -101,6 +101,7 @@ export function ActionModal({ open, action, onClose, onSaved }: Props) {
     } catch (error) {
       const result = failureToForm(intl, form, error, FIELDS, tagAliases(error, 'names'), {
         uploadFields: ['iconUploadId'],
+        carriedUpload: Boolean(icon.uploadId),
       });
       if (result.uploadRejected) {
         icon.reset();

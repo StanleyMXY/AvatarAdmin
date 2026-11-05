@@ -48,9 +48,7 @@ export default {
     const body = typeof input.body === 'string' ? trimSpec(input.body) : '';
     const length = countCodePoints(subject);
     if (length < 1 || length > SUBJECT_MAX) {
-      throw invalidRequest('The subject must be 1 to 200 characters', [
-        { ref: 'subject', reason: length < 1 ? 'EMPTY_NOT_ALLOWED' : 'TOO_LONG' },
-      ]);
+      throw new MockHttpError(400, 'INVALID_REQUEST', 'The subject must be 1 to 200 characters');
     }
     // A control character inside the subject (the ends are cut first) is INVALID_CHARACTER.
     if (hasControlCharacter(subject)) {
@@ -74,9 +72,7 @@ export default {
     };
     refuseUnknownToken('subject', subject);
     if (body === '') {
-      throw invalidRequest('The body must not be empty', [
-        { ref: 'body', reason: 'EMPTY_NOT_ALLOWED' },
-      ]);
+      throw new MockHttpError(400, 'INVALID_REQUEST', 'The body must not be empty');
     }
     refuseUnknownToken('body', body);
     const missing = def.requiredPlaceholders.filter((placeholder) => !body.includes(placeholder));

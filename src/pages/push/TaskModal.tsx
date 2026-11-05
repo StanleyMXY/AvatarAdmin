@@ -77,6 +77,7 @@ export function TaskModal({ open, locales, onClose, onSaved }: Props) {
     } catch (error) {
       const result = failureToForm(intl, form, error, FIELDS, ALIASES, {
         uploadFields: ['uploadId'],
+        carriedUpload: Boolean(picture.uploadId),
       });
       if (result.uploadRejected) {
         picture.reset();

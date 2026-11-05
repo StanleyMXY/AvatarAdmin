@@ -286,6 +286,9 @@ describe('validateValue', () => {
     expect(validateValue(s, [30, 7])).toBe('OUT_OF_RANGE');
     expect(validateValue(s, [7, 30, 7])).toBe('OUT_OF_RANGE');
     expect(validateValue(s, [7, 30, 100000])).toBeNull();
+    // the backend reads a day as a 32-bit whole number
+    expect(validateValue(s, [2147483647])).toBeNull();
+    expect(validateValue(s, [2147483648])).toBe('OUT_OF_RANGE');
   });
 
   it('holds the text interaction gap to 1 to 1440 minutes', () => {

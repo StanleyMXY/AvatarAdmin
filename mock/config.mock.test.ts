@@ -200,6 +200,7 @@ describe('PUT /config/:key', () => {
     expect((await put('root', 'milestone.days', [7, 7])).status).toBe(400);
     expect((await put('root', 'milestone.days', [30, 7])).status).toBe(400);
     expect((await put('root', 'milestone.days', [7, 30, 100000])).status).toBe(200);
+    expect((await put('root', 'milestone.days', [7, 2147483648])).status).toBe(400);
     expect((await put('root', 'companionship.text_burst_minutes', 1441)).status).toBe(400);
     expect(
       (await put('root', 'companionship.stage_thresholds', { BONDING: 200, CLOSE: 150 })).status,

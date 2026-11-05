@@ -76,6 +76,31 @@ describe('failureToForm', () => {
     expect(rejected(new Error('x'))).toBe(false);
   });
 
+  it('does not call a 404 or a 409 an upload refusal when the request carried no upload', () => {
+    const form = formWith();
+    const options = { uploadFields: ['iconUploadId'], carriedUpload: false };
+    expect(
+      failureToForm(intl, form, refusal([], 404, 'RESOURCE_NOT_FOUND'), [], {}, options)
+        .uploadRejected,
+    ).toBe(false);
+    expect(
+      failureToForm(intl, form, refusal([], 409, 'INVALID_STATE'), [], {}, options).uploadRejected,
+    ).toBe(false);
+    expect(
+      failureToForm(
+        intl,
+        form,
+        refusal([], 404, 'RESOURCE_NOT_FOUND'),
+        [],
+        {},
+        {
+          ...options,
+          carriedUpload: true,
+        },
+      ).uploadRejected,
+    ).toBe(true);
+  });
+
   it('does not call the upload refused when the 400 names another field: the file is still good', () => {
     const form = formWith();
     const other = refusal([{ ref: 'compatibleStyles', reason: 'EMPTY_NOT_ALLOWED' }]);
