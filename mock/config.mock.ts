@@ -232,6 +232,15 @@ function warningsFor(
       { code: 'PHONE_LOGIN_DISABLED_ACCOUNTS', message: 'Phone-number accounts exist', count: 3 },
     ];
   }
+  if (key === 'integrity.check_enabled' && value === false) {
+    return [
+      {
+        code: 'INTEGRITY_CHECK_OFF',
+        message:
+          'Device integrity check is off: guest credentials and accounts are created without Play Integrity or App Attest verification.',
+      },
+    ];
+  }
   if (key === 'sms.allowed_country_codes' && Array.isArray(value)) {
     // A country of the list that no enabled OTP channel serves (a channel with no countries serves all).
     const channels = [...smsState.channels.values()].filter(

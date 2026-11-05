@@ -107,6 +107,28 @@ describe('the companionship page', () => {
     expect(burst()).toHaveValue('45'); // not put back to 30
   });
 
+  it('says what is wrong with unsorted milestone days and with a gap above a day, and sends nothing', async () => {
+    const calls = useMockBackend(configMock);
+    renderPage(<CompanionshipPage />);
+    await bonding();
+    const box = screen.getByRole('combobox', { name: 'Milestone days' });
+    // the seeded days are in order; a smaller one added after them breaks the order
+    fireEvent.change(box, { target: { value: '3' } });
+    fireEvent.keyDown(box, { key: 'Enter', keyCode: 13 });
+    fireEvent.click(save());
+    expect(
+      await screen.findByText(
+        'Write 1 to 20 whole days, each once, from the smallest to the largest.',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.change(burst(), { target: { value: '1441' } });
+    fireEvent.click(save());
+    expect(
+      await screen.findByText('Write a whole number of minutes from 1 to 1440.'),
+    ).toBeInTheDocument();
+    expect(puts(calls)).toHaveLength(0);
+  });
+
   it('keeps a token that is not a whole number as typed and refuses it, without sending', async () => {
     const calls = useMockBackend(configMock);
     renderPage(<CompanionshipPage />);

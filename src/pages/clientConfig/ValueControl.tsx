@@ -29,6 +29,7 @@ export function ValueControl({ type, value, label, error, onChange }: Props) {
     return (
       <InputNumber<number>
         aria-label={label}
+        precision={0}
         style={{ width: 240 }}
         status={status}
         value={typeof value === 'number' ? value : null}

@@ -162,6 +162,20 @@ describe('PUT /email/templates/{templateCode}', () => {
     expect((await itemOf('REGISTER_CODE')).modified).toBe(true);
   });
 
+  it('refuses a control character inside the subject as INVALID_CHARACTER and cuts the ends first', async () => {
+    for (const subject of ['Your\ncode', 'Your\tcode', 'Your\u0000code', 'a\rb']) {
+      const answer = await save('REGISTER_CODE', { subject, body: '{code}' });
+      expect([answer.status, answer.body.code], JSON.stringify(subject)).toEqual([
+        400,
+        'INVALID_REQUEST',
+      ]);
+      expect(answer.body.data.details).toEqual([{ ref: 'subject', reason: 'INVALID_CHARACTER' }]);
+    }
+    expect(
+      (await save('REGISTER_CODE', { subject: '\n Your code\n', body: '{code}' })).status,
+    ).toBe(200);
+  });
+
   it('names the missing one of two required placeholders', async () => {
     const answer = await save('DELETION_CONFIRM', { subject: 'x', body: 'Open {confirmLink}' });
     expect(answer.status).toBe(400);

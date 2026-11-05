@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pushState } from '../../../mock/_core/pushData';
+import { USER } from '../../../mock/_core/usersData';
 import pushMock from '../../../mock/push.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { fileOf, pngBytes } from '../../../tests/imageBytes';
@@ -384,13 +385,14 @@ describe('the manual task page: new task', { timeout: 60000 }, () => {
     expect(dialog.querySelectorAll('.ant-select-selection-item')).toHaveLength(0);
     await chooseOption(user, 'Audience', 'Account ID list', dialog);
     fireEvent.change(within(dialog).getByLabelText('Account IDs'), {
-      target: { value: 'acc-1\nacc-2, acc-3  acc-1' },
+      target: { value: `${USER.rich}\n${USER.negative}, ${USER.noAttribution}  ${USER.rich}` },
     });
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    await dialogsClosed();
     expect(writesOf(calls)[0].body).toEqual({
       audience: 'ACCOUNT_IDS',
-      accountIds: ['acc-1', 'acc-2', 'acc-3'],
+      accountIds: [USER.rich, USER.negative, USER.noAttribution],
       title: 'Nueva función',
       body: 'Pruébala hoy',
       linkType: 'NONE',
@@ -698,5 +700,33 @@ describe('the push task page: the answer about the upload field', { timeout: 400
       ),
     ).toBeInTheDocument();
     expect(within(dialog).queryByText(/Uploaded: edge\.png/)).not.toBeInTheDocument();
+  });
+});
+
+const GHOST_1 = '00000000-0000-4000-8000-00000000dead';
+const GHOST_2 = '00000000-0000-4000-8000-00000000beef';
+
+describe('the push task page: accounts that are not there', { timeout: 40000 }, () => {
+  it('names the ids the backend says do not exist under the account id box, keeps the others out of the words, and sends again after they are taken away', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<TasksPage />);
+    const dialog = await openNew(user);
+    basics(dialog);
+    await chooseOption(user, 'Audience', 'Account ID list', dialog);
+    fireEvent.change(within(dialog).getByLabelText('Account IDs'), {
+      target: { value: `${GHOST_1} ${USER.rich} ${GHOST_2}` },
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText(`These accounts do not exist: ${GHOST_1}, ${GHOST_2}.`),
+    ).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(1);
+    fireEvent.change(within(dialog).getByLabelText('Account IDs'), {
+      target: { value: USER.rich },
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
+    await dialogsClosed();
   });
 });

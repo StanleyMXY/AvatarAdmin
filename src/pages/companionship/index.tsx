@@ -42,7 +42,9 @@ const draftOf = (items: ConfigItem[]): Draft => {
 };
 
 type Field = 'stages' | 'days' | 'burst';
-type Problem = { reason: string } | { failure: unknown; key: (typeof KEYS)[number] };
+type Problem =
+  | { reason: string; key: (typeof KEYS)[number] }
+  | { failure: unknown; key: (typeof KEYS)[number] };
 
 /** 养成管理: the stage thresholds, the milestone days and the text interaction gap, in one form. */
 export default function CompanionshipPage() {
@@ -76,7 +78,11 @@ export default function CompanionshipPage() {
   const reason = (code: string) => (intl.messages[`reason.${code}`] ? t(`reason.${code}`) : code);
   const problemText = (problem: Problem | undefined) => {
     if (!problem) return undefined;
-    if ('reason' in problem) return reason(problem.reason);
+    if ('reason' in problem) {
+      // the condition of the key in words when the language file has them, else the general words of the reason
+      const own = `config.${problem.key}.reject.${problem.reason}`;
+      return intl.messages[own] ? t(own) : reason(problem.reason);
+    }
     const { text, fields } = describeFailure(intl, problem.failure);
     return fields.find((f) => f.ref === problem.key)?.text ?? text;
   };
@@ -106,7 +112,7 @@ export default function CompanionshipPage() {
     for (const key of KEYS) {
       const spec = specOf(key);
       const problem = spec ? validateValue(spec, next[key]) : null;
-      if (problem) found[field[key]] = { reason: problem };
+      if (problem) found[field[key]] = { reason: problem, key };
     }
     setErrors(found);
     if (Object.keys(found).length > 0) return;

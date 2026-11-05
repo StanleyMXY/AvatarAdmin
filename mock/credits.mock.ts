@@ -2,6 +2,7 @@
 // _core/creditsData.ts. The credit pack endpoints follow the backend's reply 30: no id, the pack is
 // named by (store, productId), PUT /credit-products with six required fields, success data null.
 import { countCodePoints } from '../src/utils/codePoints';
+import { productIdBroken } from '../src/utils/storeProductId';
 import { trimSpec } from '../src/utils/trimSpec';
 import { guard } from './_core/auth';
 import {
@@ -85,7 +86,8 @@ function instantParam(req: MockReq, name: string): number | undefined {
 
 const byIdDesc = (a: { id: string }, b: { id: string }) => Number(b.id) - Number(a.id);
 
-const PRODUCT_STORE = /^[A-Z][A-Z0-9_]{1,31}$/;
+/** The stores a product can be mapped to: case matters, `google` is refused. */
+const PRODUCT_STORE: ReadonlySet<string> = new Set(['APPLE', 'GOOGLE']);
 const CREDITS_MAX = 1_000_000_000;
 /** The most a request can move a balance by, up or down (backend reply 108). */
 const DELTA_MAX = 1_000_000_000;
@@ -93,15 +95,18 @@ const DELTA_MAX = 1_000_000_000;
 /** The fields of `POST` and `PUT /credit-products`: the same six, all required (backend reply 30). */
 function checkProduct(body: Record<string, unknown>): Detail[] {
   const details: Detail[] = [];
-  if (typeof body.store !== 'string' || body.store === '') {
-    details.push({ ref: 'store', reason: 'EMPTY_NOT_ALLOWED' });
-  } else if (!PRODUCT_STORE.test(body.store)) {
+  if (typeof body.store !== 'string' || !PRODUCT_STORE.has(body.store)) {
+    // a missing, empty or unknown store is all the same to the backend
     details.push({ ref: 'store', reason: 'OUT_OF_RANGE' });
   }
   if (typeof body.productId !== 'string' || trimSpec(body.productId) === '') {
     details.push({ ref: 'productId', reason: 'EMPTY_NOT_ALLOWED' });
-  } else if (countCodePoints(trimSpec(body.productId)) > 255) {
-    details.push({ ref: 'productId', reason: 'TOO_LONG' });
+  } else if (
+    PRODUCT_STORE.has(String(body.store)) &&
+    productIdBroken(String(body.store), trimSpec(body.productId), 'credit')
+  ) {
+    // every length and character problem of an id is OUT_OF_RANGE, by the rule of its store
+    details.push({ ref: 'productId', reason: 'OUT_OF_RANGE' });
   }
   if (body.credits === undefined || body.credits === null) {
     details.push({ ref: 'credits', reason: 'EMPTY_NOT_ALLOWED' });

@@ -31,6 +31,9 @@ const messages: Record<string, string> = {
   'pages.common.loadFailed': '加载失败：{message}',
   'pages.common.reasonLabel': '理由',
   'pages.common.reasonLength': '理由需要 {min} 到 {max} 个字符',
+  'pages.productId.rule.APPLE': '只能用字母、数字、"."、"_" 和 "-"，1 到 {max} 个字符',
+  'pages.productId.rule.GOOGLE':
+    '只能用小写字母、数字、"_" 和 "."，第一个字符是小写字母或数字，1 到 {max} 个字符',
   'pages.common.reasonRequired': '请填写理由',
   'pages.common.submit': '提交',
   'pages.leave.title': '离开这个页面？',

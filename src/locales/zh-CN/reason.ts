@@ -15,7 +15,7 @@ const messages: Record<string, string> = {
   'reason.INVALID_PATTERN': '正则表达式无法编译',
   'reason.RESOURCE_NOT_FOUND': '引用的对象不存在',
   'reason.DUPLICATE': '这一项重复了，每项只能出现一次',
-  'reason.INVALID_CHARACTER': '文字含有不允许的字符（空字符 U+0000）',
+  'reason.INVALID_CHARACTER': '文字含有不允许的字符（换行、制表符、空字符等控制字符）',
   'reason.MISSING': '这一项没有传，必须给出',
   'reason.INVALID_FORMAT': '格式不对，或含有无法按原样保存的字符',
   'reason.PACKAGE_NAME_NOT_CONFIGURED': '后端没有配置 Google Play 应用包名，不能保存 Play 商店链接',

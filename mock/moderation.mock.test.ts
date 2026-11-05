@@ -130,6 +130,7 @@ describe('GET /moderation/records', () => {
       'source',
       'autoLevel',
       'categories',
+      'ruleHits',
       'score',
       'providerRef',
       'status',

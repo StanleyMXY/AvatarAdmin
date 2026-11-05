@@ -9,7 +9,9 @@ import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { useUploadSlot } from '../../hooks/useUploadSlot';
 import { type Audience, createTask, type PushPlatform } from '../../services/push';
 import { failureToForm } from '../../utils/failureToForm';
+import { setFieldReasons } from '../../utils/fieldReasons';
 import { AudienceFields } from './AudienceFields';
+import { accountsNotFoundReason } from './accountRefusal';
 import { audienceFields, contentFields, pickedInstantUtc } from './bodies';
 import { ContentFields } from './ContentFields';
 
@@ -80,6 +82,9 @@ export function TaskModal({ open, locales, onClose, onSaved }: Props) {
         picture.reset();
         setRejected(true);
       }
+      // accounts that are not there: the ids go under the account id box
+      const missing = accountsNotFoundReason(error);
+      if (missing) setFieldReasons(form, intl, [missing]);
       fail(error);
       return;
     }

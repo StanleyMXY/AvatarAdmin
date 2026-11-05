@@ -314,6 +314,39 @@ describe('editing and adding a mapping', { timeout: 30000 }, () => {
     expect(gets.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('writes the rule of the chosen store under the product id and stops an id that breaks it, with the 40 characters of a Google subscription product', async () => {
+    const calls = useMockBackend(subscriptionsMock);
+    const user = userEvent.setup();
+    renderPage(<ProductsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New product' }));
+    const dialog = await screen.findByRole('dialog');
+    await choose(user, dialog, 'Store', 'GOOGLE');
+    expect(
+      within(dialog).getByText(/Lower-case letters, digits, "_" and "\." only.*1 to 40 characters/),
+    ).toBeInTheDocument();
+    await choose(user, dialog, 'Entitlement', /\(basic\)$/);
+    fireEvent.change(within(dialog).getByLabelText('Sort order'), { target: { value: '1' } });
+    for (const bad of ['Premium', 'x'.repeat(41), 'has space']) {
+      fireEvent.change(within(dialog).getByLabelText('Product ID'), { target: { value: bad } });
+      await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+      await waitFor(() =>
+        expect(
+          within(dialog).getAllByText(/Lower-case letters, digits, "_" and "\." only/).length,
+        ).toBeGreaterThan(1),
+      );
+    }
+    expect(writes(calls)).toHaveLength(0);
+    await choose(user, dialog, 'Store', 'APPLE');
+    expect(
+      within(dialog).getByText(/Letters, digits, "\.", "_" and "-" only, 1 to 100/),
+    ).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Product ID'), {
+      target: { value: 'Premium_1' },
+    });
+    await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+  });
+
   it('refuses a store and product id that are already mapped, without sending', async () => {
     const calls = useMockBackend(subscriptionsMock);
     const user = userEvent.setup();

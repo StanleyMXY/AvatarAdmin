@@ -38,6 +38,8 @@ const messages: Record<string, string> = {
   'moderation.field.source': 'Source',
   'moderation.field.autoLevel': 'Automatic level',
   'moderation.field.categories': 'Categories',
+  'moderation.field.ruleHits': 'Matched rules',
+  'moderation.ruleHit.unknown': 'A word rule (what it matched was not kept)',
   'moderation.field.score': 'Score',
   'moderation.field.providerRef': 'Service reference',
   'moderation.field.status': 'Status',

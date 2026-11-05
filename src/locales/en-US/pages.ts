@@ -32,6 +32,9 @@ const messages: Record<string, string> = {
   'pages.common.loadFailed': 'Failed to load: {message}',
   'pages.common.reasonLabel': 'Reason',
   'pages.common.reasonLength': 'The reason needs {min} to {max} characters',
+  'pages.productId.rule.APPLE': 'Letters, digits, ".", "_" and "-" only, 1 to {max} characters',
+  'pages.productId.rule.GOOGLE':
+    'Lower-case letters, digits, "_" and "." only, the first a lower-case letter or digit, 1 to {max} characters',
   'pages.common.reasonRequired': 'Enter a reason',
   'pages.common.submit': 'Submit',
   'pages.leave.title': 'Leave this page?',

@@ -326,6 +326,22 @@ describe('ConfigForm: saving', () => {
     ).toBeInTheDocument();
   });
 
+  it('warns in the words of the page when the device integrity check is switched off, and not when it is switched on', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['integrity.check_enabled']} />);
+    const r = await row('integrity.check_enabled');
+    fireEvent.click(within(r).getByRole('switch'));
+    fireEvent.click(within(r).getByRole('button', { name: 'Save' }));
+    expect(
+      await screen.findByText(
+        'The device integrity check is off: guest credentials and accounts are created without checking that the request comes from a genuine app on a genuine device',
+      ),
+    ).toBeInTheDocument();
+    // the words of the page, not the backend's English sentence
+    expect(document.body.textContent).not.toContain('Play Integrity');
+  });
+
   it('disables Save for a JSON key whose text is not JSON', async () => {
     signInAs('root');
     useMockBackend(configMock);

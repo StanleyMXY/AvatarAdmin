@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pushState } from '../../../mock/_core/pushData';
+import { USER } from '../../../mock/_core/usersData';
 import pushMock from '../../../mock/push.mock';
 import { envelope, jsonResponse, stubFetch } from '../../../tests/httpStubs';
 import { fileOf, pngBytes } from '../../../tests/imageBytes';
@@ -387,12 +388,15 @@ describe('the periodic push page: new schedule', { timeout: 60000 }, () => {
     await chooseOption(user, 'Audience', 'Account ID list', dialog);
     expect(within(dialog).getByRole('combobox', { name: 'Platforms' })).toBeDisabled();
     expect(within(dialog).getByRole('combobox', { name: 'Languages' })).toBeDisabled();
-    fireEvent.change(within(dialog).getByLabelText('Account IDs'), { target: { value: 'a1, a2' } });
+    fireEvent.change(within(dialog).getByLabelText('Account IDs'), {
+      target: { value: `${USER.rich}, ${USER.negative}` },
+    });
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(writesOf(calls)[0].body).toMatchObject({
       audience: 'ACCOUNT_IDS',
-      accountIds: ['a1', 'a2'],
+      accountIds: [USER.rich, USER.negative],
     });
     expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('platforms');
     expect(Object.keys(writesOf(calls)[0].body as object)).not.toContain('locales');
@@ -658,5 +662,33 @@ describe('the periodic push page: the answer about the upload field', { timeout:
       ),
     ).toBeInTheDocument();
     expect(within(dialog).queryByText(/Uploaded: edge\.png/)).not.toBeInTheDocument();
+  });
+});
+
+const GHOST_1 = '00000000-0000-4000-8000-00000000dead';
+const GHOST_2 = '00000000-0000-4000-8000-00000000beef';
+
+describe('the periodic push page: accounts that are not there', { timeout: 40000 }, () => {
+  it('names the ids the backend says do not exist under the account id box, keeps the others out of the words, and sends again after they are taken away', async () => {
+    const calls = backend();
+    const user = userEvent.setup();
+    renderPage(<SchedulesPage />);
+    const dialog = await openNew(user);
+    fill(dialog);
+    await chooseOption(user, 'Audience', 'Account ID list', dialog);
+    fireEvent.change(within(dialog).getByLabelText('Account IDs'), {
+      target: { value: `${GHOST_1} ${USER.rich} ${GHOST_2}` },
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    expect(
+      await within(dialog).findByText(`These accounts do not exist: ${GHOST_1}, ${GHOST_2}.`),
+    ).toBeInTheDocument();
+    expect(writesOf(calls)).toHaveLength(1);
+    fireEvent.change(within(dialog).getByLabelText('Account IDs'), {
+      target: { value: USER.rich },
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(2));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

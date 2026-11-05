@@ -18,6 +18,8 @@ import { ContentPanel } from './ContentPanel';
 import { DecisionModal } from './DecisionModal';
 import { formatDuration, secondsSince } from './duration';
 import { labelOf, statusOptions } from './options';
+import { RuleHitList } from './RuleHitList';
+import { hasRuleWithoutHit, hitsOf, plainCategories } from './ruleHits';
 
 type Access = { canAccess: (code?: string) => boolean };
 
@@ -163,7 +165,16 @@ export default function ModerationDetailPage() {
     item(
       'categories',
       t('moderation.field.categories'),
-      <EllipsisPopoverText text={record.categories?.join(', ') || null} width={360} />,
+      <EllipsisPopoverText text={plainCategories(record).join(', ') || null} width={360} />,
+    ),
+    item(
+      'ruleHits',
+      t('moderation.field.ruleHits'),
+      hitsOf(record).length > 0 || hasRuleWithoutHit(record) ? (
+        <RuleHitList record={record} />
+      ) : (
+        DASH
+      ),
     ),
     item(
       'score',

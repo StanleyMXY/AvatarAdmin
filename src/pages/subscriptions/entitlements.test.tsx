@@ -374,6 +374,20 @@ describe('who sees the buttons', { timeout: 30000 }, () => {
 });
 
 describe('creating and editing an entitlement', { timeout: 30000 }, () => {
+  it('refuses a priority below 0 on the page and sends nothing', async () => {
+    const calls = useMockBackend(subscriptionsMock);
+    const user = userEvent.setup();
+    renderPage(<EntitlementsPage />);
+    await user.click(await screen.findByRole('button', { name: 'New entitlement' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Key'), { target: { value: 'gold_vn' } });
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Gold' } });
+    fireEvent.change(within(dialog).getByLabelText('Priority'), { target: { value: '-1' } });
+    await user.click(within(dialog).getByRole('button', { name: /Save/ }));
+    expect(await within(dialog).findByText('The priority cannot be below 0.')).toBeInTheDocument();
+    expect(writes(calls)).toHaveLength(0);
+  });
+
   it('creates an entitlement with a key, a name and a priority', async () => {
     const calls = useMockBackend(subscriptionsMock);
     const user = userEvent.setup();

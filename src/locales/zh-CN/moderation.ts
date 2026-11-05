@@ -38,6 +38,8 @@ const messages: Record<string, string> = {
   'moderation.field.source': '来源',
   'moderation.field.autoLevel': '自动判定级别',
   'moderation.field.categories': '类别',
+  'moderation.field.ruleHits': '命中的规则',
+  'moderation.ruleHit.unknown': '一条词库规则（没有保存它匹配的内容）',
   'moderation.field.score': '分数',
   'moderation.field.providerRef': '审核服务编号',
   'moderation.field.status': '状态',

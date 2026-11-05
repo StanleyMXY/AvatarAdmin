@@ -3,7 +3,7 @@ const messages: Record<string, string> = {
   'companionship.bonding': '亲近阶段起点（BONDING）',
   'companionship.close': '亲密阶段起点（CLOSE）',
   'companionship.days': '里程碑天数',
-  'companionship.daysHelp': '输入天数后回车；1 到 20 个互不相同的正整数。',
+  'companionship.daysHelp': '输入天数后回车；1 到 20 个正整数，每个只出现一次，从小到大。',
   'companionship.burst': '同一次互动的间隔（分钟）',
   'companionship.hint': '改阈值只影响之后的计算，不会迁移已有数据。',
   'companionship.save': '保存',

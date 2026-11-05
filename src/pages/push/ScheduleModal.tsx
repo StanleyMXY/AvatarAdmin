@@ -29,8 +29,10 @@ import {
   updateSchedule,
 } from '../../services/push';
 import { failureToForm } from '../../utils/failureToForm';
+import { setFieldReasons } from '../../utils/fieldReasons';
 import { pickedDay } from '../../utils/utcDay';
 import { AudienceFields } from './AudienceFields';
+import { accountsNotFoundReason } from './accountRefusal';
 import { scheduleFields, scheduleToValues, timeZoneNames } from './bodies';
 import { ContentFields } from './ContentFields';
 
@@ -167,6 +169,9 @@ export function ScheduleModal({ open, schedule, locales, onClose, onSaved }: Pro
         picture.reset();
         setRejected(true);
       }
+      // accounts that are not there: the ids go under the account id box
+      const missing = accountsNotFoundReason(error);
+      if (missing) setFieldReasons(form, intl, [missing]);
       fail(error);
       return;
     }

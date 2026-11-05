@@ -18,7 +18,7 @@ const messages: Record<string, string> = {
   'reason.RESOURCE_NOT_FOUND': 'The referenced item does not exist.',
   'reason.DUPLICATE': 'This item is repeated; each one may appear only once.',
   'reason.INVALID_CHARACTER':
-    'The text contains a character that is not allowed (the null character, U+0000).',
+    'The text contains a character that is not allowed (a control character such as a line break, a tab or the null character).',
   'reason.MISSING': 'This value was not sent; it must be given.',
   'reason.INVALID_FORMAT':
     'The format is not valid, or it contains characters that cannot be stored as they are.',

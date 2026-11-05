@@ -69,6 +69,8 @@ const messages: Record<string, string> = {
   'config.requiresUploadBase': 'Ad media and APK uploads need it',
   'config.warning.PHONE_LOGIN_DISABLED_ACCOUNTS':
     'Phone sign-in is now off, but {count} phone-number accounts exist',
+  'config.warning.INTEGRITY_CHECK_OFF':
+    'The device integrity check is off: guest credentials and accounts are created without checking that the request comes from a genuine app on a genuine device',
   'config.warning.UNKNOWN': 'Saved, with a warning',
   'config.auth.access_ttl_minutes.label': 'Access token lifetime',
   'config.auth.access_ttl_minutes.desc':
@@ -415,13 +417,17 @@ const messages: Record<string, string> = {
     'End of the reward campaign (UTC, ISO-8601); leave empty for no limit. When both start and end are set, the end must be later than the start, or the save is rejected.',
   'config.companionship.text_burst_minutes.label': 'Text interaction gap',
   'config.companionship.text_burst_minutes.desc':
-    'Two text messages sent no further apart than this count as one interaction, in minutes.',
+    'Two text messages sent no further apart than this count as one interaction, in minutes, from 1 to 1440.',
+  'config.companionship.text_burst_minutes.reject.OUT_OF_RANGE':
+    'Write a whole number of minutes from 1 to 1440.',
   'config.companionship.stage_thresholds.label': 'Companionship stage thresholds',
   'config.companionship.stage_thresholds.desc':
     'Score thresholds for the companionship stages, as a JSON object with a score for BONDING and one for CLOSE. A score below the BONDING value is the SEEDLING stage.',
   'config.milestone.days.label': 'Milestone days',
   'config.milestone.days.desc':
-    'Days of companionship that count as milestones, as a JSON array, for example the 7th, 30th and 100th day.',
+    'Days of companionship that count as milestones, as a JSON array from the smallest to the largest, for example the 7th, 30th and 100th day.',
+  'config.milestone.days.reject.OUT_OF_RANGE':
+    'Write 1 to 20 whole days, each once, from the smallest to the largest.',
   'config.moderation.block_score.label': 'Moderation block score',
   'config.moderation.block_score.desc':
     'The threshold on the score (0 to 1) returned by the moderation service: a score at or above it is blocked. A higher value means fewer blocks. It must be above 0 and at most 1, with up to three decimals, and higher than the review score (checked when both are saved). The value depends on the chosen moderation service and has no default. If either score is not saved the moderation service is not called (the model check does not run): nothing fails and no 503 is returned, text is still checked against the rule list, and other content is let through. A saved value applies from the next check, with no restart.',

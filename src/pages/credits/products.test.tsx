@@ -403,14 +403,16 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     expect(pack.credits).not.toBe(4321);
   });
 
-  it("sends a product id of any length and shows the length the backend refuses beside the field (the limit is the backend's, not a guess)", async () => {
-    useMockBackend(creditsMock);
+  it('shows the rule of the store when the backend refuses the product id, and checks the id before it sends', async () => {
+    const calls = useMockBackend(creditsMock);
     const real = globalThis.fetch;
     vi.stubGlobal('fetch', async (input: string | URL, init?: RequestInit) =>
       init?.method === 'POST'
         ? jsonResponse(
             400,
-            envelope('INVALID_REQUEST', { details: [{ ref: 'productId', reason: 'TOO_LONG' }] }),
+            envelope('INVALID_REQUEST', {
+              details: [{ ref: 'productId', reason: 'OUT_OF_RANGE' }],
+            }),
           )
         : real(input, init),
     );
@@ -419,12 +421,40 @@ describe('the credit pack page', { timeout: 30000 }, () => {
     await user.click(await screen.findByRole('button', { name: 'New credit pack' }));
     const dialog = await screen.findByRole('dialog');
     await chooseOption(user, 'Store', 'APPLE', dialog);
-    fireEvent.change(within(dialog).getByLabelText('Product ID'), {
-      target: { value: 'p'.repeat(300) },
-    });
+    const apple = /Letters, digits, "\.", "_" and "-" only, 1 to 100 characters/;
+    // the rule is written under the field as soon as a store is chosen
+    expect(within(dialog).getByText(apple)).toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText('Credits'), { target: { value: '10' } });
+    // an id that breaks the rule is stopped on the page and nothing is sent
+    fireEvent.change(within(dialog).getByLabelText('Product ID'), {
+      target: { value: 'has space' },
+    });
     await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
-    expect(await within(dialog).findByText('The value is too long.')).toBeInTheDocument();
+    await waitFor(() => expect(within(dialog).getAllByText(apple).length).toBeGreaterThan(1));
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+    // Google: lower case only, and the rule changes with the store
+    await chooseOption(user, 'Store', 'GOOGLE', dialog);
+    expect(
+      within(dialog).getByText(/Lower-case letters, digits, "_" and "\." only/),
+    ).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Product ID'), {
+      target: { value: 'Credits100' },
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() =>
+      expect(within(dialog).getAllByText(/Lower-case letters, digits/).length).toBeGreaterThan(1),
+    );
+    // an id that passes the page but is refused by the backend gets the same rule under the field
+    fireEvent.change(within(dialog).getByLabelText('Product ID'), {
+      target: { value: 'credits.100' },
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Submit' }));
+    await waitFor(() =>
+      expect(
+        within(dialog).getAllByText(/Lower-case letters, digits, "_" and "\." only/).length,
+      ).toBeGreaterThan(1),
+    );
+    expect(screen.queryByText('The value is outside the allowed range.')).not.toBeInTheDocument();
   });
 
   it('keeps a product id of 5000 characters without spaces inside its cell, and text of every language', async () => {

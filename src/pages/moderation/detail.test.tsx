@@ -633,3 +633,32 @@ describe('deciding', { timeout: 30000 }, () => {
     expect(attempts).toBe(1);
   });
 });
+
+describe('the rules a record matched', { timeout: 30000 }, () => {
+  it('lists each rule with its match mode, what it matches and its note, and shows no rule id', async () => {
+    await open(RECORD_ID.persona);
+    const list = await screen.findByTestId('rule-hits');
+    expect(within(list).getByText('Whole word')).toBeInTheDocument();
+    expect(within(list).getByText('kata terlarang')).toBeInTheDocument();
+    expect(within(list).getByText('Bahasa Indonesia')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('RULE:');
+    expect(document.body.textContent).not.toContain('00000000-0000-4000-8000-000000000004');
+  });
+
+  it('keeps showing what matched after the rule is changed or deleted: the hit is a snapshot of the moment', async () => {
+    await open(RECORD_ID.blocked, () => {
+      moderationState.rules = moderationState.rules.filter(
+        (rule) => rule.id !== '00000000-0000-4000-8000-000000000002',
+      );
+    });
+    const list = await screen.findByTestId('rule-hits');
+    expect(within(list).getByText('كلمة محظورة')).toBeInTheDocument();
+  });
+
+  it('shows a dash for a record that no rule matched', async () => {
+    await open(RECORD_ID.reportedMessage);
+    expect(screen.queryByTestId('rule-hits')).toBeNull();
+    const label = screen.getByText('Matched rules');
+    expect(label.closest('tr')?.textContent).toContain('—');
+  });
+});

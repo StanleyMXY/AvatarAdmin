@@ -21,6 +21,7 @@ import { DASH } from '../../utils/ratio';
 import { todayUtc } from '../../utils/utcDay';
 import { formatDuration, secondsSince } from './duration';
 import { contentTypeEnum, labelOf, sourceEnum, statusEnum, statusOptions } from './options';
+import { categoryTexts } from './ruleHits';
 
 type Filters = {
   status?: ModerationStatus;
@@ -127,7 +128,10 @@ export default function ModerationQueuePage() {
       dataIndex: 'categories',
       search: false,
       render: (_, row) => (
-        <EllipsisPopoverText text={row.categories?.join(', ') || null} width={200} />
+        <EllipsisPopoverText
+          text={categoryTexts(row, t('moderation.ruleHit.unknown')).join(', ') || null}
+          width={200}
+        />
       ),
     },
     {

@@ -23,6 +23,15 @@ export type ModerationStatus = (typeof MODERATION_STATUSES)[number];
 export const AUTO_LEVELS = ['PASS', 'REVIEW', 'BLOCK'] as const;
 export type AutoLevel = (typeof AUTO_LEVELS)[number];
 
+/** A word rule that matched, kept as it was at the moment of the match: later edits or a delete of the rule do not change it. */
+export type RuleHit = {
+  ruleId: string;
+  pattern: string;
+  matchMode: 'SUBSTRING' | 'WORD' | 'REGEX';
+  /** The note of the rule; null when it has none. */
+  note: string | null;
+};
+
 /** One row of the review queue and the record of the detail page. The original content is never in it. */
 export type ModerationRecord = {
   id: string;
@@ -34,6 +43,8 @@ export type ModerationRecord = {
   autoLevel: AutoLevel | null;
   /** The ids of the rules that matched (`RULE:<id>`) and the service's categories; never the matched text. */
   categories: string[] | null;
+  /** The rules that matched, with what they match and their note; empty when none did. */
+  ruleHits: RuleHit[];
   score: number | null;
   providerRef: string | null;
   status: ModerationStatus;

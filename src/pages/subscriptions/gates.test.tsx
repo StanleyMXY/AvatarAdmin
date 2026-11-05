@@ -12,6 +12,8 @@ import { signInAs, useMockBackend } from '../../../tests/mockBackend';
 import { renderPage } from '../../../tests/renderPage';
 import { resetUmiStub, setTestAccess } from '../../../tests/stubs/umi-max';
 import access from '../../access';
+import enUS from '../../locales/en-US';
+import zhCN from '../../locales/zh-CN';
 import { CONFIG_SCHEMA } from '../config/configSchema';
 import GatesPage from './gates';
 
@@ -119,15 +121,37 @@ describe('the default value column', { timeout: 30000 }, () => {
     expect(within(await rowOf('memory.tier')).getByText('default')).toBeInTheDocument();
   });
 
-  it('shows type, scope and the description of the server', async () => {
+  it('shows type, scope, and a label and an explanation of the page for each of the 15 keys, in the language of the page', async () => {
     useMockBackend(subscriptionsMock, configMock);
     renderPage(<GatesPage />);
     const row = await rowOf('call.daily_minutes');
     expect(within(row).getByText('Limit')).toBeInTheDocument();
     expect(within(row).getByText('Per period')).toBeInTheDocument();
-    expect(within(row).getByText('Call minutes per local day')).toBeInTheDocument();
+    expect(within(row).getByText('Call minutes a day')).toBeInTheDocument();
+    expect(within(row).getByText('Call minutes allowed in a local day')).toBeInTheDocument();
+    // none of the backend's English lines is on the page for a key the page knows
+    expect(screen.queryByText('Call minutes per local day')).not.toBeInTheDocument();
     expect(within(await rowOf('ads.removed')).getByText('Switch')).toBeInTheDocument();
     expect(within(await rowOf('assets.avatar_max')).getByText('Permanent')).toBeInTheDocument();
+  });
+
+  it('has a label and an explanation in both languages for every key the backend declares', async () => {
+    const keys = subscriptionsState().gates.map((gate: { key: string }) => gate.key);
+    expect(keys).toHaveLength(15);
+    for (const key of keys) {
+      for (const pack of [enUS, zhCN] as Record<string, string>[]) {
+        expect(pack[`subscriptions.gates.label.${key}`], key).toBeTruthy();
+        expect(pack[`subscriptions.gates.explain.${key}`], key).toBeTruthy();
+      }
+    }
+  });
+
+  it('shows the Chinese label and explanation under the Chinese page', async () => {
+    useMockBackend(subscriptionsMock, configMock);
+    renderPage(<GatesPage />, 'zh-CN');
+    const row = await rowOf('call.daily_minutes');
+    expect(within(row).getByText('每日通话分钟数')).toBeInTheDocument();
+    expect(within(row).getByText('按本地日计算，一天最多可以通话多少分钟')).toBeInTheDocument();
   });
 
   it('explains call.lifetime_minutes: only accounts created afterwards, existing grants unchanged, first session records it', async () => {

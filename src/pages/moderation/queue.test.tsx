@@ -328,3 +328,37 @@ describe('the review queue', { timeout: 30000 }, () => {
     expect(await screen.findByText(/You do not have permission to do this/)).toBeInTheDocument();
   });
 });
+
+describe('the review queue: the rules a record matched', { timeout: 30000 }, () => {
+  const RULE = '00000000-0000-4000-8000-000000000004';
+  const first = () => {
+    const found = moderationState.records.find((r) => r.id === RECORD_ID.oldestImage);
+    if (!found) throw new Error('the oldest record is not in the mock');
+    return found;
+  };
+
+  it('shows what the rule matches and its note in the categories column, never the id of the rule', async () => {
+    installMockBackend(moderationMock);
+    first().categories = ['sexual_suggestive', `RULE:${RULE}`];
+    first().ruleHits = [
+      { ruleId: RULE, pattern: 'kata terlarang', matchMode: 'WORD', note: 'Bahasa Indonesia' },
+    ];
+    renderPage(<QueuePage />);
+    const row = await rowOf(RECORD_ID.oldestImage);
+    expect(
+      within(row).getByText('sexual_suggestive, kata terlarang (Bahasa Indonesia)'),
+    ).toBeInTheDocument();
+    expect(row.textContent).not.toContain('RULE:');
+    expect(row.textContent).not.toContain(RULE);
+  });
+
+  it('says "a word rule" for a rule category that has no hit, so that an old record shows no id either', async () => {
+    installMockBackend(moderationMock);
+    first().categories = [`RULE:${RULE}`];
+    first().ruleHits = [];
+    renderPage(<QueuePage />);
+    const row = await rowOf(RECORD_ID.oldestImage);
+    expect(within(row).getByText('A word rule (what it matched was not kept)')).toBeInTheDocument();
+    expect(row.textContent).not.toContain('RULE:');
+  });
+});

@@ -281,6 +281,22 @@ describe('validateValue', () => {
     expect(validateValue(s, [1.5])).toBe('NOT_AN_INTEGER');
   });
 
+  it('wants the milestone days from the smallest to the largest, each once, with no upper bound on a day', () => {
+    const s = spec('milestone.days');
+    expect(validateValue(s, [30, 7])).toBe('OUT_OF_RANGE');
+    expect(validateValue(s, [7, 30, 7])).toBe('OUT_OF_RANGE');
+    expect(validateValue(s, [7, 30, 100000])).toBeNull();
+  });
+
+  it('holds the text interaction gap to 1 to 1440 minutes', () => {
+    const s = spec('companionship.text_burst_minutes');
+    expect(validateValue(s, 1)).toBeNull();
+    expect(validateValue(s, 1440)).toBeNull();
+    expect(validateValue(s, 0)).toBe('OUT_OF_RANGE');
+    expect(validateValue(s, 1441)).toBe('OUT_OF_RANGE');
+    expect(validateValue(s, 100000)).toBe('OUT_OF_RANGE');
+  });
+
   it('checks the supported locales: language tags, different, with en', () => {
     const s = spec('app.supported_locales');
     expect(validateValue(s, ['en'])).toBeNull();

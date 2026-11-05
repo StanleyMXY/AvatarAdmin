@@ -11,6 +11,12 @@ import {
 } from '../../services/credits';
 import { countCodePoints } from '../../utils/codePoints';
 import { detailReasons, setFieldReasons } from '../../utils/fieldReasons';
+import {
+  productIdBroken,
+  productIdMax,
+  productIdRuleKey,
+  withProductIdRule,
+} from '../../utils/storeProductId';
 import { trimSpec } from '../../utils/trimSpec';
 import { assertPackUnchanged, PackChangedError } from './freshPack';
 
@@ -41,6 +47,9 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
   const [form] = Form.useForm<Values>();
   const { text: failure, fail, clear } = useFailure();
   const editing = pack !== null;
+  const store = Form.useWatch('store', form);
+  const ruleKey = productIdRuleKey(store);
+  const ruleText = ruleKey ? t(ruleKey, { max: productIdMax(store, 'credit') }) : undefined;
 
   const { run, pending } = useSingleFlight(async (values: Values) => {
     clear();
@@ -78,8 +87,13 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
       setFieldReasons(
         form,
         intl,
-        detailReasons(intl, error, (ref) =>
-          (FIELDS as readonly string[]).includes(ref) ? ref : undefined,
+        withProductIdRule(
+          detailReasons(intl, error, (ref) =>
+            (FIELDS as readonly string[]).includes(ref) ? ref : undefined,
+          ),
+          error,
+          values.store,
+          'credit',
         ),
       );
       fail(error);
@@ -144,12 +158,16 @@ export function ProductModal({ open, pack, onClose, onSaved }: Props) {
         <Form.Item
           name="productId"
           label={t('credits.products.productId')}
+          extra={ruleText}
           rules={[
             {
               validator: async (_, value: string | undefined) => {
-                // The length limit is the backend's: it answers a too long id on this field.
-                if (countCodePoints(trimSpec(value ?? '')) === 0) {
+                const id = trimSpec(value ?? '');
+                if (countCodePoints(id) === 0)
                   throw new Error(t('credits.products.productIdRequired'));
+                // The rule of the chosen store is the backend's; an existing pack is not checked again.
+                if (!editing && ruleKey && productIdBroken(store, id, 'credit')) {
+                  throw new Error(ruleText);
                 }
               },
             },

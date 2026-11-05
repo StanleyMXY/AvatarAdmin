@@ -303,7 +303,17 @@ function DefDialog({
           name="priority"
           label={t('subscriptions.entitlements.priority')}
           extra={t('subscriptions.entitlements.priorityHint')}
-          rules={[{ validator: required }]}
+          rules={[
+            { validator: required },
+            {
+              validator: async (_, value: number | null | undefined) => {
+                // the backend refuses a priority below 0 (-1 means "no limit" elsewhere, not here)
+                if (typeof value === 'number' && value < 0) {
+                  throw new Error(t('subscriptions.entitlements.priorityNegative'));
+                }
+              },
+            },
+          ]}
         >
           <InputNumber precision={0} style={{ width: 160 }} />
         </Form.Item>

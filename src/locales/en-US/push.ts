@@ -18,6 +18,8 @@ const messages: Record<string, string> = {
   'push.audience.ACCOUNT_IDS': 'Account ID list',
   'push.audience.accountIds': 'Account IDs',
   'push.audience.accountIdsHelp': 'One ID on each line, or separated by commas or spaces.',
+  'push.audience.accountsNotFound': 'These accounts do not exist: {list}.',
+  'push.audience.accountsNotFoundMore': 'These accounts do not exist: {list} and {more} more.',
   'push.audience.accountIdsRequired': 'Enter at least one account ID',
   'push.audience.platforms': 'Platforms',
   'push.audience.locales': 'Languages',

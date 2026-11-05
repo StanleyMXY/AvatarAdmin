@@ -174,6 +174,7 @@ export default function GatesPage() {
   const intl = useIntl();
   const t = (id: string, values?: Record<string, string | number>) =>
     intl.formatMessage({ id }, values);
+  const has = (id: string) => Boolean(intl.messages[id]);
   const [gates, setGates] = useState<FeatureGate[] | null>(null);
   const { text: failure, fail, clear } = useFailure();
   const [editing, setEditing] = useState<FeatureGate | null>(null);
@@ -225,7 +226,14 @@ export default function GatesPage() {
         {
           title: t('subscriptions.gates.key'),
           dataIndex: 'key',
-          render: (key: string) => <Typography.Text code>{key}</Typography.Text>,
+          render: (key: string) => (
+            <Flex vertical gap={2}>
+              {has(`subscriptions.gates.label.${key}`) ? (
+                <Typography.Text strong>{t(`subscriptions.gates.label.${key}`)}</Typography.Text>
+              ) : null}
+              <Typography.Text code>{key}</Typography.Text>
+            </Flex>
+          ),
         },
         {
           title: t('subscriptions.gates.kind'),
@@ -264,7 +272,16 @@ export default function GatesPage() {
           title: t('subscriptions.gates.description'),
           render: (_, gate) => (
             <Flex vertical gap={4}>
-              <EllipsisPopoverText text={gate.description} lines={2} width={320} />
+              {/* The explanation in the language of the page; the backend's English line only for a key without one. */}
+              <EllipsisPopoverText
+                text={
+                  has(`subscriptions.gates.explain.${gate.key}`)
+                    ? t(`subscriptions.gates.explain.${gate.key}`)
+                    : gate.description
+                }
+                lines={2}
+                width={320}
+              />
               {gate.key === LIFETIME_KEY ? (
                 <Typography.Text
                   type="secondary"

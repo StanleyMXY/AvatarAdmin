@@ -13,5 +13,6 @@
 | `2026-11-02-backend-task-java-backend-e07469d1.md` | AvatarApp main 提交 e07469d1 的 `docs/backend-task-java-backend.md` | 新版接口文档。答案文档里的“接口文档第 N 行”指这一份。`docs/shared-snapshots/` 里的旧快照没有更新（只读，由负责人决定），行号对不上时以这一份为准 |
 | `2026-11-03-avatar-backend-admin-change-requests-implemented.md` | 负责人从后端会话取得（2026-11-03 放入） | 后端已实现的管理端改动请求：33 条建议做的全部已在后端实现（对应 28 个请求编号），8 条不做；第二节列会破坏现有前端代码的改动 |
 | `2026-11-03-backend-task-java-backend-updated.md` | 后端更新后的接口文档（负责人取得） | 上一份文件配套的接口文档；措辞以它为准。`docs/shared-snapshots/` 的旧快照不更新（只读） |
+| `2026-11-05-avatar-backend-answers-to-walkthrough-findings.md` | AvatarBackend 的 `.superpowers/sdd/2026-10-21-avatar-backend/` 同名文件（后端 main f3007e1b 之后；负责人 2026-11-05 取得） | 后端对 `docs/backend-findings/2026-11-04-walkthrough-findings-for-backend.md` 里 5 条走查发现的答复：第二节 8 项会改变页面行为的改动，第四节页面要做什么 |
 
 **规则：** 这些文件是快照，不在这里改。后端以后若有新的回复，是新的文件；管理端前端有新问题，写新的文件放到 `docs/contract-requests/`，不改这里的任何一份。契约和管理端前端设计的快照在 `docs/shared-snapshots/`，同样只读。

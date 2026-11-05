@@ -22,6 +22,13 @@ export type MockRecord = {
   source: 'AUTO' | 'REPORT' | 'COMPLAINT';
   autoLevel: 'PASS' | 'REVIEW' | 'BLOCK' | null;
   categories: string[] | null;
+  /** The rules that matched, as they were when they matched (a snapshot). */
+  ruleHits: {
+    ruleId: string;
+    pattern: string;
+    matchMode: 'SUBSTRING' | 'WORD' | 'REGEX';
+    note: string | null;
+  }[];
   score: number | null;
   providerRef: string | null;
   status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'BLOCKED';
@@ -123,6 +130,7 @@ function seed(now: Date): ModerationState {
     contentRef: `ref-${id}`,
     autoLevel: over.source === 'AUTO' ? 'REVIEW' : null,
     categories: null,
+    ruleHits: [],
     score: null,
     providerRef: null,
     reporterReason: null,
@@ -181,6 +189,14 @@ function seed(now: Date): ModerationState {
       source: 'AUTO',
       status: 'PENDING_REVIEW',
       categories: ['RULE:00000000-0000-4000-8000-000000000004'],
+      ruleHits: [
+        {
+          ruleId: '00000000-0000-4000-8000-000000000004',
+          pattern: 'kata terlarang',
+          matchMode: 'WORD',
+          note: 'Bahasa Indonesia',
+        },
+      ],
       createdAt: at(9 * 60),
     }),
     record(RECORD.companionName, {
@@ -202,6 +218,14 @@ function seed(now: Date): ModerationState {
       status: 'BLOCKED',
       autoLevel: 'BLOCK',
       categories: ['RULE:00000000-0000-4000-8000-000000000002'],
+      ruleHits: [
+        {
+          ruleId: '00000000-0000-4000-8000-000000000002',
+          pattern: 'كلمة محظورة',
+          matchMode: 'SUBSTRING',
+          note: 'نص عربي من اليمين إلى اليسار',
+        },
+      ],
       score: null,
       createdAt: at(4 * 60),
     }),

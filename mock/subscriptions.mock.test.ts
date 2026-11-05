@@ -483,6 +483,22 @@ describe('entitlement definitions and their feature values', () => {
     expect(res.status).toBe(404);
   });
 
+  it('refuses a priority below 0 and a fraction, on create and on edit', async () => {
+    const refs = async (priority: number) =>
+      (
+        (
+          await send('POST /api/admin/entitlement-defs', root(), {
+            key: 'neg',
+            name: 'Neg',
+            priority,
+          })
+        ).body.data?.details ?? []
+      ).map((d: { ref: string; reason: string }) => `${d.ref}:${d.reason}`);
+    expect(await refs(-1)).toEqual(['priority:OUT_OF_RANGE']);
+    expect(await refs(1.5)).toEqual(['priority:NOT_AN_INTEGER']);
+    expect(await refs(0)).toEqual([]);
+  });
+
   it('creates a definition and answers { key }; edits one and answers data null; a key or a priority that is taken is 409 DUPLICATE_RESOURCE with the field', async () => {
     const created = await send('POST /api/admin/entitlement-defs', root(), {
       key: 'gold',
@@ -550,7 +566,7 @@ describe('entitlement definitions and their feature values', () => {
     expect(keyOnly.body.data.field).toBe('key');
   });
 
-  it('checks the key ([A-Za-z0-9][A-Za-z0-9._-]{0,63}), the name (1 to 100 code points after the ends are trimmed) and the priority (a whole number, any value)', async () => {
+  it('checks the key ([A-Za-z0-9][A-Za-z0-9._-]{0,63}), the name (1 to 100 code points after the ends are trimmed) and the priority (a whole number, 0 or more)', async () => {
     const post = (over: Record<string, unknown>) =>
       send('POST /api/admin/entitlement-defs', root(), {
         key: 'valid-key',
@@ -575,9 +591,9 @@ describe('entitlement definitions and their feature values', () => {
     expect(await details({ priority: 1.5 })).toEqual([
       { ref: 'priority', reason: 'NOT_AN_INTEGER' },
     ]);
-    // the range of the priority is not limited: zero and a negative number are fine
+    // zero is the smallest priority; below it the backend answers OUT_OF_RANGE (priority must be at least 0)
     expect((await post({ key: 'zero', priority: 0 })).status).toBe(200);
-    expect((await post({ key: 'minus', priority: -5 })).status).toBe(200);
+    expect(await details({ priority: -5 })).toEqual([{ ref: 'priority', reason: 'OUT_OF_RANGE' }]);
   });
 
   it('does not check the key of an edit: it is the path, and the body only has the name and the priority', async () => {
@@ -794,12 +810,21 @@ describe('subscription products', () => {
     expect(noEnabled.body.data.details).toEqual([{ ref: 'enabled', reason: 'EMPTY_NOT_ALLOWED' }]);
   });
 
-  it('refuses a store outside [A-Z][A-Z0-9_]{1,31}, a product id over 255 code points, and a surface outside ANDROID or IOS', async () => {
+  it('refuses a store other than APPLE and GOOGLE, a product id that breaks the rule of its store, and a surface outside ANDROID or IOS', async () => {
     const base = { entitlementKey: 'basic', enabled: true, sortOrder: 1, surfaces: [] };
     const store = await put([{ ...base, store: 'apple', productId: 'a' }]);
     expect(store.body.data.details[0].ref).toBe('store');
-    const long = await put([{ ...base, store: 'APPLE', productId: 'x'.repeat(256) }]);
-    expect(long.body.data.details[0]).toEqual({ ref: 'productId', reason: 'TOO_LONG' });
+    const steam = await put([{ ...base, store: 'STEAM', productId: 'a' }]);
+    expect(steam.body.data.details[0]).toEqual({ ref: 'store', reason: 'OUT_OF_RANGE' });
+    const long = await put([{ ...base, store: 'APPLE', productId: 'x'.repeat(101) }]);
+    expect(long.body.data.details[0]).toEqual({ ref: 'productId', reason: 'OUT_OF_RANGE' });
+    // Google: 40 characters for a subscription product, lower case only, the first a letter or digit
+    const googleLong = await put([{ ...base, store: 'GOOGLE', productId: 'x'.repeat(41) }]);
+    expect(googleLong.body.data.details[0]).toEqual({ ref: 'productId', reason: 'OUT_OF_RANGE' });
+    const googleCase = await put([{ ...base, store: 'GOOGLE', productId: 'Premium' }]);
+    expect(googleCase.body.data.details[0]).toEqual({ ref: 'productId', reason: 'OUT_OF_RANGE' });
+    const space = await put([{ ...base, store: 'APPLE', productId: 'has space' }]);
+    expect(space.body.data.details[0]).toEqual({ ref: 'productId', reason: 'OUT_OF_RANGE' });
     const surface = await put([
       { ...base, store: 'APPLE', productId: 'a', surfaces: [{ platform: 'WEB', channel: null }] },
     ]);

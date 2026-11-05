@@ -56,12 +56,12 @@ const VALIDATORS: Record<string, (value: unknown) => string | null> = {
     if (!isPositiveInt(o.BONDING) || !isPositiveInt(o.CLOSE)) return 'OUT_OF_RANGE';
     return o.BONDING < o.CLOSE ? null : 'OUT_OF_RANGE';
   },
-  // 1 to 20 different positive whole numbers of days.
+  // 1 to 20 positive whole numbers of days, from the smallest to the largest, each once (no upper bound on a day).
   'milestone.days': (v) => {
     if (!Array.isArray(v) || v.length < 1 || v.length > 20) return 'OUT_OF_RANGE';
     if (!v.every((x) => typeof x === 'number' && Number.isInteger(x))) return 'NOT_AN_INTEGER';
     if (!v.every(isPositiveInt)) return 'OUT_OF_RANGE';
-    return new Set(v).size === v.length ? null : 'OUT_OF_RANGE';
+    return v.every((day, index) => index === 0 || day > v[index - 1]) ? null : 'OUT_OF_RANGE';
   },
   // Language tags, at most 35 characters each, all different, and `en` among them.
   'app.supported_locales': (v) => {
@@ -901,6 +901,7 @@ const ENTRIES: Omit<ConfigKeySpec, 'validate'>[] = [
     editPermission: 'COMPANIONSHIP:CONFIG',
     group: 'companionship',
     min: 1,
+    max: 1440,
   },
   {
     key: 'companionship.stage_thresholds',

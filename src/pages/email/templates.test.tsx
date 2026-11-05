@@ -424,6 +424,22 @@ describe('the check of the required placeholders', () => {
     expect(writesOf(calls)).toHaveLength(0);
   });
 
+  it('stops a subject with a control character inside, and lets the ends be cut as before', async () => {
+    const { calls, user } = await load();
+    const form = await openEdit(user, 'REGISTER_CODE');
+    const words = 'The subject cannot contain a line break, a tab or another control character.';
+    setText(form.getByRole('textbox', { name: 'Body' }), 'Use {code}');
+    // a one-line box drops a line break by itself, so the tab stands for the control characters here
+    setText(form.getByRole('textbox', { name: 'Subject' }), 'Your\tcode');
+    expect(await form.findByText(words)).toBeInTheDocument();
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await settled();
+    expect(writesOf(calls)).toHaveLength(0);
+    setText(form.getByRole('textbox', { name: 'Subject' }), '  Your code \n');
+    await user.click(form.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(writesOf(calls)).toHaveLength(1));
+  });
+
   it('does not take braces that are not a placeholder for one', async () => {
     const { calls, user } = await load();
     const form = await openEdit(user, 'REGISTER_CODE');

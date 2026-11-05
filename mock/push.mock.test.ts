@@ -3,6 +3,7 @@ import { resetConfigStore, saved } from './_core/configStore';
 import { nextRunAt, pushState, resetPushStore } from './_core/pushData';
 import { issueToken, resetStore } from './_core/store';
 import { adminOf, bearer, call } from './_core/testing';
+import { USER } from './_core/usersData';
 import push from './push.mock';
 
 beforeEach(() => {
@@ -29,6 +30,8 @@ const TASK_CREATE = 'POST /api/admin/push/tasks';
 const TASK_CANCEL = 'POST /api/admin/push/tasks/:id/cancel';
 const SCHEDULES = 'GET /api/admin/push/schedules';
 const SCHEDULE_CREATE = 'POST /api/admin/push/schedules';
+const GHOST_1 = '00000000-0000-4000-8000-00000000dead';
+const GHOST_2 = '00000000-0000-4000-8000-00000000beef';
 const SCHEDULE_UPDATE = 'PUT /api/admin/push/schedules/:id';
 const SCHEDULE_DELETE = 'DELETE /api/admin/push/schedules/:id';
 const RECORDS = 'GET /api/admin/push/records';
@@ -669,20 +672,56 @@ describe('tasks', () => {
   it('refuses platforms or languages together with an account list, and needs the list', async () => {
     const withPlatforms = await send(
       TASK_CREATE,
-      task({ audience: 'ACCOUNT_IDS', accountIds: ['a'], platforms: ['IOS'] }),
+      task({ audience: 'ACCOUNT_IDS', accountIds: [USER.rich], platforms: ['IOS'] }),
     );
     expect(withPlatforms.status).toBe(400);
     expect(withPlatforms.body.data.details).toEqual([{ ref: 'platforms', reason: 'OUT_OF_RANGE' }]);
     const withLocales = await send(
       TASK_CREATE,
-      task({ audience: 'ACCOUNT_IDS', accountIds: ['a'], locales: ['en'] }),
+      task({ audience: 'ACCOUNT_IDS', accountIds: [USER.rich], locales: ['en'] }),
     );
     expect(withLocales.body.data.details).toEqual([{ ref: 'locales', reason: 'OUT_OF_RANGE' }]);
     const noList = await send(TASK_CREATE, task({ audience: 'ACCOUNT_IDS', accountIds: [] }));
     expect(noList.body.data.details).toEqual([{ ref: 'accountIds', reason: 'EMPTY_NOT_ALLOWED' }]);
-    const ok = await send(TASK_CREATE, task({ audience: 'ACCOUNT_IDS', accountIds: ['a', 'b'] }));
+    const ok = await send(
+      TASK_CREATE,
+      task({ audience: 'ACCOUNT_IDS', accountIds: [USER.rich, USER.negative] }),
+    );
     expect(ok.status).toBe(200);
-    expect(ok.body.data.accountIds).toEqual(['a', 'b']);
+    expect(ok.body.data.accountIds).toEqual([USER.rich, USER.negative]);
+  });
+
+  it('refuses an account list with accounts that are not there, one ACCOUNT_NOT_FOUND detail for each, and takes a banned one', async () => {
+    const answer = await send(
+      TASK_CREATE,
+      task({
+        audience: 'ACCOUNT_IDS',
+        accountIds: [GHOST_1, USER.rich, GHOST_2, USER.pendingDeletion],
+      }),
+    );
+    expect(answer.status).toBe(400);
+    expect(answer.body.data.details).toEqual([
+      { ref: GHOST_1, reason: 'ACCOUNT_NOT_FOUND' },
+      { ref: GHOST_2, reason: 'ACCOUNT_NOT_FOUND' },
+    ]);
+    // a list entry that is not an id at all is refused as a whole, and none is looked up
+    const shape = await send(
+      TASK_CREATE,
+      task({ audience: 'ACCOUNT_IDS', accountIds: ['ghost-1', GHOST_1] }),
+    );
+    expect(shape.body.data.details).toEqual([{ ref: 'accountIds', reason: 'OUT_OF_RANGE' }]);
+    // the same for a periodic push
+    const periodic = await send(
+      SCHEDULE_CREATE,
+      schedule({ audience: 'ACCOUNT_IDS', accountIds: [GHOST_1] }),
+    );
+    expect(periodic.body.data.details).toEqual([{ ref: GHOST_1, reason: 'ACCOUNT_NOT_FOUND' }]);
+    // a banned account is accepted: the send skips it
+    const banned = await send(
+      TASK_CREATE,
+      task({ audience: 'ACCOUNT_IDS', accountIds: [USER.pendingDeletion] }),
+    );
+    expect(banned.status).toBe(200);
   });
 
   it('refuses an unknown audience, platform and an account list on another audience', async () => {

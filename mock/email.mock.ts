@@ -4,6 +4,7 @@
 // message names it.
 
 import { countCodePoints } from '../src/utils/codePoints';
+import { hasControlCharacter } from '../src/utils/controlCharacters';
 import { trimSpec } from '../src/utils/trimSpec';
 import { guard } from './_core/auth';
 import { emailState } from './_core/emailData';
@@ -49,6 +50,12 @@ export default {
     if (length < 1 || length > SUBJECT_MAX) {
       throw invalidRequest('The subject must be 1 to 200 characters', [
         { ref: 'subject', reason: length < 1 ? 'EMPTY_NOT_ALLOWED' : 'TOO_LONG' },
+      ]);
+    }
+    // A control character inside the subject (the ends are cut first) is INVALID_CHARACTER.
+    if (hasControlCharacter(subject)) {
+      throw invalidRequest('subject must not contain control characters', [
+        { ref: 'subject', reason: 'INVALID_CHARACTER' },
       ]);
     }
     // The real backend checks, in this order: the subject's length, its tokens, the body being empty,

@@ -46,6 +46,8 @@ const messages: Record<string, string> = {
   'email.templates.placeholders': 'Placeholders you can use:',
   'email.templates.required': 'Must be in the body:',
   'email.templates.requiredNone': 'none',
+  'email.templates.subjectControl':
+    'The subject cannot contain a line break, a tab or another control character.',
   'email.templates.unknown':
     '{list} is not a placeholder of this template. Remove it, or use one of the placeholders available for this template.',
   'email.templates.missing':

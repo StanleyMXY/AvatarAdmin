@@ -35,6 +35,12 @@ import {
 import { failureLine } from '../../session/failureLine';
 import { countCodePoints } from '../../utils/codePoints';
 import { detailReasons, messageReason, setFieldReasons } from '../../utils/fieldReasons';
+import {
+  productIdBroken,
+  productIdMax,
+  productIdRuleKey,
+  withProductIdRule,
+} from '../../utils/storeProductId';
 import { trimSpec } from '../../utils/trimSpec';
 import { FailureAlert } from './FailureAlert';
 import { valuesOf } from './featureRules';
@@ -80,6 +86,11 @@ function ProductDialog({
   const [failure, setFailure] = useState<unknown>(null);
   const chosen = Form.useWatch('entitlementKey', form);
   const def = loaded.defs.find((d) => d.key === chosen);
+  const storeChosen = Form.useWatch('store', form);
+  const ruleKey = productIdRuleKey(storeChosen);
+  const ruleText = ruleKey
+    ? t(ruleKey, { max: productIdMax(storeChosen, 'subscription') })
+    : undefined;
 
   const required = async (_: unknown, value: unknown) => {
     const empty =
@@ -111,10 +122,15 @@ function ProductDialog({
         surfaces: product?.surfaces ?? [],
       });
     } catch (error) {
-      const known = detailReasons(intl, error, (ref) =>
-        ['store', 'productId', 'entitlementKey', 'enabled', 'sortOrder'].includes(ref)
-          ? ref
-          : undefined,
+      const known = withProductIdRule(
+        detailReasons(intl, error, (ref) =>
+          ['store', 'productId', 'entitlementKey', 'enabled', 'sortOrder'].includes(ref)
+            ? ref
+            : undefined,
+        ),
+        error,
+        store,
+        'subscription',
       );
       if (known.length > 0) setFieldReasons(form, intl, known);
       else setFailure(error);
@@ -169,8 +185,29 @@ function ProductDialog({
         <Form.Item
           name="productId"
           label={t('subscriptions.products.productId')}
-          extra={t('subscriptions.products.productIdHint')}
-          rules={[{ validator: required }]}
+          extra={
+            <>
+              {t('subscriptions.products.productIdHint')}
+              {ruleText ? ` ${ruleText}` : ''}
+            </>
+          }
+          rules={[
+            { validator: required },
+            {
+              validator: async (_, value: string | undefined) => {
+                const id = trimSpec(value ?? '');
+                // The rule of the chosen store is the backend's; an existing mapping is not checked again.
+                if (
+                  product === null &&
+                  ruleKey &&
+                  id !== '' &&
+                  productIdBroken(storeChosen, id, 'subscription')
+                ) {
+                  throw new Error(ruleText);
+                }
+              },
+            },
+          ]}
         >
           <Input disabled={product !== null} dir="auto" />
         </Form.Item>

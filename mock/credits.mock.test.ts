@@ -573,7 +573,7 @@ describe('credit packs (backend reply 30)', () => {
     expect((await send(PRODUCT_CREATE, 'finance', full({ store: 'APPLE' }))).status).toBe(200);
   });
 
-  it('checks the fields: store [A-Z][A-Z0-9_]{1,31}, productId 1 to 255 code points, credits 1 to 1000000000, surfaces required', async () => {
+  it('checks the fields: store APPLE or GOOGLE, the product id by the rule of its store, credits 1 to 1000000000, surfaces required', async () => {
     const refs = async (over: Record<string, unknown>) =>
       (await send(PRODUCT_CREATE, 'finance', full(over))).body.data.details.map(
         (d: { ref: string }) => d.ref,
@@ -582,6 +582,26 @@ describe('credit packs (backend reply 30)', () => {
     expect(await refs({ store: 'A' })).toEqual(['store']);
     expect(await refs({ productId: '  ' })).toEqual(['productId']);
     expect(await refs({ productId: 'p'.repeat(256) })).toEqual(['productId']);
+    // every problem of an id is OUT_OF_RANGE by the rule of its store (no TOO_LONG any more)
+    const reasonOf = async (over: Record<string, unknown>) =>
+      (
+        ((await send(PRODUCT_CREATE, 'finance', full(over))).body.data?.details ?? []) as {
+          ref: string;
+          reason: string;
+        }[]
+      ).map((d) => `${d.ref}:${d.reason}`);
+    expect(await reasonOf({ productId: 'p'.repeat(101) })).toEqual(['productId:OUT_OF_RANGE']);
+    expect(await reasonOf({ productId: 'has space' })).toEqual(['productId:OUT_OF_RANGE']);
+    expect(await reasonOf({ store: 'GOOGLE', productId: 'Credits100' })).toEqual([
+      'productId:OUT_OF_RANGE',
+    ]);
+    expect(await reasonOf({ store: 'GOOGLE', productId: '_credits' })).toEqual([
+      'productId:OUT_OF_RANGE',
+    ]);
+    expect(await reasonOf({ store: 'GOOGLE', productId: 'credits.100_a' })).toEqual([]);
+    expect(await reasonOf({ store: 'STEAM' })).toEqual(['store:OUT_OF_RANGE']);
+    expect(await reasonOf({ store: 'google' })).toEqual(['store:OUT_OF_RANGE']);
+    expect(await reasonOf({ store: '' })).toEqual(['store:OUT_OF_RANGE']);
     expect(await refs({ credits: 0 })).toEqual(['credits']);
     expect(await refs({ credits: 1_000_000_001 })).toEqual(['credits']);
     expect(await refs({ credits: 1.5 })).toEqual(['credits']);
@@ -592,8 +612,8 @@ describe('credit packs (backend reply 30)', () => {
     delete (none as Partial<typeof none>).surfaces;
     const missing = await send(PRODUCT_CREATE, 'finance', none);
     expect(missing.body.data.details).toEqual([{ ref: 'surfaces', reason: 'EMPTY_NOT_ALLOWED' }]);
-    // a store other than the two of today is fine
-    expect((await send(PRODUCT_CREATE, 'finance', full({ store: 'HUAWEI_2' }))).status).toBe(200);
+    // a store other than the two is refused
+    expect((await send(PRODUCT_CREATE, 'finance', full({ store: 'HUAWEI_2' }))).status).toBe(400);
   });
 
   it('updates by (store, productId) from the body and answers data null; 404 for a pack that does not exist', async () => {

@@ -18,6 +18,8 @@ const messages: Record<string, string> = {
   'push.audience.ACCOUNT_IDS': '账号 ID 列表',
   'push.audience.accountIds': '账号 ID',
   'push.audience.accountIdsHelp': '每行一个 ID，也可以用逗号或空格隔开。',
+  'push.audience.accountsNotFound': '这些账号不存在：{list}。',
+  'push.audience.accountsNotFoundMore': '这些账号不存在：{list}，还有 {more} 个。',
   'push.audience.accountIdsRequired': '至少填一个账号 ID',
   'push.audience.platforms': '平台',
   'push.audience.locales': '语言',

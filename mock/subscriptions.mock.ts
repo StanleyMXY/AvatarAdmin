@@ -1,6 +1,8 @@
 // The subscription endpoints of the mock backend (contract 15.3 to 15.6, 17.4 "订阅管理", backend
 // reply points 2 to 4). Only the default export is read by the Umi mock loader; the sample data and
 // the state are in _core/subscriptionsData.ts.
+import { productIdBroken } from '../src/utils/storeProductId';
+import { trimSpec } from '../src/utils/trimSpec';
 import { guard } from './_core/auth';
 import { daysAgoIso } from './_core/fixtures';
 import { bodyOf, invalidRequest, MockHttpError, type MockReq, ok } from './_core/http';
@@ -47,6 +49,7 @@ function defProblems(body: Record<string, unknown>): { ref: string; reason: stri
     details.push({ ref: 'priority', reason: 'EMPTY_NOT_ALLOWED' });
   else if (typeof priority !== 'number' || !Number.isInteger(priority))
     details.push({ ref: 'priority', reason: 'NOT_AN_INTEGER' });
+  else if (priority < 0) details.push({ ref: 'priority', reason: 'OUT_OF_RANGE' });
   return details;
 }
 
@@ -515,11 +518,11 @@ export default {
       const row = raw && typeof raw === 'object' ? raw : {};
       const add = (ref: string, reason: string) => details.push({ ref, reason });
       const store = typeof row.store === 'string' ? row.store : '';
-      const productId = typeof row.productId === 'string' ? row.productId.trim() : '';
+      const productId = typeof row.productId === 'string' ? trimSpec(row.productId) : '';
       if (store === '') add('store', 'EMPTY_NOT_ALLOWED');
-      else if (!/^[A-Z][A-Z0-9_]{1,31}$/.test(store)) add('store', 'OUT_OF_RANGE');
+      else if (store !== 'APPLE' && store !== 'GOOGLE') add('store', 'OUT_OF_RANGE');
       if (productId === '') add('productId', 'EMPTY_NOT_ALLOWED');
-      else if ([...productId].length > 255) add('productId', 'TOO_LONG');
+      else if (productIdBroken(store, productId, 'subscription')) add('productId', 'OUT_OF_RANGE');
       if (typeof row.entitlementKey !== 'string' || row.entitlementKey.trim() === '')
         add('entitlementKey', 'EMPTY_NOT_ALLOWED');
       if (row.enabled === undefined || row.enabled === null) add('enabled', 'EMPTY_NOT_ALLOWED');

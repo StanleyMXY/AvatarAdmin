@@ -24,11 +24,13 @@ import {
   usernameOf,
 } from './_core/pushData';
 import { validDay } from './_core/statRange';
+import { findUser } from './_core/usersData';
 
 type Detail = { ref: string; reason: string };
 
 const RECALL_REASONS = ['daily_recall', 'streak_at_risk'];
 const AUDIENCES = ['ALL', 'ACCOUNTS', 'GUESTS', 'ACCOUNT_IDS'];
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PLATFORMS = ['ANDROID', 'IOS'];
 const REPEATS = ['DAILY', 'WEEKLY', 'MONTHLY'];
 const LINK_TYPES = ['NONE', 'SCREEN', 'URL'];
@@ -185,6 +187,16 @@ function audience(body: Record<string, unknown>, details: Detail[]): MockAudienc
     }
     if (body.locales !== undefined && body.locales !== null) {
       details.push({ ref: 'locales', reason: 'OUT_OF_RANGE' });
+    }
+    // an account that is not there is refused (one that is banned or otherwise not active is not: the
+    // send skips it); the ref is the account id, in the order the ids were sent
+    // an id that is not a canonical UUID is not an id at all: OUT_OF_RANGE on the list, nothing looked up
+    if ((ids ?? []).some((id) => !CANONICAL_UUID.test(id))) {
+      details.push({ ref: 'accountIds', reason: 'OUT_OF_RANGE' });
+    } else {
+      for (const id of ids ?? []) {
+        if (!findUser(id)) details.push({ ref: id, reason: 'ACCOUNT_NOT_FOUND' });
+      }
     }
     return { audience: kind, accountIds: ids, platforms: null, locales: null };
   }

@@ -198,6 +198,9 @@ describe('PUT /config/:key', () => {
 
   it('checks the JSON keys with their rules', async () => {
     expect((await put('root', 'milestone.days', [7, 7])).status).toBe(400);
+    expect((await put('root', 'milestone.days', [30, 7])).status).toBe(400);
+    expect((await put('root', 'milestone.days', [7, 30, 100000])).status).toBe(200);
+    expect((await put('root', 'companionship.text_burst_minutes', 1441)).status).toBe(400);
     expect(
       (await put('root', 'companionship.stage_thresholds', { BONDING: 200, CLOSE: 150 })).status,
     ).toBe(400);
@@ -381,6 +384,15 @@ describe('PUT /config/admin.totp_required: the production floor of the administr
     deployEnv.production = false;
     resetConfigStore();
     expect(deployEnv.production).toBe(true);
+  });
+
+  it('answers the warning INTEGRITY_CHECK_OFF when the integrity check is saved as false, and none when it is true', async () => {
+    const off = await put('root', 'integrity.check_enabled', false);
+    expect(off.body.data.warnings).toEqual([
+      expect.objectContaining({ code: 'INTEGRITY_CHECK_OFF' }),
+    ]);
+    expect(off.body.data.warnings[0]).not.toHaveProperty('count');
+    expect((await put('root', 'integrity.check_enabled', true)).body.data.warnings).toEqual([]);
   });
 
   it('still takes false for integrity.check_enabled in production: that switch may be off in any environment', async () => {

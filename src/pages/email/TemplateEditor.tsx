@@ -7,6 +7,7 @@ import { useSingleFlight } from '../../hooks/useSingleFlight';
 import { type EmailTemplate, resetEmailTemplate, saveEmailTemplate } from '../../services/email';
 import { describeFailure } from '../../session/describe';
 import { countCodePoints } from '../../utils/codePoints';
+import { hasControlCharacter } from '../../utils/controlCharacters';
 import { failureToForm, failureWords } from '../../utils/failureToForm';
 import { plainText } from '../../utils/plainText';
 import { trimSpec } from '../../utils/trimSpec';
@@ -123,6 +124,10 @@ export function TemplateEditor({ template, onClose, onChanged }: Props) {
                 const length = countCodePoints(trimSpec(value ?? ''));
                 if (length < 1 || length > SUBJECT_MAX) {
                   throw new Error(t('email.templates.subjectInvalid'));
+                }
+                // the ends are cut by the backend, a control character inside is refused
+                if (hasControlCharacter(trimSpec(value ?? ''))) {
+                  throw new Error(t('email.templates.subjectControl'));
                 }
                 const unknown = unknownPlaceholders(value ?? '', placeholders);
                 if (unknown.length > 0) {

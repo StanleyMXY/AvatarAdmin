@@ -67,6 +67,8 @@ const messages: Record<string, string> = {
   'config.warning.SMS_COUNTRY_UNCOVERED': '白名单里有国家没有启用的短信通道覆盖',
   'config.requiresUploadBase': '广告素材和 APK 上传需要它',
   'config.warning.PHONE_LOGIN_DISABLED_ACCOUNTS': '关闭手机号登录后，仍有 {count} 个手机号账号',
+  'config.warning.INTEGRITY_CHECK_OFF':
+    '设备完整性检查已关闭：创建游客凭据和账号时，不再验证请求是否来自真实设备上的正版应用',
   'config.warning.UNKNOWN': '保存成功，但有提醒',
   'config.auth.access_ttl_minutes.label': '访问令牌有效期',
   'config.auth.access_ttl_minutes.desc':
@@ -385,13 +387,16 @@ const messages: Record<string, string> = {
     '奖励活动的结束时间（UTC，ISO-8601 格式），留空表示不限。与开始时间都有值时，结束必须晚于开始，否则保存失败。',
   'config.companionship.text_burst_minutes.label': '文字互动合并间隔',
   'config.companionship.text_burst_minutes.desc':
-    '两条文字消息相隔不超过这么多分钟，就算同一次互动，单位分钟。',
+    '两条文字消息相隔不超过这么多分钟，就算同一次互动，单位分钟，1 到 1440。',
+  'config.companionship.text_burst_minutes.reject.OUT_OF_RANGE': '请写 1 到 1440 之间的整数分钟。',
   'config.companionship.stage_thresholds.label': '陪伴阶段积分门槛',
   'config.companionship.stage_thresholds.desc':
     '陪伴阶段的积分门槛，用 JSON 对象表示，例如 BONDING 和 CLOSE 各对应一个积分值。积分低于 BONDING 的值时为 SEEDLING 阶段。',
   'config.milestone.days.label': '纪念日天数',
   'config.milestone.days.desc':
-    '陪伴纪念日的天数清单，用 JSON 数组表示，例如满 7、30、100 天时触发纪念日。',
+    '陪伴纪念日的天数清单，用 JSON 数组表示，从小到大排列，例如满 7、30、100 天时触发纪念日。',
+  'config.milestone.days.reject.OUT_OF_RANGE':
+    '请写 1 到 20 个整数天数，每个只出现一次，从小到大。',
   'config.moderation.block_score.label': '审核拦截分数',
   'config.moderation.block_score.desc':
     '审核服务返回的分数（0 到 1）大于或等于这个阈值就拦截；调高它，拦截更少。取值大于 0、不超过 1，最多三位小数，并且必须大于复核分数（两个都保存时检查）。取值随审核服务选型确定，没有默认值。任一分数没保存时不会调用审核服务（模型检查不运行）：不报错、不返回 503，文字仍检查规则词表，其他内容放行；保存后下一次检查生效，不需要重启。',
