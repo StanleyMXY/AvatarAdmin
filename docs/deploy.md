@@ -4,16 +4,35 @@
 
 同域的原因：请求层把接口写成相对路径 `/api/admin/...`（`src/request/apiClient.ts`），令牌放在内存和 `sessionStorage`，不用 Cookie，也不带固定令牌；没有跨域配置，也不需要后端开 CORS。如果前端和后端必须不同域，需要在构建前改请求层，本文不涉及。
 
-## 构建
+## 取得代码
 
-要求 Node `^22.22.1 || >=24.0.0`，用仓库根目录的 `package-lock.json` 安装：
+你需要的只有一个 GitLab 私有库：部署副本 `http://172.16.118.106/mxy/AvatarAdmin.git`（代码、配置、测试、`README.md` 和本文档）。选一个工作目录（下面用 `~/avatar`），把它克隆进去。这个库是私有库，克隆和以后的 `git pull` 都需要凭据：
+
+1. 在 GitLab 上建一个个人访问令牌（用户设置里的“访问令牌”页），权限只勾选 `read_repository`（只读仓库）。这个账号要对 `AvatarAdmin` 项目有读权限。
+2. 用 git 的 credential helper 保存令牌，二选一：
+   - 只在内存里缓存一段时间：`git config --global credential.helper 'cache --timeout=3600'`。过了超时（这里是 3600 秒）再用 git 会重新询问。
+   - 保存到磁盘：`git config --global credential.helper store`。令牌会以明文写进 `~/.git-credentials`，所以先限权 `chmod 600 ~/.git-credentials`（文件在第一次认证后才生成，生成后立即执行），不再需要时删除该文件，并执行 `git config --global --unset credential.helper`。
+3. 第一次克隆时 git 会询问用户名和密码：用户名填 GitLab 用户名，密码填令牌。填过之后 helper 会记住，以后的 `git pull` 不会再问（`cache` 超时后会再问一次）。
+4. 不要把令牌写进克隆地址（`http://用户:令牌@...`），那样令牌会留在仓库的 `.git/config` 里。内网地址是 HTTP，令牌在网络上不加密传输。
 
 ```sh
-npm ci            # 或 npm install；postinstall 会运行 max setup
+mkdir -p ~/avatar && cd ~/avatar
+git clone http://172.16.118.106/mxy/AvatarAdmin.git
+cd AvatarAdmin
+```
+
+后面的命令都在 `AvatarAdmin` 目录（仓库根目录）里执行。升级时在这个目录里执行 `git pull --ff-only`（需要凭据），再按“构建”重新构建、按“产物的缓存规则”发布；`.env.local` 和 `dist/` 被 git 忽略，不会挡住 `git pull`。
+
+## 构建
+
+要求 Node `^22.22.1 || >=24.0.0`，构建机要能访问 npm 仓库 `registry.npmjs.org`（`package-lock.json` 里的包都从它下载）。用仓库根目录的 `package-lock.json` 安装：
+
+```sh
+npm ci            # 严格按 package-lock.json 安装，不改动它；postinstall 会运行 max setup
 npm run build     # max build，产物在 dist/
 ```
 
-构建前可以在环境变量或 `.env.local` 里设置下面的构建变量。它们在**构建时**写进产物，运行时改不了；改了要重新构建。非法的值（不是 6 位十六进制的颜色、不是同域路径的 Logo、超出 0 到 1 的阈值）会让构建失败。仓库里没有任何密钥。
+`npm ci` 还会运行 `prepare` 脚本（`husky`），它只给这个克隆配置本地的提交钩子，部署用不到，也不用处理。构建前可以在环境变量或 `.env.local`（可从 `.env.example` 复制）里设置下面的构建变量。它们在**构建时**写进产物，运行时改不了；改了要重新构建。非法的值（不是 6 位十六进制的颜色、不是同域路径的 Logo、超出 0 到 1 的阈值）会让构建失败。仓库里没有任何密钥。
 
 | 变量 | 默认值 | 作用 |
 | --- | --- | --- |
@@ -66,7 +85,7 @@ server {
         proxy_set_header   X-Real-IP         $remote_addr;
         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Proto $scheme;
-        # 导出和上传可能较大、较慢；上传的上限也要和后端的上传上限一致（最大的是 APK，100 MB）。
+        # 导出和上传可能较大、较慢；上传的上限也要和后端的上传上限一致（最大的是 APK，后端默认 100 MB）。nginx 默认先缓冲整个请求体再转发，后端要求上传带 `Content-Length`，所以不要给 `/api/` 加 `proxy_request_buffering off;`。
         client_max_body_size 110m;
         proxy_read_timeout   120s;
         proxy_send_timeout   120s;
@@ -118,9 +137,9 @@ server {
 注意：
 
 - nginx 里 `add_header` 写在某个 `location` 里时，会**覆盖**（不是叠加）外层 `server` 里的 `add_header`。所以上面 `server` 一级没有 `add_header`，每个 `location` 自己写需要的头；改配置时不要在 `server` 一级加头，也不要漏掉某个 `location`。
-- **`/api/` 的响应不会重复这些安全头，包括 `Cache-Control`。** 后端给管理端业务端口（8080）的每一个响应（成功、各种错误、401/403、404）都加了六个头：`X-Content-Type-Options: nosniff`、`Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`、`X-Frame-Options: DENY`、`Strict-Transport-Security: max-age=31536000; includeSubDomains`；管理端的接口自己不改 `Cache-Control`，所以接口响应的 `Cache-Control` 恒为 `no-store`（后端对本问题的答复第 16 条）。因此 `/api/` 的 `location` 里**没有任何 `add_header`**：nginx 只转发，响应里每个头各一个。如果有人在这个 `location` 里再写 `add_header Cache-Control "no-store" always;`，响应里就会有两个 `Cache-Control`；确实要由 nginx 保证，必须写成替换，不是追加：先 `proxy_hide_header Cache-Control;`，再 `add_header Cache-Control "no-store" always;`（其余五个头同理）。如果有人在 `server` 一级加了 `add_header`，又没有给 `/api/` 去掉，这些头也会在 `/api/` 的响应里出现两次。后端的 HSTS 带 `includeSubDomains`，会波及同一个主域名下的所有子域，要求这些主机只走 HTTPS。管理端口 9080（健康检查和指标）不经反向代理，前端也不访问它。发布后用 `curl -i` 看一次（见"发布后的检查"）。
-- **反向代理后面，后端要配置 `TRUSTED_PROXY_CIDRS`（受信任代理的网段，逗号分隔的 CIDR 段或单个地址）。** 默认是空：后端不信任任何代理，忽略 `X-Forwarded-For` 之类的转发头，客户端地址取的是 TCP 对端，也就是 nginx 的地址，所以按 IP 的限流（代理后面的所有人被当成同一个客户端）和点击记录里的 IP 都会失真。上面示例里的 `proxy_set_header X-Forwarded-For` 只有在后端信任这台 nginx 时才会被读取；`CLIENT_IP_HEADER` 默认就是 `X-Forwarded-For`，一般不用改。不能填覆盖所有地址的段（`0.0.0.0/0`、`::/0`），后端会启动失败（后端契约 1.5）。
-- **前端的静态文件要由上面的 nginx（或别的静态文件服务器）提供，不要由后端的 admin 应用提供。** 后端给响应加的内容安全策略是 `default-src 'none'`（后端清单第 4 节第 10 条；它加在哪些响应上还没有答复），如果静态页面也经过那条规则，脚本和样式都加载不出来。后端会不会这样处理自己提供的页面，本仓库核实不了，已写成给后端的问题（`docs/contract-requests/2026-10-31-backend-question-static-files-and-security-headers.md`）。
+- **`/api/` 的响应不会重复这些安全头，包括 `Cache-Control`。** 后端给管理端业务端口（8080）的每一个响应（成功、各种错误、401/403、404）都加了六个头：`X-Content-Type-Options: nosniff`、`Cache-Control: no-store`、`Referrer-Policy: no-referrer`、`Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`、`X-Frame-Options: DENY`、`Strict-Transport-Security: max-age=31536000; includeSubDomains`；管理端的接口自己不改 `Cache-Control`，所以接口响应的 `Cache-Control` 恒为 `no-store`。因此 `/api/` 的 `location` 里**没有任何 `add_header`**：nginx 只转发，响应里每个头各一个。如果有人在这个 `location` 里再写 `add_header Cache-Control "no-store" always;`，响应里就会有两个 `Cache-Control`；确实要由 nginx 保证，必须写成替换，不是追加：先 `proxy_hide_header Cache-Control;`，再 `add_header Cache-Control "no-store" always;`（其余五个头同理）。如果有人在 `server` 一级加了 `add_header`，又没有给 `/api/` 去掉，这些头也会在 `/api/` 的响应里出现两次。后端的 HSTS 带 `includeSubDomains`，会波及同一个主域名下的所有子域，要求这些主机只走 HTTPS。管理端口 9080（健康检查和指标）不经反向代理，前端也不访问它。发布后用 `curl -i` 看一次（见"发布后的检查"）。
+- **反向代理后面，后端要配置 `TRUSTED_PROXY_CIDRS`（受信任代理的网段，逗号分隔的 CIDR 段或单个地址）。** 默认是空：后端不信任任何代理，忽略 `X-Forwarded-For` 之类的转发头，客户端地址取的是 TCP 对端，也就是 nginx 的地址，所以按 IP 的限流（代理后面的所有人被当成同一个客户端）和点击记录里的 IP 都会失真。上面示例里的 `proxy_set_header X-Forwarded-For` 只有在后端信任这台 nginx 时才会被读取；`CLIENT_IP_HEADER` 默认就是 `X-Forwarded-For`，一般不用改。不能填覆盖所有地址的段（`0.0.0.0/0`、`::/0`），后端会启动失败。
+- **前端的静态文件要由上面的 nginx（或别的静态文件服务器）提供，不要由后端的 admin 应用提供。** 后端给业务端口上的每个响应（包括未匹配路径的 404）加的内容安全策略是 `default-src 'none'`，如果静态页面也经过那条规则，脚本和样式都加载不出来。后端的 admin 应用没有任何静态资源路由，`/`、`/index.html` 都答 404 JSON，所以 `/api/` 以外的路径一律不要转给它。
 - 找不到的文件（例如旧的哈希文件）要返回 404，不要回退到 `index.html`，否则浏览器会把 HTML 当脚本解析，页面白屏；上面哈希文件的 `location` 用了 `try_files $uri =404`。
 - 这份配置的语法和响应头已在 nginx 1.24 上验证过（`nginx -t` 通过；用一个固定返回安全头的假后端，逐个 `location` 用 `curl -i` 看响应头）；没有验证的是证书、HTTP/2 和真实后端。上线前仍用 `nginx -t` 检查语法，并在预发环境走一遍：登录、刷新一个深层地址（例如 `/users/42`）、导出一个文件、上传一张图。
 
