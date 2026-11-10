@@ -32,8 +32,6 @@ npm ci            # 严格按 package-lock.json 安装，不改动它；postinst
 npm run build     # max build，产物在 dist/
 ```
 
-`npm ci` 还会运行 `prepare` 脚本（`husky`），它只给这个克隆配置本地的提交钩子，部署用不到，也不用处理。
-
 构建前可以在环境变量或 `.env.local`（`cp .env.example .env.local` 后编辑）里设置下面的构建变量。它们在**构建时**写进产物，运行时改不了；改了要重新构建。同名的变量在 `.env.local` 和环境变量里都有时，以 `.env.local` 为准。非法的值（不是 6 位十六进制的颜色、不是同域路径的 Logo、超出 0 到 1 的阈值）会让构建失败，而且失败发生在 `npm ci`（它的 postinstall 就会加载配置），不是等到 `npm run build`；改正后重新 `npm ci`。仓库里没有任何密钥。
 
 | 变量 | 默认值 | 作用 |
@@ -56,8 +54,6 @@ ADMIN_PRIMARY_ACTIVE="#0E2D4D"
 ```
 
 构建并发布后，用浏览器打开登录页，确认主按钮的颜色是你设的值，不是默认的青色 `#0ABAB5`；如果还是默认色，说明这个值没有读进去，检查引号。
-
-`ADMIN_API_PROXY_TARGET` 只用于开发（`npm run dev:api` 把 `/api/` 代理到它），**不进产物**，部署时不用设置。
 
 ## 产物的缓存规则
 
