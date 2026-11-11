@@ -6,7 +6,7 @@
 
 ## 取得代码
 
-你需要的只有一个 GitLab 私有库：部署副本 `http://172.16.118.106/mxy/AvatarAdmin.git`（代码、配置、测试和本文档）。选一个工作目录（下面用 `~/avatar`），把它克隆进去。这个库是私有库，克隆和以后的 `git pull` 都需要凭据：
+你需要的只有一个 GitLab 私有库：部署副本 `http://172.16.118.106/mxy/AvatarAdmin.git`（代码、配置和本文档）。选一个工作目录（下面用 `~/avatar`），把它克隆进去。这个库是私有库，克隆和以后的 `git pull` 都需要凭据：
 
 1. 在 GitLab 上建一个个人访问令牌（用户设置里的“访问令牌”页），权限只勾选 `read_repository`（只读仓库）。这个账号要对 `AvatarAdmin` 项目有读权限。
 2. 用 git 的 credential helper 保存令牌，二选一：
