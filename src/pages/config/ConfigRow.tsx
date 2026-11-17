@@ -120,7 +120,14 @@ export function ConfigRow({
           />
         );
       case 'bool':
-        return <Switch checked={draft === true} onChange={setDraft} />;
+        // The row is a column: a box in it stretches to the full width unless it says where it sits.
+        return (
+          <Switch
+            checked={draft === true}
+            onChange={setDraft}
+            style={{ alignSelf: 'flex-start' }}
+          />
+        );
       case 'url':
         return (
           <StandaloneLinkInput

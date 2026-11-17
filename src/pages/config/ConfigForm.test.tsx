@@ -326,6 +326,14 @@ describe('ConfigForm: saving', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps a switch at its own size: the row is a column, so the switch must not stretch to the full width of the row', async () => {
+    signInAs('root');
+    useMockBackend(configMock);
+    renderPage(<ConfigForm keys={['integrity.check_enabled']} />);
+    const r = await row('integrity.check_enabled');
+    expect(within(r).getByRole('switch').style.alignSelf).toBe('flex-start');
+  });
+
   it('warns in the words of the page when the device integrity check is switched off, and not when it is switched on', async () => {
     signInAs('root');
     useMockBackend(configMock);
