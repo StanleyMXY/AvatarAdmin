@@ -22,12 +22,12 @@ describe('the generation task page', { timeout: 30000 }, () => {
     expect(calls[0].url).toContain('status=FAILED');
     const rows = avatarState.generationTasks.filter((t) => t.status === 'FAILED').slice(0, 20);
     for (const task of rows) {
-      expect(screen.getByText(task.id)).toBeInTheDocument();
+      expect(screen.getByText(task.taskId)).toBeInTheDocument();
     }
     expect(screen.getAllByRole('link').length).toBeGreaterThan(0);
     // The successful and the running task of the sample data are not listed.
     expect(
-      screen.queryByText(avatarState.generationTasks.at(-1)?.id ?? 'x'),
+      screen.queryByText(avatarState.generationTasks.at(-1)?.taskId ?? 'x'),
     ).not.toBeInTheDocument();
   });
 
@@ -46,7 +46,7 @@ describe('the generation task page', { timeout: 30000 }, () => {
       (t) => t.status === 'FAILED' && t.failureReason === null,
     );
     if (!none) throw new Error('the sample data has no task without a reason');
-    const row = screen.getByText(none.id).closest('tr') as HTMLElement;
+    const row = screen.getByText(none.taskId).closest('tr') as HTMLElement;
     expect(within(row).getByText('—')).toBeInTheDocument();
   });
 

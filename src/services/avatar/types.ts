@@ -158,7 +158,7 @@ export const GENERATION_TASK_TYPES: readonly GenerationTaskType[] = [
 ];
 
 export type GenerationTask = {
-  id: string;
+  taskId: string;
   /** `null`: a system task (the default avatar). */
   accountId: string | null;
   type: GenerationTaskType;

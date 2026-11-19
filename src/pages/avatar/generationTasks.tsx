@@ -26,9 +26,9 @@ export default function GenerationTasksPage() {
   const columns: ProColumns<GenerationTask>[] = [
     {
       title: t('avatar.tasks.id'),
-      dataIndex: 'id',
+      dataIndex: 'taskId',
       search: false,
-      render: (_, row) => <EllipsisPopoverText text={row.id} lines={1} width={200} />,
+      render: (_, row) => <EllipsisPopoverText text={row.taskId} lines={1} width={200} />,
     },
     {
       title: t('avatar.tasks.account'),
@@ -80,7 +80,7 @@ export default function GenerationTasksPage() {
     <>
       <Typography.Paragraph type="secondary">{t('avatar.tasks.note')}</Typography.Paragraph>
       <PagedListTable<GenerationTask, Filter>
-        rowKey="id"
+        rowKey="taskId"
         columns={columns}
         request={({ page, pageSize, type }) => listGenerationTasks({ page, pageSize, type })}
       />

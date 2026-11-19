@@ -79,7 +79,7 @@ export type MockRendererModel = {
 };
 
 export type MockGenerationTask = {
-  id: string;
+  taskId: string;
   accountId: string | null;
   type: 'AVATAR' | 'VOICE' | 'LOOK' | 'LOOK_REPREPARE' | 'ACTION_CLIP';
   status: 'FAILED' | 'SUCCEEDED' | 'PROCESSING';
@@ -461,7 +461,7 @@ function seed(now: Date): AvatarStore {
     'ACTION_CLIP',
   ];
   const generationTasks: MockGenerationTask[] = Array.from({ length: 27 }, (_, n) => ({
-    id: uuid('0000000f', n + 1),
+    taskId: uuid('0000000f', n + 1),
     // Every fifth task is a system task: it has no account.
     accountId: n % 5 === 0 ? null : uuid('0000000a', (n % 4) + 1),
     type: taskTypes[n % taskTypes.length],
@@ -473,7 +473,7 @@ function seed(now: Date): AvatarStore {
   generationTasks.push(
     {
       ...generationTasks[0],
-      id: uuid('0000000f', 100),
+      taskId: uuid('0000000f', 100),
       accountId: ACCOUNT.rich,
       type: 'AVATAR',
       status: 'SUCCEEDED',
@@ -481,7 +481,7 @@ function seed(now: Date): AvatarStore {
     },
     {
       ...generationTasks[0],
-      id: uuid('0000000f', 101),
+      taskId: uuid('0000000f', 101),
       accountId: ACCOUNT.rich,
       type: 'LOOK',
       status: 'PROCESSING',
