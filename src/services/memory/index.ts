@@ -29,12 +29,13 @@ export type EmbeddingAssignment = {
 };
 
 export type AccountMemory = {
+  /** `null`: the backend has no tier record for this account (none was ever queued for it). */
   tier: {
     tierName: string | null;
     syncStatus: 'PENDING' | 'SYNCED' | 'FAILED' | string;
     assignedAt: string | null;
     lastError: string | null;
-  };
+  } | null;
   /** The newest 200 assignments at most, newest first. */
   embeddingAssignments: EmbeddingAssignment[];
   /** True when the account has more assignments than are in the list. Left out by a backend before this field. */

@@ -163,19 +163,15 @@ export default {
 
   'GET /api/admin/accounts/:id/memory': guard('MEMORY:VIEW', (req) => {
     const id = req.params.id ?? '';
-    // An account of the user module that was never given a model has no tier and no history yet.
+    // An account of the user module that was never given a model has no tier record and no history
+    // yet: the backend answers `tier: null` (MemoryAdminApiIT, an account without a tier row).
     const account =
       memoryStore.accounts.get(id) ??
       (usersState.users.some((u) => u.id === id)
         ? {
             id,
             status: 'ACTIVE' as const,
-            tier: {
-              tierName: null,
-              syncStatus: 'PENDING' as const,
-              assignedAt: null,
-              lastError: null,
-            },
+            tier: null,
             assignments: [],
           }
         : undefined);

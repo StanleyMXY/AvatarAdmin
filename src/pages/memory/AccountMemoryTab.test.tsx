@@ -88,6 +88,26 @@ describe('what the tab shows', { timeout: 30000 }, () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the tab for an account the backend has no tier record for: `tier` is null, the page does not break', async () => {
+    // The backend's answer for an account without an `account_memory_tier` row (MemoryAdminApiIT).
+    stubFetch(async ({ url }) =>
+      jsonResponse(
+        200,
+        envelope(
+          '200',
+          url.endsWith('/memory')
+            ? { tier: null, embeddingAssignments: [], truncated: false, totalCount: 0 }
+            : { items: [] },
+        ),
+      ),
+    );
+    renderPage(<AccountMemoryTab accountId="no-tier-record" accountStatus="ACTIVE" />);
+    expect(await screen.findByText(/No tier has been assigned yet/)).toBeInTheDocument();
+    expect(
+      screen.getByText('No assignment yet; the default model bge-m3 is used'),
+    ).toBeInTheDocument();
+  });
+
   it('says that only the newest are shown, how many, and how many there are, when the history is cut', async () => {
     useMockBackend(memoryMock);
     renderPage(

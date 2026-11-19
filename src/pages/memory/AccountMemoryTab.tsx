@@ -121,7 +121,7 @@ export default function AccountMemoryTab({ accountId, accountStatus }: Props) {
   const current = history[0]?.modelName ?? null;
   const blocked = accountStatus !== undefined && BLOCKED.has(accountStatus);
   const { tier } = memory;
-  const syncKey = `memory.account.syncStatus.${tier.syncStatus}`;
+  const syncKey = tier ? `memory.account.syncStatus.${tier.syncStatus}` : '';
 
   return (
     <Flex vertical gap={16}>
@@ -130,15 +130,15 @@ export default function AccountMemoryTab({ accountId, accountStatus }: Props) {
           {t('memory.account.tier')}
         </Typography.Title>
         <Line label={t('memory.account.tierName')}>
-          {tier.tierName ?? t('memory.account.tierNone')}
+          {tier?.tierName ?? t('memory.account.tierNone')}
         </Line>
         <Line label={t('memory.account.syncStatus')}>
-          {intl.messages[syncKey] ? t(syncKey) : tier.syncStatus}
+          {tier ? (intl.messages[syncKey] ? t(syncKey) : tier.syncStatus) : DASH}
         </Line>
         <Line label={t('memory.account.assignedAt')}>
-          {tier.assignedAt ? formatInstant(tier.assignedAt, intl.locale) : DASH}
+          {tier?.assignedAt ? formatInstant(tier.assignedAt, intl.locale) : DASH}
         </Line>
-        {tier.lastError ? (
+        {tier?.lastError ? (
           <Line label={t('memory.account.lastError')}>
             <EllipsisPopoverText text={tier.lastError} width={420} />
           </Line>

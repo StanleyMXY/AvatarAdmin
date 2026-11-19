@@ -229,7 +229,7 @@ describe('GET /accounts/:id/memory', () => {
   it('knows an account of the user module that was never given a model: no tier yet, an empty history, not 404', async () => {
     const { status, body } = await get(asViewer(), USER.rich);
     expect(status).toBe(200);
-    expect(body.data.tier.tierName).toBeNull();
+    expect(body.data.tier).toBeNull();
     expect(body.data.embeddingAssignments).toEqual([]);
     expect(body.data.totalCount).toBe(0);
     expect(body.data.truncated).toBe(false);
